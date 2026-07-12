@@ -1,0 +1,19 @@
+{
+  "_comment": "Port of ENUM_Interations, upgraded: each action carries its OWN need/skill gain table (per-tick, applied every activityGainTickSeconds). This fixes the Unreal limitation where all actions on an asset shared the row's gains. Gain values are PLACEHOLDER until verified against CLAUDE.md.",
+  "actions": [
+    { "id": "eat",             "name": "Eat",              "needGains": { "hunger": 4.0 },                       "skillGains": {},                    "animation": "sit_eat",   "autonomyEligible": true,  "primaryNeed": "hunger" },
+    { "id": "sleep",           "name": "Sleep",            "needGains": { "energy": 3.0 },                       "skillGains": {},                    "animation": "lie_sleep", "autonomyEligible": true,  "primaryNeed": "energy" },
+    { "id": "nap",             "name": "Nap",              "needGains": { "energy": 1.5, "comfort": 1.0 },       "skillGains": {},                    "animation": "lie_sleep", "autonomyEligible": true,  "primaryNeed": "energy" },
+    { "id": "sit",             "name": "Sit",              "needGains": { "comfort": 2.5 },                      "skillGains": {},                    "animation": "sit_idle",  "autonomyEligible": true,  "primaryNeed": "comfort" },
+    { "id": "use_toilet",      "name": "Use toilet",       "needGains": { "bladder": 6.0 },                      "skillGains": {},                    "animation": "sit_idle",  "autonomyEligible": true,  "primaryNeed": "bladder" },
+    { "id": "shower",          "name": "Shower",           "needGains": { "hygiene": 5.0 },                      "skillGains": {},                    "animation": "stand_use", "autonomyEligible": true,  "primaryNeed": "hygiene" },
+    { "id": "wash_hands",      "name": "Wash hands",       "needGains": { "hygiene": 2.0 },                      "skillGains": {},                    "animation": "stand_use", "autonomyEligible": false, "primaryNeed": "hygiene" },
+    { "id": "watch_tv",        "name": "Watch TV",         "needGains": { "fun": 2.5 },                          "skillGains": { "english": 0.02 },   "animation": "sit_idle",  "autonomyEligible": true,  "primaryNeed": "fun", "seatAware": true, "_note": "Signature: TV teaches English. Sim prefers a seat facing the TV." },
+    { "id": "cook",            "name": "Cook",             "needGains": {},                                      "skillGains": { "cooking": 0.05 },   "animation": "stand_use", "autonomyEligible": false, "primaryNeed": null },
+    { "id": "read_book",       "name": "Read a book",      "needGains": { "fun": 1.0 },                          "skillGains": { "english": 0.04 },   "animation": "sit_idle",  "autonomyEligible": true,  "primaryNeed": "fun" },
+    { "id": "practice_english","name": "Practice English", "needGains": {},                                      "skillGains": { "english": 0.08 },   "animation": "sit_idle",  "autonomyEligible": false, "primaryNeed": null },
+    { "id": "talk_to",         "name": "Talk to",          "needGains": { "social": 3.0 },                       "skillGains": { "charisma": 0.03 },  "animation": "stand_use", "autonomyEligible": true,  "primaryNeed": "social", "_note": "Open decision #4 — what phone Talk to/Play grant" },
+    { "id": "play",            "name": "Play",             "needGains": { "fun": 3.0 },                          "skillGains": {},                    "animation": "stand_use", "autonomyEligible": true,  "primaryNeed": "fun" },
+    { "id": "tinker",          "name": "Tinker",           "needGains": { "fun": 0.5 },                          "skillGains": { "engineering": 0.05 }, "animation": "stand_use", "autonomyEligible": false, "primaryNeed": null }
+  ]
+}

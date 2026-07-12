@@ -1,0 +1,21 @@
+{
+  "_comment": "Single source of truth for needs & skills. Replaces Unreal's ENUM_Needs + ENUM_Skills. Values marked PLACEHOLDER must be verified against CLAUDE.md (the Unreal DT rows) before Phase 1 exit.",
+  "needs": [
+    { "id": "hunger",      "name": "Hunger",      "color": "#e74c3c", "default": 70, "decayPerTick": 0.10, "autonomy": true,  "_decaySource": "PLACEHOLDER — verify vs CLAUDE.md" },
+    { "id": "comfort",     "name": "Comfort",     "color": "#e67e22", "default": 70, "decayPerTick": 0.06, "autonomy": true,  "_decaySource": "PLACEHOLDER — verify vs CLAUDE.md" },
+    { "id": "bladder",     "name": "Bladder",     "color": "#f1c40f", "default": 70, "decayPerTick": 0.08, "autonomy": true,  "_decaySource": "PLACEHOLDER — verify vs CLAUDE.md" },
+    { "id": "energy",      "name": "Energy",      "color": "#2ecc71", "default": 70, "decayPerTick": 0.05, "autonomy": true,  "_decaySource": "PLACEHOLDER — verify vs CLAUDE.md" },
+    { "id": "fun",         "name": "Fun",         "color": "#9b59b6", "default": 70, "decayPerTick": 0.07, "autonomy": true,  "_decaySource": "PLACEHOLDER — verify vs CLAUDE.md" },
+    { "id": "social",      "name": "Social",      "color": "#3498db", "default": 70, "decayPerTick": 0.04, "autonomy": true,  "_decaySource": "PLACEHOLDER — verify vs CLAUDE.md" },
+    { "id": "hygiene",     "name": "Hygiene",     "color": "#1abc9c", "default": 70, "decayPerTick": 0.05, "autonomy": true,  "_decaySource": "PLACEHOLDER — verify vs CLAUDE.md" },
+    { "id": "environment", "name": "Environment", "color": "#95a5a6", "default": 50, "decayPerTick": 0,    "autonomy": false, "computed": "sumOfPlacedObjectEnvScores", "_note": "Passive — Σ environment scores of placed objects, never decays, never sought." }
+  ],
+  "skills": [
+    { "id": "english",     "name": "English",     "color": "#2980b9", "default": 0, "max": 10, "_note": "Signature mechanic — language-learning angle." },
+    { "id": "charisma",    "name": "Charisma",    "color": "#8e44ad", "default": 0, "max": 10 },
+    { "id": "cooking",     "name": "Cooking",     "color": "#d35400", "default": 0, "max": 10 },
+    { "id": "engineering", "name": "Engineering", "color": "#7f8c8d", "default": 0, "max": 10 },
+    { "id": "finance",     "name": "Finance",     "color": "#27ae60", "default": 0, "max": 10 },
+    { "id": "french",      "name": "French",      "color": "#c0392b", "default": 0, "max": 10, "enabled": false, "_note": "Planned — disabled until Phase 4 decision (open decision #4)." }
+  ]
+}

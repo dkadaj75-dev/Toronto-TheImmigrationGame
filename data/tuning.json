@@ -1,0 +1,38 @@
+{
+  "_comment": "EVERY global tunable lives here (design pillar #2). Game hot-reloads this file in dev. Values documented in WEB_GAME_ROADMAP.md are marked; the rest are PLACEHOLDER pending CLAUDE.md verification.",
+  "simulation": {
+    "needsDecayTickSeconds": 1.0,
+    "activityGainTickSeconds": 2.0,
+    "_source": "roadmap §5 — matches Unreal prototype exactly"
+  },
+  "autonomy": {
+    "seekBelowThreshold": 30,
+    "stopAtThreshold": 95,
+    "postPlayerCommandCooldownSeconds": 10,
+    "_source": "seek/stop from roadmap §2; cooldown PLACEHOLDER — verify vs CLAUDE.md"
+  },
+  "time": {
+    "secondsPerGameDay": 60,
+    "nightStartHour": 22,
+    "nightEndHour": 6,
+    "_source": "60 s/day is the Unreal DEBUG speed — open decision #2, retune in Phase 1"
+  },
+  "economy": {
+    "startingFunds": 20000,
+    "currencyName": "§",
+    "_source": "PLACEHOLDER — open decision #1 (Phase 3)"
+  },
+  "movement": {
+    "walkSpeed": 2.0,
+    "arrivalRadius": 0.35,
+    "_source": "PLACEHOLDER — tune in Phase 1"
+  },
+  "camera": {
+    "minZoom": 4,
+    "maxZoom": 18,
+    "minPitchDeg": 30,
+    "maxPitchDeg": 70,
+    "panBoundsPadding": 2,
+    "_source": "PLACEHOLDER — clamps to be tuned against Sims reference screenshots"
+  }
+}
