@@ -1,8 +1,8 @@
 {
   "_comment": "EVERY global tunable lives here (design pillar #2). Game hot-reloads this file in dev. Values documented in WEB_GAME_ROADMAP.md are marked; the rest are PLACEHOLDER pending CLAUDE.md verification.",
   "simulation": {
-    "needsDecayTickSeconds": 1.0,
-    "activityGainTickSeconds": 2.0,
+    "needsDecayTickSeconds": 1,
+    "activityGainTickSeconds": 2,
     "_source": "roadmap §5 — matches Unreal prototype exactly"
   },
   "autonomy": {
@@ -17,15 +17,37 @@
     "nightEndHour": 6,
     "_source": "60 s/day is the Unreal DEBUG speed — open decision #2, retune in Phase 1"
   },
+  "map": {
+    "active": "condo",
+    "_source": "which data/maps/<active>.json the game plays; set from the Map Editor \"Play this map\" button"
+  },
   "economy": {
     "startingFunds": 20000,
     "currencyName": "§",
     "_source": "PLACEHOLDER — open decision #1 (Phase 3)"
   },
   "movement": {
-    "walkSpeed": 2.0,
+    "walkSpeed": 2,
     "arrivalRadius": 0.35,
     "_source": "PLACEHOLDER — tune in Phase 1"
+  },
+  "character": {
+    "meshPath": "/models/character.glb",
+    "heightMeters": 1.55,
+    "yawOffsetDeg": 0,
+    "crossFadeSeconds": 0.25,
+    "walkClipSpeedReference": 2,
+    "sitHeight": 0.25,
+    "lieHeight": 0.55,
+    "clipMap": {
+      "idle": "1",
+      "walk": "Three fingerR",
+      "sit": "Sit",
+      "lie": "Lie",
+      "lie_sleep": "Fall"
+    },
+    "animationPaths": [],
+    "_source": "edit this block through tools/animations.html (Animation Mapper): it lists the GLB's actual clips, previews them in 3D, and maps them to states. animationPaths = extra GLBs whose clips are merged in (Mixamo one-clip-per-file exports, same skeleton). sitHeight/lieHeight replace the old hardcoded 0.25/0.55. Missing/failed GLB keeps the capsule stand-in."
   },
   "camera": {
     "minZoom": 4,

@@ -4,7 +4,7 @@
 
 import { createServer as createViteServer } from 'vite';
 import http from 'node:http';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, readdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -26,6 +26,16 @@ const vite = await createViteServer({
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
+
+  // --- map listing (Map Editor slice 2: multiple maps) ---
+  if (url.pathname === '/api/maps' && req.method === 'GET') {
+    try {
+      const files = (await readdir(path.join(DATA_DIR, 'maps'))).filter((f) => f.endsWith('.json'));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ maps: files.map((f) => f.slice(0, -5)).sort() }));
+    } catch { res.writeHead(500); res.end('cannot list maps'); }
+    return;
+  }
 
   // --- data API (used by the tool constellation) ---
   if (url.pathname.startsWith('/api/data/')) {
@@ -59,6 +69,17 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'DELETE') {
+      // only map files may be deleted (Map Editor slice 2); everything else is schema-critical
+      if (!rel.startsWith('maps/')) { res.writeHead(403); res.end('only map files can be deleted'); return; }
+      try {
+        await unlink(file);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end('{"ok":true}');
+      } catch { res.writeHead(404); res.end('not found'); }
+      return;
+    }
+
     res.writeHead(405); res.end();
     return;
   }
@@ -83,5 +104,5 @@ server.listen(PORT, () => {
   console.log(`Condo Life dev server → http://localhost:${PORT}`);
   console.log('  game:   /');
   console.log('  tools:  /tools/ (Phase 2+)');
-  console.log('  data:   GET/PUT /api/data/<file>.json');
+  console.log('  data:   GET/PUT /api/data/<file>.json · DELETE maps only · GET /api/maps');
 });

@@ -3,7 +3,57 @@
 // Phase 0/1: swap stand-ins for GLB loads from asset.mesh once the starter pack is imported.
 
 import * as THREE from 'three';
-import type { GameData, AssetDef } from './data';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import type { GameData, AssetDef, CharacterTuning } from './data';
+
+// ------------------------------------------------------------------ GLB furniture
+// Templates are cached per URL and cloned per placement; clones share geometry/materials
+// with the template, so they're tagged sharedResource and skipped by disposal.
+const gltfCache = new Map<string, Promise<THREE.Group>>();
+
+function loadMeshTemplate(url: string): Promise<THREE.Group> {
+  let p = gltfCache.get(url);
+  if (!p) {
+    p = new Promise((resolve, reject) => new GLTFLoader().load(url, (g) => resolve(g.scene), undefined, reject));
+    gltfCache.set(url, p);
+  }
+  return p;
+}
+
+/**
+ * Uniformly scale a model so its XZ bounds fit the asset footprint, center it, and
+ * ground it at y = 0. Makes any authoring scale (meters, centimeters…) drop in cleanly
+ * and keeps the visual matching the nav-grid footprint.
+ */
+export function normalizeModelToFootprint(model: THREE.Object3D, footprint: [number, number]) {
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const [fw, fd] = footprint;
+  const s = Math.min(fw / Math.max(size.x, 1e-6), fd / Math.max(size.z, 1e-6));
+  model.scale.multiplyScalar(s);
+  const box2 = new THREE.Box3().setFromObject(model);
+  const center = box2.getCenter(new THREE.Vector3());
+  model.position.x -= center.x;
+  model.position.z -= center.z;
+  model.position.y -= box2.min.y;
+}
+
+/** Swap a stand-in group's contents for the asset's GLB once it loads; keep the box on failure. */
+function attachMesh(group: THREE.Group, def: AssetDef) {
+  if (!def.mesh) return;
+  const url = /^(\/|https?:)/.test(def.mesh) ? def.mesh : '/' + def.mesh; // public/ serves at root
+  loadMeshTemplate(url)
+    .then((template) => {
+      const model = template.clone(true);
+      normalizeModelToFootprint(model, def.footprint);
+      model.traverse((o) => {
+        if (o instanceof THREE.Mesh) { o.castShadow = true; o.userData.sharedResource = true; }
+      });
+      group.clear();
+      group.add(model);
+    })
+    .catch(() => console.warn(`Could not load mesh for "${def.id}" (${url}) — keeping stand-in.`));
+}
 
 const FLOOR_COLORS: Record<string, number> = {
   wood: 0xb08a5a,
@@ -63,7 +113,7 @@ export function buildWorld(data: GameData): THREE.Group {
     root.add(mesh);
   }
 
-  // --- placed objects: procedural stand-ins sized by footprint ---
+  // --- placed objects: instant stand-in, async GLB swap when asset.mesh is set ---
   for (const placed of map.placedObjects) {
     const def = byId.get(placed.asset);
     if (!def) { console.warn(`Unknown asset in map: ${placed.asset}`); continue; }
@@ -71,6 +121,7 @@ export function buildWorld(data: GameData): THREE.Group {
     obj.position.set(placed.pos[0], 0, placed.pos[1]);
     obj.rotation.y = THREE.MathUtils.degToRad(placed.rotDeg);
     obj.userData = { assetId: def.id, interactions: def.interactions };
+    attachMesh(obj, def);
     root.add(obj);
   }
 
@@ -91,6 +142,69 @@ function makeStandIn(def: AssetDef): THREE.Group {
   return g;
 }
 
+/**
+ * Uniformly scale a model so its bounding height equals `height`, center it in XZ, and
+ * ground it at y = 0. The character counterpart of normalizeModelToFootprint — any
+ * authoring scale (Mixamo cm, Quaternius m) drops in at the tuned character height.
+ */
+export function normalizeModelToHeight(model: THREE.Object3D, height: number) {
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  model.scale.multiplyScalar(height / Math.max(size.y, 1e-6));
+  const box2 = new THREE.Box3().setFromObject(model);
+  const center = box2.getCenter(new THREE.Vector3());
+  model.position.x -= center.x;
+  model.position.z -= center.z;
+  model.position.y -= box2.min.y;
+}
+
+export interface LoadedCharacter { model: THREE.Group; clips: THREE.AnimationClip[] }
+
+/**
+ * Load the rigged character GLB (single sim → no template caching / SkeletonUtils cloning
+ * needed) and normalize it to the tuned height. Rejects on load failure — the caller
+ * keeps the capsule stand-in, same philosophy as furniture placeholders.
+ */
+export async function loadRiggedCharacter(character: CharacterTuning): Promise<LoadedCharacter> {
+  const norm = (p: string) => (/^(\/|https?:)/.test(p) ? p : '/' + p);
+  const loader = new GLTFLoader();
+  const load = (u: string) =>
+    new Promise<{ scene: THREE.Group; animations: THREE.AnimationClip[] }>(
+      (resolve, reject) => loader.load(u, resolve, undefined, reject),
+    );
+  const gltf = await load(norm(character.meshPath));
+  // Mixamo-style workflows ship each animation as its own GLB (same skeleton) — merge their clips.
+  const extras = await Promise.all(
+    (character.animationPaths ?? []).map((p) =>
+      load(norm(p)).then(
+        (g) => g.animations,
+        (err) => { console.warn(`animation source failed to load: ${p}`, err); return [] as THREE.AnimationClip[]; },
+      ),
+    ),
+  );
+  const clips = [...gltf.animations, ...extras.flat()];
+  const model = gltf.scene;
+  normalizeModelToHeight(model, character.heightMeters);
+  if (character.yawOffsetDeg) {
+    // wrap so the yaw is baked inside; the agent freely rotates the outer group
+    const inner = new THREE.Group();
+    inner.add(model);
+    inner.rotation.y = THREE.MathUtils.degToRad(character.yawOffsetDeg);
+    return finishCharacter(inner, clips);
+  }
+  return finishCharacter(model, clips);
+}
+
+function finishCharacter(model: THREE.Group, clips: THREE.AnimationClip[]): LoadedCharacter {
+  model.traverse((o) => {
+    if (o instanceof THREE.Mesh) {
+      o.castShadow = true;
+      o.frustumCulled = false; // skinned bounds don't track bones; never cull the one sim
+    }
+  });
+  return { model, clips };
+}
+
 export function makeSimStandIn(): THREE.Group {
   // Placeholder character until the rigged GLB (Mixamo/Quaternius) is imported.
   const g = new THREE.Group();
@@ -109,12 +223,48 @@ export function makeSimStandIn(): THREE.Group {
 export function makeLights(): THREE.Group {
   const g = new THREE.Group();
   const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+  sun.name = 'sun';
   sun.position.set(8, 14, 6);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
   sun.shadow.camera.left = -12; sun.shadow.camera.right = 12;
   sun.shadow.camera.top = 12; sun.shadow.camera.bottom = -12;
   const ambient = new THREE.AmbientLight(0xbfd0e8, 0.9);
+  ambient.name = 'ambient';
   g.add(sun, ambient);
   return g;
+}
+
+/**
+ * 0 = full night, 1 = full day, with a 1-game-hour cosmetic ramp at dawn and dusk.
+ * The night window itself comes from tuning.json (time.nightStartHour/nightEndHour).
+ */
+export function daylightFactor(hour: number, nightStartHour: number, nightEndHour: number): number {
+  const RAMP = 1; // visual transition length (cosmetic, not gameplay)
+  const h = ((hour % 24) + 24) % 24;
+  // hours since dawn (nightEndHour), in a 24h wrap
+  const sinceDawn = (h - nightEndHour + 24) % 24;
+  const dayLength = (nightStartHour - nightEndHour + 24) % 24;
+  if (sinceDawn >= dayLength) return 0;                    // night
+  if (sinceDawn < RAMP) return sinceDawn / RAMP;           // dawn ramp
+  if (sinceDawn > dayLength - RAMP) return (dayLength - sinceDawn) / RAMP; // dusk ramp
+  return 1;                                                // day
+}
+
+const SKY_DAY = new THREE.Color(0x2a3346);
+const SKY_NIGHT = new THREE.Color(0x0d1220);
+const SUN_DAY = new THREE.Color(0xffffff);
+const SUN_NIGHT = new THREE.Color(0x7a8fc4); // moonlight
+
+/** Blend sun/ambient/background between day and night. Call per frame with the game hour. */
+export function applyDayNight(lights: THREE.Group, scene: THREE.Scene, hour: number, nightStartHour: number, nightEndHour: number) {
+  const f = daylightFactor(hour, nightStartHour, nightEndHour);
+  const sun = lights.getObjectByName('sun') as THREE.DirectionalLight | null;
+  const ambient = lights.getObjectByName('ambient') as THREE.AmbientLight | null;
+  if (sun) {
+    sun.intensity = THREE.MathUtils.lerp(0.35, 2.2, f);
+    sun.color.lerpColors(SUN_NIGHT, SUN_DAY, f);
+  }
+  if (ambient) ambient.intensity = THREE.MathUtils.lerp(0.4, 0.9, f);
+  if (scene.background instanceof THREE.Color) scene.background.lerpColors(SKY_NIGHT, SKY_DAY, f);
 }

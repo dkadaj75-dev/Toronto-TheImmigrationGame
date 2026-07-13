@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Animation Mapper — Condo Life tools</title>
+<style>
+  :root { --bg:#12151c; --panel:#1a1f2a; --panel2:#20263400; --line:#2a3142; --text:#e8eaf0; --dim:#8b93a7;
+          --accent:#6fa0ff; --ok:#7fc97f; --warn:#d9a441; --err:#e07070; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  header { display:flex; align-items:center; gap:14px; padding:10px 16px; background:var(--panel); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  header .hint { color:var(--dim); font-size:12px; }
+  .status { margin-left:auto; font-size:12px; color:var(--dim); }
+  .status.dirty { color:var(--warn); }
+  .status.clean { color:var(--ok); }
+  .status.error { color:var(--err); }
+  button { background:#2a3550; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 12px; cursor:pointer; font:inherit; }
+  button:hover { background:#334066; }
+  button.small { padding:2px 8px; font-size:12px; }
+  button.danger:hover { background:#5a2f33; border-color:#7a3a40; }
+  main { display:grid; grid-template-columns: 300px 1fr 380px; gap:12px; padding:12px 16px; align-items:start; }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; }
+  h2 { font-size:13px; margin:0 0 10px; color:var(--dim); text-transform:uppercase; letter-spacing:.05em; }
+  label { display:block; font-size:12px; color:var(--dim); margin:8px 0 2px; }
+  input[type=text], input[type=number], select { width:100%; background:#0f1219; color:var(--text); border:1px solid var(--line); border-radius:5px; padding:5px 8px; font:inherit; }
+  input:focus, select:focus { outline:none; border-color:var(--accent); }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:.05em; padding:4px 8px; border-bottom:1px solid var(--line); }
+  td { padding:6px 8px; border-bottom:1px solid #232a3a; vertical-align:middle; }
+  tr.warn td:first-child { color:var(--warn); }
+  tr.warn td:first-child::after { content:" ⚠"; }
+  .badge { display:inline-block; font-size:10px; padding:1px 7px; border-radius:9px; border:1px solid var(--line); color:var(--dim); white-space:nowrap; }
+  .badge.core { border-color:#3a5a8a; color:#9db8e6; }
+  .badge.action { border-color:#3a6a44; color:#9ed0a6; }
+  .badge.custom { border-color:#6a5a3a; color:#d6c08e; }
+  .detail { font-size:11px; color:var(--dim); }
+  .row { display:flex; gap:6px; align-items:center; }
+  #preview { width:100%; height:320px; background:#0d1017; border:1px solid var(--line); border-radius:6px; overflow:hidden; position:relative; }
+  #preview canvas { display:block; }
+  #preview-msg { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--dim); font-size:12px; text-align:center; padding:12px; pointer-events:none; }
+  #clip-list { max-height:260px; overflow:auto; margin-top:8px; }
+  #clip-list .clip { display:flex; align-items:center; gap:8px; padding:3px 4px; border-radius:4px; font-size:13px; }
+  #clip-list .clip:hover { background:#232a3a; }
+  #clip-list .clip.playing { color:var(--accent); }
+  #sources-list .src { display:flex; gap:6px; align-items:center; margin:4px 0; font-size:12px; }
+  #sources-list .src span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); }
+  .note { font-size:11px; color:var(--dim); margin-top:10px; border-top:1px solid var(--line); padding-top:8px; }
+  @media (max-width:1100px){ main { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Animation Mapper</h1>
+  <span class="hint">assign character clips to game states · saves to tuning.json (character block) · running game hot-reloads</span>
+  <span id="status" class="status">loading…</span>
+  <button id="save" title="Ctrl+S">Save</button>
+</header>
+
+<main>
+  <!-- ------------------------------------------------ left: character settings -->
+  <section>
+    <h2>Character</h2>
+    <label>Model GLB path</label>
+    <input type="text" id="f-meshPath" data-field="meshPath" placeholder="/models/character.glb" />
+    <div id="num-fields"></div>
+
+    <h2 style="margin-top:16px">Animation sources</h2>
+    <div class="detail">Extra GLBs whose clips are merged in — for Mixamo-style exports where each animation is its own file (must share the model's skeleton).</div>
+    <div id="sources-list"></div>
+    <div class="row" style="margin-top:6px">
+      <input type="text" id="new-source" placeholder="/models/anims/walking.glb" />
+      <button id="add-source" class="small">Add</button>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------ middle: state → clip mapping -->
+  <section>
+    <h2>State → clip mapping</h2>
+    <table>
+      <thead><tr><th>State</th><th>Clip</th><th></th><th>Origin</th><th></th></tr></thead>
+      <tbody id="states-body"></tbody>
+    </table>
+    <div class="row" style="margin-top:10px">
+      <input type="text" id="new-state" placeholder="new state id, e.g. scream" style="max-width:220px" />
+      <button id="add-state" class="small">Add state</button>
+    </div>
+    <div class="note">
+      <b>idle</b> and <b>walk</b> drive locomotion automatically. Every other state does something in-game once an
+      action's <i>animation</i> field references it (Interactions data / future Interaction Editor) — e.g. set the
+      Cook action's animation to <i>cook</i> and map <i>cook</i> here. Unmapped states (⚠) fall back to idle in-game.
+      Blank clip = remove the mapping.
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------ right: 3D preview + clip browser -->
+  <section>
+    <h2>Preview</h2>
+    <div id="preview"><div id="preview-msg">loading model…</div></div>
+    <div class="row" style="margin-top:8px; justify-content:space-between">
+      <span class="detail" id="clip-count"></span>
+      <button id="stop-preview" class="small">Stop (T-pose)</button>
+    </div>
+    <h2 style="margin-top:12px">Clips in the model</h2>
+    <div id="clip-list"><div class="detail">—</div></div>
+  </section>
+</main>
+
+<script>
+/* ================================================================== AnimTool
+   Editor logic — plain script, no three.js, headless-testable via jsdom
+   (test/animation-editor.test.mjs). 3D preview lives in the module script below.
+=================================================================== */
+window.AnimTool = (() => {
+  const API = '/api/data/';
+  const BUILTIN = [
+    { id: 'idle', detail: 'core — whenever the sim stands around' },
+    { id: 'walk', detail: 'core — locomotion' },
+    { id: 'sit',  detail: 'core — seat-aware actions (couch, chairs)' },
+    { id: 'lie',  detail: 'core — bed actions (sleep)' },
+  ];
+  const DEFAULT_CHARACTER = {
+    meshPath: '/models/character.glb', heightMeters: 1.55, yawOffsetDeg: 0,
+    crossFadeSeconds: 0.25, walkClipSpeedReference: 2.0, sitHeight: 0.25, lieHeight: 0.55,
+    clipMap: {}, animationPaths: [],
+  };
+  const NUM_FIELDS = [
+    ['heightMeters', 'Height (m)', 0.5, 3],
+    ['yawOffsetDeg', 'Yaw offset (°) — if the model doesn\u2019t face +Z', -180, 360],
+    ['crossFadeSeconds', 'Cross-fade (s)', 0, 2],
+    ['walkClipSpeedReference', 'Walk clip authored speed (units/s)', 0.1, 10],
+    ['sitHeight', 'Sit height (root y on seats)', 0, 2],
+    ['lieHeight', 'Lie height (root y on beds)', 0, 2],
+  ];
+
+  let tuning = null, interactions = null;
+  let clips = [];      // clip names from the loaded model + sources
+  let custom = [];     // designer-added states not (yet) referenced anywhere
+  let dirty = false;
+  let playingClip = null;
+
+  // module-script hooks (no-ops under jsdom)
+  const T = {
+    onSourcesChanged: null, // model path / sources / height / yaw changed → reload preview
+    onPreview: null,        // (clipName|null) → play/stop in preview
+  };
+
+  const $ = (s) => document.querySelector(s);
+
+  function setDirty(d) {
+    dirty = d;
+    const el = $('#status');
+    el.textContent = d ? 'unsaved changes' : 'saved';
+    el.className = 'status ' + (d ? 'dirty' : 'clean');
+  }
+
+  function character() { return tuning.character; }
+
+  function ensureCharacter() {
+    if (!tuning.character) tuning.character = JSON.parse(JSON.stringify(DEFAULT_CHARACTER));
+    const c = tuning.character;
+    if (!c.clipMap || typeof c.clipMap !== 'object') c.clipMap = {};
+    if (!Array.isArray(c.animationPaths)) c.animationPaths = [];
+    for (const [k, v] of Object.entries(DEFAULT_CHARACTER)) if (c[k] === undefined) c[k] = v;
+  }
+
+  /** state id → list of action names using it as their animation */
+  function actionStates() {
+    const m = new Map();
+    for (const a of (interactions?.actions ?? [])) {
+      const s = String(a.animation ?? '').trim();
+      if (!s) continue;
+      if (!m.has(s)) m.set(s, []);
+      m.get(s).push(a.name);
+    }
+    return m;
+  }
+
+  /** ordered union: core states, action-referenced, clipMap leftovers, custom */
+  function states() {
+    const seen = new Set(); const out = [];
+    const acts = actionStates();
+    for (const b of BUILTIN) {
+      seen.add(b.id);
+      const used = acts.get(b.id);
+      out.push({ id: b.id, origin: 'core', detail: used ? b.detail + ' · also used by: ' + used.join(', ') : b.detail });
+    }
+    for (const [s, names] of acts) {
+      if (seen.has(s)) continue; seen.add(s);
+      out.push({ id: s, origin: 'action', detail: 'used by: ' + names.join(', ') });
+    }
+    for (const s of Object.keys(tuning.character.clipMap)) {
+      if (seen.has(s)) continue; seen.add(s);
+      out.push({ id: s, origin: 'custom', detail: 'in clipMap but not referenced by any action yet' });
+    }
+    for (const s of custom) {
+      if (seen.has(s)) continue; seen.add(s);
+      out.push({ id: s, origin: 'custom', detail: 'added here — reference it from an action\u2019s animation field to use it in-game' });
+    }
+    return out;
+  }
+
+  // ------------------------------------------------------------------ render
+  function render() {
+    renderSettings();
+    renderSources();
+    renderStates();
+    renderClipList();
+  }
+
+  function renderSettings() {
+    const c = tuning.character;
+    $('#f-meshPath').value = c.meshPath;
+    const host = $('#num-fields');
+    host.innerHTML = '';
+    for (const [field, labelText, min, max] of NUM_FIELDS) {
+      const label = document.createElement('label');
+      label.textContent = labelText;
+      const input = document.createElement('input');
+      input.type = 'number'; input.step = 'any'; input.dataset.field = field; input.value = c[field];
+      input.addEventListener('change', () => {
+        const v = Number(input.value);
+        if (!Number.isFinite(v)) { input.value = c[field]; return; }
+        if (v < min || v > max) input.style.borderColor = 'var(--warn)'; else input.style.borderColor = '';
+        c[field] = v;
+        setDirty(true);
+        if (field === 'heightMeters' || field === 'yawOffsetDeg') T.onSourcesChanged && T.onSourcesChanged();
+      });
+      host.append(label, input);
+    }
+  }
+
+  function renderSources() {
+    const c = tuning.character;
+    const host = $('#sources-list');
+    host.innerHTML = '';
+    c.animationPaths.forEach((p, i) => {
+      const div = document.createElement('div');
+      div.className = 'src';
+      const span = document.createElement('span'); span.textContent = p; span.title = p;
+      const del = document.createElement('button'); del.className = 'small danger'; del.textContent = '✕';
+      del.addEventListener('click', () => { c.animationPaths.splice(i, 1); setDirty(true); render(); T.onSourcesChanged && T.onSourcesChanged(); });
+      div.append(span, del);
+      host.append(div);
+    });
+    if (c.animationPaths.length === 0) host.innerHTML = '<div class="detail">none — using clips embedded in the model GLB</div>';
+  }
+
+  function renderStates() {
+    const c = tuning.character;
+    const body = $('#states-body');
+    body.innerHTML = '';
+    for (const st of states()) {
+      const tr = document.createElement('tr');
+      tr.dataset.state = st.id;
+      const mapped = c.clipMap[st.id];
+      const resolvable = mapped && clips.some((n) => n === mapped || n.toLowerCase() === mapped.toLowerCase() || n.toLowerCase().includes(mapped.toLowerCase()));
+      if (!mapped || (clips.length > 0 && !resolvable)) tr.className = 'warn';
+
+      const tdName = document.createElement('td');
+      tdName.textContent = st.id;
+
+      const tdSel = document.createElement('td');
+      const sel = document.createElement('select');
+      sel.className = 'clip-select';
+      sel.append(new Option('— none —', ''));
+      const names = clips.slice();
+      if (mapped && !names.includes(mapped)) names.unshift(mapped); // keep an unresolvable mapping visible/selectable
+      for (const n of names) sel.append(new Option(n, n));
+      sel.value = mapped ?? '';
+      sel.addEventListener('change', () => { assign(st.id, sel.value); });
+      tdSel.append(sel);
+
+      const tdPlay = document.createElement('td');
+      const play = document.createElement('button');
+      play.className = 'small'; play.textContent = '▶'; play.title = 'preview the assigned clip';
+      play.disabled = !mapped;
+      play.addEventListener('click', () => preview(mapped));
+      tdPlay.append(play);
+
+      const tdOrigin = document.createElement('td');
+      const badge = document.createElement('span');
+      badge.className = 'badge ' + st.origin; badge.textContent = st.origin;
+      const det = document.createElement('div'); det.className = 'detail'; det.textContent = st.detail;
+      tdOrigin.append(badge, det);
+
+      const tdDel = document.createElement('td');
+      if (st.origin === 'custom') {
+        const del = document.createElement('button');
+        del.className = 'small danger'; del.textContent = '✕'; del.title = 'remove this state and its mapping';
+        del.addEventListener('click', () => removeState(st.id));
+        tdDel.append(del);
+      }
+
+      tr.append(tdName, tdSel, tdPlay, tdOrigin, tdDel);
+      body.append(tr);
+    }
+  }
+
+  function renderClipList() {
+    const host = $('#clip-list');
+    $('#clip-count').textContent = clips.length ? `${clips.length} clip(s) found` : 'no clips found';
+    host.innerHTML = '';
+    if (clips.length === 0) {
+      host.innerHTML = '<div class="detail">No animation clips in the model. If your animations are separate GLB files (Mixamo exports), add them under <b>Animation sources</b>.</div>';
+      return;
+    }
+    for (const n of clips) {
+      const div = document.createElement('div');
+      div.className = 'clip' + (n === playingClip ? ' playing' : '');
+      div.dataset.clip = n;
+      const play = document.createElement('button');
+      play.className = 'small'; play.textContent = '▶';
+      play.addEventListener('click', () => preview(n));
+      const span = document.createElement('span'); span.textContent = n;
+      div.append(play, span);
+      host.append(div);
+    }
+  }
+
+  // ------------------------------------------------------------------ mutations
+  function assign(state, clipName) {
+    const c = tuning.character;
+    if (clipName) c.clipMap[state] = clipName;
+    else delete c.clipMap[state]; // sparse: blank removes the key, same convention as gain tables
+    setDirty(true);
+    renderStates();
+  }
+
+  function addState(id) {
+    id = String(id ?? '').trim();
+    if (!id || states().some((s) => s.id === id)) return false;
+    custom.push(id);
+    renderStates();
+    return true;
+  }
+
+  function removeState(id) {
+    custom = custom.filter((s) => s !== id);
+    if (tuning.character.clipMap[id] !== undefined) { delete tuning.character.clipMap[id]; setDirty(true); }
+    renderStates();
+  }
+
+  function addSource(path) {
+    path = String(path ?? '').trim();
+    if (!path) return false;
+    if (!/^(\/|https?:)/.test(path)) path = '/' + path;
+    const c = tuning.character;
+    if (c.animationPaths.includes(path)) return false;
+    c.animationPaths.push(path);
+    setDirty(true);
+    render();
+    T.onSourcesChanged && T.onSourcesChanged();
+    return true;
+  }
+
+  function setClips(names) {
+    clips = names.slice();
+    playingClip = null;
+    renderStates();
+    renderClipList();
+  }
+
+  function preview(clipName) {
+    playingClip = clipName ?? null;
+    renderClipList();
+    T.onPreview && T.onPreview(playingClip);
+  }
+
+  function previewMessage(msg) {
+    const el = $('#preview-msg');
+    if (el) { el.textContent = msg ?? ''; el.style.display = msg ? 'flex' : 'none'; }
+  }
+
+  // ------------------------------------------------------------------ save
+  async function save() {
+    try {
+      const res = await fetch(API + 'tuning.json', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tuning, null, 2),
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      setDirty(false);
+    } catch (e) {
+      const el = $('#status');
+      el.textContent = 'save failed: ' + e.message;
+      el.className = 'status error';
+    }
+  }
+
+  function init({ tuning: t, interactions: i }) {
+    tuning = t; interactions = i;
+    ensureCharacter();
+    render();
+    setDirty(false);
+  }
+
+  // ------------------------------------------------------------------ wiring
+  document.addEventListener('DOMContentLoaded', () => {
+    $('#save').addEventListener('click', save);
+    $('#f-meshPath').addEventListener('change', () => {
+      const v = $('#f-meshPath').value.trim();
+      tuning.character.meshPath = /^(\/|https?:)/.test(v) || v === '' ? v : '/' + v;
+      $('#f-meshPath').value = tuning.character.meshPath;
+      setDirty(true);
+      T.onSourcesChanged && T.onSourcesChanged();
+    });
+    $('#add-state').addEventListener('click', () => { if (addState($('#new-state').value)) $('#new-state').value = ''; });
+    $('#new-state').addEventListener('keydown', (e) => { if (e.key === 'Enter') { if (addState($('#new-state').value)) $('#new-state').value = ''; } });
+    $('#add-source').addEventListener('click', () => { if (addSource($('#new-source').value)) $('#new-source').value = ''; });
+    $('#new-source').addEventListener('keydown', (e) => { if (e.key === 'Enter') { if (addSource($('#new-source').value)) $('#new-source').value = ''; } });
+    $('#stop-preview').addEventListener('click', () => preview(null));
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
+    });
+    window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+  });
+
+  return {
+    init, save, assign, addState, removeState, addSource, setClips, preview, previewMessage,
+    character, states,
+    get dirty() { return dirty; },
+    get clips() { return clips.slice(); },
+    payload: () => tuning,
+    set onSourcesChanged(fn) { T.onSourcesChanged = fn; },
+    set onPreview(fn) { T.onPreview = fn; },
+  };
+})();
+</script>
+
+<script type="module">
+/* ================================================================== preview
+   three.js side — processed by Vite in the browser, inert under jsdom.
+   Reuses the game's own normalizeModelToHeight (not a reimplementation).
+=================================================================== */
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { normalizeModelToHeight } from '/game/world.ts';
+
+const API = '/api/data/';
+const j = (u) => fetch(API + u, { cache: 'no-cache' }).then((r) => { if (!r.ok) throw new Error(u + ': HTTP ' + r.status); return r.json(); });
+
+let tuning, interactions;
+try {
+  [tuning, interactions] = await Promise.all([j('tuning.json'), j('interactions.json')]);
+} catch (e) {
+  document.getElementById('status').textContent = 'data failed to load — is server.js running? (' + e.message + ')';
+  document.getElementById('status').className = 'status error';
+  throw e;
+}
+AnimTool.init({ tuning, interactions });
+
+// --- three scene ---
+const host = document.getElementById('preview');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const size = () => [host.clientWidth, host.clientHeight];
+renderer.setSize(...size());
+host.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1017);
+scene.add(new THREE.GridHelper(4, 8, 0x33415c, 0x232a3a));
+const hemi = new THREE.HemisphereLight(0xdde6ff, 0x2a2f3a, 1.4);
+const dir = new THREE.DirectionalLight(0xffffff, 1.6);
+dir.position.set(3, 5, 4);
+scene.add(hemi, dir);
+
+const camera = new THREE.PerspectiveCamera(40, host.clientWidth / host.clientHeight, 0.01, 100);
+const controls = new OrbitControls(camera, renderer.domElement);
+
+let charRoot = null, mixer = null, clipObjs = [], currentAction = null;
+
+function frameModel(model) {
+  const box = new THREE.Box3().setFromObject(model);
+  const s = box.getSize(new THREE.Vector3());
+  const c = box.getCenter(new THREE.Vector3());
+  const radius = Math.max(s.x, s.y, s.z);
+  camera.near = Math.max(radius / 100, 0.001);
+  camera.far = radius * 50;
+  camera.position.set(c.x + radius * 1.6, c.y + radius * 0.9, c.z + radius * 1.6);
+  camera.updateProjectionMatrix();
+  controls.target.copy(c);
+  controls.update();
+}
+
+async function loadCharacter() {
+  const c = AnimTool.character();
+  if (charRoot) { scene.remove(charRoot); charRoot = null; }
+  mixer = null; clipObjs = []; currentAction = null;
+  AnimTool.setClips([]);
+  if (!c.meshPath) { AnimTool.previewMessage('set a model GLB path'); return; }
+  AnimTool.previewMessage('loading model…');
+  const loader = new GLTFLoader();
+  const load = (u) => new Promise((res, rej) => loader.load(u, res, undefined, rej));
+  try {
+    const gltf = await load(c.meshPath);
+    clipObjs = [...gltf.animations];
+    for (const p of c.animationPaths) {
+      try { const extra = await load(p); clipObjs.push(...extra.animations); }
+      catch (e) { console.warn('animation source failed to load:', p, e); }
+    }
+    const model = gltf.scene;
+    normalizeModelToHeight(model, c.heightMeters || 1.55);
+    model.rotation.y = THREE.MathUtils.degToRad(c.yawOffsetDeg || 0);
+    model.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
+    charRoot = model;
+    scene.add(model);
+    mixer = new THREE.AnimationMixer(model);
+    frameModel(model);
+    AnimTool.setClips(clipObjs.map((k) => k.name));
+    AnimTool.previewMessage(clipObjs.length ? '' : 'model loaded — no clips (add animation sources)');
+  } catch (e) {
+    console.warn(e);
+    AnimTool.previewMessage('could not load ' + c.meshPath + ' — check the path (files under public/ are served at /)');
+  }
+}
+
+AnimTool.onSourcesChanged = () => { void loadCharacter(); };
+AnimTool.onPreview = (name) => {
+  if (!mixer) return;
+  if (currentAction) { currentAction.fadeOut(0.2); currentAction = null; }
+  if (!name) { setTimeout(() => mixer && mixer.stopAllAction(), 250); return; }
+  const clip = clipObjs.find((k) => k.name === name);
+  if (!clip) return;
+  currentAction = mixer.clipAction(clip);
+  currentAction.setLoop(THREE.LoopRepeat, Infinity);
+  currentAction.reset().setEffectiveWeight(1).fadeIn(0.2).play();
+};
+
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta();
+  if (mixer) mixer.update(dt);
+  controls.update();
+  renderer.render(scene, camera);
+});
+window.addEventListener('resize', () => {
+  renderer.setSize(...size());
+  camera.aspect = host.clientWidth / host.clientHeight;
+  camera.updateProjectionMatrix();
+});
+
+void loadCharacter();
+</script>
+</body>
+</html>

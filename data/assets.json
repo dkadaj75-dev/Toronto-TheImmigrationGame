@@ -1,20 +1,243 @@
 {
   "_comment": "Port of DT_Assets (14 rows). SCHEMA IS FINAL; VALUES ARE PLACEHOLDER — every price, environment score, footprint and interaction list below must be replaced 1:1 with the CLAUDE.md / DT_Assets numbers. Mesh refs point to public/models/*.glb (starter pack to be imported; procedural stand-ins render until then).",
-  "categories": ["seating", "beds", "appliances", "plumbing", "electronics", "surfaces", "decor"],
+  "categories": [
+    "seating",
+    "beds",
+    "appliances",
+    "plumbing",
+    "electronics",
+    "surfaces",
+    "decor"
+  ],
   "assets": [
-    { "id": "sofa",         "name": "Sofa",           "category": "seating",     "mesh": "models/sofa.glb",         "buyPrice": 450,  "sellPrice": 340,  "environmentScore": 3, "footprint": [3, 1], "seats": 3, "interactions": ["sit", "nap"] },
-    { "id": "armchair",     "name": "Armchair",       "category": "seating",     "mesh": "models/armchair.glb",     "buyPrice": 180,  "sellPrice": 135,  "environmentScore": 2, "footprint": [1, 1], "seats": 1, "interactions": ["sit"] },
-    { "id": "dining_chair", "name": "Dining chair",   "category": "seating",     "mesh": "models/dining_chair.glb", "buyPrice": 80,   "sellPrice": 60,   "environmentScore": 1, "footprint": [1, 1], "seats": 1, "interactions": ["sit", "eat"] },
-    { "id": "bed",          "name": "Bed",            "category": "beds",        "mesh": "models/bed.glb",          "buyPrice": 900,  "sellPrice": 675,  "environmentScore": 3, "footprint": [2, 3], "interactions": ["sleep", "nap"] },
-    { "id": "fridge",       "name": "Fridge",         "category": "appliances",  "mesh": "models/fridge.glb",       "buyPrice": 600,  "sellPrice": 450,  "environmentScore": 1, "footprint": [1, 1], "interactions": ["eat"] },
-    { "id": "stove",        "name": "Stove",          "category": "appliances",  "mesh": "models/stove.glb",        "buyPrice": 400,  "sellPrice": 300,  "environmentScore": 1, "footprint": [1, 1], "interactions": ["cook"] },
-    { "id": "counter",      "name": "Counter",        "category": "surfaces",    "mesh": "models/counter.glb",      "buyPrice": 150,  "sellPrice": 110,  "environmentScore": 1, "footprint": [1, 1], "interactions": [] },
-    { "id": "dining_table", "name": "Dining table",   "category": "surfaces",    "mesh": "models/dining_table.glb", "buyPrice": 250,  "sellPrice": 185,  "environmentScore": 2, "footprint": [2, 1], "interactions": [] },
-    { "id": "toilet",       "name": "Toilet",         "category": "plumbing",    "mesh": "models/toilet.glb",       "buyPrice": 300,  "sellPrice": 225,  "environmentScore": 0, "footprint": [1, 1], "interactions": ["use_toilet"] },
-    { "id": "shower",       "name": "Shower",         "category": "plumbing",    "mesh": "models/shower.glb",       "buyPrice": 650,  "sellPrice": 490,  "environmentScore": 1, "footprint": [1, 1], "interactions": ["shower"] },
-    { "id": "sink",         "name": "Sink",           "category": "plumbing",    "mesh": "models/sink.glb",         "buyPrice": 200,  "sellPrice": 150,  "environmentScore": 0, "footprint": [1, 1], "interactions": ["wash_hands"] },
-    { "id": "tv",           "name": "TV",             "category": "electronics", "mesh": "models/tv.glb",           "buyPrice": 800,  "sellPrice": 600,  "environmentScore": 2, "footprint": [2, 1], "interactions": ["watch_tv"], "seatTarget": true },
-    { "id": "bookshelf",    "name": "Bookshelf",      "category": "decor",       "mesh": "models/bookshelf.glb",    "buyPrice": 350,  "sellPrice": 260,  "environmentScore": 3, "footprint": [2, 1], "interactions": ["read_book", "practice_english"] },
-    { "id": "phone",        "name": "Phone",          "category": "electronics", "mesh": "models/phone.glb",        "buyPrice": 500,  "sellPrice": 375,  "environmentScore": 1, "footprint": [1, 1], "interactions": ["talk_to", "play"] }
+    {
+      "id": "sofa",
+      "name": "Sofa",
+      "category": "seating",
+      "mesh": "models/sofa.glb",
+      "buyPrice": 450,
+      "sellPrice": 340,
+      "environmentScore": 3,
+      "footprint": [
+        3,
+        1
+      ],
+      "seats": 3,
+      "interactions": [
+        "sit",
+        "nap"
+      ]
+    },
+    {
+      "id": "armchair",
+      "name": "Armchair",
+      "category": "seating",
+      "mesh": "models/armchair.glb",
+      "buyPrice": 180,
+      "sellPrice": 135,
+      "environmentScore": 2,
+      "footprint": [
+        1,
+        1
+      ],
+      "seats": 1,
+      "interactions": [
+        "sit"
+      ]
+    },
+    {
+      "id": "dining_chair",
+      "name": "Dining chair",
+      "category": "seating",
+      "mesh": "models/dining_chair.glb",
+      "buyPrice": 80,
+      "sellPrice": 60,
+      "environmentScore": 1,
+      "footprint": [
+        1,
+        1
+      ],
+      "seats": 1,
+      "interactions": [
+        "sit",
+        "eat"
+      ]
+    },
+    {
+      "id": "bed",
+      "name": "Bed",
+      "category": "beds",
+      "mesh": "models/bed.glb",
+      "buyPrice": 900,
+      "sellPrice": 675,
+      "environmentScore": 3,
+      "footprint": [
+        2,
+        3
+      ],
+      "interactions": [
+        "sleep",
+        "nap"
+      ]
+    },
+    {
+      "id": "fridge",
+      "name": "Fridge",
+      "category": "appliances",
+      "mesh": "models/fridge.glb",
+      "buyPrice": 600,
+      "sellPrice": 450,
+      "environmentScore": 1,
+      "footprint": [
+        1,
+        1
+      ],
+      "interactions": [
+        "eat"
+      ]
+    },
+    {
+      "id": "stove",
+      "name": "Stove",
+      "category": "appliances",
+      "mesh": "models/stove.glb",
+      "buyPrice": 400,
+      "sellPrice": 300,
+      "environmentScore": 1,
+      "footprint": [
+        1,
+        1
+      ],
+      "interactions": [
+        "cook"
+      ]
+    },
+    {
+      "id": "counter",
+      "name": "Counter",
+      "category": "surfaces",
+      "mesh": "models/counter.glb",
+      "buyPrice": 150,
+      "sellPrice": 110,
+      "environmentScore": 1,
+      "footprint": [
+        1,
+        1
+      ],
+      "interactions": []
+    },
+    {
+      "id": "dining_table",
+      "name": "Dining table",
+      "category": "surfaces",
+      "mesh": "models/dining_table.glb",
+      "buyPrice": 250,
+      "sellPrice": 185,
+      "environmentScore": 2,
+      "footprint": [
+        2,
+        1
+      ],
+      "interactions": []
+    },
+    {
+      "id": "toilet",
+      "name": "Toilet",
+      "category": "plumbing",
+      "mesh": "models/toilet.glb",
+      "buyPrice": 300,
+      "sellPrice": 225,
+      "environmentScore": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "interactions": [
+        "use_toilet"
+      ]
+    },
+    {
+      "id": "shower",
+      "name": "Shower",
+      "category": "plumbing",
+      "mesh": "models/shower.glb",
+      "buyPrice": 650,
+      "sellPrice": 490,
+      "environmentScore": 1,
+      "footprint": [
+        1,
+        1
+      ],
+      "interactions": [
+        "shower"
+      ]
+    },
+    {
+      "id": "sink",
+      "name": "Sink",
+      "category": "plumbing",
+      "mesh": "models/sink.glb",
+      "buyPrice": 200,
+      "sellPrice": 150,
+      "environmentScore": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "interactions": [
+        "wash_hands"
+      ]
+    },
+    {
+      "id": "tv",
+      "name": "TV",
+      "category": "electronics",
+      "mesh": "models/tv.glb",
+      "buyPrice": 800,
+      "sellPrice": 600,
+      "environmentScore": 2,
+      "footprint": [
+        2,
+        1
+      ],
+      "interactions": [
+        "watch_tv"
+      ],
+      "seatTarget": true
+    },
+    {
+      "id": "bookshelf",
+      "name": "Bookshelf",
+      "category": "decor",
+      "mesh": "models/bookshelf.glb",
+      "buyPrice": 350,
+      "sellPrice": 260,
+      "environmentScore": 3,
+      "footprint": [
+        2,
+        1
+      ],
+      "interactions": [
+        "read_book",
+        "practice_english"
+      ]
+    },
+    {
+      "id": "phone",
+      "name": "Phone",
+      "category": "electronics",
+      "mesh": "models/phone.glb",
+      "buyPrice": 500,
+      "sellPrice": 375,
+      "environmentScore": 1,
+      "footprint": [
+        1,
+        1
+      ],
+      "interactions": [
+        "talk_to",
+        "play"
+      ]
+    }
   ]
 }

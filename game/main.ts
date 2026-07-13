@@ -5,7 +5,14 @@
 import * as THREE from 'three';
 import { loadAll, watchData, type GameData } from './data';
 import { TouchCamera } from './camera';
-import { buildWorld, makeSimStandIn, makeLights } from './world';
+import { buildWorld, makeSimStandIn, makeLights, applyDayNight, loadRiggedCharacter } from './world';
+import { AnimController } from './anim';
+import { bakeNavGrid } from './nav';
+import { TapInput } from './input';
+import { SimAgent, ClickCue, findSeatFor } from './sim';
+import { SimStats } from './stats';
+import { Hud } from './ui';
+import { Autonomy } from './autonomy';
 
 const app = document.getElementById('app')!;
 const boot = document.getElementById('boot')!;
@@ -33,7 +40,8 @@ async function start() {
   scene.background = new THREE.Color(0x2a3346);
 
   let world = buildWorld(data);
-  scene.add(world, makeLights());
+  const lights = makeLights();
+  scene.add(world, lights);
 
   const sim = makeSimStandIn();
   sim.position.set(data.map.spawn.pos[0], 0, data.map.spawn.pos[1]);
@@ -43,12 +51,160 @@ async function start() {
   const cam = new TouchCamera(window.innerWidth / window.innerHeight, data.tuning.camera, data.map);
   cam.attach(renderer.domElement);
 
+  // --- Phase 1: tap-to-go + needs/skills simulation + actions ---
+  let grid = bakeNavGrid(data.map, data.assets);
+  const agent = new SimAgent(sim, grid, data.tuning);
+  const cue = new ClickCue();
+  scene.add(cue.object);
+
+  // --- rigged character: swap the capsule's contents for the GLB when it loads.
+  // The `sim` group stays the agent's object, so position/rotation/pose logic is untouched.
+  let anim: AnimController | null = null;
+  // signature of the last load — changing the mesh OR the animation sources re-loads the rig
+  let charSig = '';
+  const sigOf = (c: { meshPath: string; animationPaths?: string[] }) => JSON.stringify([c.meshPath, c.animationPaths ?? []]);
+  const loadCharacter = () => {
+    const c = data.tuning.character;
+    if (!c?.meshPath) return;
+    const sig = sigOf(c);
+    if (sig === charSig) return;
+    charSig = sig;
+    loadRiggedCharacter(c)
+      .then(({ model, clips }) => {
+        if (!data.tuning.character || sigOf(data.tuning.character) !== sig) return; // changed again mid-flight
+        disposeGroup(sim); // free the capsule (or a previous rig)
+        sim.clear();
+        sim.add(model);
+        anim = new AnimController(model, clips, data.tuning.character!);
+        console.info(`character clips available: ${clips.map((k) => k.name).join(', ')} — map them in tuning.character.clipMap`);
+        agent.hasRig = true;
+        // enter the correct state immediately (mid-walk / mid-action hot-swaps included)
+        anim.play(agent.current ? agent.current.action.animation : agent.isMoving ? 'walk' : 'idle');
+        anim.setWalkSpeed(data.tuning.movement.walkSpeed);
+      })
+      .catch((err) => console.warn(`rigged character failed to load (${c.meshPath}) — keeping the capsule stand-in.`, err));
+  };
+  loadCharacter();
+
+  agent.onLocomotionChange = (moving) => {
+    if (!anim) return;
+    if (moving) {
+      anim.play('walk');
+      anim.setWalkSpeed(data.tuning.movement.walkSpeed);
+    } else if (!agent.current) {
+      anim.play('idle'); // arrival into an action is handled by onActionStart instead
+    }
+  };
+
+  const stats = new SimStats(data.stats);
+  const hud = new Hud(stats);
+
+  // Environment need (Sims "Room" score) = Σ environment scores of placed objects
+  const environmentScore = () => {
+    const byId = new Map(data.assets.assets.map((a) => [a.id, a]));
+    return data.map.placedObjects.reduce((sum, p) => sum + (byId.get(p.asset)?.environmentScore ?? 0), 0);
+  };
+  const envNeedId = () => data.stats.needs.find((n) => n.computed)?.id;
+  const applyEnvironment = () => { const id = envNeedId(); if (id) stats.setComputed(id, environmentScore()); };
+  applyEnvironment();
+
+  const autonomy = new Autonomy(() => data, () => world, agent, stats);
+
+  // --- object highlight: subtle box on hover (mouse), bright box while the menu is open ---
+  const hoverBox = new THREE.BoxHelper(new THREE.Object3D(), 0x6fa0ff);
+  const selectBox = new THREE.BoxHelper(new THREE.Object3D(), 0xffd166);
+  hoverBox.visible = false;
+  selectBox.visible = false;
+  scene.add(hoverBox, selectBox);
+  const setHover = (obj: THREE.Object3D | null) => {
+    if (obj) hoverBox.setFromObject(obj);
+    hoverBox.visible = !!obj;
+    renderer.domElement.style.cursor = obj ? 'pointer' : 'default';
+  };
+  const setSelected = (obj: THREE.Object3D | null) => {
+    if (obj) selectBox.setFromObject(obj);
+    selectBox.visible = !!obj;
+    if (obj) setHover(null); // the bright box replaces the hover box on the same object
+  };
+  hud.onMenuHidden = () => setSelected(null);
+
+  agent.onActionStart = (a) => {
+    hud.showActivity(a.action.name);
+    anim?.play(a.action.animation || 'idle'); // unmapped states fall back to idle inside AnimController
+  };
+  agent.onActionStop = () => {
+    hud.hideActivity();
+    anim?.play('idle');
+  };
+  hud.onCancelAction = () => { autonomy.notePlayerCommand(); agent.stopAction(); };
+
+  const tapInput = new TapInput(renderer.domElement, cam.camera, () => world, (hit) => {
+    if (hit.object) {
+      const assetId = hit.object.userData.assetId as string;
+      const asset = data.assets.assets.find((a) => a.id === assetId);
+      if (asset) {
+        const actions = asset.interactions
+          .map((id) => data.interactions.actions.find((x) => x.id === id))
+          .filter((x): x is NonNullable<typeof x> => !!x);
+        if (actions.length > 0) {
+          const target = hit.object;
+          setSelected(target);
+          hud.showActionMenu(asset, actions, (action) => {
+            autonomy.notePlayerCommand();
+            const seat = action.seatAware ? findSeatFor(world, data, target) : null;
+            if (agent.orderAction(action, target, seat)) cue.showAt(target.position.x, target.position.z);
+            else console.log('no path to object', assetId);
+          });
+          return; // object tap opens the menu; don't also walk to the tap point
+        }
+      }
+    }
+    hud.hideActionMenu();
+    if (hit.ground) {
+      autonomy.notePlayerCommand();
+      const ok = agent.goTo(hit.ground.x, hit.ground.z);
+      if (ok) cue.showAt(hit.ground.x, hit.ground.z);
+    }
+  });
+  tapInput.onHover = setHover;
+
+  // --- simulation ticks (all intervals & thresholds from tuning.json / stats.json) ---
+  let decayAcc = 0, gainAcc = 0;
+  const simTick = (dt: number) => {
+    decayAcc += dt;
+    const decayEvery = data.tuning.simulation.needsDecayTickSeconds;
+    while (decayAcc >= decayEvery) {
+      decayAcc -= decayEvery;
+      stats.decayTick();
+      applyEnvironment();
+      autonomy.maybeAct(); // free will evaluates on the decay tick
+    }
+
+    gainAcc += dt;
+    const gainEvery = data.tuning.simulation.activityGainTickSeconds;
+    while (gainAcc >= gainEvery) {
+      gainAcc -= gainEvery;
+      const active = agent.current;
+      if (active) {
+        stats.applyGains(active.action);
+        // auto-stop when the action's primary need is satisfied
+        const pn = active.action.primaryNeed;
+        if (pn && (stats.needs.get(pn) ?? 0) >= data.tuning.autonomy.stopAtThreshold) {
+          agent.stopAction();
+        }
+      }
+    }
+  };
+
+  let hudAcc = 0;
+
   window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
     cam.resize(window.innerWidth / window.innerHeight);
   });
 
   // --- data hot-reload (design pillar: tuning is play-test-live) ---
+  let currentMapId = data.map.id;
   watchData((fresh) => {
     data = fresh;
     scene.remove(world);
@@ -56,6 +212,22 @@ async function start() {
     world = buildWorld(data);
     scene.add(world);
     cam.retune(data.tuning.camera, data.map);
+    grid = bakeNavGrid(data.map, data.assets);
+    agent.retune(data.tuning, grid);
+    if (data.map.id !== currentMapId) {
+      // map switch (tuning.map.active changed) — respawn the sim on the new map
+      currentMapId = data.map.id;
+      agent.teleportTo(data.map.spawn.pos[0], data.map.spawn.pos[1], data.map.spawn.facingDeg);
+      hud.hideActionMenu();
+    }
+    stats.retune(data.stats);
+    hud.rebuildBars();
+    applyEnvironment();
+    if (data.tuning.character) {
+      anim?.retune(data.tuning.character);
+      anim?.setWalkSpeed(data.tuning.movement.walkSpeed);
+      loadCharacter(); // no-op unless meshPath changed
+    }
     flashDevbar();
   });
 
@@ -70,10 +242,21 @@ async function start() {
   renderer.setAnimationLoop((now) => {
     const dt = Math.min((now - last) / 1000, 0.1);
     last = now;
+    const sdt = dt * hud.speed; // simulation time: pause/1×/2×/3× scales everything below
 
-    gameSeconds = (gameSeconds + dt * clockScale()) % 86400;
+    gameSeconds = (gameSeconds + sdt * clockScale()) % 86400;
     const h = Math.floor(gameSeconds / 3600), m = Math.floor((gameSeconds % 3600) / 60);
     devClock.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    hud.setClock(h, m);
+    applyDayNight(lights, scene, gameSeconds / 3600, data.tuning.time.nightStartHour, data.tuning.time.nightEndHour);
+
+    agent.update(sdt);
+    anim?.update(sdt); // sim time: pause freezes the character, 2×/3× speed it up
+    cue.update(dt); // UI feedback stays real-time
+    autonomy.update(sdt);
+    simTick(sdt);
+    hudAcc += dt;
+    if (hudAcc >= 0.25) { hudAcc = 0; hud.refresh(); } // 4 Hz is plenty for bars
 
     frames++; fpsTimer += dt;
     if (fpsTimer >= 1) { devFps.textContent = `${frames} fps`; frames = 0; fpsTimer = 0; }
@@ -86,7 +269,7 @@ async function start() {
 
 function disposeGroup(g: THREE.Group) {
   g.traverse((o) => {
-    if (o instanceof THREE.Mesh) {
+    if (o instanceof THREE.Mesh && !o.userData.sharedResource) { // GLB clones share the cached template's buffers
       o.geometry.dispose();
       const m = o.material;
       (Array.isArray(m) ? m : [m]).forEach((mm) => mm.dispose());

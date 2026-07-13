@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Condo Life — Asset Editor</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #141a28; color: #dfe6f2; }
+  header { position: sticky; top: 0; z-index: 5; display: flex; gap: 10px; align-items: center;
+    padding: 10px 14px; background: #0f1420ee; backdrop-filter: blur(6px); border-bottom: 1px solid #26304a; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header .grow { flex: 1; }
+  #search { background: #1c2436; border: 1px solid #2c3a58; color: #dfe6f2; border-radius: 8px; padding: 7px 10px; width: 200px; font-size: 13px; }
+  button { border: 0; border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; background: #2c3a58; color: #dfe6f2; }
+  button.primary { background: #3d6fd2; color: #fff; }
+  button.danger { background: #7a3040; }
+  button:disabled { opacity: .45; cursor: default; }
+  #status { font-size: 12px; color: #8fa3c8; min-width: 150px; text-align: right; }
+  #status.ok { color: #7fd98a; } #status.err { color: #e58a8a; }
+
+  #layout { display: grid; grid-template-columns: 250px 1fr; height: calc(100vh - 53px); }
+  #sidebar { border-right: 1px solid #26304a; overflow-y: auto; padding: 8px; }
+  #sidebar h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #6f7fa3; margin: 12px 6px 4px; }
+  .asset-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+    background: transparent; padding: 7px 8px; border-radius: 8px; font-size: 13px; }
+  .asset-item:hover { background: #1c2436; }
+  .asset-item.active { background: rgba(90,120,190,.28); }
+  .asset-item .badge { margin-left: auto; font-size: 10px; color: #8fa3c8; background: #1c2436; border-radius: 999px; padding: 2px 7px; }
+  #editor { overflow-y: auto; padding: 16px; }
+  #editor .empty { color: #5f6f93; padding: 40px; text-align: center; }
+  .card { background: #1a2133; border: 1px solid #26304a; border-radius: 12px; padding: 14px; margin-bottom: 14px; max-width: 660px; }
+  .card h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: #93a3c0; }
+  .frow { display: grid; grid-template-columns: 160px 1fr; gap: 10px; align-items: center; padding: 5px 0; }
+  .frow label { font-size: 13px; }
+  .frow input[type=number], .frow input[type=text], .frow select { width: 100%; background: #10182a; border: 1px solid #2c3a58;
+    color: #dfe6f2; border-radius: 6px; padding: 6px 8px; font-size: 13px; }
+  .frow input[readonly] { color: #6f7fa3; }
+  .frow .pair { display: flex; gap: 8px; }
+  .checks { display: flex; flex-wrap: wrap; gap: 8px; }
+  .checks label { display: flex; align-items: center; gap: 5px; font-size: 13px; background: #10182a;
+    border: 1px solid #2c3a58; border-radius: 8px; padding: 5px 9px; cursor: pointer; }
+  .checks label:has(input:checked) { border-color: #3d6fd2; background: rgba(61,111,210,.15); }
+  #preview-wrap { max-width: 660px; }
+  #preview { width: 100%; height: 280px; background: #0d1220; border: 1px solid #26304a; border-radius: 12px; display: block; }
+  #preview-msg { font-size: 12px; color: #5f6f93; margin-top: 6px; }
+  .row-actions { display: flex; gap: 8px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛋 Asset Editor</h1>
+  <span class="grow"></span>
+  <input id="search" type="search" placeholder="Search assets…" />
+  <button id="new">+ New asset</button>
+  <button id="save" class="primary" disabled>Save changes</button>
+  <span id="status">loading…</span>
+</header>
+<div id="layout">
+  <nav id="sidebar"></nav>
+  <div id="editor"><div class="empty">Select an asset</div></div>
+</div>
+
+<script>
+// ------------------------------------------------------------------ state
+const API = '/api/data/';
+const state = { assets: null, interactions: null, map: null, selected: null, dirty: false };
+
+async function load() {
+  setStatus('loading…');
+  try {
+    const [a, i, m] = await Promise.all([
+      fetch(API + 'assets.json').then((r) => { if (!r.ok) throw new Error('assets.json HTTP ' + r.status); return r.json(); }),
+      fetch(API + 'interactions.json').then((r) => { if (!r.ok) throw new Error('interactions.json HTTP ' + r.status); return r.json(); }),
+      fetch(API + 'maps/condo.json').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ]);
+    state.assets = a; state.interactions = i; state.map = m;
+    state.dirty = false;
+    if (!state.selected && a.assets.length) state.selected = a.assets[0].id;
+    renderAll();
+    setStatus('loaded', 'ok');
+  } catch (e) { setStatus(String(e.message || e), 'err'); }
+}
+
+async function save() {
+  setStatus('saving…');
+  try {
+    const res = await fetch(API + 'assets.json', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state.assets, null, 2),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    state.dirty = false;
+    updateSave();
+    setStatus('saved — game hot-reloads', 'ok');
+  } catch (e) { setStatus(String(e.message || e), 'err'); }
+}
+
+function markDirty() { state.dirty = true; updateSave(); setStatus('unsaved changes'); }
+function updateSave() { document.getElementById('save').disabled = !state.dirty; }
+function setStatus(msg, cls = '') { const s = document.getElementById('status'); s.textContent = msg; s.className = cls; }
+const placedCount = (id) => (state.map?.placedObjects ?? []).filter((p) => p.asset === id).length;
+const selectedAsset = () => state.assets.assets.find((a) => a.id === state.selected) ?? null;
+
+// ------------------------------------------------------------------ sidebar
+function renderSidebar() {
+  const nav = document.getElementById('sidebar');
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  nav.innerHTML = '';
+  for (const cat of state.assets.categories) {
+    const items = state.assets.assets.filter((a) => a.category === cat &&
+      (q === '' || a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q)));
+    if (!items.length) continue;
+    const h = document.createElement('h4');
+    h.textContent = cat;
+    nav.appendChild(h);
+    for (const a of items) {
+      const b = document.createElement('button');
+      b.className = 'asset-item' + (a.id === state.selected ? ' active' : '');
+      b.dataset.assetId = a.id;
+      const n = placedCount(a.id);
+      b.innerHTML = `<span>${a.name}</span>${n ? `<span class="badge">×${n} placed</span>` : ''}`;
+      b.addEventListener('click', () => { state.selected = a.id; renderAll(); });
+      nav.appendChild(b);
+    }
+  }
+  // uncategorized safety net
+  const stray = state.assets.assets.filter((a) => !state.assets.categories.includes(a.category));
+  if (stray.length) {
+    const h = document.createElement('h4');
+    h.textContent = '(uncategorized)';
+    nav.appendChild(h);
+    for (const a of stray) {
+      const b = document.createElement('button');
+      b.className = 'asset-item' + (a.id === state.selected ? ' active' : '');
+      b.dataset.assetId = a.id;
+      b.textContent = a.name;
+      b.addEventListener('click', () => { state.selected = a.id; renderAll(); });
+      nav.appendChild(b);
+    }
+  }
+}
+
+// ------------------------------------------------------------------ editor form
+function frow(label, input) {
+  const r = document.createElement('div');
+  r.className = 'frow';
+  const l = document.createElement('label');
+  l.textContent = label;
+  r.append(l, input);
+  return r;
+}
+function numInput(get, set, path) {
+  const i = document.createElement('input');
+  i.type = 'number'; i.step = 'any'; i.value = get() ?? '';
+  i.dataset.path = path;
+  i.addEventListener('input', () => { set(i.value === '' ? undefined : Number(i.value)); markDirty(); });
+  return i;
+}
+function textInput(get, set, path, opts = {}) {
+  const i = document.createElement('input');
+  i.type = 'text'; i.value = get() ?? '';
+  i.dataset.path = path;
+  if (opts.readonly) i.readOnly = true;
+  i.addEventListener('input', () => { set(i.value); markDirty(); });
+  return i;
+}
+function checkInput(get, set, path) {
+  const i = document.createElement('input');
+  i.type = 'checkbox'; i.checked = !!get();
+  i.dataset.path = path;
+  i.addEventListener('change', () => { set(i.checked); markDirty(); });
+  return i;
+}
+
+function renderEditor() {
+  const root = document.getElementById('editor');
+  const a = selectedAsset();
+  root.innerHTML = '';
+  if (!a) { root.innerHTML = '<div class="empty">Select an asset</div>'; return; }
+
+  // --- identity & economy
+  const card1 = document.createElement('div');
+  card1.className = 'card';
+  card1.innerHTML = '<h2>Asset</h2>';
+  card1.appendChild(frow('id (fixed — maps reference it)', textInput(() => a.id, () => {}, 'id', { readonly: true })));
+  card1.appendChild(frow('name', textInput(() => a.name, (v) => { a.name = v; renderSidebar(); }, 'name')));
+  const catSel = document.createElement('select');
+  catSel.dataset.path = 'category';
+  for (const c of state.assets.categories) {
+    const o = document.createElement('option'); o.value = c; o.textContent = c; catSel.appendChild(o);
+  }
+  catSel.value = a.category;
+  catSel.addEventListener('change', () => { a.category = catSel.value; markDirty(); renderSidebar(); });
+  card1.appendChild(frow('category', catSel));
+  card1.appendChild(frow('buy price', numInput(() => a.buyPrice, (v) => { a.buyPrice = v ?? 0; }, 'buyPrice')));
+  card1.appendChild(frow('sell price', numInput(() => a.sellPrice, (v) => { a.sellPrice = v ?? 0; }, 'sellPrice')));
+  card1.appendChild(frow('environment score', numInput(() => a.environmentScore, (v) => { a.environmentScore = v ?? 0; }, 'environmentScore')));
+  root.appendChild(card1);
+
+  // --- placement & seating
+  const card2 = document.createElement('div');
+  card2.className = 'card';
+  card2.innerHTML = '<h2>Placement & seating</h2>';
+  const pair = document.createElement('div');
+  pair.className = 'pair';
+  pair.append(
+    numInput(() => a.footprint[0], (v) => { a.footprint[0] = v ?? 1; }, 'footprint.w'),
+    numInput(() => a.footprint[1], (v) => { a.footprint[1] = v ?? 1; }, 'footprint.d'),
+  );
+  card2.appendChild(frow('footprint (w × d, meters)', pair));
+  card2.appendChild(frow('seats (count)', numInput(() => a.seats, (v) => { if (v === undefined) delete a.seats; else a.seats = v; }, 'seats')));
+  card2.appendChild(frow('is a seat target (sit here for seat-aware actions)', checkInput(() => a.seatTarget, (v) => { if (v) a.seatTarget = true; else delete a.seatTarget; }, 'seatTarget')));
+  root.appendChild(card2);
+
+  // --- interactions
+  const card3 = document.createElement('div');
+  card3.className = 'card';
+  card3.innerHTML = '<h2>Interactions</h2>';
+  const checks = document.createElement('div');
+  checks.className = 'checks';
+  for (const act of state.interactions.actions) {
+    const lab = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.dataset.path = 'interaction:' + act.id;
+    cb.checked = a.interactions.includes(act.id);
+    cb.addEventListener('change', () => {
+      if (cb.checked) { if (!a.interactions.includes(act.id)) a.interactions.push(act.id); }
+      else a.interactions = a.interactions.filter((x) => x !== act.id);
+      markDirty();
+    });
+    lab.append(cb, document.createTextNode(act.name));
+    checks.appendChild(lab);
+  }
+  card3.appendChild(checks);
+  root.appendChild(card3);
+
+  // --- mesh & preview
+  const card4 = document.createElement('div');
+  card4.className = 'card';
+  card4.id = 'preview-wrap';
+  card4.innerHTML = '<h2>Mesh</h2>';
+  const mesh = textInput(() => a.mesh, (v) => { a.mesh = v; schedulePreview(); }, 'mesh');
+  mesh.placeholder = '/models/furniture/couch.glb';
+  card4.appendChild(frow('GLB path (under public/)', mesh));
+  card4.insertAdjacentHTML('beforeend', '<canvas id="preview"></canvas><div id="preview-msg"></div>');
+  root.appendChild(card4);
+
+  // --- danger zone
+  const card5 = document.createElement('div');
+  card5.className = 'card';
+  card5.innerHTML = '<h2>Actions</h2>';
+  const rowA = document.createElement('div');
+  rowA.className = 'row-actions';
+  const dup = document.createElement('button');
+  dup.textContent = 'Duplicate';
+  dup.addEventListener('click', () => addAsset(structuredClone(a)));
+  const del = document.createElement('button');
+  del.className = 'danger';
+  del.id = 'delete';
+  const n = placedCount(a.id);
+  del.textContent = n ? `Delete (placed ×${n} in map!)` : 'Delete';
+  del.addEventListener('click', () => {
+    const msg = n
+      ? `"${a.name}" is placed ${n}× in the condo map. Deleting it will break those placements. Delete anyway?`
+      : `Delete "${a.name}"?`;
+    if (!window.confirm(msg)) return;
+    state.assets.assets = state.assets.assets.filter((x) => x.id !== a.id);
+    state.selected = state.assets.assets[0]?.id ?? null;
+    markDirty();
+    renderAll();
+  });
+  rowA.append(dup, del);
+  card5.appendChild(rowA);
+  root.appendChild(card5);
+
+  schedulePreview();
+}
+
+function addAsset(base) {
+  let id = window.prompt('New asset id (lowercase, no spaces):', base ? base.id + '_copy' : '');
+  if (!id) return;
+  id = id.trim().toLowerCase().replace(/\s+/g, '_');
+  if (state.assets.assets.some((x) => x.id === id)) { window.alert(`id "${id}" already exists`); return; }
+  const fresh = base ?? {
+    id, name: id, category: state.assets.categories[0] ?? 'misc', mesh: '',
+    buyPrice: 0, sellPrice: 0, environmentScore: 0, footprint: [1, 1], interactions: [],
+  };
+  fresh.id = id;
+  if (base) fresh.name = base.name + ' copy';
+  state.assets.assets.push(fresh);
+  state.selected = id;
+  markDirty();
+  renderAll();
+}
+
+function renderAll() { renderSidebar(); renderEditor(); }
+
+function schedulePreview() {
+  const a = selectedAsset();
+  window.AssetPreview?.show(a?.mesh || '');
+}
+
+document.getElementById('search').addEventListener('input', renderSidebar);
+document.getElementById('new').addEventListener('click', () => addAsset(null));
+document.getElementById('save').addEventListener('click', save);
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); save(); }
+});
+window.addEventListener('beforeunload', (e) => { if (state.dirty) e.preventDefault(); });
+load();
+</script>
+
+<!-- 3D preview — module script processed by Vite dev server; safely ignored in headless tests -->
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+let renderer = null, scene, camera, controls, current = null, raf = 0;
+const loader = new GLTFLoader();
+
+function ensure(canvas) {
+  if (renderer && renderer.domElement === canvas) return true;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  } catch { renderer = null; return false; }
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100);
+  camera.position.set(2, 1.6, 2.6);
+  controls = new OrbitControls(camera, canvas);
+  controls.enableDamping = true;
+  scene.add(new THREE.AmbientLight(0xbfd0e8, 1.1));
+  const sun = new THREE.DirectionalLight(0xffffff, 2);
+  sun.position.set(3, 5, 2);
+  scene.add(sun);
+  scene.add(new THREE.GridHelper(4, 8, 0x2c3a58, 0x212b44));
+  cancelAnimationFrame(raf);
+  const loop = () => {
+    raf = requestAnimationFrame(loop);
+    const rect = canvas.getBoundingClientRect();
+    if (canvas.width !== Math.floor(rect.width) && rect.width > 0) {
+      renderer.setSize(rect.width, rect.height, false);
+      camera.aspect = rect.width / rect.height;
+      camera.updateProjectionMatrix();
+    }
+    controls.update();
+    renderer.render(scene, camera);
+  };
+  loop();
+  return true;
+}
+
+window.AssetPreview = {
+  show(meshPath) {
+    const canvas = document.getElementById('preview');
+    const msg = document.getElementById('preview-msg');
+    if (!canvas || !ensure(canvas)) return;
+    if (current) { scene.remove(current); current = null; }
+    if (!meshPath) { if (msg) msg.textContent = 'No mesh assigned — set a GLB path to preview it.'; return; }
+    // public/ is served at the site root — normalize "models/bed.glb" → "/models/bed.glb"
+    const url = /^(\/|https?:)/.test(meshPath) ? meshPath : '/' + meshPath;
+    if (msg) msg.textContent = 'loading ' + url + ' …';
+    loader.load(
+      url,
+      (gltf) => {
+        if (current) scene.remove(current);
+        current = gltf.scene;
+        // center + frame the model, adapting clip planes to its scale
+        const box = new THREE.Box3().setFromObject(current);
+        const size = box.getSize(new THREE.Vector3()).length() || 1;
+        const center = box.getCenter(new THREE.Vector3());
+        current.position.sub(center);
+        camera.near = Math.max(size / 100, 0.001);
+        camera.far = size * 20;
+        camera.updateProjectionMatrix();
+        camera.position.set(1, 0.7, 1.2).setLength(size * 1.2);
+        controls.target.set(0, 0, 0);
+        controls.update();
+        scene.add(current);
+        if (msg) msg.textContent = `${url} — bounds ${box.getSize(new THREE.Vector3()).toArray().map((v) => v.toFixed(2)).join(' × ')}`;
+      },
+      undefined,
+      () => { if (msg) msg.textContent = `Could not load ${url} — the file should be at public${url} (e.g. public/models/bed.glb → "/models/bed.glb").`; },
+    );
+  },
+};
+</script>
+</body>
+</html>

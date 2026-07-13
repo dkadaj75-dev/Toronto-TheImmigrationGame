@@ -2,53 +2,424 @@
   "_comment": "Starter condo map. LAYOUT IS PLACEHOLDER — to be redrawn against Unreal prototype screenshots for parity (Phase 1 reference). Units = grid cells (1 cell = 1 m). navGrid is derived at load in Phase 0; the Map Editor will bake it in Phase 2.",
   "id": "condo",
   "name": "The Condo",
-  "gridSize": 1.0,
-  "bounds": { "w": 14, "h": 10 },
+  "gridSize": 1,
+  "bounds": {
+    "w": 14,
+    "h": 10
+  },
   "floors": [
-    { "id": "living",  "polygon": [[0,0],[9,0],[9,6],[0,6]],   "material": "wood" },
-    { "id": "kitchen", "polygon": [[9,0],[14,0],[14,6],[9,6]], "material": "tile" },
-    { "id": "bedroom", "polygon": [[0,6],[7,6],[7,10],[0,10]], "material": "carpet" },
-    { "id": "bathroom","polygon": [[7,6],[14,6],[14,10],[7,10]],"material": "tile" }
+    {
+      "id": "living",
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          9,
+          0
+        ],
+        [
+          9,
+          6
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "material": "wood"
+    },
+    {
+      "id": "kitchen",
+      "polygon": [
+        [
+          9,
+          0
+        ],
+        [
+          14,
+          0
+        ],
+        [
+          14,
+          6
+        ],
+        [
+          9,
+          6
+        ]
+      ],
+      "material": "tile"
+    },
+    {
+      "id": "bedroom",
+      "polygon": [
+        [
+          0,
+          6
+        ],
+        [
+          7,
+          6
+        ],
+        [
+          7,
+          10
+        ],
+        [
+          0,
+          10
+        ]
+      ],
+      "material": "carpet"
+    },
+    {
+      "id": "bathroom",
+      "polygon": [
+        [
+          7,
+          6
+        ],
+        [
+          14,
+          6
+        ],
+        [
+          14,
+          10
+        ],
+        [
+          7,
+          10
+        ]
+      ],
+      "material": "tile"
+    }
   ],
   "walls": [
-    { "from": [0,0],  "to": [14,0] },
-    { "from": [14,0], "to": [14,10] },
-    { "from": [14,10],"to": [0,10] },
-    { "from": [0,10], "to": [0,0] },
-    { "from": [9,0],  "to": [9,2.5] },
-    { "from": [9,4.5],"to": [9,6] },
-    { "from": [0,6],  "to": [2.5,6] },
-    { "from": [4.5,6],"to": [7,6] },
-    { "from": [7,6],  "to": [7,7] },
-    { "from": [7,9],  "to": [7,10] },
-    { "from": [7,6],  "to": [10,6] },
-    { "from": [12,6], "to": [14,6] }
+    {
+      "from": [
+        0,
+        0
+      ],
+      "to": [
+        14,
+        0
+      ]
+    },
+    {
+      "from": [
+        14,
+        0
+      ],
+      "to": [
+        14,
+        10
+      ]
+    },
+    {
+      "from": [
+        14,
+        10
+      ],
+      "to": [
+        0,
+        10
+      ]
+    },
+    {
+      "from": [
+        0,
+        10
+      ],
+      "to": [
+        0,
+        0
+      ]
+    },
+    {
+      "from": [
+        9,
+        0
+      ],
+      "to": [
+        9,
+        2.5
+      ]
+    },
+    {
+      "from": [
+        9,
+        4.5
+      ],
+      "to": [
+        9,
+        6
+      ]
+    },
+    {
+      "from": [
+        0,
+        6
+      ],
+      "to": [
+        2.5,
+        6
+      ]
+    },
+    {
+      "from": [
+        4.5,
+        6
+      ],
+      "to": [
+        7,
+        6
+      ]
+    },
+    {
+      "from": [
+        9,
+        6
+      ],
+      "to": [
+        9,
+        7
+      ]
+    },
+    {
+      "from": [
+        9,
+        9
+      ],
+      "to": [
+        9,
+        10
+      ]
+    },
+    {
+      "from": [
+        7,
+        6
+      ],
+      "to": [
+        10,
+        6
+      ]
+    },
+    {
+      "from": [
+        12,
+        6
+      ],
+      "to": [
+        14,
+        6
+      ]
+    }
   ],
   "doors": [
-    { "at": [9, 3.5],  "orientation": "vertical",   "_note": "living ↔ kitchen" },
-    { "at": [3.5, 6],  "orientation": "horizontal", "_note": "living ↔ bedroom" },
-    { "at": [11, 6],   "orientation": "horizontal", "_note": "kitchen ↔ bathroom (hallway-less placeholder)" },
-    { "at": [7, 8],    "orientation": "vertical",   "_note": "bedroom ↔ bathroom" }
+    {
+      "at": [
+        9,
+        3.5
+      ],
+      "orientation": "vertical",
+      "_note": "living ↔ kitchen"
+    },
+    {
+      "at": [
+        3.5,
+        6
+      ],
+      "orientation": "horizontal",
+      "_note": "living ↔ bedroom"
+    },
+    {
+      "at": [
+        11,
+        6
+      ],
+      "orientation": "horizontal",
+      "_note": "kitchen ↔ bathroom (hallway-less placeholder)"
+    },
+    {
+      "at": [
+        9,
+        8
+      ],
+      "orientation": "vertical",
+      "_note": "bedroom ↔ bathroom"
+    }
   ],
-  "spawn": { "pos": [4.5, 3], "facingDeg": 180 },
+  "spawn": {
+    "pos": [
+      4.5,
+      3
+    ],
+    "facingDeg": 180
+  },
   "placedObjects": [
-    { "asset": "sofa",         "pos": [3, 1],    "rotDeg": 0 },
-    { "asset": "tv",           "pos": [3, 5],    "rotDeg": 180 },
-    { "asset": "armchair",     "pos": [6, 1.5],  "rotDeg": 315 },
-    { "asset": "bookshelf",    "pos": [0.5, 3],  "rotDeg": 90 },
-    { "asset": "phone",        "pos": [7.5, 0.5],"rotDeg": 0 },
-    { "asset": "fridge",       "pos": [13.5, 0.5],"rotDeg": 270 },
-    { "asset": "stove",        "pos": [12, 0.5], "rotDeg": 0 },
-    { "asset": "counter",      "pos": [10.5, 0.5],"rotDeg": 0 },
-    { "asset": "counter",      "pos": [13.5, 2], "rotDeg": 270 },
-    { "asset": "sink",         "pos": [13.5, 3], "rotDeg": 270 },
-    { "asset": "dining_table", "pos": [11, 4.5], "rotDeg": 0 },
-    { "asset": "dining_chair", "pos": [10.5, 3.6],"rotDeg": 180 },
-    { "asset": "dining_chair", "pos": [11.5, 5.4],"rotDeg": 0 },
-    { "asset": "bed",          "pos": [1, 8],    "rotDeg": 90 },
-    { "asset": "bookshelf",    "pos": [5.5, 9.5],"rotDeg": 180 },
-    { "asset": "toilet",       "pos": [13.5, 9.5],"rotDeg": 180 },
-    { "asset": "shower",       "pos": [8, 9.5],  "rotDeg": 180 },
-    { "asset": "sink",         "pos": [11, 9.5], "rotDeg": 180 }
+    {
+      "asset": "sofa",
+      "pos": [
+        1.5,
+        0.5
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "tv",
+      "pos": [
+        1.5,
+        3
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "armchair",
+      "pos": [
+        4.5,
+        1.5
+      ],
+      "rotDeg": 315
+    },
+    {
+      "asset": "bookshelf",
+      "pos": [
+        0.5,
+        5
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "phone",
+      "pos": [
+        8,
+        0.5
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "fridge",
+      "pos": [
+        13.5,
+        0.5
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "stove",
+      "pos": [
+        12,
+        0.5
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "counter",
+      "pos": [
+        10.5,
+        0.5
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "counter",
+      "pos": [
+        13.5,
+        2
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "sink",
+      "pos": [
+        13.5,
+        3
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "dining_chair",
+      "pos": [
+        7.5,
+        3.5
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "bed",
+      "pos": [
+        1.5,
+        8
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "bookshelf",
+      "pos": [
+        5.5,
+        9.5
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "toilet",
+      "pos": [
+        13.5,
+        9.5
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "shower",
+      "pos": [
+        11.5,
+        9.5
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "sink",
+      "pos": [
+        10,
+        9.5
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "counter",
+      "pos": [
+        7,
+        5
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "dining_table",
+      "pos": [
+        7,
+        5
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "bookshelf",
+      "pos": [
+        7,
+        5
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "dining_table",
+      "pos": [
+        7,
+        5
+      ],
+      "rotDeg": 0
+    }
   ]
 }

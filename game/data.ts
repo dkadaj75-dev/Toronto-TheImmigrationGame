@@ -29,9 +29,30 @@ export interface MapData {
   bounds: { w: number; h: number };
   floors: { id: string; polygon: [number, number][]; material: string }[];
   walls: { from: [number, number]; to: [number, number] }[];
-  doors: { at: [number, number]; orientation: 'vertical' | 'horizontal' }[];
+  doors: { at: [number, number]; orientation: 'vertical' | 'horizontal'; width?: number }[];
   spawn: { pos: [number, number]; facingDeg: number };
   placedObjects: { asset: string; pos: [number, number]; rotDeg: number }[];
+}
+
+/** Rigged character setup — all of it data, so a different GLB export is a JSON edit. */
+export interface CharacterTuning {
+  /** GLB with skinned mesh + animation clips (leading-slash path under public/) */
+  meshPath: string;
+  /** model is uniformly scaled so its bounding height equals this (meters) */
+  heightMeters: number;
+  /** extra yaw if the model doesn't face +Z (the game's travel-facing convention) */
+  yawOffsetDeg?: number;
+  /** cross-fade duration between clips, seconds */
+  crossFadeSeconds: number;
+  /** ground speed (units/s) the walk clip was authored at; playback rate = walkSpeed / this */
+  walkClipSpeedReference: number;
+  /** root height while sitting on a seat / lying on a bed (replaces the old hardcoded 0.25/0.55) */
+  sitHeight: number;
+  lieHeight: number;
+  /** logical state → clip name in the GLB ("idle", "walk", "sit", "lie", any action.animation) */
+  clipMap: Record<string, string>;
+  /** extra GLBs whose clips are merged in (Mixamo-style one-clip-per-file exports; must share the model's skeleton) */
+  animationPaths?: string[];
 }
 
 export interface TuningData {
@@ -41,6 +62,10 @@ export interface TuningData {
   economy: { startingFunds: number; currencyName: string };
   movement: { walkSpeed: number; arrivalRadius: number };
   camera: { minZoom: number; maxZoom: number; minPitchDeg: number; maxPitchDeg: number; panBoundsPadding: number };
+  /** which map the game plays: data/maps/<active>.json (set from the Map Editor's "Play this map") */
+  map?: { active: string };
+  /** optional so pre-rig data files & test fixtures stay valid; game falls back to the capsule */
+  character?: CharacterTuning;
 }
 
 export interface GameData {
@@ -55,7 +80,6 @@ const FILES = {
   stats: '/data/stats.json',
   interactions: '/data/interactions.json',
   assets: '/data/assets.json',
-  map: '/data/maps/condo.json',
   tuning: '/data/tuning.json',
 } as const;
 
@@ -66,12 +90,14 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 export async function loadAll(): Promise<GameData> {
-  const [stats, interactions, assets, map, tuning] = await Promise.all([
+  // tuning first — it names the active map (tuning.map.active, default "condo")
+  const tuning = await fetchJson<TuningData>(FILES.tuning);
+  const mapFile = `/data/maps/${tuning.map?.active ?? 'condo'}.json`;
+  const [stats, interactions, assets, map] = await Promise.all([
     fetchJson<StatsData>(FILES.stats),
     fetchJson<InteractionsData>(FILES.interactions),
     fetchJson<AssetsData>(FILES.assets),
-    fetchJson<MapData>(FILES.map),
-    fetchJson<TuningData>(FILES.tuning),
+    fetchJson<MapData>(mapFile),
   ]);
   return { stats, interactions, assets, map, tuning };
 }

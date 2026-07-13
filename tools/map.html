@@ -1,0 +1,809 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Condo Life — Map Editor</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #141a28; color: #dfe6f2; }
+  header { position: sticky; top: 0; z-index: 5; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding: 10px 14px; background: #0f1420ee; backdrop-filter: blur(6px); border-bottom: 1px solid #26304a; }
+  header h1 { font-size: 15px; margin: 0 8px 0 0; font-weight: 600; letter-spacing: .03em; }
+  header .grow { flex: 1; }
+  button { border: 0; border-radius: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer;
+    background: #2c3a58; color: #dfe6f2; }
+  button.primary { background: #3d6fd2; color: #fff; }
+  button.danger:hover { background: #6a3040; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.mode { background: #1c2436; border: 1px solid #2c3a58; }
+  button.mode.active { background: #3d6fd2; border-color: #3d6fd2; color: #fff; }
+  select, input[type=number], input[type=text] { background: #10182a; border: 1px solid #2c3a58; color: #dfe6f2;
+    border-radius: 6px; padding: 6px 8px; font-size: 13px; }
+  #map-select { min-width: 140px; }
+  label.chk { display: inline-flex; gap: 5px; align-items: center; font-size: 12px; color: #93a3c0; }
+  #status { font-size: 12px; color: #8fa3c8; min-width: 150px; text-align: right; }
+  #status.ok { color: #7fd98a; } #status.err { color: #e58a8a; }
+  main { display: grid; grid-template-columns: 210px 1fr 250px; gap: 10px; padding: 10px 14px; align-items: start; }
+  .panel { background: #1a2133; border: 1px solid #26304a; border-radius: 12px; padding: 10px; }
+  .panel h2 { margin: 2px 0 8px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #93a3c0; }
+  .panel h2:not(:first-child) { margin-top: 14px; border-top: 1px solid #26304a; padding-top: 10px; }
+  #palette { max-height: 330px; overflow: auto; }
+  #palette .cat { font-size: 11px; color: #6f7fa3; margin: 8px 0 2px; text-transform: uppercase; letter-spacing: .05em; }
+  #palette .item { display: block; width: 100%; text-align: left; background: #1c2436; border: 1px solid #26304a;
+    margin: 3px 0; padding: 5px 8px; border-radius: 6px; font-size: 13px; }
+  #palette .item:hover { border-color: #3d6fd2; }
+  #canvas-wrap { position: relative; }
+  canvas { display: block; width: 100%; height: 640px; background: #0d1322; border: 1px solid #26304a; border-radius: 12px;
+    touch-action: none; cursor: crosshair; }
+  .field { display: grid; grid-template-columns: 74px 1fr; gap: 6px; align-items: center; margin: 5px 0; }
+  .field label { font-size: 12px; color: #93a3c0; }
+  .field input, .field select { width: 100%; }
+  .hint { font-size: 11px; color: #5f6f93; margin-top: 6px; line-height: 1.5; }
+  .muted { color: #5f6f93; font-size: 12px; }
+  input[type=range] { width: 100%; }
+  input[type=file] { font-size: 11px; width: 100%; color: #93a3c0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>▦ Map Editor</h1>
+  <select id="map-select" title="map"></select>
+  <button id="map-new">New</button>
+  <button id="map-dup">Duplicate</button>
+  <button id="map-del" class="danger">Delete</button>
+  <button id="map-play" title="set as the map the game plays (tuning.map.active)">▶ Play this map</button>
+  <span class="grow"></span>
+  <label class="chk"><input type="checkbox" id="snap" checked /> snap ½ cell</label>
+  <label class="chk"><input type="checkbox" id="show-nav" checked /> nav overlay</label>
+  <button id="reload">Reload</button>
+  <button id="save" class="primary" disabled>Save map</button>
+  <span id="status">loading…</span>
+</header>
+
+<header style="position:static; border-top:0; padding-top:0">
+  <span class="muted">mode:</span>
+  <button class="mode active" data-mode="objects">Objects</button>
+  <button class="mode" data-mode="floors">Floors</button>
+  <button class="mode" data-mode="walls">Walls</button>
+  <button class="mode" data-mode="doors">Doors</button>
+  <button class="mode" data-mode="spawn">Spawn</button>
+  <span class="muted" id="mode-help"></span>
+</header>
+
+<main>
+  <div class="panel">
+    <h2>Palette</h2>
+    <div id="palette"></div>
+    <h2>Underlay (tracing)</h2>
+    <input type="file" id="underlay-file" accept="image/*" />
+    <div class="field"><label>opacity</label><input type="range" id="underlay-opacity" min="0" max="1" step="0.05" value="0.45" /></div>
+    <div class="field"><label>width (u)</label><input type="number" id="underlay-width" step="any" value="14" /></div>
+    <div class="field"><label>offset x</label><input type="number" id="underlay-x" step="any" value="0" /></div>
+    <div class="field"><label>offset z</label><input type="number" id="underlay-z" step="any" value="0" /></div>
+    <div class="hint">Load a floor-plan image, size it in world units, then trace floors and walls over it. The image is a session-only guide — it isn't saved into the map.</div>
+  </div>
+
+  <div id="canvas-wrap" class="panel" style="padding:8px">
+    <canvas id="canvas"></canvas>
+    <div class="hint">Keys: <b>R</b> rotate · <b>Del</b> delete · <b>Esc</b> deselect · <b>Ctrl+Z</b> undo · <b>Ctrl+S</b> save</div>
+  </div>
+
+  <div class="panel">
+    <h2>Inspector</h2>
+    <div id="inspector"><span class="muted">nothing selected</span></div>
+  </div>
+</main>
+
+<script>
+// =============================================================== Map Editor
+// Slice 1 (objects, snap, nav overlay, inspector) + Slice 2 (draw floors/walls/
+// doors/spawn, multiple maps, active-map switch, underlay tracing, undo).
+// Plain script: fully drives state + DOM (jsdom-testable). Canvas drawing and
+// the nav bake are skipped headlessly (no 2d context / no NavBridge).
+const API = '/api/data/'; // matches server.js GET/PUT/DELETE /api/data/*
+const MODE_HELP = {
+  objects: 'click to select · drag to move · palette adds',
+  floors:  'drag on empty space to draw a floor rectangle · click a floor to edit it',
+  walls:   'drag to draw a wall (axis-locked) · click a wall to edit endpoints',
+  doors:   'click on a wall to place a door · drag a door to move it',
+  spawn:   'click to place the spawn point',
+};
+const FLOOR_MATERIALS = ['wood', 'tile', 'carpet'];
+const FLOOR_COLORS = { wood: '#8a6b46', tile: '#9aa3ad', carpet: '#6f7f97' };
+
+const state = {
+  maps: [], mapId: null, doc: null,
+  assets: null, tuning: null,
+  dirty: false, mode: 'objects', sel: null,       // sel: {kind, index} | {kind:'spawn'}
+  undoStack: [],
+  navCells: null, navDirty: true,
+  drag: null,                                      // {kind:'move'|'floorRect'|'wallLine'|'door', ...}
+  newFloorMaterial: FLOOR_MATERIALS[0],
+  underlay: { img: null, opacity: 0.45, width: 14, x: 0, z: 0 },
+};
+
+// ---------------------------------------------------------------- io
+async function getJson(u) { const r = await fetch(u); if (!r.ok) throw new Error(`${u}: HTTP ${r.status}`); return r.json(); }
+
+async function boot() {
+  setStatus('loading…');
+  try {
+    const [list, assets, tuning] = await Promise.all([getJson('/api/maps'), getJson(API + 'assets.json'), getJson(API + 'tuning.json')]);
+    state.maps = list.maps;
+    state.assets = assets;
+    state.tuning = tuning;
+    const active = tuning.map?.active;
+    await selectMap(state.maps.includes(active) ? active : state.maps[0]);
+    renderPalette();
+    setStatus('loaded', 'ok');
+  } catch (e) { setStatus(String(e.message || e), 'err'); }
+}
+
+async function selectMap(id) {
+  if (state.dirty && !confirm('Discard unsaved changes to the current map?')) { renderMapSelect(); return; }
+  state.doc = await getJson(API + 'maps/' + id + '.json');
+  state.mapId = id;
+  state.sel = null; state.dirty = false; state.undoStack = []; state.navDirty = true;
+  renderMapSelect(); renderInspector(); updateSaveButton(); fitView(); redraw();
+}
+
+async function save() {
+  if (!state.doc) return;
+  setStatus('saving…');
+  try {
+    const res = await fetch(API + 'maps/' + state.mapId + '.json', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state.doc, null, 2),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    state.dirty = false; updateSaveButton();
+    setStatus('saved — game hot-reloads', 'ok');
+  } catch (e) { setStatus(String(e.message || e), 'err'); }
+}
+
+async function newMap(idArg) {
+  const id = (idArg ?? prompt('New map id (letters, numbers, - _):') ?? '').trim();
+  if (!id) return false;
+  if (!/^[a-z0-9_-]+$/i.test(id)) { setStatus('invalid id — letters/numbers/-/_ only', 'err'); return false; }
+  if (state.maps.includes(id)) { setStatus('a map with that id already exists', 'err'); return false; }
+  const doc = {
+    id, name: id, gridSize: 1.0, bounds: { w: 14, h: 10 },
+    floors: [], walls: [], doors: [],
+    spawn: { pos: [2, 2], facingDeg: 0 },
+    placedObjects: [],
+  };
+  return createMapFile(doc);
+}
+
+async function duplicateMap(idArg) {
+  if (!state.doc) return false;
+  const id = (idArg ?? prompt('Duplicate as id:') ?? '').trim();
+  if (!id || !/^[a-z0-9_-]+$/i.test(id) || state.maps.includes(id)) { setStatus('invalid or existing id', 'err'); return false; }
+  const doc = JSON.parse(JSON.stringify(state.doc));
+  doc.id = id; doc.name = id;
+  return createMapFile(doc);
+}
+
+async function createMapFile(doc) {
+  try {
+    const res = await fetch(API + 'maps/' + doc.id + '.json', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(doc, null, 2),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    state.maps.push(doc.id);
+    state.dirty = false; // never carry dirt across the switch
+    await selectMap(doc.id);
+    setStatus('map created', 'ok');
+    return true;
+  } catch (e) { setStatus(String(e.message || e), 'err'); return false; }
+}
+
+async function deleteMap() {
+  if (!state.mapId) return false;
+  if (state.tuning.map?.active === state.mapId) { setStatus('this map is set as active (Play) — switch the game to another map first', 'err'); return false; }
+  if (state.maps.length <= 1) { setStatus('cannot delete the last map', 'err'); return false; }
+  if (!confirm(`Delete map "${state.mapId}"? This removes data/maps/${state.mapId}.json.`)) return false;
+  try {
+    const res = await fetch(API + 'maps/' + state.mapId + '.json', { method: 'DELETE' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    state.maps = state.maps.filter((m) => m !== state.mapId);
+    state.dirty = false;
+    await selectMap(state.maps[0]);
+    setStatus('map deleted', 'ok');
+    return true;
+  } catch (e) { setStatus(String(e.message || e), 'err'); return false; }
+}
+
+async function playThisMap() {
+  if (!state.mapId) return;
+  try {
+    if (!state.tuning.map) state.tuning.map = {};
+    state.tuning.map.active = state.mapId;
+    const res = await fetch(API + 'tuning.json', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state.tuning, null, 2),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    setStatus(`game now plays "${state.mapId}" (hot-reloads)`, 'ok');
+  } catch (e) { setStatus(String(e.message || e), 'err'); }
+}
+
+// ---------------------------------------------------------------- helpers
+const assetById = (id) => state.assets.assets.find((a) => a.id === id);
+const normRot = (deg) => ((Math.round(deg / 90) * 90) % 360 + 360) % 360;
+const snapStep = () => (state.doc?.gridSize ?? 1) / 2;
+const snapVal = (v) => (document.getElementById('snap').checked ? Math.round(v / snapStep()) * snapStep() : v);
+const snapPoint = (x, z) => [snapVal(x), snapVal(z)];
+
+function objectRect(p) {
+  const def = assetById(p.asset);
+  let [w, d] = def ? def.footprint : [1, 1];
+  const rot = normRot(p.rotDeg);
+  if (rot === 90 || rot === 270) [w, d] = [d, w];
+  return { x: p.pos[0] - w / 2, z: p.pos[1] - d / 2, w, d };
+}
+
+function pointInPolygon(x, z, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, zi] = poly[i], [xj, zj] = poly[j];
+    if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+function distToSegment(px, pz, ax, az, bx, bz) {
+  const dx = bx - ax, dz = bz - az;
+  const len2 = dx * dx + dz * dz;
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / len2));
+  return { d: Math.hypot(px - (ax + t * dx), pz - (az + t * dz)), t };
+}
+
+/** topmost hit at a world point, respecting the current mode's priorities */
+function hitTest(x, z, mode = state.mode) {
+  const doc = state.doc;
+  if (mode === 'objects') {
+    for (let i = doc.placedObjects.length - 1; i >= 0; i--) {
+      const r = objectRect(doc.placedObjects[i]);
+      if (x >= r.x && x <= r.x + r.w && z >= r.z && z <= r.z + r.d) return { kind: 'object', index: i };
+    }
+    return null;
+  }
+  if (mode === 'floors') {
+    for (let i = doc.floors.length - 1; i >= 0; i--) if (pointInPolygon(x, z, doc.floors[i].polygon)) return { kind: 'floor', index: i };
+    return null;
+  }
+  if (mode === 'walls') {
+    for (let i = doc.walls.length - 1; i >= 0; i--) {
+      const w = doc.walls[i];
+      if (distToSegment(x, z, w.from[0], w.from[1], w.to[0], w.to[1]).d < 0.35) return { kind: 'wall', index: i };
+    }
+    return null;
+  }
+  if (mode === 'doors') {
+    for (let i = doc.doors.length - 1; i >= 0; i--) {
+      const d = doc.doors[i];
+      if (Math.hypot(x - d.at[0], z - d.at[1]) < 0.6) return { kind: 'door', index: i };
+    }
+    return null;
+  }
+  return null;
+}
+
+/** nearest wall within radius, with the projected point on it (for placing doors) */
+function nearestWall(x, z, radius = 0.7) {
+  let best = null;
+  state.doc.walls.forEach((w, i) => {
+    const r = distToSegment(x, z, w.from[0], w.from[1], w.to[0], w.to[1]);
+    if (r.d < radius && (!best || r.d < best.d)) {
+      const px = w.from[0] + (w.to[0] - w.from[0]) * r.t;
+      const pz = w.from[1] + (w.to[1] - w.from[1]) * r.t;
+      best = { index: i, d: r.d, px, pz, wall: w };
+    }
+  });
+  return best;
+}
+
+// ---------------------------------------------------------------- mutations
+function pushUndo() {
+  state.undoStack.push(JSON.stringify(state.doc));
+  if (state.undoStack.length > 50) state.undoStack.shift();
+}
+function undo() {
+  const prev = state.undoStack.pop();
+  if (!prev) return;
+  state.doc = JSON.parse(prev);
+  state.sel = null;
+  markDirty(); renderInspector(); redraw();
+}
+function markDirty() {
+  state.dirty = true; state.navDirty = true;
+  updateSaveButton();
+  setStatus('unsaved changes');
+}
+function updateSaveButton() { document.getElementById('save').disabled = !state.dirty; }
+function setStatus(msg, cls = '') { const s = document.getElementById('status'); s.textContent = msg; s.className = cls; }
+
+function addObjectFromPalette(assetId) {
+  pushUndo();
+  const [x, z] = snapPoint(state.doc.bounds.w / 2, state.doc.bounds.h / 2);
+  state.doc.placedObjects.push({ asset: assetId, pos: [x, z], rotDeg: 0 });
+  setMode('objects');
+  state.sel = { kind: 'object', index: state.doc.placedObjects.length - 1 };
+  markDirty(); renderInspector(); redraw();
+}
+
+function rotateSelected() {
+  if (state.sel?.kind === 'object') {
+    pushUndo();
+    const p = state.doc.placedObjects[state.sel.index];
+    p.rotDeg = normRot(p.rotDeg + 90);
+  } else if (state.sel?.kind === 'door') {
+    pushUndo();
+    const d = state.doc.doors[state.sel.index];
+    d.orientation = d.orientation === 'vertical' ? 'horizontal' : 'vertical';
+  } else return;
+  markDirty(); renderInspector(); redraw();
+}
+
+function deleteSelected() {
+  const s = state.sel;
+  if (!s || s.kind === 'spawn') return;
+  pushUndo();
+  if (s.kind === 'object') state.doc.placedObjects.splice(s.index, 1);
+  if (s.kind === 'floor') state.doc.floors.splice(s.index, 1);
+  if (s.kind === 'wall') state.doc.walls.splice(s.index, 1);
+  if (s.kind === 'door') state.doc.doors.splice(s.index, 1);
+  state.sel = null;
+  markDirty(); renderInspector(); redraw();
+}
+
+function setMode(mode) {
+  state.mode = mode; state.sel = null; state.drag = null;
+  document.querySelectorAll('button.mode').forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
+  document.getElementById('mode-help').textContent = MODE_HELP[mode];
+  renderInspector(); redraw();
+}
+
+function uniqueFloorId() {
+  let n = 1;
+  while (state.doc.floors.some((f) => f.id === 'floor_' + n)) n++;
+  return 'floor_' + n;
+}
+
+// ---------------------------------------------------------------- canvas & view
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext ? canvas.getContext('2d') : null; // null under jsdom
+const DPR = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+const PAD = 26;
+let view = { s: 40, ox: PAD, oy: PAD };
+
+function canvasCssSize() {
+  const w = canvas.clientWidth || 800, h = canvas.clientHeight || 640;
+  return [w, h];
+}
+function fitView() {
+  if (!state.doc) return;
+  const [cw, ch] = canvasCssSize();
+  if (ctx) { canvas.width = cw * DPR; canvas.height = ch * DPR; }
+  const { w, h } = state.doc.bounds;
+  view.s = Math.min((cw - 2 * PAD) / w, (ch - 2 * PAD) / h);
+  view.ox = (cw - w * view.s) / 2;
+  view.oy = (ch - h * view.s) / 2;
+}
+const worldToPx = (x, z) => [view.ox + x * view.s, view.oy + z * view.s];
+const pxToWorld = (px, py) => [(px - view.ox) / view.s, (py - view.oy) / view.s];
+function eventWorld(e) {
+  const r = canvas.getBoundingClientRect();
+  return pxToWorld(e.clientX - r.left, e.clientY - r.top);
+}
+
+function redraw() {
+  if (!ctx || !state.doc) return;
+  const doc = state.doc;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const [cw, ch] = canvasCssSize();
+  ctx.clearRect(0, 0, cw, ch);
+
+  // underlay
+  const u = state.underlay;
+  if (u.img) {
+    const wpx = u.width * view.s;
+    const hpx = wpx * (u.img.height / u.img.width);
+    const [ox, oy] = worldToPx(u.x, u.z);
+    ctx.globalAlpha = u.opacity;
+    ctx.drawImage(u.img, ox, oy, wpx, hpx);
+    ctx.globalAlpha = 1;
+  }
+
+  // floors
+  for (let i = 0; i < doc.floors.length; i++) {
+    const f = doc.floors[i];
+    ctx.beginPath();
+    f.polygon.forEach(([x, z], k) => { const [px, py] = worldToPx(x, z); k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); });
+    ctx.closePath();
+    ctx.fillStyle = FLOOR_COLORS[f.material] ?? '#777';
+    ctx.globalAlpha = 0.55; ctx.fill(); ctx.globalAlpha = 1;
+    if (state.sel?.kind === 'floor' && state.sel.index === i) { ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2; ctx.stroke(); }
+  }
+
+  // grid
+  ctx.strokeStyle = '#1f2a45'; ctx.lineWidth = 1;
+  for (let x = 0; x <= doc.bounds.w; x += doc.gridSize) {
+    const [px1, py1] = worldToPx(x, 0), [, py2] = worldToPx(x, doc.bounds.h);
+    ctx.beginPath(); ctx.moveTo(px1, py1); ctx.lineTo(px1, py2); ctx.stroke();
+  }
+  for (let z = 0; z <= doc.bounds.h; z += doc.gridSize) {
+    const [px1, py1] = worldToPx(0, z), [px2] = worldToPx(doc.bounds.w, z);
+    ctx.beginPath(); ctx.moveTo(px1, py1); ctx.lineTo(px2, py1); ctx.stroke();
+  }
+
+  // nav overlay
+  if (document.getElementById('show-nav').checked && window.NavBridge) {
+    if (state.navDirty) {
+      try { state.navCells = window.NavBridge.walkableCells(doc, state.assets); state.navDirty = false; }
+      catch (e) { console.warn('nav bake failed', e); state.navCells = null; }
+    }
+    if (state.navCells) {
+      ctx.fillStyle = '#4fae62';
+      for (const [x, z] of state.navCells) {
+        const [px, py] = worldToPx(x, z);
+        ctx.beginPath(); ctx.arc(px, py, 2.5, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+
+  // walls
+  for (let i = 0; i < doc.walls.length; i++) {
+    const w = doc.walls[i];
+    const [x1, y1] = worldToPx(w.from[0], w.from[1]);
+    const [x2, y2] = worldToPx(w.to[0], w.to[1]);
+    ctx.strokeStyle = state.sel?.kind === 'wall' && state.sel.index === i ? '#ffd166' : '#dfe6f2';
+    ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  }
+
+  // doors
+  for (let i = 0; i < doc.doors.length; i++) {
+    const d = doc.doors[i];
+    const [px, py] = worldToPx(d.at[0], d.at[1]);
+    const long = view.s * 0.5, short = view.s * 0.14;
+    ctx.fillStyle = state.sel?.kind === 'door' && state.sel.index === i ? '#ffd166' : '#c98a4b';
+    if (d.orientation === 'vertical') ctx.fillRect(px - short, py - long, short * 2, long * 2);
+    else ctx.fillRect(px - long, py - short, long * 2, short * 2);
+  }
+
+  // placed objects
+  for (let i = 0; i < doc.placedObjects.length; i++) {
+    const p = doc.placedObjects[i];
+    const r = objectRect(p);
+    const [px, py] = worldToPx(r.x, r.z);
+    ctx.fillStyle = '#3a4c74';
+    ctx.strokeStyle = state.sel?.kind === 'object' && state.sel.index === i ? '#ffd166' : '#6f89bd';
+    ctx.lineWidth = state.sel?.kind === 'object' && state.sel.index === i ? 2.5 : 1.5;
+    ctx.fillRect(px, py, r.w * view.s, r.d * view.s);
+    ctx.strokeRect(px, py, r.w * view.s, r.d * view.s);
+    // facing tick (+Z rotated by rotDeg, matching the game convention)
+    const th = (normRot(p.rotDeg) * Math.PI) / 180;
+    const [cx, cy] = worldToPx(p.pos[0], p.pos[1]);
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.sin(th) * view.s * 0.4, cy + Math.cos(th) * view.s * 0.4);
+    ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 1.5; ctx.stroke();
+    // label
+    ctx.fillStyle = '#aebadb'; ctx.font = '10px system-ui';
+    ctx.fillText(p.asset, px + 3, py + 11);
+  }
+
+  // spawn
+  {
+    const [px, py] = worldToPx(doc.spawn.pos[0], doc.spawn.pos[1]);
+    ctx.strokeStyle = state.sel?.kind === 'spawn' ? '#ffd166' : '#7fd98a';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(px, py, view.s * 0.3, 0, Math.PI * 2); ctx.stroke();
+    const th = (doc.spawn.facingDeg * Math.PI) / 180;
+    ctx.beginPath(); ctx.moveTo(px, py);
+    ctx.lineTo(px + Math.sin(th) * view.s * 0.45, py + Math.cos(th) * view.s * 0.45);
+    ctx.stroke();
+  }
+
+  // drag previews
+  const d = state.drag;
+  if (d?.kind === 'floorRect' || d?.kind === 'wallLine') {
+    const [x1, y1] = worldToPx(d.x1, d.z1);
+    const [x2, y2] = worldToPx(d.x2, d.z2);
+    ctx.strokeStyle = '#3d6fd2'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+    if (d.kind === 'floorRect') ctx.strokeRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+    else { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
+    ctx.setLineDash([]);
+  }
+}
+
+// ---------------------------------------------------------------- pointer interaction
+function onPointerDown(e) {
+  if (!state.doc) return;
+  canvas.setPointerCapture?.(e.pointerId);
+  const [x, z] = eventWorld(e);
+
+  if (state.mode === 'objects') {
+    const hit = hitTest(x, z);
+    state.sel = hit;
+    if (hit) {
+      const p = state.doc.placedObjects[hit.index];
+      state.drag = { kind: 'move', dx: p.pos[0] - x, dz: p.pos[1] - z, moved: false };
+    }
+  } else if (state.mode === 'floors') {
+    const hit = hitTest(x, z);
+    if (hit) state.sel = hit;
+    else { state.sel = null; const [sx, sz] = snapPoint(x, z); state.drag = { kind: 'floorRect', x1: sx, z1: sz, x2: sx, z2: sz }; }
+  } else if (state.mode === 'walls') {
+    const hit = hitTest(x, z);
+    if (hit) state.sel = hit;
+    else { state.sel = null; const [sx, sz] = snapPoint(x, z); state.drag = { kind: 'wallLine', x1: sx, z1: sz, x2: sx, z2: sz }; }
+  } else if (state.mode === 'doors') {
+    const hit = hitTest(x, z);
+    if (hit) {
+      state.sel = hit;
+      state.drag = { kind: 'move', dx: state.doc.doors[hit.index].at[0] - x, dz: state.doc.doors[hit.index].at[1] - z, moved: false };
+    } else {
+      const w = nearestWall(x, z);
+      if (w) {
+        pushUndo();
+        const vertical = Math.abs(w.wall.to[0] - w.wall.from[0]) < Math.abs(w.wall.to[1] - w.wall.from[1]);
+        // snap along the wall axis, stay on the wall line on the cross axis
+        const at = vertical ? [w.px, snapVal(w.pz)] : [snapVal(w.px), w.pz];
+        state.doc.doors.push({ at, orientation: vertical ? 'vertical' : 'horizontal' });
+        state.sel = { kind: 'door', index: state.doc.doors.length - 1 };
+        markDirty();
+      } else state.sel = null;
+    }
+  } else if (state.mode === 'spawn') {
+    pushUndo();
+    state.doc.spawn.pos = snapPoint(x, z);
+    state.sel = { kind: 'spawn' };
+    markDirty();
+  }
+  renderInspector(); redraw();
+}
+
+function onPointerMove(e) {
+  if (!state.doc || !state.drag) return;
+  const [x, z] = eventWorld(e);
+  const d = state.drag;
+  if (d.kind === 'move') {
+    if (!d.moved) { pushUndo(); d.moved = true; }
+    const [nx, nz] = snapPoint(x + d.dx, z + d.dz);
+    if (state.sel?.kind === 'object') state.doc.placedObjects[state.sel.index].pos = [nx, nz];
+    if (state.sel?.kind === 'door') state.doc.doors[state.sel.index].at = [nx, nz];
+    markDirty(); renderInspector();
+  } else if (d.kind === 'floorRect' || d.kind === 'wallLine') {
+    [d.x2, d.z2] = snapPoint(x, z);
+    if (d.kind === 'wallLine') { // axis lock to the dominant direction
+      if (Math.abs(d.x2 - d.x1) >= Math.abs(d.z2 - d.z1)) d.z2 = d.z1; else d.x2 = d.x1;
+    }
+  }
+  redraw();
+}
+
+function onPointerUp() {
+  const d = state.drag;
+  state.drag = null;
+  if (!d || !state.doc) return;
+  if (d.kind === 'floorRect') {
+    const x1 = Math.min(d.x1, d.x2), x2 = Math.max(d.x1, d.x2);
+    const z1 = Math.min(d.z1, d.z2), z2 = Math.max(d.z1, d.z2);
+    if (x2 - x1 >= state.doc.gridSize && z2 - z1 >= state.doc.gridSize) {
+      pushUndo();
+      state.doc.floors.push({
+        id: uniqueFloorId(),
+        polygon: [[x1, z1], [x2, z1], [x2, z2], [x1, z2]],
+        material: state.newFloorMaterial,
+      });
+      state.sel = { kind: 'floor', index: state.doc.floors.length - 1 };
+      markDirty();
+    }
+  } else if (d.kind === 'wallLine') {
+    if (Math.hypot(d.x2 - d.x1, d.z2 - d.z1) >= snapStep()) {
+      pushUndo();
+      state.doc.walls.push({ from: [d.x1, d.z1], to: [d.x2, d.z2] });
+      state.sel = { kind: 'wall', index: state.doc.walls.length - 1 };
+      markDirty();
+    }
+  }
+  renderInspector(); redraw();
+}
+
+// ---------------------------------------------------------------- inspector & panels
+function field(labelText, value, onChange, opts = {}) {
+  const row = document.createElement('div'); row.className = 'field';
+  const lab = document.createElement('label'); lab.textContent = labelText;
+  let input;
+  if (opts.options) {
+    input = document.createElement('select');
+    const vals = new Set(opts.options);
+    if (value && !vals.has(value)) opts.options.push(value); // keep unknown values selectable
+    for (const o of opts.options) { const el = document.createElement('option'); el.value = o; el.textContent = o; input.appendChild(el); }
+    input.value = value ?? '';
+    input.addEventListener('change', () => onChange(input.value));
+  } else if (opts.text) {
+    input = document.createElement('input'); input.type = 'text'; input.value = value ?? '';
+    input.addEventListener('change', () => onChange(input.value));
+  } else {
+    input = document.createElement('input'); input.type = 'number'; input.step = 'any'; input.value = value;
+    input.addEventListener('change', () => { const v = Number(input.value); if (Number.isFinite(v)) onChange(v); });
+  }
+  if (opts.id) input.id = opts.id;
+  if (opts.data) input.dataset.field = opts.data;
+  row.append(lab, input);
+  return row;
+}
+
+function renderInspector() {
+  const host = document.getElementById('inspector');
+  host.innerHTML = '';
+  const doc = state.doc;
+  if (!doc) return;
+  const s = state.sel;
+  const edit = (fn) => (v) => { pushUndo(); fn(v); markDirty(); renderInspector(); redraw(); };
+
+  if (!s) {
+    host.appendChild(Object.assign(document.createElement('h2'), { textContent: 'Map properties' }));
+    host.appendChild(field('name', doc.name, edit((v) => { doc.name = v; }), { text: true, data: 'map.name' }));
+    host.appendChild(field('grid size', doc.gridSize, edit((v) => { doc.gridSize = Math.max(0.25, v); }), { data: 'map.gridSize' }));
+    host.appendChild(field('bounds w', doc.bounds.w, edit((v) => { doc.bounds.w = Math.max(2, v); fitView(); }), { data: 'map.bounds.w' }));
+    host.appendChild(field('bounds h', doc.bounds.h, edit((v) => { doc.bounds.h = Math.max(2, v); fitView(); }), { data: 'map.bounds.h' }));
+    if (state.mode === 'floors') {
+      host.appendChild(Object.assign(document.createElement('h2'), { textContent: 'New floors' }));
+      host.appendChild(field('material', state.newFloorMaterial, (v) => { state.newFloorMaterial = v; }, { options: [...FLOOR_MATERIALS], id: 'floor-material' }));
+    }
+    const p = document.createElement('div'); p.className = 'hint';
+    p.textContent = `${doc.floors.length} floors · ${doc.walls.length} walls · ${doc.doors.length} doors · ${doc.placedObjects.length} objects`;
+    host.appendChild(p);
+    return;
+  }
+
+  const del = document.createElement('button');
+  del.className = 'danger'; del.textContent = 'Delete'; del.style.marginTop = '8px';
+  del.addEventListener('click', deleteSelected);
+
+  if (s.kind === 'object') {
+    const p = doc.placedObjects[s.index];
+    host.appendChild(Object.assign(document.createElement('h2'), { textContent: assetById(p.asset)?.name ?? p.asset }));
+    host.appendChild(field('x', p.pos[0], edit((v) => { p.pos[0] = v; }), { data: 'obj.x' }));
+    host.appendChild(field('z', p.pos[1], edit((v) => { p.pos[1] = v; }), { data: 'obj.z' }));
+    host.appendChild(field('rot °', p.rotDeg, edit((v) => { p.rotDeg = normRot(v); }), { data: 'obj.rot' }));
+    host.appendChild(del);
+  } else if (s.kind === 'floor') {
+    const f = doc.floors[s.index];
+    host.appendChild(Object.assign(document.createElement('h2'), { textContent: 'Floor' }));
+    host.appendChild(field('id', f.id, edit((v) => { f.id = v; }), { text: true, data: 'floor.id' }));
+    host.appendChild(field('material', f.material, edit((v) => { f.material = v; }), { options: [...FLOOR_MATERIALS], data: 'floor.material' }));
+    const poly = document.createElement('div'); poly.className = 'hint';
+    poly.textContent = 'polygon: ' + JSON.stringify(f.polygon);
+    host.appendChild(poly);
+    host.appendChild(del);
+  } else if (s.kind === 'wall') {
+    const w = doc.walls[s.index];
+    host.appendChild(Object.assign(document.createElement('h2'), { textContent: 'Wall' }));
+    host.appendChild(field('from x', w.from[0], edit((v) => { w.from[0] = v; }), { data: 'wall.fx' }));
+    host.appendChild(field('from z', w.from[1], edit((v) => { w.from[1] = v; }), { data: 'wall.fz' }));
+    host.appendChild(field('to x', w.to[0], edit((v) => { w.to[0] = v; }), { data: 'wall.tx' }));
+    host.appendChild(field('to z', w.to[1], edit((v) => { w.to[1] = v; }), { data: 'wall.tz' }));
+    host.appendChild(del);
+  } else if (s.kind === 'door') {
+    const d = doc.doors[s.index];
+    host.appendChild(Object.assign(document.createElement('h2'), { textContent: 'Door' }));
+    host.appendChild(field('x', d.at[0], edit((v) => { d.at[0] = v; }), { data: 'door.x' }));
+    host.appendChild(field('z', d.at[1], edit((v) => { d.at[1] = v; }), { data: 'door.z' }));
+    host.appendChild(field('orientation', d.orientation, edit((v) => { d.orientation = v; }), { options: ['vertical', 'horizontal'], data: 'door.orientation' }));
+    host.appendChild(del);
+  } else if (s.kind === 'spawn') {
+    host.appendChild(Object.assign(document.createElement('h2'), { textContent: 'Spawn' }));
+    host.appendChild(field('x', doc.spawn.pos[0], edit((v) => { doc.spawn.pos[0] = v; }), { data: 'spawn.x' }));
+    host.appendChild(field('z', doc.spawn.pos[1], edit((v) => { doc.spawn.pos[1] = v; }), { data: 'spawn.z' }));
+    host.appendChild(field('facing °', doc.spawn.facingDeg, edit((v) => { doc.spawn.facingDeg = ((v % 360) + 360) % 360; }), { data: 'spawn.facing' }));
+  }
+}
+
+function renderPalette() {
+  const host = document.getElementById('palette');
+  host.innerHTML = '';
+  for (const cat of state.assets.categories) {
+    const items = state.assets.assets.filter((a) => a.category === cat);
+    if (items.length === 0) continue;
+    const h = document.createElement('div'); h.className = 'cat'; h.textContent = cat;
+    host.appendChild(h);
+    for (const a of items) {
+      const b = document.createElement('button');
+      b.className = 'item'; b.dataset.asset = a.id;
+      b.textContent = `${a.name}  ·  ${a.footprint[0]}×${a.footprint[1]}`;
+      b.addEventListener('click', () => addObjectFromPalette(a.id));
+      host.appendChild(b);
+    }
+  }
+}
+
+function renderMapSelect() {
+  const sel = document.getElementById('map-select');
+  sel.innerHTML = '';
+  for (const id of state.maps) {
+    const o = document.createElement('option');
+    o.value = id;
+    o.textContent = id + (state.tuning.map?.active === id ? ' (active)' : '');
+    sel.appendChild(o);
+  }
+  sel.value = state.mapId;
+}
+
+// ---------------------------------------------------------------- wiring
+canvas.addEventListener('pointerdown', onPointerDown);
+canvas.addEventListener('pointermove', onPointerMove);
+canvas.addEventListener('pointerup', onPointerUp);
+document.querySelectorAll('button.mode').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
+document.getElementById('map-select').addEventListener('change', (e) => selectMap(e.target.value));
+document.getElementById('map-new').addEventListener('click', () => newMap());
+document.getElementById('map-dup').addEventListener('click', () => duplicateMap());
+document.getElementById('map-del').addEventListener('click', () => deleteMap());
+document.getElementById('map-play').addEventListener('click', playThisMap);
+document.getElementById('reload').addEventListener('click', boot);
+document.getElementById('save').addEventListener('click', save);
+document.getElementById('show-nav').addEventListener('change', redraw);
+document.getElementById('snap').addEventListener('change', () => {});
+window.addEventListener('resize', () => { fitView(); redraw(); });
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+  if (e.key === 'r' || e.key === 'R') rotateSelected();
+  if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
+  if (e.key === 'Escape') { state.sel = null; renderInspector(); redraw(); }
+});
+window.addEventListener('beforeunload', (e) => { if (state.dirty) e.preventDefault(); });
+
+// underlay controls
+document.getElementById('underlay-file').addEventListener('change', (e) => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => { state.underlay.img = img; redraw(); };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(f);
+});
+for (const [id, key] of [['underlay-opacity', 'opacity'], ['underlay-width', 'width'], ['underlay-x', 'x'], ['underlay-z', 'z']]) {
+  document.getElementById(id).addEventListener('input', (e) => { state.underlay[key] = Number(e.target.value); redraw(); });
+}
+
+// exposed for the module script + headless tests
+window.MapEditor = {
+  state, boot, selectMap, save, newMap, duplicateMap, deleteMap, playThisMap,
+  hitTest, nearestWall, snapPoint, normRot, objectRect,
+  addObjectFromPalette, rotateSelected, deleteSelected, setMode, undo,
+  fitView, redraw, pxToWorld, worldToPx,
+  navBridgeReady: () => { state.navDirty = true; redraw(); },
+};
+
+boot();
+</script>
+
+<script type="module">
+// Nav overlay — the game's own nav module via Vite (never a reimplementation).
+import { bakeNavGrid } from '/game/nav.ts';
+window.NavBridge = {
+  walkableCells(map, assets) {
+    const g = bakeNavGrid(map, assets);
+    const out = [];
+    for (let r = 0; r < g.rows; r++)
+      for (let c = 0; c < g.cols; c++)
+        if (g.walkable[r * g.cols + c]) out.push([(c + 0.5) * g.cellSize, (r + 0.5) * g.cellSize]);
+    return out;
+  },
+};
+window.MapEditor?.navBridgeReady?.();
+</script>
+</body>
+</html>

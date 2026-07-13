@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Condo Life — Tuning Editor</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #141a28; color: #dfe6f2; }
+  header { position: sticky; top: 0; z-index: 5; display: flex; gap: 10px; align-items: center;
+    padding: 10px 14px; background: #0f1420ee; backdrop-filter: blur(6px); border-bottom: 1px solid #26304a; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: .03em; }
+  header .grow { flex: 1; }
+  #search { background: #1c2436; border: 1px solid #2c3a58; color: #dfe6f2; border-radius: 8px;
+    padding: 7px 10px; width: 220px; font-size: 13px; }
+  button { border: 0; border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer;
+    background: #2c3a58; color: #dfe6f2; }
+  button.primary { background: #3d6fd2; color: #fff; }
+  button:disabled { opacity: .45; cursor: default; }
+  #status { font-size: 12px; color: #8fa3c8; min-width: 130px; text-align: right; }
+  #status.ok { color: #7fd98a; } #status.err { color: #e58a8a; }
+  main { max-width: 980px; margin: 0 auto; padding: 14px; }
+  section { background: #1a2133; border: 1px solid #26304a; border-radius: 12px; margin: 14px 0; overflow: hidden; }
+  section > h2 { margin: 0; padding: 10px 14px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase;
+    color: #93a3c0; background: #1f2740; display: flex; align-items: center; gap: 8px; }
+  section > h2 .file { margin-left: auto; font-size: 11px; text-transform: none; letter-spacing: 0; color: #6f7fa3; }
+  section > h2 .dirty-dot { width: 8px; height: 8px; border-radius: 50%; background: #e0b05f; display: none; }
+  section.dirty > h2 .dirty-dot { display: inline-block; }
+  .group { padding: 6px 14px 10px; }
+  .group h3 { font-size: 12px; color: #7f92b8; margin: 10px 0 4px; font-weight: 600; }
+  .row { display: grid; grid-template-columns: 280px 130px 1fr; gap: 10px; align-items: center;
+    padding: 4px 0; border-bottom: 1px solid #212b44; }
+  .row:last-child { border-bottom: 0; }
+  .row label { font-size: 13px; }
+  .row .hint { font-size: 11px; color: #5f6f93; }
+  .row input[type=number], .row input[type=text], .row select { width: 100%; background: #10182a;
+    border: 1px solid #2c3a58; color: #dfe6f2; border-radius: 6px; padding: 6px 8px; font-size: 13px; }
+  .row input.warn { border-color: #e0b05f; background: #2a2314; }
+  .row input[type=checkbox] { width: 16px; height: 16px; }
+  .row input[type=color] { width: 42px; height: 28px; padding: 0; border: 1px solid #2c3a58; border-radius: 6px; background: #10182a; }
+  .sub { margin-left: 14px; }
+  .muted { color: #5f6f93; font-size: 12px; padding: 8px 14px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>⚙ Tuning Editor</h1>
+  <span class="grow"></span>
+  <input id="search" type="search" placeholder="Search parameters…" />
+  <button id="reload">Reload</button>
+  <button id="save" class="primary" disabled>Save changes</button>
+  <span id="status">loading…</span>
+</header>
+<main id="root"></main>
+
+<script>
+// ------------------------------------------------------------------ state
+const API = '/api/data/'; // matches server.js GET/PUT /api/data/*
+const FILES = ['tuning.json', 'stats.json', 'interactions.json'];
+const state = { docs: {}, dirty: new Set() };
+
+// soft sanity ranges (warn, never block — the designer is in charge)
+const HINTS = [
+  [/decayPerTick$/, 0, 5],
+  [/\bdefault$/, 0, 100],
+  [/\bmax$/, 1, 100],
+  [/seekBelowThreshold|stopAtThreshold/, 0, 100],
+  [/postPlayerCommandCooldownSeconds/, 0, 120],
+  [/DecayTickSeconds|GainTickSeconds/, 0.1, 10],
+  [/secondsPerGameDay/, 30, 86400],
+  [/night(Start|End)Hour/, 0, 24],
+  [/walkSpeed/, 0.2, 8],
+  [/arrivalRadius/, 0.05, 2],
+  [/gain:/, -25, 25],
+];
+const hintFor = (path) => HINTS.find(([re]) => re.test(path));
+
+// ------------------------------------------------------------------ io
+async function load() {
+  setStatus('loading…');
+  try {
+    for (const f of FILES) {
+      const res = await fetch(API + f);
+      if (!res.ok) throw new Error(`${f}: HTTP ${res.status}`);
+      state.docs[f] = await res.json();
+    }
+    state.dirty.clear();
+    render();
+    setStatus('loaded', 'ok');
+  } catch (e) { setStatus(String(e.message || e), 'err'); }
+}
+
+async function saveAll() {
+  setStatus('saving…');
+  try {
+    for (const f of [...state.dirty]) {
+      const res = await fetch(API + f, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state.docs[f], null, 2),
+      });
+      if (!res.ok) throw new Error(`${f}: HTTP ${res.status}`);
+      state.dirty.delete(f);
+      sectionEl(f)?.classList.remove('dirty');
+    }
+    updateSaveButton();
+    setStatus('saved — game hot-reloads', 'ok');
+  } catch (e) { setStatus(String(e.message || e), 'err'); }
+}
+
+function markDirty(file) {
+  state.dirty.add(file);
+  sectionEl(file)?.classList.add('dirty');
+  updateSaveButton();
+  setStatus('unsaved changes');
+}
+const sectionEl = (file) => document.querySelector(`section[data-file="${file}"]`);
+function updateSaveButton() { document.getElementById('save').disabled = state.dirty.size === 0; }
+function setStatus(msg, cls = '') { const s = document.getElementById('status'); s.textContent = msg; s.className = cls; }
+
+// ------------------------------------------------------------------ field factory
+function fieldRow(label, path, get, set, file, kind = 'number') {
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.dataset.label = (label + ' ' + path).toLowerCase();
+
+  const lab = document.createElement('label');
+  lab.textContent = label;
+  row.appendChild(lab);
+
+  let input;
+  if (kind === 'checkbox') {
+    input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = !!get();
+    input.addEventListener('change', () => { set(input.checked); markDirty(file); });
+  } else if (kind === 'color') {
+    input = document.createElement('input');
+    input.type = 'color';
+    input.value = get() || '#888888';
+    input.addEventListener('input', () => { set(input.value); markDirty(file); });
+  } else if (kind === 'text') {
+    input = document.createElement('input');
+    input.type = 'text';
+    input.value = get() ?? '';
+    input.addEventListener('input', () => { set(input.value); markDirty(file); });
+  } else if (Array.isArray(kind)) { // select
+    input = document.createElement('select');
+    for (const opt of kind) {
+      const o = document.createElement('option');
+      o.value = opt.value; o.textContent = opt.label;
+      input.appendChild(o);
+    }
+    input.value = get() ?? '';
+    input.addEventListener('change', () => { set(input.value || undefined); markDirty(file); });
+  } else { // number (blank allowed when sparse=true is encoded by set receiving undefined)
+    input = document.createElement('input');
+    input.type = 'number';
+    input.step = 'any';
+    const v = get();
+    input.value = v === undefined ? '' : v;
+    const check = () => {
+      const h = hintFor(path);
+      input.classList.toggle('warn', !!h && input.value !== '' && (Number(input.value) < h[1] || Number(input.value) > h[2]));
+    };
+    check();
+    input.addEventListener('input', () => {
+      set(input.value === '' ? undefined : Number(input.value));
+      markDirty(file);
+      check();
+    });
+  }
+  input.dataset.path = path;
+  row.appendChild(input);
+
+  const hintEl = document.createElement('span');
+  hintEl.className = 'hint';
+  const h = hintFor(path);
+  hintEl.textContent = h ? `${h[1]} – ${h[2]}` : '';
+  row.appendChild(hintEl);
+  return row;
+}
+
+// ------------------------------------------------------------------ render
+function render() {
+  const root = document.getElementById('root');
+  root.innerHTML = '';
+  root.appendChild(renderTuning());
+  root.appendChild(renderNeeds());
+  root.appendChild(renderSkills());
+  root.appendChild(renderActions());
+  applySearch();
+}
+
+function makeSection(title, file) {
+  const s = document.createElement('section');
+  s.dataset.file = file;
+  s.innerHTML = `<h2><span class="dirty-dot"></span>${title}<span class="file">${file}</span></h2>`;
+  return s;
+}
+
+function renderTuning() {
+  const file = 'tuning.json';
+  const doc = state.docs[file];
+  const s = makeSection('Global constants', file);
+  for (const [groupName, group] of Object.entries(doc)) {
+    if (typeof group !== 'object' || group === null) continue;
+    const g = document.createElement('div');
+    g.className = 'group';
+    g.innerHTML = `<h3>${groupName}</h3>`;
+    for (const key of Object.keys(group)) {
+      const kind = typeof group[key] === 'string' ? 'text' : 'number';
+      g.appendChild(fieldRow(key, `${groupName}.${key}`, () => group[key], (v) => { group[key] = v; }, file, kind));
+    }
+    s.appendChild(g);
+  }
+  return s;
+}
+
+function renderNeeds() {
+  const file = 'stats.json';
+  const doc = state.docs[file];
+  const s = makeSection('Needs', file);
+  for (const need of doc.needs) {
+    const g = document.createElement('div');
+    g.className = 'group';
+    g.innerHTML = `<h3>${need.name} <span style="color:#5f6f93">(${need.id})${need.computed ? ' · computed' : ''}</span></h3>`;
+    g.appendChild(fieldRow('default', `need.${need.id}.default`, () => need.default, (v) => { need.default = v ?? 0; }, file));
+    if (!need.computed) {
+      g.appendChild(fieldRow('decay per tick', `need.${need.id}.decayPerTick`, () => need.decayPerTick, (v) => { need.decayPerTick = v ?? 0; }, file));
+    }
+    g.appendChild(fieldRow('participates in autonomy', `need.${need.id}.autonomy`, () => need.autonomy, (v) => { need.autonomy = v; }, file, 'checkbox'));
+    g.appendChild(fieldRow('bar color', `need.${need.id}.color`, () => need.color, (v) => { need.color = v; }, file, 'color'));
+    s.appendChild(g);
+  }
+  return s;
+}
+
+function renderSkills() {
+  const file = 'stats.json';
+  const doc = state.docs[file];
+  const s = makeSection('Skills', file);
+  s.dataset.file = file; // same file as needs — dirty state shared
+  for (const skill of doc.skills) {
+    const g = document.createElement('div');
+    g.className = 'group';
+    g.innerHTML = `<h3>${skill.name} <span style="color:#5f6f93">(${skill.id})</span></h3>`;
+    g.appendChild(fieldRow('enabled', `skill.${skill.id}.enabled`, () => skill.enabled !== false, (v) => { skill.enabled = v; }, file, 'checkbox'));
+    g.appendChild(fieldRow('default', `skill.${skill.id}.default`, () => skill.default, (v) => { skill.default = v ?? 0; }, file));
+    g.appendChild(fieldRow('max', `skill.${skill.id}.max`, () => skill.max, (v) => { skill.max = v ?? 10; }, file));
+    g.appendChild(fieldRow('bar color', `skill.${skill.id}.color`, () => skill.color, (v) => { skill.color = v; }, file, 'color'));
+    s.appendChild(g);
+  }
+  return s;
+}
+
+function renderActions() {
+  const file = 'interactions.json';
+  const doc = state.docs[file];
+  const stats = state.docs['stats.json'];
+  const s = makeSection('Actions — per-tick gains', file);
+  const needOpts = [{ value: '', label: '(none)' }, ...stats.needs.map((n) => ({ value: n.id, label: n.name }))];
+
+  for (const action of doc.actions) {
+    const g = document.createElement('div');
+    g.className = 'group';
+    g.innerHTML = `<h3>${action.name} <span style="color:#5f6f93">(${action.id} · anim: ${action.animation})</span></h3>`;
+    g.appendChild(fieldRow('autonomy eligible', `action.${action.id}.autonomyEligible`, () => action.autonomyEligible, (v) => { action.autonomyEligible = v; }, file, 'checkbox'));
+    g.appendChild(fieldRow('seat aware', `action.${action.id}.seatAware`, () => !!action.seatAware, (v) => { action.seatAware = v; }, file, 'checkbox'));
+    g.appendChild(fieldRow('primary need (auto-stop)', `action.${action.id}.primaryNeed`, () => action.primaryNeed, (v) => { action.primaryNeed = v; }, file, needOpts));
+
+    const sub = document.createElement('div');
+    sub.className = 'sub';
+    sub.innerHTML = '<h3>need gains / tick <span style="color:#5f6f93">(blank = no effect)</span></h3>';
+    for (const need of stats.needs) {
+      sub.appendChild(fieldRow(need.name, `action.${action.id}.gain:${need.id}`,
+        () => action.needGains[need.id],
+        (v) => { if (v === undefined) delete action.needGains[need.id]; else action.needGains[need.id] = v; }, file));
+    }
+    const sub2 = document.createElement('div');
+    sub2.className = 'sub';
+    sub2.innerHTML = '<h3>skill gains / tick</h3>';
+    for (const skill of stats.skills) {
+      sub2.appendChild(fieldRow(skill.name, `action.${action.id}.gain:${skill.id}`,
+        () => action.skillGains[skill.id],
+        (v) => { if (v === undefined) delete action.skillGains[skill.id]; else action.skillGains[skill.id] = v; }, file));
+    }
+    g.appendChild(sub);
+    g.appendChild(sub2);
+    s.appendChild(g);
+  }
+  return s;
+}
+
+// ------------------------------------------------------------------ search
+function applySearch() {
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  document.querySelectorAll('.row').forEach((row) => {
+    row.classList.toggle('hidden', q !== '' && !row.dataset.label.includes(q));
+  });
+  document.querySelectorAll('.group').forEach((g) => {
+    const any = [...g.querySelectorAll('.row')].some((r) => !r.classList.contains('hidden'));
+    g.classList.toggle('hidden', !any);
+  });
+  document.querySelectorAll('section').forEach((s) => {
+    const any = [...s.querySelectorAll('.group')].some((g) => !g.classList.contains('hidden'));
+    s.classList.toggle('hidden', !any);
+  });
+}
+
+// ------------------------------------------------------------------ boot
+document.getElementById('search').addEventListener('input', applySearch);
+document.getElementById('reload').addEventListener('click', load);
+document.getElementById('save').addEventListener('click', saveAll);
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveAll(); }
+});
+window.addEventListener('beforeunload', (e) => { if (state.dirty.size > 0) e.preventDefault(); });
+load();
+</script>
+</body>
+</html>
