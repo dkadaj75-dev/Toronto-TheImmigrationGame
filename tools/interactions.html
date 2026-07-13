@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Condo Life — Interaction Editor</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #141a28; color: #dfe6f2; }
+  header { position: sticky; top: 0; z-index: 5; display: flex; gap: 10px; align-items: center;
+    padding: 10px 14px; background: #0f1420ee; backdrop-filter: blur(6px); border-bottom: 1px solid #26304a; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header .grow { flex: 1; }
+  #search { background: #1c2436; border: 1px solid #2c3a58; color: #dfe6f2; border-radius: 8px; padding: 7px 10px; width: 200px; font-size: 13px; }
+  button { border: 0; border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; background: #2c3a58; color: #dfe6f2; }
+  button.primary { background: #3d6fd2; color: #fff; }
+  button.danger { background: #7a3040; }
+  button:disabled { opacity: .45; cursor: default; }
+  #status { font-size: 12px; color: #8fa3c8; min-width: 150px; text-align: right; }
+  #status.ok { color: #7fd98a; } #status.err { color: #e58a8a; }
+
+  #layout { display: grid; grid-template-columns: 250px 1fr; height: calc(100vh - 53px); }
+  #sidebar { border-right: 1px solid #26304a; overflow-y: auto; padding: 8px; }
+  .action-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+    background: transparent; padding: 7px 8px; border-radius: 8px; font-size: 13px; }
+  .action-item:hover { background: #1c2436; }
+  .action-item.active { background: rgba(90,120,190,.28); }
+  .action-item .badge { margin-left: auto; font-size: 10px; color: #8fa3c8; background: #1c2436; border-radius: 999px; padding: 2px 7px; }
+  #editor { overflow-y: auto; padding: 16px; }
+  #editor .empty { color: #5f6f93; padding: 40px; text-align: center; }
+  .card { background: #1a2133; border: 1px solid #26304a; border-radius: 12px; padding: 14px; margin-bottom: 14px; max-width: 660px; }
+  .card h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: #93a3c0; }
+  .frow { display: grid; grid-template-columns: 190px 1fr; gap: 10px; align-items: center; padding: 5px 0; }
+  .frow label { font-size: 13px; }
+  .frow input[type=number], .frow input[type=text], .frow select { width: 100%; background: #10182a; border: 1px solid #2c3a58;
+    color: #dfe6f2; border-radius: 6px; padding: 6px 8px; font-size: 13px; }
+  .frow input[readonly] { color: #6f7fa3; }
+  .hint-line { font-size: 11px; color: #5f6f93; margin-top: 4px; }
+  .row-actions { display: flex; gap: 8px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎬 Interaction Editor</h1>
+  <span class="grow"></span>
+  <input id="search" type="search" placeholder="Search actions…" />
+  <button id="new">+ New action</button>
+  <button id="save" class="primary" disabled>Save changes</button>
+  <span id="status">loading…</span>
+</header>
+<div id="layout">
+  <nav id="sidebar"></nav>
+  <div id="editor"><div class="empty">Select an action</div></div>
+</div>
+
+<script>
+// ------------------------------------------------------------------ state
+// The Interaction Editor makes data/interactions.json (ENUM_Interations port) fully
+// designer-editable: add/remove actions, per-action need/skill gains, primary need,
+// animation state, autonomy eligibility, seat-awareness. Mirrors tools/assets.html's
+// sidebar+editor architecture (see PROJECT_CONTEXT.md §5 "Tool architecture").
+const API = '/api/data/';
+const state = { interactions: null, assets: null, stats: null, selected: null, dirty: new Set() };
+
+async function load() {
+  setStatus('loading…');
+  try {
+    const [i, a, s] = await Promise.all([
+      fetch(API + 'interactions.json').then((r) => { if (!r.ok) throw new Error('interactions.json HTTP ' + r.status); return r.json(); }),
+      fetch(API + 'assets.json').then((r) => { if (!r.ok) throw new Error('assets.json HTTP ' + r.status); return r.json(); }),
+      fetch(API + 'stats.json').then((r) => { if (!r.ok) throw new Error('stats.json HTTP ' + r.status); return r.json(); }),
+    ]);
+    state.interactions = i; state.assets = a; state.stats = s;
+    state.dirty.clear();
+    if (!state.selected && i.actions.length) state.selected = i.actions[0].id;
+    renderAll();
+    setStatus('loaded', 'ok');
+  } catch (e) { setStatus(String(e.message || e), 'err'); }
+}
+
+async function saveAll() {
+  setStatus('saving…');
+  try {
+    const files = { 'interactions.json': state.interactions, 'assets.json': state.assets };
+    for (const f of [...state.dirty]) {
+      const res = await fetch(API + f, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(files[f], null, 2),
+      });
+      if (!res.ok) throw new Error(`${f}: HTTP ${res.status}`);
+      state.dirty.delete(f);
+    }
+    updateSave();
+    setStatus('saved — game hot-reloads', 'ok');
+  } catch (e) { setStatus(String(e.message || e), 'err'); }
+}
+
+function markDirty(file) { state.dirty.add(file); updateSave(); setStatus('unsaved changes'); }
+function updateSave() { document.getElementById('save').disabled = state.dirty.size === 0; }
+function setStatus(msg, cls = '') { const s = document.getElementById('status'); s.textContent = msg; s.className = cls; }
+const selectedAction = () => state.interactions.actions.find((a) => a.id === state.selected) ?? null;
+
+// ------------------------------------------------------------------ sidebar
+function renderSidebar() {
+  const nav = document.getElementById('sidebar');
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  nav.innerHTML = '';
+  const items = state.interactions.actions.filter((a) =>
+    q === '' || a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q));
+  for (const act of items) {
+    const b = document.createElement('button');
+    b.className = 'action-item' + (act.id === state.selected ? ' active' : '');
+    b.dataset.actionId = act.id;
+    b.innerHTML = `<span>${act.name}</span>${act.autonomyEligible ? '' : '<span class="badge">player-only</span>'}`;
+    b.addEventListener('click', () => { state.selected = act.id; renderAll(); });
+    nav.appendChild(b);
+  }
+}
+
+// ------------------------------------------------------------------ field factory (mirrors assets.html)
+function frow(label, input) {
+  const r = document.createElement('div');
+  r.className = 'frow';
+  const l = document.createElement('label');
+  l.textContent = label;
+  r.append(l, input);
+  return r;
+}
+function numInput(get, set, path) {
+  const i = document.createElement('input');
+  i.type = 'number'; i.step = 'any'; i.value = get() ?? '';
+  i.dataset.path = path;
+  i.addEventListener('input', () => { set(i.value === '' ? undefined : Number(i.value)); markDirty('interactions.json'); });
+  return i;
+}
+function textInput(get, set, path, opts = {}) {
+  const i = document.createElement('input');
+  i.type = 'text'; i.value = get() ?? '';
+  i.dataset.path = path;
+  if (opts.readonly) i.readOnly = true;
+  if (opts.list) i.setAttribute('list', opts.list);
+  i.addEventListener('input', () => { set(i.value); markDirty('interactions.json'); });
+  return i;
+}
+function checkInput(get, set, path) {
+  const i = document.createElement('input');
+  i.type = 'checkbox'; i.checked = !!get();
+  i.dataset.path = path;
+  i.addEventListener('change', () => { set(i.checked); markDirty('interactions.json'); });
+  return i;
+}
+
+// animation states in use across all actions, plus the 4 core states the game always
+// recognizes (game/anim.ts BUILTIN in the Animation Mapper) — shown as a hint + datalist
+// so the free-text "animation" field doesn't require guessing an existing name.
+const CORE_STATES = ['idle', 'walk', 'sit', 'lie'];
+function animationStatesInUse() {
+  const set = new Set(CORE_STATES);
+  for (const a of state.interactions.actions) {
+    const v = String(a.animation || '').trim();
+    if (v) set.add(v);
+  }
+  return [...set].sort();
+}
+
+// ------------------------------------------------------------------ editor
+function renderEditor() {
+  const root = document.getElementById('editor');
+  const a = selectedAction();
+  root.innerHTML = '';
+  if (!a) { root.innerHTML = '<div class="empty">Select an action</div>'; return; }
+
+  const datalist = document.createElement('datalist');
+  datalist.id = 'anim-states-list';
+  for (const s of animationStatesInUse()) {
+    const o = document.createElement('option');
+    o.value = s;
+    datalist.appendChild(o);
+  }
+  root.appendChild(datalist);
+
+  // --- identity
+  const card1 = document.createElement('div');
+  card1.className = 'card';
+  card1.innerHTML = '<h2>Action</h2>';
+  card1.appendChild(frow('id (fixed — assets reference it)', textInput(() => a.id, () => {}, 'id', { readonly: true })));
+  card1.appendChild(frow('name', textInput(() => a.name, (v) => { a.name = v; renderSidebar(); }, 'name')));
+
+  const animWrap = document.createElement('div');
+  animWrap.appendChild(textInput(() => a.animation, (v) => { a.animation = v; }, 'animation', { list: 'anim-states-list' }));
+  const hint = document.createElement('div');
+  hint.className = 'hint-line';
+  hint.textContent = 'states in use: ' + animationStatesInUse().join(', ') + ' — feeds the Animation Mapper’s state list';
+  animWrap.appendChild(hint);
+  card1.appendChild(frow('animation state', animWrap));
+  root.appendChild(card1);
+
+  // --- behavior
+  const card2 = document.createElement('div');
+  card2.className = 'card';
+  card2.innerHTML = '<h2>Behavior</h2>';
+  card2.appendChild(frow('autonomy eligible (sim may pick this on its own)',
+    checkInput(() => a.autonomyEligible, (v) => { a.autonomyEligible = v; renderSidebar(); }, 'autonomyEligible')));
+  card2.appendChild(frow('seat aware (walks to nearest seat facing the object, e.g. TV)',
+    checkInput(() => !!a.seatAware, (v) => { if (v) a.seatAware = true; else delete a.seatAware; }, 'seatAware')));
+
+  const needSel = document.createElement('select');
+  needSel.dataset.path = 'primaryNeed';
+  const noneOpt = document.createElement('option'); noneOpt.value = ''; noneOpt.textContent = '(none)';
+  needSel.appendChild(noneOpt);
+  for (const n of state.stats.needs) {
+    const o = document.createElement('option'); o.value = n.id; o.textContent = n.name;
+    needSel.appendChild(o);
+  }
+  needSel.value = a.primaryNeed ?? '';
+  needSel.addEventListener('change', () => { a.primaryNeed = needSel.value || null; markDirty('interactions.json'); });
+  card2.appendChild(frow('primary need (auto-stop threshold target)', needSel));
+  root.appendChild(card2);
+
+  // --- need gains (fed from stats.json — no free-typed ids, one row per real need)
+  const card3 = document.createElement('div');
+  card3.className = 'card';
+  card3.innerHTML = '<h2>Need gains / tick <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#5f6f93">(blank = no effect)</span></h2>';
+  for (const need of state.stats.needs) {
+    card3.appendChild(frow(need.name, numInput(
+      () => a.needGains[need.id],
+      (v) => { if (v === undefined) delete a.needGains[need.id]; else a.needGains[need.id] = v; },
+      'gain.need.' + need.id,
+    )));
+  }
+  root.appendChild(card3);
+
+  // --- skill gains (same convention)
+  const card4 = document.createElement('div');
+  card4.className = 'card';
+  card4.innerHTML = '<h2>Skill gains / tick</h2>';
+  for (const skill of state.stats.skills) {
+    const label = skill.name + (skill.enabled === false ? ' (disabled)' : '');
+    card4.appendChild(frow(label, numInput(
+      () => a.skillGains[skill.id],
+      (v) => { if (v === undefined) delete a.skillGains[skill.id]; else a.skillGains[skill.id] = v; },
+      'gain.skill.' + skill.id,
+    )));
+  }
+  root.appendChild(card4);
+
+  // --- danger zone
+  const card5 = document.createElement('div');
+  card5.className = 'card';
+  card5.innerHTML = '<h2>Actions</h2>';
+  const rowA = document.createElement('div');
+  rowA.className = 'row-actions';
+  const del = document.createElement('button');
+  del.className = 'danger';
+  del.id = 'delete';
+  const n = assetUsages(a.id).length;
+  del.textContent = n ? `Delete (used by ${n} asset${n === 1 ? '' : 's'}!)` : 'Delete';
+  del.addEventListener('click', () => removeAction(a.id));
+  rowA.appendChild(del);
+  card5.appendChild(rowA);
+  root.appendChild(card5);
+}
+
+// ------------------------------------------------------------------ add/remove (referential integrity)
+// Same policy as the Tuning Editor's need/skill add-remove (PROJECT_CONTEXT.md §2c): warn with the
+// exact list of referencing assets, then on confirm strip the dangling reference so assets.json
+// never ships an interaction id that no longer exists in interactions.json.
+function slugify(name) {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+function uniqueId(base, existingIds) {
+  let root = base && /^[a-z]/.test(base) ? base : `a_${base || 'action'}`;
+  if (!root) root = 'action';
+  let candidate = root, n = 2;
+  while (existingIds.includes(candidate)) candidate = `${root}_${n++}`;
+  return candidate;
+}
+
+function assetUsages(actionId) {
+  return state.assets.assets.filter((asset) => asset.interactions.includes(actionId)).map((asset) => asset.name);
+}
+
+function addAction() {
+  const name = window.prompt('New action name (e.g. "Do Yoga"):', '');
+  if (!name || !name.trim()) return;
+  const id = uniqueId(slugify(name.trim()), state.interactions.actions.map((a) => a.id));
+  state.interactions.actions.push({
+    id,
+    name: name.trim(),
+    needGains: {},
+    skillGains: {},
+    animation: '',
+    autonomyEligible: true,
+    primaryNeed: null,
+  });
+  state.selected = id;
+  markDirty('interactions.json');
+  renderAll(); // rebuilds DOM — call after markDirty is fine here since sidebar/editor read state.dirty only via updateSave()
+}
+
+function removeAction(id) {
+  const action = state.interactions.actions.find((a) => a.id === id);
+  if (!action) return;
+  const uses = assetUsages(id);
+  const msg = uses.length
+    ? `"${action.name}" is referenced by: ${uses.join(', ')}.\n\nDeleting it will remove this action from those assets' interaction lists. Continue?`
+    : `Delete "${action.name}"? No assets reference it.`;
+  if (!window.confirm(msg)) return;
+  state.interactions.actions = state.interactions.actions.filter((a) => a.id !== id);
+  let alsoAssets = false;
+  if (uses.length) {
+    for (const asset of state.assets.assets) {
+      if (asset.interactions.includes(id)) {
+        asset.interactions = asset.interactions.filter((x) => x !== id);
+        alsoAssets = true;
+      }
+    }
+  }
+  state.selected = state.interactions.actions[0]?.id ?? null;
+  markDirty('interactions.json');
+  if (alsoAssets) markDirty('assets.json');
+  renderAll();
+}
+
+function renderAll() { renderSidebar(); renderEditor(); }
+
+// ------------------------------------------------------------------ boot
+document.getElementById('search').addEventListener('input', renderSidebar);
+document.getElementById('new').addEventListener('click', addAction);
+document.getElementById('save').addEventListener('click', saveAll);
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveAll(); }
+});
+window.addEventListener('beforeunload', (e) => { if (state.dirty.size > 0) e.preventDefault(); });
+load();
+</script>
+</body>
+</html>
