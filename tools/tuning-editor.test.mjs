@@ -99,6 +99,105 @@ const visible = [...doc.querySelectorAll('.row')].filter((r) => !r.classList.con
 assert(visible.length === 1 && visible[0].dataset.label.includes('walkspeed'), 'search narrows to walkSpeed row');
 assert(doc.querySelector('section[data-file="stats.json"]').classList.contains('hidden'), 'empty sections hidden by search');
 
+// clear search before exercising add/remove flows
+search.value = '';
+search.dispatchEvent(new window.Event('input', { bubbles: true }));
+
+// ==================================================================
+// Add / remove needs & skills (designer-autonomy slice)
+// ==================================================================
+
+// --- add a need: prompt supplies a name, id is derived + defaults are sane
+window.prompt = () => 'Thirst';
+doc.querySelector('[data-action="add-need"]').click();
+const thirstGroup = doc.querySelector('input[data-path="need.thirst.default"]');
+assert(thirstGroup, 'new need "thirst" rendered with a default field');
+assert(doc.querySelector('input[data-path="need.thirst.decayPerTick"]'), 'new need has a decay field (not computed)');
+assert(doc.querySelector('input[data-path="need.thirst.autonomy"]').checked, 'new need defaults to autonomy-eligible');
+assert(doc.querySelector('section[data-file="stats.json"]').classList.contains('dirty'), 'adding a need marks stats.json dirty');
+// default/decay copied from the average of existing (non-computed) needs — here just "hunger",
+// whose decayPerTick was changed to 0.8 by the sanity-hint test above (default stayed 70)
+assert(Number(thirstGroup.value) === 70, 'new need default copies the average of existing needs');
+assert(doc.querySelector('input[data-path="need.thirst.decayPerTick"]').value === '0.8', 'new need decay copies the average of existing needs');
+
+// --- cancelled prompt adds nothing
+window.prompt = () => '';
+const needCountBefore = doc.querySelectorAll('section[data-file="stats.json"] .group').length;
+doc.querySelector('[data-action="add-need"]').click();
+assert(doc.querySelectorAll('section[data-file="stats.json"] .group').length === needCountBefore, 'blank prompt adds no need');
+
+// --- duplicate names get a uniquified id, not a collision
+window.prompt = () => 'Thirst';
+doc.querySelector('[data-action="add-need"]').click();
+assert(doc.querySelector('input[data-path="need.thirst_2.default"]'), 'second "Thirst" gets a uniquified id (thirst_2)');
+
+// --- add a need whose id happens to match an existing action reference ("fun"), to test the
+// referenced-deletion path below (the fixture's watch_tv action already has needGains.fun + primaryNeed "fun")
+window.prompt = () => 'Fun';
+doc.querySelector('[data-action="add-need"]').click();
+assert(doc.querySelector('input[data-path="need.fun.default"]'), 'need "fun" added');
+
+// --- add a skill: prompt supplies a name, id derived, max copies average of existing skills
+window.prompt = () => 'Gardening';
+doc.querySelector('[data-action="add-skill"]').click();
+assert(doc.querySelector('input[data-path="skill.gardening.default"]'), 'new skill "gardening" rendered');
+assert(doc.querySelector('input[data-path="skill.gardening.default"]').value === '0', 'new skill starts at 0 (skills grow through practice)');
+assert(doc.querySelector('input[data-path="skill.gardening.max"]').value === '10', 'new skill max copies average of existing skills (english=10)');
+assert(doc.querySelector('input[data-path="skill.gardening.enabled"]').checked, 'new skill enabled by default');
+
+// give "gardening" a real gain on watch_tv so the referenced-skill-delete path (below) has
+// something to strip — the earlier "sparse gains" test already blanked out watch_tv's original
+// english gain, so english is unreferenced by this point (used for the unreferenced-skill case).
+const gardeningGain = doc.querySelector('input[data-path="action.watch_tv.gain:gardening"]');
+assert(gardeningGain, 'gardening gain field rendered on watch_tv after the skill was added');
+gardeningGain.value = '0.05';
+gardeningGain.dispatchEvent(new window.Event('input', { bubbles: true }));
+
+// --- delete an unreferenced need: plain confirm message, no interactions.json change
+let confirmMsg = '';
+window.confirm = (msg) => { confirmMsg = msg; return true; };
+doc.querySelector('[data-action="delete-need"][data-need-id="thirst_2"]').click();
+assert(confirmMsg.includes('No actions reference it'), 'unreferenced need gets a plain delete message');
+assert(!doc.querySelector('input[data-path="need.thirst_2.default"]'), 'thirst_2 removed from the DOM');
+
+// --- cancel a referenced delete: nothing changes
+window.confirm = () => false;
+doc.querySelector('[data-action="delete-need"][data-need-id="fun"]').click();
+assert(doc.querySelector('input[data-path="need.fun.default"]'), 'cancelled delete leaves the need in place');
+
+// --- confirm a referenced delete: need removed AND dangling references stripped from interactions.json
+window.confirm = (msg) => { confirmMsg = msg; return true; };
+doc.querySelector('[data-action="delete-need"][data-need-id="fun"]').click();
+assert(confirmMsg.includes('Watch TV') && confirmMsg.includes('primary need'), 'referenced-need delete lists the referencing action and field');
+assert(!doc.querySelector('input[data-path="need.fun.default"]'), 'need "fun" removed');
+assert(doc.querySelector('section[data-file="interactions.json"]').classList.contains('dirty'), 'stripping references marks interactions.json dirty');
+
+// --- delete an unreferenced skill: plain confirm message (its earlier gain was blanked out above)
+window.confirm = (msg) => { confirmMsg = msg; return true; };
+doc.querySelector('[data-action="delete-skill"][data-skill-id="english"]').click();
+assert(confirmMsg.includes('No actions reference it'), 'unreferenced skill gets a plain delete message');
+assert(!doc.querySelector('input[data-path="skill.english.default"]'), 'skill "english" removed');
+
+// --- delete a referenced skill: strips the skillGains key too
+window.confirm = (msg) => { confirmMsg = msg; return true; };
+doc.querySelector('[data-action="delete-skill"][data-skill-id="gardening"]').click();
+assert(confirmMsg.includes('Watch TV'), 'referenced-skill delete lists the referencing action');
+assert(!doc.querySelector('input[data-path="skill.gardening.default"]'), 'skill "gardening" removed');
+
+// --- save: PUT reflects the final add/remove state
+doc.getElementById('save').click();
+await new Promise((r) => setTimeout(r, 50));
+const savedStats = puts['stats.json'];
+const savedInteractions = puts['interactions.json'];
+assert(savedStats.needs.some((n) => n.id === 'thirst'), 'PUT stats.json includes the surviving new need "thirst"');
+assert(!savedStats.needs.some((n) => n.id === 'fun' || n.id === 'thirst_2'), 'PUT stats.json excludes deleted needs');
+assert(!savedStats.skills.some((s) => s.id === 'gardening' || s.id === 'english'), 'PUT stats.json excludes both deleted skills');
+const watchTv = savedInteractions.actions.find((a) => a.id === 'watch_tv');
+assert(!('fun' in watchTv.needGains), 'PUT interactions.json stripped the dangling needGains.fun key');
+assert(watchTv.primaryNeed === null, 'PUT interactions.json cleared the dangling primaryNeed');
+assert(!('gardening' in watchTv.skillGains), 'PUT interactions.json stripped the dangling skillGains.gardening key');
+assert(doc.getElementById('save').disabled, 'save disabled again after saving the add/remove changes');
+
 console.log('ALL TUNING-EDITOR TESTS PASSED');
 
 function assert(cond, msg) {

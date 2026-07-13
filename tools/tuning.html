@@ -42,6 +42,9 @@
   .sub { margin-left: 14px; }
   .muted { color: #5f6f93; font-size: 12px; padding: 8px 14px; }
   .hidden { display: none !important; }
+  .toolbar { padding: 10px 14px; display: flex; gap: 8px; }
+  .row-delete { margin-top: 6px; background: #7a3040; }
+  .group h3 .del-wrap { float: right; }
 </style>
 </head>
 <body>
@@ -223,6 +226,16 @@ function renderNeeds() {
   const file = 'stats.json';
   const doc = state.docs[file];
   const s = makeSection('Needs', file);
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'toolbar';
+  const addBtn = document.createElement('button');
+  addBtn.textContent = '+ Add need';
+  addBtn.dataset.action = 'add-need';
+  addBtn.addEventListener('click', addNeed);
+  toolbar.appendChild(addBtn);
+  s.appendChild(toolbar);
+
   for (const need of doc.needs) {
     const g = document.createElement('div');
     g.className = 'group';
@@ -233,6 +246,13 @@ function renderNeeds() {
     }
     g.appendChild(fieldRow('participates in autonomy', `need.${need.id}.autonomy`, () => need.autonomy, (v) => { need.autonomy = v; }, file, 'checkbox'));
     g.appendChild(fieldRow('bar color', `need.${need.id}.color`, () => need.color, (v) => { need.color = v; }, file, 'color'));
+    const del = document.createElement('button');
+    del.className = 'row-delete';
+    del.textContent = 'Delete need';
+    del.dataset.action = 'delete-need';
+    del.dataset.needId = need.id;
+    del.addEventListener('click', () => removeNeed(need.id));
+    g.appendChild(del);
     s.appendChild(g);
   }
   return s;
@@ -243,6 +263,16 @@ function renderSkills() {
   const doc = state.docs[file];
   const s = makeSection('Skills', file);
   s.dataset.file = file; // same file as needs — dirty state shared
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'toolbar';
+  const addBtn = document.createElement('button');
+  addBtn.textContent = '+ Add skill';
+  addBtn.dataset.action = 'add-skill';
+  addBtn.addEventListener('click', addSkill);
+  toolbar.appendChild(addBtn);
+  s.appendChild(toolbar);
+
   for (const skill of doc.skills) {
     const g = document.createElement('div');
     g.className = 'group';
@@ -251,9 +281,141 @@ function renderSkills() {
     g.appendChild(fieldRow('default', `skill.${skill.id}.default`, () => skill.default, (v) => { skill.default = v ?? 0; }, file));
     g.appendChild(fieldRow('max', `skill.${skill.id}.max`, () => skill.max, (v) => { skill.max = v ?? 10; }, file));
     g.appendChild(fieldRow('bar color', `skill.${skill.id}.color`, () => skill.color, (v) => { skill.color = v; }, file, 'color'));
+    const del = document.createElement('button');
+    del.className = 'row-delete';
+    del.textContent = 'Delete skill';
+    del.dataset.action = 'delete-skill';
+    del.dataset.skillId = skill.id;
+    del.addEventListener('click', () => removeSkill(skill.id));
+    g.appendChild(del);
     s.appendChild(g);
   }
   return s;
+}
+
+// ------------------------------------------------------------------ add/remove needs & skills
+// Referential-integrity policy (documented in PROJECT_CONTEXT.md): deleting a need/skill that's
+// still referenced by an action's needGains/skillGains/primaryNeed would leave dangling ids —
+// harmless at runtime (stats.ts/autonomy.ts both no-op on unknown ids) but messy data. We choose
+// to WARN with the exact list of referencing actions, then on confirm STRIP those references so
+// interactions.json never ships pointing at a stat that no longer exists.
+function slugify(name) {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+function uniqueId(base, existingIds) {
+  let root = base && /^[a-z]/.test(base) ? base : `n_${base || 'stat'}`;
+  if (!root) root = 'stat';
+  let candidate = root, n = 2;
+  while (existingIds.includes(candidate)) candidate = `${root}_${n++}`;
+  return candidate;
+}
+function randomColor() {
+  return '#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
+}
+function avgOf(list, key, fallback) {
+  const vals = list.map((x) => x[key]).filter((v) => typeof v === 'number');
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : fallback;
+}
+
+function addNeed() {
+  const stats = state.docs['stats.json'];
+  const name = window.prompt('New need name (e.g. "Thirst"):', '');
+  if (!name || !name.trim()) return;
+  const id = uniqueId(slugify(name), stats.needs.map((n) => n.id));
+  const concrete = stats.needs.filter((n) => !n.computed);
+  stats.needs.push({
+    id,
+    name: name.trim(),
+    color: randomColor(),
+    default: Math.round(avgOf(concrete, 'default', 70)),
+    decayPerTick: Number(avgOf(concrete, 'decayPerTick', 0.05).toFixed(3)),
+    autonomy: true,
+  });
+  render(); // rebuilds the section DOM — must happen before markDirty so the new element gets the dirty class
+  markDirty('stats.json');
+}
+
+function addSkill() {
+  const stats = state.docs['stats.json'];
+  const name = window.prompt('New skill name (e.g. "Gardening"):', '');
+  if (!name || !name.trim()) return;
+  const id = uniqueId(slugify(name), stats.skills.map((s) => s.id));
+  stats.skills.push({
+    id,
+    name: name.trim(),
+    color: randomColor(),
+    default: 0, // skills start low and grow through practice — no decay field exists on skills
+    max: Math.round(avgOf(stats.skills, 'max', 10)),
+  });
+  render();
+  markDirty('stats.json');
+}
+
+function needUsages(id) {
+  const interactions = state.docs['interactions.json'];
+  const uses = [];
+  for (const action of interactions.actions) {
+    const bits = [];
+    if (Object.prototype.hasOwnProperty.call(action.needGains, id)) bits.push('gain');
+    if (action.primaryNeed === id) bits.push('primary need');
+    if (bits.length) uses.push(`${action.name} (${bits.join(', ')})`);
+  }
+  return uses;
+}
+function skillUsages(id) {
+  const interactions = state.docs['interactions.json'];
+  const uses = [];
+  for (const action of interactions.actions) {
+    if (Object.prototype.hasOwnProperty.call(action.skillGains, id)) uses.push(`${action.name} (gain)`);
+  }
+  return uses;
+}
+
+function removeNeed(id) {
+  const stats = state.docs['stats.json'];
+  const need = stats.needs.find((n) => n.id === id);
+  if (!need) return;
+  const uses = needUsages(id);
+  const msg = uses.length
+    ? `"${need.name}" is referenced by: ${uses.join(', ')}.\n\nDeleting it will strip those references (gain removed / primary need cleared). Continue?`
+    : `Delete "${need.name}"? No actions reference it.`;
+  if (!window.confirm(msg)) return;
+  stats.needs = stats.needs.filter((n) => n.id !== id);
+  let alsoInteractions = false;
+  if (uses.length) {
+    const interactions = state.docs['interactions.json'];
+    for (const action of interactions.actions) {
+      if (Object.prototype.hasOwnProperty.call(action.needGains, id)) delete action.needGains[id];
+      if (action.primaryNeed === id) action.primaryNeed = null;
+    }
+    alsoInteractions = true;
+  }
+  render(); // rebuilds section DOM — must happen before markDirty so the new elements get the dirty class
+  markDirty('stats.json');
+  if (alsoInteractions) markDirty('interactions.json');
+}
+
+function removeSkill(id) {
+  const stats = state.docs['stats.json'];
+  const skill = stats.skills.find((s) => s.id === id);
+  if (!skill) return;
+  const uses = skillUsages(id);
+  const msg = uses.length
+    ? `"${skill.name}" is referenced by: ${uses.join(', ')}.\n\nDeleting it will strip those gains. Continue?`
+    : `Delete "${skill.name}"? No actions reference it.`;
+  if (!window.confirm(msg)) return;
+  stats.skills = stats.skills.filter((s) => s.id !== id);
+  let alsoInteractions = false;
+  if (uses.length) {
+    const interactions = state.docs['interactions.json'];
+    for (const action of interactions.actions) {
+      if (Object.prototype.hasOwnProperty.call(action.skillGains, id)) delete action.skillGains[id];
+    }
+    alsoInteractions = true;
+  }
+  render(); // rebuilds section DOM — must happen before markDirty so the new elements get the dirty class
+  markDirty('stats.json');
+  if (alsoInteractions) markDirty('interactions.json');
 }
 
 function renderActions() {
