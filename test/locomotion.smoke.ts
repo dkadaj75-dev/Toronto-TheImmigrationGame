@@ -17,6 +17,7 @@ const tuning = {
   economy: { startingFunds: 0, currencyName: '§' },
   movement: { walkSpeed: 2, arrivalRadius: 0.35 },
   camera: { minZoom: 4, maxZoom: 18, minPitchDeg: 30, maxPitchDeg: 70, panBoundsPadding: 2 },
+  quests: { toastDurationSeconds: 4, completedLogLimit: 5 },
   character: { meshPath: '', heightMeters: 1.55, crossFadeSeconds: 0.25, walkClipSpeedReference: 2, sitHeight: 0.4, lieHeight: 0.7, clipMap: {} },
 } satisfies TuningData;
 

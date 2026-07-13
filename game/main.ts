@@ -13,6 +13,7 @@ import { SimAgent, ClickCue, findSeatFor } from './sim';
 import { SimStats } from './stats';
 import { Hud } from './ui';
 import { Autonomy } from './autonomy';
+import { QuestRunner } from './quests';
 
 const app = document.getElementById('app')!;
 const boot = document.getElementById('boot')!;
@@ -110,6 +111,26 @@ async function start() {
 
   const autonomy = new Autonomy(() => data, () => world, agent, stats);
 
+  // --- quest system (PROJECT_CONTEXT.md §3): runtime-only state, see quests.ts's persistence doc comment ---
+  const quests = new QuestRunner(data.quests, data.simstate, data.tuning.economy.startingFunds);
+  const completedQuestLog: { name: string }[] = [];
+  const refreshQuestLog = () => {
+    const active = data.quests.quests
+      .filter((q) => quests.quests[q.id] === 'active')
+      .map((q) => ({ name: q.name, description: q.description }));
+    hud.setQuestLog(active, completedQuestLog, data.tuning.quests.completedLogLimit);
+  };
+  quests.onQuestStarted = (q) => {
+    hud.showQuestToast(`Quest started: ${q.name}`, 'started', data.tuning.quests.toastDurationSeconds * 1000);
+    refreshQuestLog();
+  };
+  quests.onQuestCompleted = (q) => {
+    hud.showQuestToast(`Quest completed: ${q.name}`, 'completed', data.tuning.quests.toastDurationSeconds * 1000);
+    completedQuestLog.push({ name: q.name });
+    refreshQuestLog();
+  };
+  refreshQuestLog();
+
   // --- object highlight: subtle box on hover (mouse), bright box while the menu is open ---
   const hoverBox = new THREE.BoxHelper(new THREE.Object3D(), 0x6fa0ff);
   const selectBox = new THREE.BoxHelper(new THREE.Object3D(), 0xffd166);
@@ -178,6 +199,12 @@ async function start() {
       stats.decayTick();
       applyEnvironment();
       autonomy.maybeAct(); // free will evaluates on the decay tick
+      // quest triggers/completions evaluate on the same tick (§3.2: "same reuse-an-existing-interval convention")
+      quests.tick(
+        Object.fromEntries(stats.needs),
+        Object.fromEntries(stats.skills),
+        { hour: Math.floor(gameSeconds / 3600), day: gameDay },
+      );
     }
 
     gainAcc += dt;
@@ -223,6 +250,8 @@ async function start() {
     stats.retune(data.stats);
     hud.rebuildBars();
     applyEnvironment();
+    quests.retune(data.quests, data.simstate); // definitions only — runtime quest/var state is untouched
+    refreshQuestLog();
     if (data.tuning.character) {
       anim?.retune(data.tuning.character);
       anim?.setWalkSpeed(data.tuning.movement.walkSpeed);
@@ -231,10 +260,11 @@ async function start() {
     flashDevbar();
   });
 
-  devData.innerHTML = `data: <b>${data.assets.assets.length} assets</b> · <b>${data.stats.needs.length} needs</b> · <b>${data.stats.skills.filter(s => s.enabled !== false).length} skills</b> · <b>${data.interactions.actions.length} actions</b>`;
+  devData.innerHTML = `data: <b>${data.assets.assets.length} assets</b> · <b>${data.stats.needs.length} needs</b> · <b>${data.stats.skills.filter(s => s.enabled !== false).length} skills</b> · <b>${data.interactions.actions.length} actions</b> · <b>${data.quests.quests.length} quests</b>`;
 
-  // --- game clock (display only in Phase 0; drives day/night in Phase 1) ---
+  // --- game clock (display only in Phase 0; drives day/night in Phase 1; day count feeds quests' time.day) ---
   let gameSeconds = 8 * 3600; // start the day at 08:00
+  let gameDay = 1;
   const clockScale = () => 86400 / data.tuning.time.secondsPerGameDay;
 
   // --- render loop ---
@@ -244,7 +274,8 @@ async function start() {
     last = now;
     const sdt = dt * hud.speed; // simulation time: pause/1×/2×/3× scales everything below
 
-    gameSeconds = (gameSeconds + sdt * clockScale()) % 86400;
+    gameSeconds += sdt * clockScale();
+    while (gameSeconds >= 86400) { gameSeconds -= 86400; gameDay++; }
     const h = Math.floor(gameSeconds / 3600), m = Math.floor((gameSeconds % 3600) / 60);
     devClock.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     hud.setClock(h, m);

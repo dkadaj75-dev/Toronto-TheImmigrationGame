@@ -1,0 +1,22 @@
+{
+  "_comment": "Quest definitions (PROJECT_CONTEXT.md §3.2). trigger: locked→active condition, evaluated on the needs-decay tick. completion: active→done condition; on success rewards are applied. onceOnly:true quests stay 'done' forever; onceOnly:false quests reset to 'locked' after completion so they can trigger again later (repeatable) — see the doc comment on QuestRunner.tick in game/quests.ts.",
+  "quests": [
+    {
+      "id": "first_words",
+      "name": "First Words",
+      "description": "Reach English level 10 and save §500.",
+      "trigger": { "all": [ { "var": "skills.english", "gte": 1 } ] },
+      "completion": {
+        "all": [
+          { "var": "skills.english", "gte": 10 },
+          { "var": "funds", "gte": 500 }
+        ]
+      },
+      "rewards": [
+        { "type": "funds", "amount": 200 },
+        { "type": "setVar", "var": "visaStatus", "value": "student" }
+      ],
+      "onceOnly": true
+    }
+  ]
+}

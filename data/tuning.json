@@ -26,6 +26,11 @@
     "currencyName": "§",
     "_source": "PLACEHOLDER — open decision #1 (Phase 3)"
   },
+  "quests": {
+    "toastDurationSeconds": 4,
+    "completedLogLimit": 5,
+    "_source": "Quest system slice (PROJECT_CONTEXT.md §3) — toast on-screen time and how many completed quests the HUD log keeps."
+  },
   "movement": {
     "walkSpeed": 2,
     "arrivalRadius": 0.35,

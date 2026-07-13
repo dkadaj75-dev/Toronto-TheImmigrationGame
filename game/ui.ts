@@ -51,6 +51,23 @@ const CSS = `
 #activity-chip.open { display: flex; }
 #activity-chip button { border: 0; background: rgba(220,90,90,.35); color: #fbdada; border-radius: 999px;
   padding: 4px 10px; font-size: 12px; cursor: pointer; }
+
+#quest-panel { bottom: 40px; max-height: 38vh; overflow-y: auto; }
+#quest-panel .quest-section-title { font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+  color: #93a3c0; margin: 8px 0 4px; }
+#quest-panel .quest-section-title:first-child { margin-top: 0; }
+.quest-item { margin: 4px 0; }
+.quest-item .qname { font-size: 12px; font-weight: 600; }
+.quest-item .qdesc { font-size: 10px; color: #b7c1d6; }
+.quest-empty { font-size: 10px; color: #6d7996; font-style: italic; }
+
+#quest-toasts { position: absolute; top: 56px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; z-index: 11; }
+.quest-toast { background: rgba(20,26,40,.92); color: #eaf0fb; border-radius: 10px; padding: 8px 14px;
+  font-size: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.35); opacity: 0; transform: translateY(-6px);
+  transition: opacity .25s, transform .25s; border-left: 3px solid #5a9fd6; max-width: 80vw; text-align: center; }
+.quest-toast.show { opacity: 1; transform: translateY(0); }
+.quest-toast.completed { border-left-color: #6fce7a; }
 `;
 
 export class Hud {
@@ -59,6 +76,9 @@ export class Hud {
   private menu: HTMLElement;
   private chip: HTMLElement;
   private chipLabel: HTMLElement;
+  private questPanel: HTMLElement;
+  private questBody: HTMLElement;
+  private questToasts: HTMLElement;
   private fills = new Map<string, HTMLElement>();
 
   onCancelAction: (() => void) | null = null;
@@ -81,6 +101,7 @@ export class Hud {
     root.innerHTML = `
       <div class="hud-panel" id="needs-panel"><h3>Needs</h3><div class="bars"></div></div>
       <div class="hud-panel" id="skills-panel"><h3>Skills</h3><div class="bars"></div></div>
+      <div class="hud-panel" id="quest-panel"><h3>Quests</h3><div class="bars" id="quest-body"></div></div>
       <div id="time-bar">
         <button data-speed="0" title="Pause (space)">⏸</button>
         <span class="clock">--:--</span>
@@ -89,7 +110,8 @@ export class Hud {
         <button data-speed="3" title="Ultra (3)">3×</button>
       </div>
       <div id="action-menu"></div>
-      <div id="activity-chip"><span id="activity-label"></span><button>Stop</button></div>`;
+      <div id="activity-chip"><span id="activity-label"></span><button>Stop</button></div>
+      <div id="quest-toasts"></div>`;
     document.body.appendChild(root);
 
     this.needsPanel = root.querySelector('#needs-panel')!;
@@ -97,6 +119,9 @@ export class Hud {
     this.menu = root.querySelector('#action-menu')!;
     this.chip = root.querySelector('#activity-chip')!;
     this.chipLabel = root.querySelector('#activity-label')!;
+    this.questPanel = root.querySelector('#quest-panel')!;
+    this.questBody = root.querySelector('#quest-body')!;
+    this.questToasts = root.querySelector('#quest-toasts')!;
     this.chip.querySelector('button')!.addEventListener('click', () => this.onCancelAction?.());
 
     // --- time controls ---
@@ -113,7 +138,7 @@ export class Hud {
       else if (e.key === '1' || e.key === '2' || e.key === '3') this.setSpeed(Number(e.key));
     });
 
-    for (const panel of [this.needsPanel, this.skillsPanel]) {
+    for (const panel of [this.needsPanel, this.skillsPanel, this.questPanel]) {
       panel.querySelector('h3')!.addEventListener('click', () => panel.classList.toggle('collapsed'));
     }
     // portrait phones start with skills collapsed to save space
@@ -206,4 +231,61 @@ export class Hud {
   }
 
   hideActivity() { this.chip.classList.remove('open'); }
+
+  /** Rebuild the quest log panel. `completed` is the full completion log; only the last `completedLimit` show. */
+  setQuestLog(active: { name: string; description: string }[], completed: { name: string }[], completedLimit: number) {
+    const body = this.questBody;
+    body.innerHTML = '';
+
+    const activeTitle = document.createElement('div');
+    activeTitle.className = 'quest-section-title';
+    activeTitle.textContent = 'Active';
+    body.appendChild(activeTitle);
+    if (active.length === 0) {
+      body.appendChild(makeEmptyRow('No active quests'));
+    } else {
+      for (const q of active) {
+        const item = document.createElement('div');
+        item.className = 'quest-item';
+        item.innerHTML = `<div class="qname">${q.name}</div><div class="qdesc">${q.description}</div>`;
+        body.appendChild(item);
+      }
+    }
+
+    const doneTitle = document.createElement('div');
+    doneTitle.className = 'quest-section-title';
+    doneTitle.textContent = 'Completed';
+    body.appendChild(doneTitle);
+    const recent = completed.slice(-completedLimit).reverse();
+    if (recent.length === 0) {
+      body.appendChild(makeEmptyRow('None yet'));
+    } else {
+      for (const q of recent) {
+        const item = document.createElement('div');
+        item.className = 'quest-item';
+        item.innerHTML = `<div class="qname">✓ ${q.name}</div>`;
+        body.appendChild(item);
+      }
+    }
+  }
+
+  /** Transient toast for a quest trigger/completion. Duration comes from tuning.quests.toastDurationSeconds. */
+  showQuestToast(text: string, kind: 'started' | 'completed', durationMs: number) {
+    const el = document.createElement('div');
+    el.className = kind === 'completed' ? 'quest-toast completed' : 'quest-toast';
+    el.textContent = text;
+    this.questToasts.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 300);
+    }, durationMs);
+  }
+}
+
+function makeEmptyRow(text: string): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'quest-empty';
+  el.textContent = text;
+  return el;
 }

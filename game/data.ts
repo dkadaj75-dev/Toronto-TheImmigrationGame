@@ -24,6 +24,39 @@ export interface AssetDef {
 }
 export interface AssetsData { categories: string[]; assets: AssetDef[]; }
 
+/** Designer-defined sim-state variable (PROJECT_CONTEXT.md §3.1). `funds` is a separate built-in
+ *  namespace (seeded from tuning.economy.startingFunds) and is NOT one of these. */
+export interface VarDef { id: string; name: string; type: 'string' | 'number' | 'boolean'; default: string | number | boolean | null; }
+export interface SimStateData { variables: VarDef[]; }
+
+/** Quest condition tree (§3.2). Operators are mutually exclusive per leaf; combinators nest. */
+export interface ConditionLeaf {
+  var: string;
+  gte?: number;
+  lte?: number;
+  eq?: string | number | boolean | null;
+  neq?: string | number | boolean | null;
+}
+export interface ConditionAll { all: Condition[]; }
+export interface ConditionAny { any: Condition[]; }
+export type Condition = ConditionLeaf | ConditionAll | ConditionAny;
+
+export type QuestState = 'locked' | 'active' | 'done';
+
+export interface RewardFunds { type: 'funds'; amount: number; }
+export interface RewardSetVar { type: 'setVar'; var: string; value: string | number | boolean; }
+export interface RewardUnlockAsset { type: 'unlockAsset'; asset: string; }
+export type Reward = RewardFunds | RewardSetVar | RewardUnlockAsset;
+
+export interface QuestDef {
+  id: string; name: string; description: string;
+  trigger: Condition;
+  completion: Condition;
+  rewards: Reward[];
+  onceOnly: boolean;
+}
+export interface QuestsData { quests: QuestDef[]; }
+
 export interface MapData {
   id: string; name: string; gridSize: number;
   bounds: { w: number; h: number };
@@ -62,6 +95,8 @@ export interface TuningData {
   economy: { startingFunds: number; currencyName: string };
   movement: { walkSpeed: number; arrivalRadius: number };
   camera: { minZoom: number; maxZoom: number; minPitchDeg: number; maxPitchDeg: number; panBoundsPadding: number };
+  /** quest log HUD tuning (§3 quest system) — no magic numbers in game/quests.ts or ui.ts */
+  quests: { toastDurationSeconds: number; completedLogLimit: number };
   /** which map the game plays: data/maps/<active>.json (set from the Map Editor's "Play this map") */
   map?: { active: string };
   /** optional so pre-rig data files & test fixtures stay valid; game falls back to the capsule */
@@ -74,6 +109,8 @@ export interface GameData {
   assets: AssetsData;
   map: MapData;
   tuning: TuningData;
+  simstate: SimStateData;
+  quests: QuestsData;
 }
 
 const FILES = {
@@ -81,6 +118,8 @@ const FILES = {
   interactions: '/data/interactions.json',
   assets: '/data/assets.json',
   tuning: '/data/tuning.json',
+  simstate: '/data/simstate.json',
+  quests: '/data/quests.json',
 } as const;
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -93,13 +132,15 @@ export async function loadAll(): Promise<GameData> {
   // tuning first — it names the active map (tuning.map.active, default "condo")
   const tuning = await fetchJson<TuningData>(FILES.tuning);
   const mapFile = `/data/maps/${tuning.map?.active ?? 'condo'}.json`;
-  const [stats, interactions, assets, map] = await Promise.all([
+  const [stats, interactions, assets, map, simstate, quests] = await Promise.all([
     fetchJson<StatsData>(FILES.stats),
     fetchJson<InteractionsData>(FILES.interactions),
     fetchJson<AssetsData>(FILES.assets),
     fetchJson<MapData>(mapFile),
+    fetchJson<SimStateData>(FILES.simstate),
+    fetchJson<QuestsData>(FILES.quests),
   ]);
-  return { stats, interactions, assets, map, tuning };
+  return { stats, interactions, assets, map, tuning, simstate, quests };
 }
 
 /** Dev hot-reload: polls the data files and invokes callbacks when content changes. */
