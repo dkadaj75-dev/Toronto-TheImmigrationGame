@@ -64,18 +64,18 @@ check('save disabled while clean', doc.getElementById('save').disabled);
 // ------------------------------------------------------------------ slice 1: objects
 console.log('map-editor.test — objects: hit test / snap / drag / rotate / delete');
 {
-  // sofa at [3,1], footprint 3×1, rot 0 → hit at x∈[1.5,4.5], z∈[0.5,1.5]
-  check('hit inside footprint', ME.hitTest(4.2, 1.2)?.kind === 'object' && st.doc.placedObjects[ME.hitTest(4.2, 1.2).index].asset === 'sofa');
+  // sofa at [1.5,0.5] (condo.json), footprint 3×1, rot 0 → hit at x∈[0,3], z∈[0,1]
+  check('hit inside footprint', ME.hitTest(2.7, 0.7)?.kind === 'object' && st.doc.placedObjects[ME.hitTest(2.7, 0.7).index].asset === 'sofa');
   check('miss outside footprint', ME.hitTest(3, 2.2) === null || st.doc.placedObjects[ME.hitTest(3, 2.2).index].asset !== 'sofa');
-  // rotation-aware: bed at [1,8] footprint [2,3] rot 90 → spans x∈[-0.5,2.5], z∈[7,9]
+  // rotation-aware: bed at [1.5,8] footprint [2,3] rot 90 → spans x∈[0,3], z∈[7,9]
   const bedHit = ME.hitTest(2.3, 7.2);
   check('rotation-aware hit (bed rot 90 swaps axes)', bedHit && st.doc.placedObjects[bedHit.index].asset === 'bed');
   check('snap math (half cell)', ME.snapPoint(1.26, 3.74).join(',') === '1.5,3.5');
   check('rot normalization 450→90', ME.normRot(450) === 90);
   check('rot normalization -90→270', ME.normRot(-90) === 270);
 
-  // drag the sofa
-  pointer('pointerdown', 3, 1);
+  // drag the sofa (pointerdown exactly on its actual pos so the drag anchor offset is 0)
+  pointer('pointerdown', 1.5, 0.5);
   check('pointerdown selects', st.sel?.kind === 'object' && st.doc.placedObjects[st.sel.index].asset === 'sofa');
   pointer('pointermove', 4.13, 2.86);
   pointer('pointerup', 4.13, 2.86);
