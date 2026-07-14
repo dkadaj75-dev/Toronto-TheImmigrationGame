@@ -19,7 +19,7 @@ The designer (Septentrion) must be able to build and balance the entire game **t
 | **Add / remove actions** and per-action gains, animation state, autonomy eligibility | Interaction Editor | ✅ done (2026-07-13) |
 | **Quest system**: author quests with trigger & completion conditions + rewards | Quest Editor (replaces roadmap's "Story Editor") | ✅ done (2026-07-13, see §3.3–§3.4) |
 | Simulate balance headlessly, chart curves | Balance Dashboard | ⬜ nice-to-have |
-| **Navigate between all admin tools** (tabs/buttons in every tool) | Shared tool nav bar | ⬜ planned — design locked §7.4 |
+| **Navigate between all admin tools** (tabs/buttons in every tool) | Shared tool nav bar | ✅ done (2026-07-14) |
 | **Asset facing direction** ("normal" vector: where the object faces, for use-spots/seating logic) | Asset Editor + Map Editor arrow | ⬜ planned — design locked §7.2 |
 | **Doors as their own asset type** (mesh, hinge axis, scale fit, open/close timing) | Asset Editor door section + Map Editor door↔asset link | ⬜ planned — design locked §7.1 |
 | **Accidents** (per-asset risk config; accident assets that override base interactions) | Asset Editor risk section (accident types are assets) | ⬜ planned — design locked §7.3 |
@@ -138,7 +138,7 @@ Step 3 of §3's build order — the last piece of the quest slice. **New tool fi
 3. ~~Needs & skills add/remove in the Tuning Editor~~ ✅ shipped 2026-07-13 (see §2c below)
 4. ~~Interaction Editor~~ ✅ shipped 2026-07-13 (see §2d) — add/remove actions, per-action gains, animation state, autonomy flags (unlocks the full animation vocabulary: cook, read, scream…)
 5. ~~Quest system per §3 (variables → runner → editor)~~ ✅ shipped 2026-07-13 — all 3 steps done: variables + evaluator, runner + HUD log (§3.3), Quest Editor tool (§3.4)
-6. **Shared tool nav bar** (§7.4) — quick win, unblocks nothing but improves every tool session
+6. ~~Shared tool nav bar~~ ✅ shipped 2026-07-14 (§7.4) — quick win, unblocks nothing but improves every tool session
 7. **Asset facing vector** (§7.2) — foundational: use-spots and seat-facing logic feed doors' and accidents' placement math, and Buy/Sell placement UX later
 8. **Doors as assets** (§7.1)
 9. **Accidents system** (§7.3) — biggest of the four; needs facing/use-spot (§7.2) landed first
@@ -196,3 +196,10 @@ Four requests from the designer, specced here before implementation (build order
 ### 7.4 Tool navigation
 
 - A shared nav bar on every tool page + the game: new `tools/nav.js` (plain non-module script so jsdom tests are unaffected) that injects a compact tab strip — Game, Assets, Interactions, Tuning, Map, Animations, Quests — highlighting the current page. Each `tools/*.html` (and `index.html`) includes it with one `<script src>` line. New tools must add themselves to the one list in `nav.js`.
+
+### 7.4 as-built (2026-07-14)
+
+- **File**: `tools/nav.js`, a self-guarded IIFE. Injects its own `<style>` + DOM, keyed off `location.pathname` (matches `/tools/<file>.html` against its own `TOOLS` list; `/` or `/index.html` → the game). Idempotent (checks for `#condo-toolnav`/`#condo-toolnav-corner` before injecting) and wrapped in try/catch so it can never break a host page. **Include pattern**: one line, `<script src="/tools/nav.js"></script>`, placed just before `</body>` in all six `tools/*.html` files and `index.html` — the absolute `/tools/nav.js` path resolves correctly from every page since Vite (via `server.js`'s fallthrough to `vite.middlewares`) serves `tools/*.js` as a normal static asset with no server changes needed (verified: `GET /tools/nav.js` → 200, `Content-Type: text/javascript`).
+- **index.html decision**: the game's HUD (`game/ui.ts`) already fills the top edge — `#needs-panel`/`#skills-panel` at `top:8px` left/right, `#time-bar` top-center, `#quest-toasts` at `top:56px` center — so a top strip would collide. Per §7.4's own escape hatch, `index.html` instead gets a small fixed gear button (`#condo-toolnav-corner`, `right:8px; bottom:40px`) that expands a link panel upward; that corner sits clear of `#devbar` (full-width bottom strip), `#quest-panel` (bottom-left), and `#action-menu`/`#activity-chip` (bottom-center). All six `tools/*.html` pages get the plain top-strip variant instead (inserted as the first child of `<body>`, non-sticky, so it never fights each page's own `header { position: sticky; top: 0 }` — the strip just scrolls away first).
+- **Layout compensation**: `assets.html` and `interactions.html` hardcode `#layout { height: calc(100vh - 53px) }` against their own header's height; `nav.js` adds one scoped override rule, `#layout { height: calc(100vh - 53px - 32px) !important; }`, so the extra 32px strip doesn't cause a few pixels of unwanted page scroll. This rule is unconditionally injected but is a no-op on every page without a `#layout` element.
+- **Tests**: new `test/toolnav.test.mjs` (jsdom) — loads `tools/nav.js`'s source as an inline `<script>` (jsdom doesn't fetch external `<script src>` without `resources: "usable"`, which is also exactly why adding the include line to every other tool's HTML doesn't affect *their* existing suites at all) and asserts: top strip renders + is the first body child + correct active tab per page, no corner button on tool pages; the game page gets the corner button instead with correct active tab, toggle-open/close-on-outside-click behavior; and double-injection is a no-op. Future tools: add one entry to the `TOOLS` array in `tools/nav.js` and one `<script src="/tools/nav.js"></script>` line before `</body>`.
