@@ -5,17 +5,18 @@
 import * as THREE from 'three';
 import { loadAll, watchData, type GameData } from './data';
 import { TouchCamera } from './camera';
-import { buildWorld, makeSimStandIn, makeLights, applyDayNight, loadRiggedCharacter } from './world';
+import { buildWorld, makeSimStandIn, makeLights, applyDayNight, loadRiggedCharacter, normalizeMeshUrl } from './world';
 import { buildDoors } from './doors';
 import { AnimController } from './anim';
 import { bakeNavGrid } from './nav';
-import { TapInput } from './input';
+import { TapInput, type TapResult } from './input';
 import { SimAgent, ClickCue, findSeatFor } from './sim';
 import { SimStats } from './stats';
 import { Hud } from './ui';
 import { Autonomy } from './autonomy';
 import { QuestRunner, type EvalContext } from './quests';
 import { AccidentsController, resolveTapAssetId } from './accidents';
+import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials } from './buymode';
 
 const app = document.getElementById('app')!;
 const boot = document.getElementById('boot')!;
@@ -65,6 +66,18 @@ async function start() {
   // --- accidents (PROJECT_CONTEXT.md §7.3): closures over the live `let world`/`grid` so a
   // hot-reload rebake/rebuild is picked up automatically, same pattern as Autonomy below.
   const accidents = new AccidentsController(() => data, () => world, () => grid);
+
+  // --- Buy/Sell mode (§7.6): overlay of player purchases/moves/sells layered over
+  // data.map.placedObjects (never written back to the map file — see buymode.ts's module doc
+  // comment). `rebakeNav` is the single place that feeds the overlay's EFFECTIVE placed-object
+  // list (designer objects with overrides applied, minus sold, plus player additions) into
+  // bakeNavGrid — used by both buy-mode actions and the ordinary hot-reload rebake below, so
+  // overlay changes always survive a tuning/map/asset edit landing mid-session.
+  const buyMode = new BuyModeController(() => data, () => world);
+  const rebakeNav = () => {
+    grid = bakeNavGrid({ ...data.map, placedObjects: buyMode.effectivePlacedObjectsList() }, data.assets);
+    agent.retune(data.tuning, grid);
+  };
 
   // --- rigged character: swap the capsule's contents for the GLB when it loads.
   // The `sim` group stays the agent's object, so position/rotation/pose logic is untouched.
@@ -190,7 +203,29 @@ async function start() {
   };
   hud.onCancelAction = () => { autonomy.notePlayerCommand(); agent.stopAction(); };
 
+  // --- Buy/Sell mode tap handling (§7.6): a tap while `buyMode.active` never reaches the normal
+  // gameplay routing below (tap-to-go / open an action menu) — it either repositions the pending
+  // placement/move ghost (tap-only, matching this game's existing tap-first interaction model —
+  // see buymode.ts's moveGhostTo doc comment), or selects a placed instance to show the
+  // Move/Rotate/Sell chips.
+  const handleBuyModeTap = (hit: TapResult) => {
+    if (buyMode.selection && buyMode.selection.kind !== 'selected') {
+      if (hit.ground) buyMode.moveGhostTo(hit.ground.x, hit.ground.z);
+      return;
+    }
+    if (hit.object) {
+      const inst = buyMode.instanceForObject(hit.object);
+      if (inst && buyMode.select(inst) && buyMode.selection?.kind === 'selected') {
+        hud.showSelectionChips(buyMode.selection.def.name, buyMode.selection.def.sellPrice, data.tuning.economy.currencyName);
+        return;
+      }
+    }
+    buyMode.deselect();
+    hud.hideSelectionChips();
+  };
+
   const tapInput = new TapInput(renderer.domElement, cam.camera, () => world, (hit) => {
+    if (buyMode.active) { handleBuyModeTap(hit); return; }
     if (hit.object) {
       const assetId = hit.object.userData.assetId as string;
       let asset = data.assets.assets.find((a) => a.id === assetId);
@@ -232,6 +267,115 @@ async function start() {
     }
   });
   tapInput.onHover = setHover;
+
+  // --- Buy/Sell mode HUD wiring (§7.6) ---
+  let buyActiveCategory = '';
+  let buySearchQuery = '';
+  /** set whenever a buy/sell/move actually lands, so closing buy mode knows whether the nav grid
+   *  (and therefore any in-flight sim path) might have changed underneath it — see onBuyClose. */
+  let buyModeChangedSomething = false;
+  const buyIsUnlocked = (assetId: string) => quests.isAssetUnlocked(assetId);
+  const currencyName = () => data.tuning.economy.currencyName;
+
+  const refreshBuyCatalog = () => {
+    const categories = catalogCategories(data.assets, buyIsUnlocked);
+    if (!categories.includes(buyActiveCategory)) buyActiveCategory = categories[0] ?? '';
+    const items = filterCatalog(data.assets.assets, buyIsUnlocked, { category: buyActiveCategory, search: buySearchQuery })
+      .map((a) => ({
+        id: a.id, name: a.name, price: a.buyPrice, affordable: isAffordable(a, quests.funds),
+        icon: a.icon ? normalizeMeshUrl(a.icon) : undefined,
+        fallbackColor: iconFallbackColor(a.category), fallbackInitials: iconFallbackInitials(a.name),
+      }));
+    hud.renderCatalog(
+      categories.map((id) => ({ id, label: id.charAt(0).toUpperCase() + id.slice(1) })),
+      buyActiveCategory, items, currencyName(),
+    );
+  };
+
+  hud.setFunds(quests.funds, currencyName());
+
+  hud.onBuyOpen = () => {
+    buyMode.enter();
+    hud.setBuyModeActive(true);
+    buyActiveCategory = '';
+    buySearchQuery = '';
+    buyModeChangedSomething = false;
+    hud.setBuySearchValue('');
+    refreshBuyCatalog();
+  };
+  hud.onBuyClose = () => {
+    buyMode.exit();
+    hud.setBuyModeActive(false);
+    // Safety net: sim-time freeze means the agent never advances while shopping, but it may have
+    // been mid-route when buy mode opened, and a rebake during shopping can invalidate that stale
+    // path (moved/sold/bought furniture). Cancelling in place is simpler and safer than trying to
+    // resume a path computed against a nav grid that may no longer match.
+    if (buyModeChangedSomething && agent.isMoving) agent.goTo(sim.position.x, sim.position.z);
+  };
+  hud.onBuyCategoryPick = (cat) => { buyActiveCategory = cat; refreshBuyCatalog(); };
+  hud.onBuySearch = (q) => { buySearchQuery = q; refreshBuyCatalog(); };
+  hud.onBuyItemPick = (assetId) => {
+    const def = data.assets.assets.find((a) => a.id === assetId);
+    if (!def) return;
+    buyMode.startPlacing(def);
+    hud.hideSelectionChips();
+    hud.showGhostControls();
+  };
+  hud.onGhostRotate = () => buyMode.rotateGhost();
+  hud.onGhostConfirm = () => {
+    const result = buyMode.confirm(quests.funds);
+    if (!result) return;
+    if (result.kind === 'bought') {
+      buyModeChangedSomething = true;
+      quests.funds -= result.cost;
+      hud.setFunds(quests.funds, currencyName());
+      rebakeNav();
+      refreshBuyCatalog();
+      hud.hideGhostControls();
+    } else if (result.kind === 'moved') {
+      buyModeChangedSomething = true;
+      rebakeNav();
+      hud.hideGhostControls();
+      if (buyMode.selection?.kind === 'selected') hud.showSelectionChips(buyMode.selection.def.name, buyMode.selection.def.sellPrice, currencyName());
+    } else {
+      // Placement/funds flipped between the last ghost move and the confirm tap (e.g. another
+      // purchase just landed on the same spot) — leave the ghost up so the player can adjust;
+      // the card/ghost tint already gave affordability/validity feedback before this point.
+      console.warn('buy mode confirm failed:', result.reason);
+    }
+  };
+  hud.onGhostCancel = () => {
+    const wasMoving = buyMode.selection?.kind === 'moving';
+    buyMode.cancel();
+    hud.hideGhostControls();
+    if (wasMoving && buyMode.selection?.kind === 'selected') {
+      hud.showSelectionChips(buyMode.selection.def.name, buyMode.selection.def.sellPrice, currencyName());
+    }
+  };
+  hud.onSelectionMove = () => {
+    buyMode.beginMoveSelected();
+    hud.hideSelectionChips();
+    hud.showGhostControls();
+  };
+  hud.onSelectionRotate = () => {
+    if (buyMode.rotateSelectedInPlace()) { buyModeChangedSomething = true; rebakeNav(); }
+    if (buyMode.selection?.kind === 'selected') hud.showSelectionChips(buyMode.selection.def.name, buyMode.selection.def.sellPrice, currencyName());
+  };
+  hud.onSelectionSell = () => {
+    const refund = buyMode.sellSelected();
+    if (refund > 0) {
+      buyModeChangedSomething = true;
+      quests.funds += refund;
+      hud.setFunds(quests.funds, currencyName());
+      rebakeNav();
+      refreshBuyCatalog();
+    }
+    hud.hideSelectionChips();
+  };
+  hud.onSelectionCancel = () => {
+    buyMode.deselect();
+    hud.hideSelectionChips();
+  };
 
   // --- simulation ticks (all intervals & thresholds from tuning.json / stats.json) ---
   let decayAcc = 0, gainAcc = 0;
@@ -293,9 +437,13 @@ async function start() {
     // §7.3: buildWorld() has no notion of runtime accident instances (never in map data) —
     // re-parent every LIVE fire/puddle into the freshly-built world so hot-reload never wipes them.
     accidents.reattach(world);
+    // §7.6: same reasoning — buildWorld() rebuilds designer objects fresh (undoing any buy-mode
+    // sold/moved override) and knows nothing about player-purchased additions; reattach patches
+    // both back onto the new world. rebakeNav() (not a raw bakeNavGrid call) so the overlay keeps
+    // feeding the nav grid across hot-reloads too.
+    buyMode.reattach(world);
     cam.retune(data.tuning.camera, data.map);
-    grid = bakeNavGrid(data.map, data.assets);
-    agent.retune(data.tuning, grid);
+    rebakeNav();
     if (data.map.id !== currentMapId) {
       // map switch (tuning.map.active changed) — respawn the sim on the new map
       currentMapId = data.map.id;
@@ -312,6 +460,8 @@ async function start() {
       anim?.setWalkSpeed(data.tuning.movement.walkSpeed);
       loadCharacter(); // no-op unless meshPath changed
     }
+    hud.setFunds(quests.funds, currencyName());
+    if (buyMode.active) refreshBuyCatalog(); // asset prices/icons/gates may have changed mid-shop
     flashDevbar();
   });
 
@@ -327,7 +477,15 @@ async function start() {
   renderer.setAnimationLoop((now) => {
     const dt = Math.min((now - last) / 1000, 0.1);
     last = now;
-    const sdt = dt * hud.speed; // simulation time: pause/1×/2×/3× scales everything below
+    // §7.6: buy mode forces sim time to a hard 0 regardless of the player's chosen 1×/2×/3×/pause
+    // selection — implemented as this one-line override rather than mutating hud.speed, so the
+    // player's speed choice is completely undisturbed by entering/exiting buy mode (it simply
+    // doesn't advance while shopping, and resumes exactly where it left off afterward). Real-time
+    // UI (click cue, camera) below still uses raw `dt`, matching Sims pausing in Buy Mode while
+    // the camera stays free — and freezing agent.update() this way also means the sim can never be
+    // mid-move when a buy-mode nav rebake happens (see the onBuyClose safety net for the leftover
+    // stale-path edge case when it WAS mid-route at the moment buy mode opened).
+    const sdt = buyMode.active ? 0 : dt * hud.speed;
 
     gameSeconds += sdt * clockScale();
     while (gameSeconds >= 86400) { gameSeconds -= 86400; gameDay++; }
@@ -352,7 +510,7 @@ async function start() {
     autonomy.update(sdt);
     simTick(sdt);
     hudAcc += dt;
-    if (hudAcc >= 0.25) { hudAcc = 0; hud.refresh(); } // 4 Hz is plenty for bars
+    if (hudAcc >= 0.25) { hudAcc = 0; hud.refresh(); hud.setFunds(quests.funds, currencyName()); } // 4 Hz is plenty for bars/funds
 
     frames++; fpsTimer += dt;
     if (fpsTimer >= 1) { devFps.textContent = `${frames} fps`; frames = 0; fpsTimer = 0; }

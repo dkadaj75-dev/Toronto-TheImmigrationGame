@@ -186,22 +186,28 @@ export function buildWorld(data: GameData): THREE.Group {
   }
 
   // --- placed objects: instant stand-in, async GLB swap when asset.mesh is set ---
-  for (const placed of map.placedObjects) {
+  // `placedIndex` (§7.6 Buy/Sell mode): the object's position in map.placedObjects, so
+  // game/buymode.ts's BuyModeController can patch a designer-placed instance in-place (hide a
+  // sold one, reposition a moved one) after each buildWorld() rebuild without needing its own
+  // parallel rendering path for these objects — see BuyModeController.apply().
+  map.placedObjects.forEach((placed, placedIndex) => {
     const def = byId.get(placed.asset);
-    if (!def) { console.warn(`Unknown asset in map: ${placed.asset}`); continue; }
+    if (!def) { console.warn(`Unknown asset in map: ${placed.asset}`); return; }
     const obj = makeStandIn(def);
     obj.position.set(placed.pos[0], 0, placed.pos[1]);
     obj.rotation.y = THREE.MathUtils.degToRad(placed.rotDeg);
-    obj.userData = { assetId: def.id, interactions: def.interactions };
+    obj.userData = { assetId: def.id, interactions: def.interactions, placedIndex };
     attachMesh(obj, def);
     root.add(obj);
-  }
+  });
 
   return root;
 }
 
-/** Footprint-sized colored box + tiny label plate. Replaced by GLBs when the pack lands. */
-function makeStandIn(def: AssetDef): THREE.Group {
+/** Footprint-sized colored box + tiny label plate. Replaced by GLBs when the pack lands.
+ *  Exported for reuse by game/buymode.ts (§7.6): a purchased instance gets the EXACT same
+ *  stand-in-then-GLB-swap rendering as a designer-placed one via attachMesh. */
+export function makeStandIn(def: AssetDef): THREE.Group {
   const g = new THREE.Group();
   g.name = `asset:${def.id}`;
   const [fw, fd] = def.footprint;

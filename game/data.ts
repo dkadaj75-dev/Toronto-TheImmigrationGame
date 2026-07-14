@@ -28,6 +28,14 @@ export interface AssetDef {
   facingDeg?: number;
   /** Whether the future Buy/Sell catalog offers this asset. Absent = true (§7.1). */
   buyable?: boolean;
+  /** Catalog thumbnail (§7.6): image path under public/, same drop-in convention as `mesh`.
+   *  Absent → the catalog renders a category-colored fallback tile with the asset's initials,
+   *  never a broken image. See game/buymode.ts's `iconFallback`. */
+  icon?: string;
+  /** §7.6 Buy/Sell catalog gate, ties into the §3.3 quest `unlockAsset` reward: when true, the
+   *  asset is only purchasable once `QuestRunner.isAssetUnlocked(id)` is true (absent/false =
+   *  no quest gate, purchasable as normal subject to `buyable`). See game/buymode.ts. */
+  requiresQuestUnlock?: boolean;
   /** Mesh authoring corrections applied by world.ts AFTER normalizeModelToFootprint (§7.1/§7.2).
    *  scale multiplies on top of the automatic footprint-fit scale (uniform or per-axis);
    *  yawOffsetDeg rotates the loaded model in place (fixes a mesh not authored facing the

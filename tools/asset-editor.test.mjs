@@ -85,6 +85,19 @@ assert(facingInput.value === '', 'facingDeg blank when absent');
 facingInput.value = '90';
 facingInput.dispatchEvent(new window.Event('input', { bubbles: true }));
 
+// --- requiresQuestUnlock (§7.6): sparse, absent by default, unchecked → key deleted
+const questGateCb = doc.querySelector('input[data-path="requiresQuestUnlock"]');
+assert(questGateCb.checked === false, 'requiresQuestUnlock unchecked when absent');
+questGateCb.checked = true;
+questGateCb.dispatchEvent(new window.Event('change', { bubbles: true }));
+
+// --- icon (§7.6): blank by default, sparse round-trip, thumbnail element present
+const iconInput = doc.querySelector('input[data-path="icon"]');
+assert(iconInput.value === '', 'icon blank when absent');
+assert(doc.getElementById('icon-thumb'), 'icon thumbnail <img> element rendered');
+iconInput.value = '/models/icons/sofa.png';
+iconInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+
 // --- meshFit: sparse uniform scale, yawOffsetDeg, yOffset
 const scaleInput = doc.querySelector('input[data-path="meshFit.scale"]');
 assert(scaleInput.value === '', 'meshFit.scale blank when absent');
@@ -259,10 +272,14 @@ assert(savedCouch.facingDeg === 90, 'PUT carries edited facingDeg');
 assert(savedCouch.meshFit.scale === 1.2, 'PUT carries sparse meshFit.scale');
 assert(savedCouch.meshFit.yawOffsetDeg === 45, 'PUT carries sparse meshFit.yawOffsetDeg');
 assert(!('yOffset' in savedCouch.meshFit), 'untouched meshFit.yOffset stays absent (sparse)');
+assert(savedCouch.requiresQuestUnlock === true, 'PUT carries checked requiresQuestUnlock');
+assert(savedCouch.icon === '/models/icons/sofa.png', 'PUT carries edited icon path');
 const savedLamp = saved.assets.find((a) => a.id === 'lamp');
 assert(!('buyable' in savedLamp), 'new asset has no buyable key (defaults true)');
 assert(!('facingDeg' in savedLamp), 'new asset has no facingDeg key (defaults 0)');
 assert(!('meshFit' in savedLamp), 'new asset has no meshFit key (nothing set)');
+assert(!('requiresQuestUnlock' in savedLamp), 'new asset has no requiresQuestUnlock key (defaults unlocked)');
+assert(!('icon' in savedLamp), 'new asset has no icon key (falls back to initials tile)');
 assert(savedLamp.category === 'door', 'PUT carries lamp\'s category change to door');
 assert(savedLamp.door.hingeOffset[0] === -0.5 && savedLamp.door.hingeOffset[1] === 0, 'PUT carries door.hingeOffset');
 assert(savedLamp.door.openAngleDeg === 100, 'PUT carries door.openAngleDeg');

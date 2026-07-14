@@ -339,8 +339,37 @@ function renderEditor() {
   buyableCb.dataset.path = 'buyable';
   buyableCb.checked = a.buyable !== false; // absent = true (§7.1)
   buyableCb.addEventListener('change', () => { if (buyableCb.checked) delete a.buyable; else a.buyable = false; markDirty(); });
-  card1.appendChild(frow('buyable (offered in the future Buy/Sell catalog)', buyableCb));
+  card1.appendChild(frow('buyable (offered in the Buy/Sell catalog)', buyableCb));
+  const questGateCb = document.createElement('input');
+  questGateCb.type = 'checkbox';
+  questGateCb.dataset.path = 'requiresQuestUnlock';
+  questGateCb.checked = !!a.requiresQuestUnlock;
+  questGateCb.addEventListener('change', () => { if (questGateCb.checked) a.requiresQuestUnlock = true; else delete a.requiresQuestUnlock; markDirty(); });
+  card1.appendChild(frow('requires quest unlock (only purchasable once a quest unlocks it)', questGateCb));
   root.appendChild(card1);
+
+  // --- Buy/Sell catalog icon (§7.6): image path under public/ + thumbnail preview. Absent → the
+  // in-game catalog falls back to a category-colored initials tile (game/buymode.ts's
+  // iconFallbackColor/iconFallbackInitials) — never a broken image.
+  const cardIcon = document.createElement('div');
+  cardIcon.className = 'card';
+  cardIcon.innerHTML = '<h2>Catalog icon</h2><div class="hint">Image path under public/ shown on the Buy/Sell catalog card. Leave blank for a category-colored initials tile instead — never a broken image.</div>';
+  const iconInput = textInput(() => a.icon, (v) => { if (v) a.icon = v; else delete a.icon; updateIconThumb(); }, 'icon');
+  iconInput.placeholder = '/models/icons/sofa.png';
+  cardIcon.appendChild(frow('icon path', iconInput));
+  cardIcon.insertAdjacentHTML('beforeend', '<img id="icon-thumb" alt="" style="max-width:96px;max-height:96px;border-radius:8px;border:1px solid #26304a;display:none;margin-top:4px;" /><div id="icon-thumb-msg" class="hint"></div>');
+  root.appendChild(cardIcon);
+  function updateIconThumb() {
+    const img = document.getElementById('icon-thumb');
+    const msg = document.getElementById('icon-thumb-msg');
+    if (!img || !msg) return;
+    if (!a.icon) { img.style.display = 'none'; msg.textContent = 'No icon set — catalog falls back to a colored initials tile.'; return; }
+    const url = /^(\/|https?:)/.test(a.icon) ? a.icon : '/' + a.icon;
+    img.onload = () => { img.style.display = 'block'; msg.textContent = url; };
+    img.onerror = () => { img.style.display = 'none'; msg.textContent = `Could not load ${url} — the file should be at public${url}. Falls back to a colored initials tile in-game.`; };
+    img.src = url;
+  }
+  updateIconThumb();
 
   // --- placement & seating
   const card2 = document.createElement('div');

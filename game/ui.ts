@@ -91,6 +91,66 @@ const CSS = `
   #time-bar .clock { min-width: 38px; font-size: 12px; padding: 0 4px; }
   #quest-toasts { top: calc(90px + env(safe-area-inset-top, 0px)); }
 }
+
+/* --- Buy/Sell mode (PROJECT_CONTEXT.md §7.6) ---------------------------------------------
+   Layout budget on the bottom-right (§8 constraints): #devbar is a full-width strip at the very
+   bottom; tools/nav.js's corner gear sits at right:8px, bottom:40px (~36px tall). #funds-chip and
+   #buy-button stack ABOVE that, clear of both; #action-menu/#activity-chip stay bottom-center so
+   there's no conflict there either. */
+#funds-chip { position: absolute; right: calc(8px + env(safe-area-inset-right, 0px));
+  bottom: calc(128px + env(safe-area-inset-bottom, 0px)); background: rgba(20,26,40,.82);
+  border-radius: 999px; padding: 6px 12px; font-size: 12px; font-variant-numeric: tabular-nums;
+  color: #e0c26f; pointer-events: none; }
+#buy-button { position: absolute; right: calc(8px + env(safe-area-inset-right, 0px));
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px)); border: 0; border-radius: 999px;
+  padding: 10px 16px; font-size: 13px; background: rgba(90,120,190,.55); color: #eaf0fb;
+  cursor: pointer; pointer-events: auto; touch-action: manipulation; }
+#funds-chip.hidden, #buy-button.hidden { display: none; }
+.hud-panel.buy-mode-hidden { display: none; }
+
+#buy-bar { position: absolute; left: 0; right: 0; bottom: 0; pointer-events: none;
+  display: none; flex-direction: column; }
+#buy-bar.open { display: flex; }
+#buy-bar .buy-inner { pointer-events: auto; background: rgba(15,20,32,.95); backdrop-filter: blur(8px);
+  padding: 10px calc(10px + env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) calc(10px + env(safe-area-inset-left, 0px));
+  border-top: 1px solid #2c3a58; max-height: 46vh; display: flex; flex-direction: column; gap: 8px; }
+.buy-header { display: flex; align-items: center; gap: 8px; }
+.buy-header #buy-funds { font-size: 15px; font-weight: 600; color: #e0c26f; white-space: nowrap; }
+.buy-header .grow { flex: 1; }
+#buy-search { flex: 1; max-width: 220px; background: #1c2436; border: 1px solid #2c3a58; color: #dfe6f2;
+  border-radius: 8px; padding: 7px 10px; font-size: 13px; }
+#buy-exit { border: 0; border-radius: 999px; background: rgba(220,90,90,.35); color: #fbdada;
+  padding: 7px 12px; font-size: 12px; cursor: pointer; touch-action: manipulation; }
+.buy-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.buy-tabs button { flex: none; border: 0; border-radius: 999px; padding: 6px 12px; font-size: 12px;
+  background: #1c2436; color: #93a3c0; cursor: pointer; touch-action: manipulation; white-space: nowrap; }
+.buy-tabs button.active { background: rgba(90,120,190,.5); color: #eaf0fb; }
+.buy-cards { display: flex; gap: 8px; overflow-x: auto; padding: 2px; }
+.buy-card { flex: none; width: 92px; border: 0; border-radius: 10px; background: #1a2133;
+  color: #dfe6f2; padding: 8px; cursor: pointer; text-align: left; touch-action: manipulation; }
+.buy-card:disabled { opacity: .4; cursor: default; }
+.buy-card .thumb { width: 100%; height: 56px; border-radius: 6px; object-fit: cover; display: block; margin-bottom: 6px; }
+.buy-card .thumb-fallback { width: 100%; height: 56px; border-radius: 6px; margin-bottom: 6px;
+  display: grid; place-items: center; font-size: 16px; font-weight: 700; color: rgba(0,0,0,.55); }
+.buy-card .name { font-size: 11px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.buy-card .price { font-size: 11px; color: #e0c26f; display: block; }
+.buy-empty { font-size: 12px; color: #6d7996; font-style: italic; padding: 8px; }
+
+#buy-ghost-controls, #buy-selection-chips { position: absolute; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%); background: rgba(20,26,40,.92); border-radius: 999px; padding: 8px 10px;
+  display: none; align-items: center; gap: 8px; pointer-events: auto; }
+#buy-ghost-controls.open, #buy-selection-chips.open { display: flex; }
+#buy-ghost-controls button, #buy-selection-chips button { border: 0; border-radius: 999px; padding: 8px 14px;
+  font-size: 13px; background: rgba(90,120,190,.28); color: #eaf0fb; cursor: pointer; touch-action: manipulation; }
+#buy-ghost-controls button.gc-confirm, #buy-selection-chips button.sc-sell { background: rgba(90,190,110,.35); }
+#buy-ghost-controls button.gc-cancel, #buy-selection-chips button.sc-cancel { background: transparent; color: #93a3c0; }
+#buy-selection-chips .sel-name { font-size: 12px; color: #93a3c0; padding: 0 4px; white-space: nowrap; }
+
+@media (max-width: 500px) {
+  #funds-chip { bottom: calc(118px + env(safe-area-inset-bottom, 0px)); font-size: 11px; padding: 5px 10px; }
+  #buy-button { bottom: calc(78px + env(safe-area-inset-bottom, 0px)); font-size: 12px; padding: 8px 12px; }
+  .buy-card { width: 78px; }
+}
 `;
 
 export class Hud {
@@ -103,6 +163,34 @@ export class Hud {
   private questBody: HTMLElement;
   private questToasts: HTMLElement;
   private fills = new Map<string, HTMLElement>();
+
+  // --- Buy/Sell mode (§7.6) ---
+  private fundsChip: HTMLElement;
+  private buyButton: HTMLElement;
+  private buyBar: HTMLElement;
+  private buyFundsEl: HTMLElement;
+  private buySearchEl: HTMLInputElement;
+  private buyTabsEl: HTMLElement;
+  private buyCardsEl: HTMLElement;
+  private ghostControls: HTMLElement;
+  private selectionChips: HTMLElement;
+  private selNameEl: HTMLElement;
+  private selSellPriceEl: HTMLElement;
+
+  /** fires when the player taps the Buy button (game HUD, not the tool) */
+  onBuyOpen: (() => void) | null = null;
+  /** fires when the player exits buy mode (the bar's own Exit button) */
+  onBuyClose: (() => void) | null = null;
+  onBuyCategoryPick: ((category: string) => void) | null = null;
+  onBuySearch: ((query: string) => void) | null = null;
+  onBuyItemPick: ((assetId: string) => void) | null = null;
+  onGhostRotate: (() => void) | null = null;
+  onGhostConfirm: (() => void) | null = null;
+  onGhostCancel: (() => void) | null = null;
+  onSelectionMove: (() => void) | null = null;
+  onSelectionRotate: (() => void) | null = null;
+  onSelectionSell: (() => void) | null = null;
+  onSelectionCancel: (() => void) | null = null;
 
   onCancelAction: (() => void) | null = null;
   /** fires whenever the action menu closes (pick, cancel, or tap-away) */
@@ -134,7 +222,33 @@ export class Hud {
       </div>
       <div id="action-menu"></div>
       <div id="activity-chip"><span id="activity-label"></span><button>Stop</button></div>
-      <div id="quest-toasts"></div>`;
+      <div id="quest-toasts"></div>
+      <div id="funds-chip">§ 0</div>
+      <button id="buy-button">🛒 Buy</button>
+      <div id="buy-bar">
+        <div class="buy-inner">
+          <div class="buy-header">
+            <span id="buy-funds">§ 0</span>
+            <span class="grow"></span>
+            <input id="buy-search" type="search" placeholder="Search…" />
+            <button id="buy-exit">✕ Exit</button>
+          </div>
+          <div class="buy-tabs" id="buy-tabs"></div>
+          <div class="buy-cards" id="buy-cards"></div>
+        </div>
+      </div>
+      <div id="buy-ghost-controls">
+        <button data-gc="rotate">⟳ Rotate</button>
+        <button data-gc="confirm" class="gc-confirm">✓ Confirm</button>
+        <button data-gc="cancel" class="gc-cancel">✗ Cancel</button>
+      </div>
+      <div id="buy-selection-chips">
+        <span class="sel-name" id="buy-sel-name"></span>
+        <button data-sc="move">Move</button>
+        <button data-sc="rotate">Rotate</button>
+        <button data-sc="sell" class="sc-sell">Sell <span id="buy-sell-price"></span></button>
+        <button data-sc="cancel" class="sc-cancel">Close</button>
+      </div>`;
     document.body.appendChild(root);
 
     this.needsPanel = root.querySelector('#needs-panel')!;
@@ -146,6 +260,30 @@ export class Hud {
     this.questBody = root.querySelector('#quest-body')!;
     this.questToasts = root.querySelector('#quest-toasts')!;
     this.chip.querySelector('button')!.addEventListener('click', () => this.onCancelAction?.());
+
+    // --- Buy/Sell mode wiring (§7.6) ---
+    this.fundsChip = root.querySelector('#funds-chip')!;
+    this.buyButton = root.querySelector('#buy-button')!;
+    this.buyBar = root.querySelector('#buy-bar')!;
+    this.buyFundsEl = root.querySelector('#buy-funds')!;
+    this.buySearchEl = root.querySelector('#buy-search')!;
+    this.buyTabsEl = root.querySelector('#buy-tabs')!;
+    this.buyCardsEl = root.querySelector('#buy-cards')!;
+    this.ghostControls = root.querySelector('#buy-ghost-controls')!;
+    this.selectionChips = root.querySelector('#buy-selection-chips')!;
+    this.selNameEl = root.querySelector('#buy-sel-name')!;
+    this.selSellPriceEl = root.querySelector('#buy-sell-price')!;
+
+    this.buyButton.addEventListener('click', () => this.onBuyOpen?.());
+    root.querySelector('#buy-exit')!.addEventListener('click', () => this.onBuyClose?.());
+    this.buySearchEl.addEventListener('input', () => this.onBuySearch?.(this.buySearchEl.value));
+    root.querySelector('[data-gc="rotate"]')!.addEventListener('click', () => this.onGhostRotate?.());
+    root.querySelector('[data-gc="confirm"]')!.addEventListener('click', () => this.onGhostConfirm?.());
+    root.querySelector('[data-gc="cancel"]')!.addEventListener('click', () => this.onGhostCancel?.());
+    root.querySelector('[data-sc="move"]')!.addEventListener('click', () => this.onSelectionMove?.());
+    root.querySelector('[data-sc="rotate"]')!.addEventListener('click', () => this.onSelectionRotate?.());
+    root.querySelector('[data-sc="sell"]')!.addEventListener('click', () => this.onSelectionSell?.());
+    root.querySelector('[data-sc="cancel"]')!.addEventListener('click', () => this.onSelectionCancel?.());
 
     // --- time controls ---
     this.timeBar = root.querySelector('#time-bar')!;
@@ -309,6 +447,104 @@ export class Hud {
       setTimeout(() => el.remove(), 300);
     }, durationMs);
   }
+
+  // ================================================================ Buy/Sell mode (§7.6)
+
+  /** Persistent funds readout: always kept current so it's correct the instant buy mode opens
+   *  or the small outside-of-buy-mode chip is shown. `currencyName` comes from
+   *  tuning.economy.currencyName (design pillar: no hardcoded "§"). */
+  setFunds(amount: number, currencyName: string) {
+    const text = `${currencyName}${Math.floor(amount).toLocaleString()}`;
+    this.fundsChip.textContent = text;
+    this.buyFundsEl.textContent = text;
+  }
+
+  /** Toggles the whole buy-mode chrome: hides the normal needs/skills panels + any open action
+   *  menu/activity chip (§7.6: "normal needs/skills panels hide"), shows/hides the catalog bar and
+   *  the persistent funds chip/Buy button (redundant once the bar's own funds readout is up). */
+  setBuyModeActive(active: boolean) {
+    this.needsPanel.classList.toggle('buy-mode-hidden', active);
+    this.skillsPanel.classList.toggle('buy-mode-hidden', active);
+    this.fundsChip.classList.toggle('hidden', active);
+    this.buyButton.classList.toggle('hidden', active);
+    this.buyBar.classList.toggle('open', active);
+    if (active) {
+      this.hideActionMenu();
+      this.hideActivity();
+    } else {
+      this.hideGhostControls();
+      this.hideSelectionChips();
+    }
+  }
+
+  /** One catalog card's view-model — pure data the caller (main.ts/BuyModeController) computes
+   *  from game/buymode.ts's pure catalog helpers; ui.ts only renders it. */
+  renderCatalog(
+    categories: { id: string; label: string }[],
+    activeCategory: string,
+    items: { id: string; name: string; price: number; affordable: boolean; icon?: string; fallbackColor: string; fallbackInitials: string }[],
+    currencyName: string,
+  ) {
+    this.buyTabsEl.innerHTML = '';
+    for (const cat of categories) {
+      const b = document.createElement('button');
+      b.textContent = cat.label;
+      b.className = cat.id === activeCategory ? 'active' : '';
+      b.addEventListener('click', () => this.onBuyCategoryPick?.(cat.id));
+      this.buyTabsEl.appendChild(b);
+    }
+
+    this.buyCardsEl.innerHTML = '';
+    if (items.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'buy-empty';
+      empty.textContent = 'No items here.';
+      this.buyCardsEl.appendChild(empty);
+      return;
+    }
+    for (const item of items) {
+      const card = document.createElement('button');
+      card.className = 'buy-card';
+      card.disabled = !item.affordable;
+      card.dataset.assetId = item.id;
+      if (item.icon) {
+        card.innerHTML = `<img class="thumb" src="${item.icon}" loading="lazy" />`;
+        const img = card.querySelector('img')!;
+        img.addEventListener('error', () => { img.replaceWith(fallbackTile(item.fallbackColor, item.fallbackInitials)); }, { once: true });
+      } else {
+        card.appendChild(fallbackTile(item.fallbackColor, item.fallbackInitials));
+      }
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = item.name;
+      const price = document.createElement('span');
+      price.className = 'price';
+      price.textContent = `${currencyName}${item.price.toLocaleString()}`;
+      card.append(name, price);
+      card.addEventListener('click', () => { if (item.affordable) this.onBuyItemPick?.(item.id); });
+      this.buyCardsEl.appendChild(card);
+    }
+  }
+
+  setBuySearchValue(q: string) { this.buySearchEl.value = q; }
+
+  showGhostControls() { this.ghostControls.classList.add('open'); }
+  hideGhostControls() { this.ghostControls.classList.remove('open'); }
+
+  showSelectionChips(name: string, sellPrice: number, currencyName: string) {
+    this.selNameEl.textContent = name;
+    this.selSellPriceEl.textContent = `${currencyName}${sellPrice.toLocaleString()}`;
+    this.selectionChips.classList.add('open');
+  }
+  hideSelectionChips() { this.selectionChips.classList.remove('open'); }
+}
+
+function fallbackTile(color: string, initials: string): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'thumb-fallback';
+  el.style.background = color;
+  el.textContent = initials;
+  return el;
 }
 
 function makeEmptyRow(text: string): HTMLElement {
