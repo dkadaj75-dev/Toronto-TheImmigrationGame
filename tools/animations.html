@@ -67,10 +67,10 @@
     <div id="num-fields"></div>
 
     <h2 style="margin-top:16px">Animation sources</h2>
-    <div class="detail">Extra GLBs whose clips are merged in — for Mixamo-style exports where each animation is its own file (must share the model's skeleton).</div>
+    <div class="detail">Extra GLB or FBX files whose clips are merged in — for Mixamo-style exports where each animation is its own file (must share the model's skeleton). .fbx sources get automatic mixamorig-prefix bone retargeting, root-translation stripping, and filename-based clip naming (see PROJECT_CONTEXT.md §2) — same handling the running game uses.</div>
     <div id="sources-list"></div>
     <div class="row" style="margin-top:6px">
-      <input type="text" id="new-source" placeholder="/models/anims/walking.glb" />
+      <input type="text" id="new-source" placeholder="/models/anims/walking.glb or .fbx" />
       <button id="add-source" class="small">Add</button>
     </div>
 
@@ -366,7 +366,7 @@ window.AnimTool = (() => {
     $('#clip-count').textContent = clips.length ? `${clips.length} clip(s) found` : 'no clips found';
     host.innerHTML = '';
     if (clips.length === 0) {
-      host.innerHTML = '<div class="detail">No animation clips in the model. If your animations are separate GLB files (Mixamo exports), add them under <b>Animation sources</b>.</div>';
+      host.innerHTML = '<div class="detail">No animation clips in the model. If your animations are separate GLB or FBX files (Mixamo exports), add them under <b>Animation sources</b>.</div>';
       return;
     }
     for (const n of clips) {
@@ -507,7 +507,7 @@ window.AnimTool = (() => {
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { normalizeModelToHeight } from '/game/world.ts';
+import { normalizeModelToHeight, loadFbxClips, collectBoneNames, isFbxPath } from '/game/world.ts';
 import { createMarkerInstance } from '/game/marker.ts';
 
 const API = '/api/data/';
@@ -579,9 +579,29 @@ async function loadCharacter() {
   try {
     const gltf = await load(c.meshPath);
     clipObjs = [...gltf.animations];
+    // Same loader split as game/world.ts's loadRiggedCharacter: .fbx sources go through the
+    // shared loadFbxClips (Mixamo bone retargeting / root-translation strip / clip-name dedupe,
+    // reused not reimplemented — §5); everything else keeps this tool's existing GLB merge path.
+    const targetBoneNames = collectBoneNames(gltf.scene);
+    const usedClipNames = new Set(clipObjs.map((k) => k.name).filter(Boolean));
+    const unmatchedTracks = [];
     for (const p of c.animationPaths) {
-      try { const extra = await load(p); clipObjs.push(...extra.animations); }
-      catch (e) { console.warn('animation source failed to load:', p, e); }
+      if (isFbxPath(p)) {
+        try {
+          const { clips: fbxClips, unmatchedTracks: unmatched } = await loadFbxClips(p, targetBoneNames, usedClipNames);
+          clipObjs.push(...fbxClips);
+          unmatchedTracks.push(...unmatched);
+        } catch (e) { console.warn('animation source failed to load:', p, e); }
+        continue;
+      }
+      try {
+        const extra = await load(p);
+        for (const k of extra.animations) if (k.name) usedClipNames.add(k.name);
+        clipObjs.push(...extra.animations);
+      } catch (e) { console.warn('animation source failed to load:', p, e); }
+    }
+    if (unmatchedTracks.length) {
+      console.warn(`FBX animation source(s) had ${unmatchedTracks.length} bone track(s) that didn't match the character rig (game/fbxclips.ts) — those tracks will be static in-game:`, unmatchedTracks);
     }
     const model = gltf.scene;
     normalizeModelToHeight(model, c.heightMeters || 1.55);

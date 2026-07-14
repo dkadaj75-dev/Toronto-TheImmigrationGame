@@ -4,8 +4,10 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import type { GameData, AssetDef, CharacterTuning } from './data';
 import { classifyMeshPath, createSpriteInstance } from './sprites';
+import { retargetTrackName, stripPositionTracks, resolveClipName, fileStem } from './fbxclips';
 
 // ------------------------------------------------------------------ GLB furniture
 // Templates are cached per URL and cloned per placement; clones share geometry/materials
@@ -238,6 +240,89 @@ export function normalizeModelToHeight(model: THREE.Object3D, height: number) {
 
 export interface LoadedCharacter { model: THREE.Group; clips: THREE.AnimationClip[] }
 
+// ------------------------------------------------------------------ FBX animation sources
+// A downloaded rigged character sometimes ships as a GLB body with its animation clips as
+// SEPARATE .fbx files (Mixamo-style exports). This section loads those and reuses game/fbxclips.ts
+// for the pure Mixamo-quirk decisions (bone-name retargeting, root-translation drop, clip-name
+// dedupe) — see that module's doc comments for the "why" of each rule. `loadFbxClips` and
+// `isFbxPath` are exported so tools/animations.html's preview loader calls this SAME
+// implementation instead of reimplementing FBX handling (never-reimplement rule, §5).
+const fbxCache = new Map<string, Promise<THREE.Group>>();
+function loadFbxTemplate(url: string): Promise<THREE.Group> {
+  let p = fbxCache.get(url);
+  if (!p) {
+    p = new Promise((resolve, reject) => new FBXLoader().load(url, resolve, undefined, reject));
+    fbxCache.set(url, p);
+  }
+  return p;
+}
+
+export function isFbxPath(url: string): boolean {
+  return /\.fbx(\?|#|$)/i.test(url);
+}
+
+/** Every skinned bone name found under `root` — the "target skeleton" that FBX clip tracks are retargeted against. */
+export function collectBoneNames(root: THREE.Object3D): string[] {
+  const names = new Set<string>();
+  root.traverse((o) => {
+    const skinned = o as THREE.SkinnedMesh;
+    if (skinned.isSkinnedMesh && skinned.skeleton) {
+      for (const b of skinned.skeleton.bones) names.add(b.name);
+    } else if ((o as THREE.Bone).isBone) {
+      names.add(o.name);
+    }
+  });
+  return [...names];
+}
+
+/**
+ * Load the animation clip(s) from one .fbx source file and adapt them for the base character rig:
+ *  - **bone retargeting**: FBX clips are often authored against `mixamorig:Bone`/`mixamorigBone`
+ *    track names while the GLB base rig's bones may or may not carry that prefix. Each track is
+ *    retargeted via game/fbxclips.ts's `retargetTrackName` (exact-name pass-through first, then
+ *    mixamorig-prefix-stripped fallback); unresolved tracks are left alone (so playback degrades
+ *    gracefully — a static bone, not a crash) and collected for a single console warning.
+ *  - **scale / root translation**: Mixamo FBX is authored in centimeters, so root-bone position
+ *    tracks can be ~100x the game's world scale. Rather than detect "which bone is the root" from
+ *    the FBX hierarchy and rescale it, every position track is dropped outright (`stripPositionTracks`)
+ *    — Mixamo skeletons only ever keyframe position on the root/hip bone in the first place
+ *    (everything else is rotation-only), and the game's locomotion is already procedural (anim.ts
+ *    scales the walk clip's timeScale off actual ground speed, not baked root motion), so an
+ *    in-place idle/walk/sit/lie loop has no use for translation tracks regardless of their scale.
+ *  - **clip naming**: Mixamo exports every clip embedded-named "mixamo.com" (or blank). `resolveClipName`
+ *    falls back to the file's basename (no extension) whenever the embedded name is missing or
+ *    already used, so multiple FBX sources stay distinguishable in the Animation Mapper's dropdowns.
+ */
+export async function loadFbxClips(
+  url: string,
+  targetBoneNames: string[],
+  usedClipNames: Set<string>,
+): Promise<{ clips: THREE.AnimationClip[]; unmatchedTracks: string[] }> {
+  const object = await loadFbxTemplate(url);
+  const stem = fileStem(url);
+  const boneSet = new Set(targetBoneNames);
+  const unmatchedTracks: string[] = [];
+  const clips = (object.animations ?? []).map((clip) => {
+    const trackNames = clip.tracks.map((t) => t.name);
+    const { kept } = stripPositionTracks(trackNames);
+    const keptSet = new Set(kept);
+    const tracks: THREE.KeyframeTrack[] = [];
+    for (const track of clip.tracks) {
+      if (!keptSet.has(track.name)) continue; // root/position track dropped
+      const r = retargetTrackName(track.name, boneSet);
+      if (!r.matched) unmatchedTracks.push(track.name);
+      if (r.trackName === track.name) { tracks.push(track); continue; }
+      const renamed = track.clone();
+      renamed.name = r.trackName;
+      tracks.push(renamed);
+    }
+    const name = resolveClipName(clip.name, stem, usedClipNames);
+    usedClipNames.add(name);
+    return new THREE.AnimationClip(name, clip.duration, tracks, clip.blendMode);
+  });
+  return { clips, unmatchedTracks };
+}
+
 /**
  * Load the rigged character GLB (single sim → no template caching / SkeletonUtils cloning
  * needed) and normalize it to the tuned height. Rejects on load failure — the caller
@@ -251,15 +336,29 @@ export async function loadRiggedCharacter(character: CharacterTuning): Promise<L
       (resolve, reject) => loader.load(u, resolve, undefined, reject),
     );
   const gltf = await load(norm(character.meshPath));
-  // Mixamo-style workflows ship each animation as its own GLB (same skeleton) — merge their clips.
+  const targetBoneNames = collectBoneNames(gltf.scene);
+  const usedClipNames = new Set<string>(gltf.animations.map((c) => c.name).filter(Boolean));
+  const unmatchedTracks: string[] = [];
+  // Mixamo-style workflows ship each animation as its own file (same skeleton) — merge their
+  // clips. `.fbx` sources go through loadFbxClips (Mixamo-quirk handling, see its doc comment
+  // above); every other extension keeps the exact original GLB merge path, unchanged.
   const extras = await Promise.all(
-    (character.animationPaths ?? []).map((p) =>
-      load(norm(p)).then(
-        (g) => g.animations,
+    (character.animationPaths ?? []).map((p) => {
+      const u = norm(p);
+      if (isFbxPath(u)) {
+        return loadFbxClips(u, targetBoneNames, usedClipNames)
+          .then(({ clips, unmatchedTracks: unmatched }) => { unmatchedTracks.push(...unmatched); return clips; })
+          .catch((err) => { console.warn(`animation source failed to load: ${p}`, err); return [] as THREE.AnimationClip[]; });
+      }
+      return load(u).then(
+        (g) => { for (const c of g.animations) if (c.name) usedClipNames.add(c.name); return g.animations; },
         (err) => { console.warn(`animation source failed to load: ${p}`, err); return [] as THREE.AnimationClip[]; },
-      ),
-    ),
+      );
+    }),
   );
+  if (unmatchedTracks.length) {
+    console.warn(`FBX animation source(s) had ${unmatchedTracks.length} bone track(s) that didn't match the character rig (game/fbxclips.ts) — those tracks will be static in-game: ${unmatchedTracks.join(', ')}`);
+  }
   const clips = [...gltf.animations, ...extras.flat()];
   const model = gltf.scene;
   normalizeModelToHeight(model, character.heightMeters);
