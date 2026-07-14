@@ -300,7 +300,7 @@
       "id": "fire",
       "name": "Fire",
       "category": "accident",
-      "mesh": "models/fire.glb",
+      "mesh": "models/fire.gif",
       "buyPrice": 0,
       "sellPrice": 0,
       "environmentScore": -10,

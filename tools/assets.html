@@ -422,8 +422,8 @@ function renderEditor() {
   card4.id = 'preview-wrap';
   card4.innerHTML = '<h2>Mesh</h2>';
   const mesh = textInput(() => a.mesh, (v) => { a.mesh = v; schedulePreview(); }, 'mesh');
-  mesh.placeholder = '/models/furniture/couch.glb';
-  card4.appendChild(frow('GLB path (under public/)', mesh));
+  mesh.placeholder = '/models/furniture/couch.glb — or an image: /models/fire.gif';
+  card4.appendChild(frow('GLB or image path (under public/) — png/jpg/webp/gif render as sprites', mesh));
   card4.insertAdjacentHTML('beforeend', '<canvas id="preview"></canvas><div id="preview-msg"></div>');
   root.appendChild(card4);
 
@@ -582,7 +582,9 @@ function renderAll() { renderSidebar(); renderEditor(); }
 
 function schedulePreview() {
   const a = selectedAsset();
-  window.AssetPreview?.show(a?.mesh || '');
+  // §7.5: pass the whole asset so the preview can render image meshes with the real footprint/
+  // sprite config (the preview module ignores everything but mesh for GLBs).
+  window.AssetPreview?.show(a?.mesh || '', a);
 }
 
 document.getElementById('search').addEventListener('input', renderSidebar);
@@ -600,8 +602,12 @@ load();
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { classifyMeshPath, createSpriteInstance } from '/game/sprites.ts';
 
 let renderer = null, scene, camera, controls, current = null, raf = 0;
+let activeSprite = null; // §7.5: SpriteInstance being previewed — its update() drives GIF frames (real time here, sim time in-game)
+let previewSeq = 0; // staleness token: a slow decode must not clobber a newer show()
+const previewClock = new THREE.Clock();
 const loader = new GLTFLoader();
 
 function ensure(canvas) {
@@ -630,6 +636,7 @@ function ensure(canvas) {
       camera.updateProjectionMatrix();
     }
     controls.update();
+    activeSprite?.update(previewClock.getDelta()); // advance GIF frames while previewing
     renderer.render(scene, camera);
   };
   loop();
@@ -637,15 +644,44 @@ function ensure(canvas) {
 }
 
 window.AssetPreview = {
-  show(meshPath) {
+  show(meshPath, assetDef) {
     const canvas = document.getElementById('preview');
     const msg = document.getElementById('preview-msg');
     if (!canvas || !ensure(canvas)) return;
+    previewSeq++; // invalidate any in-flight async load from a previous show()
     if (current) { scene.remove(current); current = null; }
-    if (!meshPath) { if (msg) msg.textContent = 'No mesh assigned — set a GLB path to preview it.'; return; }
+    if (activeSprite) { activeSprite.dispose(); activeSprite = null; }
+    if (!meshPath) { if (msg) msg.textContent = 'No mesh assigned — set a GLB or image path to preview it.'; return; }
     // public/ is served at the site root — normalize "models/bed.glb" → "/models/bed.glb"
     const url = /^(\/|https?:)/.test(meshPath) ? meshPath : '/' + meshPath;
     if (msg) msg.textContent = 'loading ' + url + ' …';
+    // §7.5: image mesh (png/jpg/webp/gif) — preview through the game's OWN sprite pipeline
+    // (game/sprites.ts), so what the designer sees here (billboard vs flat, GIF animation) is
+    // exactly what spawns in-game. Frame advance runs on real time in this preview.
+    if (classifyMeshPath(url) === 'image') {
+      const def = assetDef && Array.isArray(assetDef.footprint) ? assetDef : { ...(assetDef || {}), footprint: [1, 1] };
+      const inst = createSpriteInstance(def, url);
+      const seq = previewSeq;
+      inst.ready
+        .then(() => {
+          if (seq !== previewSeq) { inst.dispose(); return; } // superseded by a newer show()
+          if (current) scene.remove(current);
+          current = inst.object;
+          activeSprite = inst;
+          const [w, h] = [Math.max(def.footprint[0], 0.5), Math.max(def.footprint[1], 0.5)];
+          const size = Math.max(w, h) * 2;
+          camera.near = Math.max(size / 100, 0.001);
+          camera.far = size * 20;
+          camera.updateProjectionMatrix();
+          camera.position.set(1, 0.7, 1.2).setLength(size * 1.2);
+          controls.target.set(0, h / 2, 0);
+          controls.update();
+          scene.add(current);
+          if (msg) msg.textContent = `${url} — image sprite (${def.sprite?.orientation ?? 'billboard'}${url.toLowerCase().includes('.gif') ? ', animated' : ''})`;
+        })
+        .catch(() => { inst.dispose(); if (msg) msg.textContent = `Could not load ${url} — the file should be at public${url}.`; });
+      return;
+    }
     loader.load(
       url,
       (gltf) => {
