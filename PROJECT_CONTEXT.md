@@ -1,6 +1,6 @@
 # Condo Life — Web Edition: Project Context Addendum
 
-**Status date**: 2026-07-13 (updated after Map Editor slice 2). Put this file in Claude's project knowledge alongside `WEB_GAME_ROADMAP.md` and `PROGRESS.md`. Where this file and the roadmap disagree, **this file wins** — it records design decisions made after the roadmap was written.
+**Status date**: 2026-07-14 (updated with §7 locked designs: doors-as-assets, facing vector, accidents, tool navigation). Where this file and the roadmap disagree, **this file wins** — it records design decisions made after the roadmap was written.
 
 ---
 
@@ -19,6 +19,10 @@ The designer (Septentrion) must be able to build and balance the entire game **t
 | **Add / remove actions** and per-action gains, animation state, autonomy eligibility | Interaction Editor | ✅ done (2026-07-13) |
 | **Quest system**: author quests with trigger & completion conditions + rewards | Quest Editor (replaces roadmap's "Story Editor") | ✅ done (2026-07-13, see §3.3–§3.4) |
 | Simulate balance headlessly, chart curves | Balance Dashboard | ⬜ nice-to-have |
+| **Navigate between all admin tools** (tabs/buttons in every tool) | Shared tool nav bar | ⬜ planned — design locked §7.4 |
+| **Asset facing direction** ("normal" vector: where the object faces, for use-spots/seating logic) | Asset Editor + Map Editor arrow | ⬜ planned — design locked §7.2 |
+| **Doors as their own asset type** (mesh, hinge axis, scale fit, open/close timing) | Asset Editor door section + Map Editor door↔asset link | ⬜ planned — design locked §7.1 |
+| **Accidents** (per-asset risk config; accident assets that override base interactions) | Asset Editor risk section (accident types are assets) | ⬜ planned — design locked §7.3 |
 
 Data-driven rule of thumb for every new feature: *if the designer might want to change it, it's a JSON field with a tool UI, not code.*
 
@@ -134,13 +138,17 @@ Step 3 of §3's build order — the last piece of the quest slice. **New tool fi
 3. ~~Needs & skills add/remove in the Tuning Editor~~ ✅ shipped 2026-07-13 (see §2c below)
 4. ~~Interaction Editor~~ ✅ shipped 2026-07-13 (see §2d) — add/remove actions, per-action gains, animation state, autonomy flags (unlocks the full animation vocabulary: cook, read, scream…)
 5. ~~Quest system per §3 (variables → runner → editor)~~ ✅ shipped 2026-07-13 — all 3 steps done: variables + evaluator, runner + HUD log (§3.3), Quest Editor tool (§3.4)
-6. **Buy/Sell mode** (Phase 3) — after quests' funds/rewards exist, so money has sources and sinks; needs Sims Buy Mode reference screenshots from the designer
-7. Mobile polish / PWA (Phase 5)
+6. **Shared tool nav bar** (§7.4) — quick win, unblocks nothing but improves every tool session
+7. **Asset facing vector** (§7.2) — foundational: use-spots and seat-facing logic feed doors' and accidents' placement math, and Buy/Sell placement UX later
+8. **Doors as assets** (§7.1)
+9. **Accidents system** (§7.3) — biggest of the four; needs facing/use-spot (§7.2) landed first
+10. **Buy/Sell mode** (Phase 3) — needs Sims Buy Mode reference screenshots from the designer (BLOCKED on that); doors stay `buyable: false` at first (§7.1)
+11. Mobile polish / PWA (Phase 5)
 
 ## 5. Working conventions with Claude (session bootstrap)
 
-- **Claude's container resets between sessions.** At the start of a coding session, upload: `game.rar` (or zip of `game/`), the current `tools/` files being touched, relevant `data/*.json` (at minimum `tuning.json`), `package.json` if changed — plus keep `PROGRESS.md` and this file in project knowledge.
-- **Slice workflow**: user says "Continue" → Claude proposes/builds the next self-contained slice → headless tests + strict type gate (`npx tsc --noEmit --strict --target es2020 --moduleResolution bundler --module esnext --skipLibCheck game/*.ts`) → delivery zip of changed files only → user drops files into `D:\WebCreation\condo-life-web`, confirms in-browser.
+- **Workflow since 2026-07-13: Claude Code works the local repo directly** (reads/edits files, runs tests, commits slice-per-commit on `master`; nothing is pushed without the user asking). The old Claude-Projects ritual (upload zips each session, delivery zips back) is obsolete — kept here only as history. Session bootstrap is now just: read this file + `git log`/`git status`.
+- **Slice workflow**: user says "Continue" → Claude proposes/builds the next self-contained slice (usually via a background subagent given this file as spec) → headless tests + strict type gate (`npx tsc --noEmit --strict --target es2020 --moduleResolution bundler --module esnext --skipLibCheck game/*.ts`) → main session verifies and commits → user confirms in-browser.
 - **Tests**: TS suites via `npx tsx test/<name>.test.ts`; tool suites via `node test/<name>.test.mjs` (jsdom). Tool tests load the HTML, run the plain inline script (module scripts are inert in jsdom), and drive the DOM.
 - **Tool architecture**: editor logic in a plain inline script exposed as `window.<Tool>` (jsdom-testable); three.js and game-module imports isolated in a `type="module"` script (Vite-processed in the browser). Tools import game logic directly (e.g. Map Editor uses `nav.ts`, Animation Mapper uses `normalizeModelToHeight` from `world.ts`) — never reimplement.
 - **API**: `GET/PUT /api/data/<path>` on the dev server; tools PUT whole files with `JSON.stringify(data, null, 2)`.
@@ -153,3 +161,38 @@ Step 3 of §3's build order — the last piece of the quest slice. **New tool fi
 - Real `secondsPerGameDay` — live-tunable, pick when it matters.
 - Known gaps from PROGRESS.md §7 still apply (no Map Editor undo, seat distance cap, single-sim seat occupancy, animated doors / wall fade cosmetic work).
 - The Tuning Editor renders `tuning.json` groups generically — the nested `character.clipMap` object may render awkwardly there; the Animation Mapper is the dedicated surface for that block.
+
+---
+
+## 7. Locked designs — designer requests of 2026-07-14
+
+Four requests from the designer, specced here before implementation (build order in §4 items 6–9). Common thread: everything is data + tool UI per the §1 rule.
+
+### 7.1 Doors as their own asset type
+
+- **Doors become entries in `assets.json`** with `category: "door"` — they reuse the whole asset machinery (mesh, footprint, editor) instead of a parallel system. A new general field `buyable: boolean` (default `true`, absent = true) is added to `AssetDef`; door entries ship `buyable: false` — the designer doesn't want players buying/selling doors *yet*, but flipping one flag changes that later. The future Buy/Sell catalog must filter on `buyable`.
+- **Mesh-fit fields, general to ALL assets** (any imported GLB may come mis-scaled/mis-oriented): optional `meshFit: { scale?: number | [x,y,z], yawOffsetDeg?: number, yOffset?: number }` on `AssetDef`, applied by the loader after normalization. This answers the door "resize as required" request but deliberately lands on every asset.
+- **Door-specific block** on door-category assets: `door: { hingeOffset: [x, z], openAngleDeg, openSeconds, closeSeconds, triggerDistance }`. `hingeOffset` is the rotation-axis position in model-local meters relative to the model origin — the designer's requested movable Z-rotation axis, so any GLB can be made to swing correctly regardless of where its author put the origin. Per-asset values override tuning defaults `tuning.doors: { openSeconds: 0.5, closeSeconds, openAngleDeg: 90, triggerDistance }` (all live-tunable; 0.5s is the designer's requested default).
+- **Map link**: a map's `doors[]` entries gain an optional `assetId` (a door-category asset). With an `assetId` the game renders that asset's mesh on the doorway and animates it; without one, current behavior (bare opening) is unchanged — old maps stay valid. The Map Editor's Doors mode gets a door-asset dropdown (door-category assets only) in its inspector.
+- **Open/close logic** (mirrors the Unreal `BP_Door` semantics, which are PIE-proven): each frame-ish (reuse an existing tick, no new timer): if the sim is within `triggerDistance` **and** its current nav path crosses the doorway segment → rotate open around the hinge over `openSeconds`; once the sim is farther than `triggerDistance`, rotate closed over `closeSeconds`. Never close while the sim is within the trigger distance (never trap/clip the sim mid-transit). Standing near a door without a path through it does NOT open it.
+
+### 7.2 Asset facing direction (the "normal" vector)
+
+- `AssetDef` gains `facingDeg: number` (default 0): the direction the object faces in **model-local space**, expressed as a yaw in degrees (0 = the model's local −Z after `meshFit.yawOffsetDeg`, i.e. what the game already treats as "toward the camera at rot 0" — the implementing agent must verify and document the exact convention against `world.ts`'s placement math). An instance's **world facing** = instance `rot` + `facingDeg`. A single yaw is exactly the "normal vector telling me where the object is facing" the designer asked for, in the friendliest editable form (degrees, not a vector triple) — tools may *display* it as an arrow.
+- **Consumers (game)**: a shared `useSpotFor(instance)` helper — the interaction stand/approach point becomes "footprint edge along world facing + small clearance" instead of any current pivot/center heuristic (fridge opens from its front, WC approached from the front…); seat-aware logic ("sit in front of the TV") screens candidate seats by the half-space test `dot(seatPos − tvPos, tvFacing) > 0` and the seat's own facing toward the target — this replicates the Unreal Phase-A seat-in-front-of-screen logic that needed a hardcoded RightVector exception for the TV mesh; with `facingDeg` per asset that exception class disappears.
+- **Tools**: Asset Editor gets the `facingDeg` field (and `meshFit`, and `buyable` from §7.1); Map Editor draws a small facing arrow on every placed object (read-only indicator, instance rot + asset facingDeg) so the designer can see at a glance which way furniture faces.
+
+### 7.3 Accidents
+
+- **Accident types are assets too**: `category: "accident"`, `buyable: false` (fire, water puddle, debris…). They get mesh/footprint/interactions through the existing Asset Editor for free. Their `interactions` are the cleanup actions (mop, extinguish — authored in the Interaction Editor like any action); their `environmentScore` should typically be negative while present. New field on accident-category assets: `clearedBy: string[]` — action ids whose completion on the accident instance despawns it.
+- **Per-asset risk config** on any normal asset: `accidents: [{ accidentId, trigger: "onUse", baseChancePercent, placement: "on" | "adjacent", adjacentRange: [1, 2], modifiers: [{ var, pctAt0, pctAtMax }] }]`.
+  - **Roll timing**: once, when a sim *finishes* an action on the asset (`trigger: "onUse"` is the only trigger for now; the enum exists so future triggers — time-based, idle — slot in).
+  - **Risk formula**: `chance = clamp(baseChancePercent + Σ modifier contributions, 0, 100)`; each modifier reads a stat via the **quest condition namespace** (`needs.<id>`, `skills.<id>` — reuse `game/quests.ts`'s path resolution, don't reinvent) and contributes a linear interpolation from `pctAt0` (stat at 0) to `pctAtMax` (stat at its max). Example: kitchen fire `baseChancePercent: 2`, modifier `{ var: "skills.cooking", pctAt0: +15, pctAtMax: −2 }` — a novice cook risks ~17%, a master ~0%.
+  - **Placement**: `"on"` spawns the accident on the base asset's own cells (kitchen fire ON the stove); `"adjacent"` picks a random free, in-bounds, non-wall cell 1–2 grid squares away (`adjacentRange`) — the designer's "leak" case. If no free cell exists, fall back to "on".
+- **Runtime**: accident *instances* are runtime state (spawned into the world + nav/tap systems like placed objects), NOT written into the map file; shape must be serializable for the future save system (same convention as `QuestRunner.serialize()`). 
+- **Interaction hierarchy (the designer's exact rule)**: if an accident instance's footprint **overlaps** a base asset's footprint, the accident's interactions REPLACE the base asset's in the tap menu (impossible to cook while the kitchen is on fire) and autonomy must likewise skip the blocked asset's actions. If they do **not** overlap, there is no hierarchy — the accident is just its own independent tappable object alongside the asset.
+- **Tools**: the Asset Editor gains (a) nothing special for accident-category assets beyond the `clearedBy` action multi-select, and (b) an "Accidents" risk section on normal assets — accident dropdown (accident-category assets only), trigger, base %, placement + range, modifier rows with var dropdowns fed from `stats.json` (no free-typed ids, as always).
+
+### 7.4 Tool navigation
+
+- A shared nav bar on every tool page + the game: new `tools/nav.js` (plain non-module script so jsdom tests are unaffected) that injects a compact tab strip — Game, Assets, Interactions, Tuning, Map, Animations, Quests — highlighting the current page. Each `tools/*.html` (and `index.html`) includes it with one `<script src>` line. New tools must add themselves to the one list in `nav.js`.
