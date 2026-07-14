@@ -236,7 +236,10 @@
       ],
       "interactions": [
         "watch_tv"
-      ]
+      ],
+      "meshFit": {
+        "yawOffsetDeg": -90
+      }
     },
     {
       "id": "bookshelf",
