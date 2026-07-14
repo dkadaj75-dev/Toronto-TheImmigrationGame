@@ -73,6 +73,12 @@
       <input type="text" id="new-source" placeholder="/models/anims/walking.glb" />
       <button id="add-source" class="small">Add</button>
     </div>
+
+    <h2 style="margin-top:16px">Overhead marker</h2>
+    <div class="detail">Sims-style icon floating above the sim's head. GLB or image — png/jpg/webp/gif billboard above the head; leave blank for the built-in green plumbob.</div>
+    <label>Mesh path</label>
+    <input type="text" id="f-marker-mesh" placeholder="leave blank for the built-in green plumbob" />
+    <div id="marker-num-fields"></div>
   </section>
 
   <!-- ------------------------------------------------ middle: state → clip mapping -->
@@ -132,6 +138,17 @@ window.AnimTool = (() => {
     ['walkClipSpeedReference', 'Walk clip authored speed (units/s)', 0.1, 10],
     ['sitHeight', 'Sit height (root y on seats)', 0, 2],
     ['lieHeight', 'Lie height (root y on beds)', 0, 2],
+  ];
+  // Overhead marker (section 7.7): sparse fields on tuning.character.marker -- blank = "use the
+  // game-side default" (see game/marker.ts's MARKER_DEFAULTS), same convention as the Asset
+  // Editor's meshFit/sprite/door cards. Placeholders show the exact default the game falls back to.
+  const MARKER_DEFAULTS = { yOffset: 0.35, scale: 0.3, spinDegPerSec: 90, bobAmplitude: 0.05, bobHz: 0.8 };
+  const MARKER_NUM_FIELDS = [
+    ['yOffset', 'Y offset (m)'],
+    ['scale', 'Scale'],
+    ['spinDegPerSec', 'Spin (deg/s, 3D meshes only)'],
+    ['bobAmplitude', 'Bob amplitude (m)'],
+    ['bobHz', 'Bob rate (Hz)'],
   ];
 
   let tuning = null, interactions = null;
@@ -205,6 +222,7 @@ window.AnimTool = (() => {
   function render() {
     renderSettings();
     renderSources();
+    renderMarker();
     renderStates();
     renderClipList();
   }
@@ -245,6 +263,51 @@ window.AnimTool = (() => {
       host.append(div);
     });
     if (c.animationPaths.length === 0) host.innerHTML = '<div class="detail">none — using clips embedded in the model GLB</div>';
+  }
+
+  /** Sparse-set/-clear a marker field: blank clears the key (falls back to the game-side
+   *  default), and the whole `marker` object is pruned once every key is cleared — same
+   *  convention as the Asset Editor's meshFit/sprite cards (ensure-on-write, prune-when-empty). */
+  function setMarkerField(field, value) {
+    const c = tuning.character;
+    if (value === undefined || value === '') {
+      if (c.marker) {
+        delete c.marker[field];
+        if (Object.keys(c.marker).length === 0) delete c.marker;
+      }
+    } else {
+      if (!c.marker) c.marker = {};
+      c.marker[field] = value;
+    }
+    setDirty(true);
+  }
+
+  function renderMarker() {
+    const c = tuning.character;
+    const m = c.marker || {};
+    $('#f-marker-mesh').value = m.mesh ?? '';
+    const host = $('#marker-num-fields');
+    host.innerHTML = '';
+    for (const [field, labelText] of MARKER_NUM_FIELDS) {
+      const label = document.createElement('label');
+      label.textContent = labelText;
+      const input = document.createElement('input');
+      input.type = 'number'; input.step = 'any'; input.dataset.markerField = field;
+      input.placeholder = String(MARKER_DEFAULTS[field]);
+      if (m[field] !== undefined) input.value = m[field];
+      input.addEventListener('change', () => {
+        // No onSourcesChanged-style reload hook needed: the module script's preview reads
+        // AnimTool.character() fresh every animation frame (game/marker.ts's own update() also
+        // re-resolves config every call), so a numeric field edit here is live next frame with
+        // zero extra plumbing — only the mesh PATH (below) needs an explicit rebuild signal.
+        const raw = input.value.trim();
+        if (raw === '') { setMarkerField(field, undefined); return; }
+        const v = Number(raw);
+        if (!Number.isFinite(v)) { input.value = m[field] ?? ''; return; }
+        setMarkerField(field, v);
+      });
+      host.append(label, input);
+    }
   }
 
   function renderStates() {
@@ -407,6 +470,12 @@ window.AnimTool = (() => {
       setDirty(true);
       T.onSourcesChanged && T.onSourcesChanged();
     });
+    $('#f-marker-mesh').addEventListener('change', () => {
+      let v = $('#f-marker-mesh').value.trim();
+      if (v && !/^(\/|https?:)/.test(v)) v = '/' + v;
+      $('#f-marker-mesh').value = v;
+      setMarkerField('mesh', v === '' ? undefined : v); // blank = unset → built-in default octahedron
+    });
     $('#add-state').addEventListener('click', () => { if (addState($('#new-state').value)) $('#new-state').value = ''; });
     $('#new-state').addEventListener('keydown', (e) => { if (e.key === 'Enter') { if (addState($('#new-state').value)) $('#new-state').value = ''; } });
     $('#add-source').addEventListener('click', () => { if (addSource($('#new-source').value)) $('#new-source').value = ''; });
@@ -439,6 +508,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { normalizeModelToHeight } from '/game/world.ts';
+import { createMarkerInstance } from '/game/marker.ts';
 
 const API = '/api/data/';
 const j = (u) => fetch(API + u, { cache: 'no-cache' }).then((r) => { if (!r.ok) throw new Error(u + ': HTTP ' + r.status); return r.json(); });
@@ -473,6 +543,16 @@ const camera = new THREE.PerspectiveCamera(40, host.clientWidth / host.clientHei
 const controls = new OrbitControls(camera, renderer.domElement);
 
 let charRoot = null, mixer = null, clipObjs = [], currentAction = null;
+
+// --- overhead marker preview (§7.7): independent of the character GLB load (the preview
+// character never moves), so it's created once, up front, and just reads AnimTool.character()
+// fresh every frame — no rebuild wiring needed beyond what game/marker.ts already does
+// internally when the mesh path changes. `markerAnchor` mirrors where the preview model itself
+// sits (world origin) — matches game/marker.ts's "track the character root's position" contract
+// without depending on charRoot, which gets torn down/recreated on every model (re)load.
+const markerAnchor = new THREE.Object3D();
+scene.add(markerAnchor);
+const marker = createMarkerInstance(scene, markerAnchor, AnimTool.character());
 
 function frameModel(model) {
   const box = new THREE.Box3().setFromObject(model);
@@ -535,6 +615,7 @@ const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const dt = clock.getDelta();
   if (mixer) mixer.update(dt);
+  marker.update(dt, AnimTool.character()); // preview runs on real time (no sim-time/pause concept in this tool)
   controls.update();
   renderer.render(scene, camera);
 });

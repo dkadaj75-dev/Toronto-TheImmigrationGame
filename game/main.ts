@@ -17,6 +17,7 @@ import { Autonomy } from './autonomy';
 import { QuestRunner, type EvalContext } from './quests';
 import { AccidentsController, resolveTapAssetId } from './accidents';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials } from './buymode';
+import { createMarkerInstance, type MarkerInstance } from './marker';
 
 const app = document.getElementById('app')!;
 const boot = document.getElementById('boot')!;
@@ -107,6 +108,13 @@ async function start() {
       .catch((err) => console.warn(`rigged character failed to load (${c.meshPath}) — keeping the capsule stand-in.`, err));
   };
   loadCharacter();
+
+  // --- overhead marker (§7.7): an INDEPENDENT top-level object tracking `sim`'s position only
+  // (never its rotation) — see game/marker.ts's module doc comment for why it isn't literally
+  // parented under `sim` (loadCharacter's `sim.clear()` on every rig reload would delete it).
+  // No character block → no marker, same precedent as the rig itself (`loadCharacter` no-ops
+  // without `meshPath`).
+  let marker: MarkerInstance | null = data.tuning.character ? createMarkerInstance(scene, sim, data.tuning.character) : null;
 
   agent.onLocomotionChange = (moving) => {
     if (!anim) return;
@@ -459,6 +467,10 @@ async function start() {
       anim?.retune(data.tuning.character);
       anim?.setWalkSpeed(data.tuning.movement.walkSpeed);
       loadCharacter(); // no-op unless meshPath changed
+      if (!marker) marker = createMarkerInstance(scene, sim, data.tuning.character);
+    } else if (marker) {
+      marker.dispose();
+      marker = null;
     }
     hud.setFunds(quests.funds, currencyName());
     if (buyMode.active) refreshBuyCatalog(); // asset prices/icons/gates may have changed mid-shop
@@ -506,6 +518,7 @@ async function start() {
     // parented under it), so a sprite gets its frames ticked with no extra per-caller wiring.
     world.traverse((o) => { o.userData.spriteUpdate?.(sdt); });
     anim?.update(sdt); // sim time: pause freezes the character, 2×/3× speed it up
+    if (marker && data.tuning.character) marker.update(sdt, data.tuning.character); // §7.7: same sim time as the mixer/doors/sprites
     cue.update(dt); // UI feedback stays real-time
     autonomy.update(sdt);
     simTick(sdt);

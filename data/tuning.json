@@ -64,6 +64,15 @@
       "lie_sleep": "Fall"
     },
     "animationPaths": [],
+    "marker": {
+      "mesh": "",
+      "yOffset": 0.35,
+      "scale": 0.3,
+      "spinDegPerSec": 90,
+      "bobAmplitude": 0.05,
+      "bobHz": 0.8,
+      "_source": "Overhead marker slice (PROJECT_CONTEXT.md §7.7, Sims plumbob reference). Edit through tools/animations.html's Overhead marker section. Blank mesh = the built-in green octahedron; point it at a .glb or an image (png/jpg/webp/gif billboard) to override. Tuned against heightMeters 1.55: yOffset clears a real head, scale keeps a modest ~0.3m marker, spin/bob read as a gentle idle."
+    },
     "_source": "edit this block through tools/animations.html (Animation Mapper): it lists the GLB's actual clips, previews them in 3D, and maps them to states. animationPaths = extra GLBs whose clips are merged in (Mixamo one-clip-per-file exports, same skeleton). sitHeight/lieHeight replace the old hardcoded 0.25/0.55. Missing/failed GLB keeps the capsule stand-in."
   },
   "camera": {

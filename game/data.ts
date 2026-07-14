@@ -144,6 +144,21 @@ export interface CharacterTuning {
   clipMap: Record<string, string>;
   /** extra GLBs whose clips are merged in (Mixamo-style one-clip-per-file exports; must share the model's skeleton) */
   animationPaths?: string[];
+  /** Sims-style overhead marker (§7.7). All fields sparse/optional — see game/marker.ts's
+   *  MARKER_DEFAULTS for the fallback values applied when absent. */
+  marker?: MarkerTuning;
+}
+
+/** Overhead marker config (PROJECT_CONTEXT.md §7.7). `mesh` goes through the SAME §7.5 extension
+ *  detection as any asset (empty/absent → the built-in green octahedron; image → billboard sprite,
+ *  GIFs animate on sim time; `.glb` → mesh). See game/marker.ts for defaults/resolution/rendering. */
+export interface MarkerTuning {
+  mesh?: string;
+  yOffset?: number;
+  scale?: number;
+  spinDegPerSec?: number;
+  bobAmplitude?: number;
+  bobHz?: number;
 }
 
 export interface TuningData {

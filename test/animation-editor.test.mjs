@@ -105,6 +105,51 @@ console.log('animation-editor.test — animation sources');
   check('source removable', AnimTool.character().animationPaths.length === 0);
 }
 
+console.log('animation-editor.test — overhead marker (§7.7)');
+{
+  check('no marker block → mesh field blank', document.querySelector('#f-marker-mesh').value === '');
+  check('no marker block → numeric fields blank (placeholder shows the default)', document.querySelector('input[data-marker-field="scale"]').value === '');
+  check('placeholder shows the game-side default', document.querySelector('input[data-marker-field="scale"]').placeholder === '0.3');
+  check('character() has no marker key yet', AnimTool.character().marker === undefined);
+
+  const meshInput = document.querySelector('#f-marker-mesh');
+  meshInput.value = 'models/plumbob.glb';
+  meshInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('mesh path normalized with a leading slash', AnimTool.character().marker.mesh === '/models/plumbob.glb');
+  check('mesh field reflects the normalized value', meshInput.value === '/models/plumbob.glb');
+
+  const scaleInput = document.querySelector('input[data-marker-field="scale"]');
+  scaleInput.value = '0.5';
+  scaleInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('scale write is sparse (only the touched key)', AnimTool.character().marker.scale === 0.5 && !('yOffset' in AnimTool.character().marker));
+
+  const bobInput = document.querySelector('input[data-marker-field="bobAmplitude"]');
+  bobInput.value = '0.1';
+  bobInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('a second field adds alongside the first (still sparse — no untouched keys)',
+    AnimTool.character().marker.bobAmplitude === 0.1
+    && Object.keys(AnimTool.character().marker).sort().join(',') === 'bobAmplitude,mesh,scale');
+
+  scaleInput.value = '';
+  scaleInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('blanking a field clears just that key', !('scale' in AnimTool.character().marker) && AnimTool.character().marker.bobAmplitude === 0.1);
+
+  meshInput.value = '';
+  meshInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+  bobInput.value = '';
+  bobInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('clearing every key prunes the whole marker object', AnimTool.character().marker === undefined);
+
+  const badInput = document.querySelector('input[data-marker-field="spinDegPerSec"]');
+  badInput.value = 'not-a-number';
+  badInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('non-numeric input rejected, no key written', AnimTool.character().marker === undefined);
+
+  // leave one field set for the save-payload assertion below
+  scaleInput.value = '0.6';
+  scaleInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+}
+
 console.log('animation-editor.test — numeric settings');
 {
   const input = document.querySelector('input[data-field="heightMeters"]');
@@ -126,6 +171,7 @@ console.log('animation-editor.test — save PUTs the whole tuning file');
   const body = JSON.parse(captured.body);
   check('payload preserves untouched groups', body.autonomy.stopAtThreshold === 95 && body.economy.startingFunds === 20000);
   check('payload carries the edits', body.character.clipMap.walk === 'Walking_A' && body.character.heightMeters === 1.7);
+  check('payload carries the sparse marker edit (only the touched key)', body.character.marker.scale === 0.6 && Object.keys(body.character.marker).join(',') === 'scale');
   check('dirty cleared after save', AnimTool.dirty === false);
   check('status reads saved', document.querySelector('#status').textContent === 'saved');
 }
