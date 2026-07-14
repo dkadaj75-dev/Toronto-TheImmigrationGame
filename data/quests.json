@@ -3,18 +3,38 @@
   "quests": [
     {
       "id": "first_words",
-      "name": "First Words",
-      "description": "Reach English level 10 and save §500.",
-      "trigger": { "all": [ { "var": "skills.english", "gte": 1 } ] },
+      "name": "Watch TV",
+      "description": "Watch TV like the larva you are",
+      "trigger": {
+        "all": [
+          {
+            "var": "needs.fun",
+            "gte": 70
+          }
+        ]
+      },
       "completion": {
         "all": [
-          { "var": "skills.english", "gte": 10 },
-          { "var": "funds", "gte": 500 }
+          {
+            "var": "needs.fun",
+            "gte": 80
+          },
+          {
+            "var": "funds",
+            "gte": 500
+          }
         ]
       },
       "rewards": [
-        { "type": "funds", "amount": 200 },
-        { "type": "setVar", "var": "visaStatus", "value": "student" }
+        {
+          "type": "funds",
+          "amount": 200
+        },
+        {
+          "type": "setVar",
+          "var": "visaStatus",
+          "value": "student"
+        }
       ],
       "onceOnly": true
     }
