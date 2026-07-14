@@ -21,6 +21,20 @@ export interface AssetDef {
   buyPrice: number; sellPrice: number; environmentScore: number;
   footprint: [number, number]; seats?: number;
   interactions: string[]; seatTarget?: boolean;
+  /** Model-local facing yaw in degrees; absent = 0. PROJECT_CONTEXT.md §7.2 as-built:
+   *  world facing = instance.rotDeg + facingDeg, using the SAME "rotation.y=0 → local +Z is
+   *  forward" convention world.ts already applies to every placed object and game/sim.ts
+   *  applies to the sim's own travel-facing. See game/facing.ts for the consumers. */
+  facingDeg?: number;
+  /** Whether the future Buy/Sell catalog offers this asset. Absent = true (§7.1). */
+  buyable?: boolean;
+  /** Mesh authoring corrections applied by world.ts AFTER normalizeModelToFootprint (§7.1/§7.2).
+   *  scale multiplies on top of the automatic footprint-fit scale (uniform or per-axis);
+   *  yawOffsetDeg rotates the loaded model in place (fixes a mesh not authored facing the
+   *  game's local +Z convention — see facingDeg's doc comment above, which is defined in
+   *  terms of the model's orientation AFTER this correction); yOffset nudges the model
+   *  vertically post-grounding (e.g. a door needing to sit flush in its frame). */
+  meshFit?: { scale?: number | [number, number, number]; yawOffsetDeg?: number; yOffset?: number };
 }
 export interface AssetsData { categories: string[]; assets: AssetDef[]; }
 
@@ -94,6 +108,12 @@ export interface TuningData {
   time: { secondsPerGameDay: number; nightStartHour: number; nightEndHour: number };
   economy: { startingFunds: number; currencyName: string };
   movement: { walkSpeed: number; arrivalRadius: number };
+  /** Optional so pre-existing tuning fixtures/tests stay valid (mirrors the `character?` precedent
+   *  below) — game code falls back with `?? <value>` where used (see game/facing.ts). §7.2 as-built:
+   *  useSpotClearance = gap beyond the footprint edge for a front-approach stand point;
+   *  seatViewDistance = how far in front of a seat-aware target (e.g. the TV) the "viewing point"
+   *  sits when ranking candidate seats — ports the Unreal prototype's RightVector·400 constant. */
+  interaction?: { useSpotClearance?: number; seatViewDistance?: number };
   camera: { minZoom: number; maxZoom: number; minPitchDeg: number; maxPitchDeg: number; panBoundsPadding: number };
   /** quest log HUD tuning (§3 quest system) — no magic numbers in game/quests.ts or ui.ts */
   quests: { toastDurationSeconds: number; completedLogLimit: number };

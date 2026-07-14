@@ -46,6 +46,7 @@
   #preview { width: 100%; height: 280px; background: #0d1220; border: 1px solid #26304a; border-radius: 12px; display: block; }
   #preview-msg { font-size: 12px; color: #5f6f93; margin-top: 6px; }
   .row-actions { display: flex; gap: 8px; margin-top: 8px; }
+  .hint { font-size: 11px; color: #5f6f93; margin-top: 6px; line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -198,6 +199,12 @@ function renderEditor() {
   card1.appendChild(frow('buy price', numInput(() => a.buyPrice, (v) => { a.buyPrice = v ?? 0; }, 'buyPrice')));
   card1.appendChild(frow('sell price', numInput(() => a.sellPrice, (v) => { a.sellPrice = v ?? 0; }, 'sellPrice')));
   card1.appendChild(frow('environment score', numInput(() => a.environmentScore, (v) => { a.environmentScore = v ?? 0; }, 'environmentScore')));
+  const buyableCb = document.createElement('input');
+  buyableCb.type = 'checkbox';
+  buyableCb.dataset.path = 'buyable';
+  buyableCb.checked = a.buyable !== false; // absent = true (§7.1)
+  buyableCb.addEventListener('change', () => { if (buyableCb.checked) delete a.buyable; else a.buyable = false; markDirty(); });
+  card1.appendChild(frow('buyable (offered in the future Buy/Sell catalog)', buyableCb));
   root.appendChild(card1);
 
   // --- placement & seating
@@ -213,6 +220,8 @@ function renderEditor() {
   card2.appendChild(frow('footprint (w × d, meters)', pair));
   card2.appendChild(frow('seats (count)', numInput(() => a.seats, (v) => { if (v === undefined) delete a.seats; else a.seats = v; }, 'seats')));
   card2.appendChild(frow('is a seat target (sit here for seat-aware actions)', checkInput(() => a.seatTarget, (v) => { if (v) a.seatTarget = true; else delete a.seatTarget; }, 'seatTarget')));
+  card2.appendChild(frow('facing ° (blank = 0)', numInput(() => a.facingDeg, (v) => { if (v === undefined) delete a.facingDeg; else a.facingDeg = v; }, 'facingDeg')));
+  card2.insertAdjacentHTML('beforeend', '<div class="hint">direction the object faces, degrees — world facing = the map instance\'s rot° + this. 0 means the model\'s local +Z (its "front") already points the way rot° faces; only set this if the mesh itself is authored facing a different local axis.</div>');
   root.appendChild(card2);
 
   // --- interactions
@@ -248,6 +257,44 @@ function renderEditor() {
   card4.appendChild(frow('GLB path (under public/)', mesh));
   card4.insertAdjacentHTML('beforeend', '<canvas id="preview"></canvas><div id="preview-msg"></div>');
   root.appendChild(card4);
+
+  // --- mesh fit (§7.1/§7.2: sparse — meshFit / meshFit.scale keys only exist if the designer sets them)
+  const card4b = document.createElement('div');
+  card4b.className = 'card';
+  card4b.innerHTML = '<h2>Mesh fit</h2><div class="hint">Corrections applied after the automatic footprint-fit scaling — for a mesh that comes in mis-scaled or mis-oriented (e.g. a door). Leave everything blank to skip.</div>';
+  const ensureFit = () => (a.meshFit ??= {});
+  const pruneFit = () => { if (a.meshFit && Object.keys(a.meshFit).length === 0) delete a.meshFit; };
+  card4b.appendChild(frow('additional scale × (uniform, blank = ×1)', numInput(
+    () => (typeof a.meshFit?.scale === 'number' ? a.meshFit.scale : undefined),
+    (v) => { if (v === undefined) { if (a.meshFit) delete a.meshFit.scale; } else ensureFit().scale = v; pruneFit(); },
+    'meshFit.scale',
+  )));
+  const scalePair = document.createElement('div');
+  scalePair.className = 'pair';
+  const arrScaleAt = (i) => (Array.isArray(a.meshFit?.scale) ? a.meshFit.scale[i] : undefined);
+  const setArrScale = (i) => (v) => {
+    const cur = Array.isArray(a.meshFit?.scale) ? [...a.meshFit.scale] : [1, 1, 1];
+    cur[i] = v ?? 1;
+    ensureFit().scale = cur;
+    pruneFit();
+  };
+  scalePair.append(
+    numInput(() => arrScaleAt(0), setArrScale(0), 'meshFit.scaleX'),
+    numInput(() => arrScaleAt(1), setArrScale(1), 'meshFit.scaleY'),
+    numInput(() => arrScaleAt(2), setArrScale(2), 'meshFit.scaleZ'),
+  );
+  card4b.appendChild(frow('…or per-axis scale x/y/z (overrides the field above)', scalePair));
+  card4b.appendChild(frow('yaw offset ° (rotates the mesh in place)', numInput(
+    () => a.meshFit?.yawOffsetDeg,
+    (v) => { if (v === undefined) { if (a.meshFit) delete a.meshFit.yawOffsetDeg; } else ensureFit().yawOffsetDeg = v; pruneFit(); },
+    'meshFit.yawOffsetDeg',
+  )));
+  card4b.appendChild(frow('y offset (meters, post-grounding)', numInput(
+    () => a.meshFit?.yOffset,
+    (v) => { if (v === undefined) { if (a.meshFit) delete a.meshFit.yOffset; } else ensureFit().yOffset = v; pruneFit(); },
+    'meshFit.yOffset',
+  )));
+  root.appendChild(card4b);
 
   // --- danger zone
   const card5 = document.createElement('div');

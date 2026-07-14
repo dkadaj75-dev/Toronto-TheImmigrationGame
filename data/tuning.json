@@ -36,6 +36,11 @@
     "arrivalRadius": 0.35,
     "_source": "PLACEHOLDER — tune in Phase 1"
   },
+  "interaction": {
+    "useSpotClearance": 0.4,
+    "seatViewDistance": 2.5,
+    "_source": "Asset facing slice (PROJECT_CONTEXT.md §7.2). useSpotClearance = gap beyond an asset's footprint edge for a front-approach stand point; seatViewDistance = how far in front of a seat-aware target (e.g. the TV) the viewing point sits when ranking candidate seats — ports the Unreal prototype's RightVector*400 (~4m) at a web-appropriate scale."
+  },
   "character": {
     "meshPath": "/models/character.glb",
     "heightMeters": 1.55,

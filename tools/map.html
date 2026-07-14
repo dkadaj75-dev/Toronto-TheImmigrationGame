@@ -486,12 +486,21 @@ function redraw() {
     ctx.lineWidth = state.sel?.kind === 'object' && state.sel.index === i ? 2.5 : 1.5;
     ctx.fillRect(px, py, r.w * view.s, r.d * view.s);
     ctx.strokeRect(px, py, r.w * view.s, r.d * view.s);
-    // facing tick (+Z rotated by rotDeg, matching the game convention)
-    const th = (normRot(p.rotDeg) * Math.PI) / 180;
+    // facing arrow: +Z rotated by rotDeg + the asset's own facingDeg (§7.2 as-built) — read-only,
+    // world facing = instance rot° + AssetDef.facingDeg, matching the game's own convention.
+    const facingDef = assetById(p.asset);
+    const th = ((normRot(p.rotDeg) + (facingDef?.facingDeg ?? 0)) * Math.PI) / 180;
     const [cx, cy] = worldToPx(p.pos[0], p.pos[1]);
-    ctx.beginPath(); ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + Math.sin(th) * view.s * 0.4, cy + Math.cos(th) * view.s * 0.4);
+    const tipX = cx + Math.sin(th) * view.s * 0.4, tipY = cy + Math.cos(th) * view.s * 0.4;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(tipX, tipY);
     ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 1.5; ctx.stroke();
+    const headLen = view.s * 0.12, headSpread = 0.5; // small triangle arrowhead at the tip
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(tipX - Math.sin(th + headSpread) * headLen, tipY - Math.cos(th + headSpread) * headLen);
+    ctx.lineTo(tipX - Math.sin(th - headSpread) * headLen, tipY - Math.cos(th - headSpread) * headLen);
+    ctx.closePath();
+    ctx.fillStyle = '#ffd166'; ctx.fill();
     // label
     ctx.fillStyle = '#aebadb'; ctx.font = '10px system-ui';
     ctx.fillText(p.asset, px + 3, py + 11);

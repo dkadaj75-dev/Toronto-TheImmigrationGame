@@ -38,6 +38,26 @@ export function normalizeModelToFootprint(model: THREE.Object3D, footprint: [num
   model.position.y -= box2.min.y;
 }
 
+/**
+ * Designer escape hatch for mesh authoring quirks (AssetDef.meshFit, §7.1/§7.2): applied AFTER
+ * normalizeModelToFootprint has already scaled/centered/grounded the model, so these are
+ * intentional deviations from that automatic fit, not replacements for it.
+ *  - scale: additional multiply on top of the footprint-fit scale (uniform or per-axis).
+ *  - yawOffsetDeg: rotates the model in place — corrects a mesh not authored facing the
+ *    game's local +Z convention. AssetDef.facingDeg (game/facing.ts) is then defined in terms
+ *    of the model's orientation AFTER this correction, so the two fields compose cleanly.
+ *  - yOffset: nudges the model vertically post-grounding (e.g. a door sitting flush in its frame).
+ */
+function applyMeshFit(model: THREE.Object3D, fit: AssetDef['meshFit']) {
+  if (!fit) return;
+  if (fit.scale !== undefined) {
+    if (Array.isArray(fit.scale)) model.scale.set(model.scale.x * fit.scale[0], model.scale.y * fit.scale[1], model.scale.z * fit.scale[2]);
+    else model.scale.multiplyScalar(fit.scale);
+  }
+  if (fit.yawOffsetDeg) model.rotation.y += THREE.MathUtils.degToRad(fit.yawOffsetDeg);
+  if (fit.yOffset) model.position.y += fit.yOffset;
+}
+
 /** Swap a stand-in group's contents for the asset's GLB once it loads; keep the box on failure. */
 function attachMesh(group: THREE.Group, def: AssetDef) {
   if (!def.mesh) return;
@@ -46,6 +66,7 @@ function attachMesh(group: THREE.Group, def: AssetDef) {
     .then((template) => {
       const model = template.clone(true);
       normalizeModelToFootprint(model, def.footprint);
+      applyMeshFit(model, def.meshFit);
       model.traverse((o) => {
         if (o instanceof THREE.Mesh) { o.castShadow = true; o.userData.sharedResource = true; }
       });

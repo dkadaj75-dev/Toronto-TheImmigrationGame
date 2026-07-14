@@ -3,8 +3,16 @@
 // Needs/autonomy/actions plug into this same class in the next slices.
 
 import * as THREE from 'three';
-import type { TuningData, ActionDef, GameData } from './data';
+import type { TuningData, ActionDef, GameData, AssetDef } from './data';
 import { findPath, nearestWalkable, worldToCell, cellCenter, type NavGrid } from './nav';
+import { useSpotFor, isInFrontHalfSpace, viewingPointFor, type FacingInstance } from './facing';
+
+/** THREE.Object3D → the {pos, rotDeg} shape facing.ts's pure math works with. Objects are
+ *  placed with `obj.rotation.y = degToRad(placed.rotDeg)` and nothing else touches that outer
+ *  rotation (world.ts), so this recovers the exact original instance rotation. */
+function facingInstanceOf(obj: THREE.Object3D): FacingInstance {
+  return { pos: [obj.position.x, obj.position.z], rotDeg: THREE.MathUtils.radToDeg(obj.rotation.y) };
+}
 
 /** What the sim is doing right now. */
 export interface ActiveAction {
@@ -15,12 +23,23 @@ export interface ActiveAction {
 }
 
 /**
- * For a seat-aware action, find the nearest seat-target object to the action's object
- * (e.g. the couch closest to the TV). Returns null when the home has no seats —
- * the sim then just stands, the graceful fallback.
+ * For a seat-aware action, find the best seat-target object to serve the action's object
+ * (e.g. the couch that faces the TV) — §7.2's "sit in front of the TV" screen: candidate
+ * seats are filtered to the target's front half-space (dot(seatPos − targetPos, targetFacing)
+ * > 0), then the nearest to a viewing point projected out along the target's facing wins.
+ * This replaces the old "nearest seat regardless of side" heuristic and the TV-specific
+ * RightVector exception the Unreal prototype needed (CLAUDE.md ANIMATION_PLAN Phase A) —
+ * with per-asset facingDeg, any seat-aware asset gets the same treatment for free.
+ * Returns null when the home has no seat in front of the target — the sim then just
+ * stands at the target, the graceful fallback.
  */
 export function findSeatFor(world: THREE.Group, data: GameData, target: THREE.Object3D): THREE.Object3D | null {
   const assetsById = new Map(data.assets.assets.map((a) => [a.id, a]));
+  const targetDef = assetsById.get(target.userData?.assetId as string);
+  if (!targetDef) return null;
+  const targetInstance = facingInstanceOf(target);
+  const viewPoint = viewingPointFor(targetInstance, targetDef, data.tuning);
+
   let best: THREE.Object3D | null = null;
   let bestDist = Infinity;
   for (const obj of world.children) {
@@ -28,7 +47,8 @@ export function findSeatFor(world: THREE.Group, data: GameData, target: THREE.Ob
     if (!assetId || obj === target) continue;
     const def = assetsById.get(assetId);
     if (!def?.seatTarget) continue;
-    const d = obj.position.distanceTo(target.position);
+    if (!isInFrontHalfSpace([obj.position.x, obj.position.z], targetInstance, targetDef)) continue;
+    const d = Math.hypot(obj.position.x - viewPoint[0], obj.position.z - viewPoint[1]);
     if (d < bestDist) { bestDist = d; best = obj; }
   }
   return best;
@@ -75,20 +95,36 @@ export class SimAgent {
    * resolved seat (findSeatFor) — the sim walks to the seat instead and sits facing the
    * target. Unreachable seat falls back to standing at the target. Returns false only
    * if neither is reachable.
+   *
+   * `targetDef` (optional, §7.2): when supplied, the walk-to point for `target` is
+   * useSpotFor's footprint-edge-along-facing point instead of the raw pivot — the sim
+   * approaches the asset from its front (fridge, stove, sink…) rather than beelining to
+   * its center. Omitting it (e.g. tests with no asset data) falls back to the old pivot
+   * heuristic. The seat branch is unchanged — sitting is still ON the seat, not in front
+   * of it — and either way the FINAL sit/lie position still snaps onto the seat/target
+   * itself once arrived (applyPose, below), so this only changes where the sim walks to.
    */
-  orderAction(action: ActionDef, target: THREE.Object3D, seat: THREE.Object3D | null = null): boolean {
+  orderAction(action: ActionDef, target: THREE.Object3D, seat: THREE.Object3D | null = null, targetDef?: AssetDef): boolean {
     this.stopAction();
-    const routeToObj = (obj: THREE.Object3D): boolean => {
+    const routeToPivot = (obj: THREE.Object3D): boolean => {
       const stand = nearestWalkable(this.grid, worldToCell(this.grid, obj.position.x, obj.position.z));
       if (!stand) return false;
       const [sx, sz] = cellCenter(this.grid, stand);
       return this.route(sx, sz);
     };
-    if (seat && routeToObj(seat)) {
+    const routeToTargetFront = (obj: THREE.Object3D, def: AssetDef): boolean => {
+      const [fx, fz] = useSpotFor(facingInstanceOf(obj), def, this.tuning);
+      const stand = nearestWalkable(this.grid, worldToCell(this.grid, fx, fz));
+      if (!stand) return routeToPivot(obj); // front cell unreachable (e.g. asset flush against a wall) — old heuristic still works
+      const [sx, sz] = cellCenter(this.grid, stand);
+      return this.route(sx, sz);
+    };
+    if (seat && routeToPivot(seat)) {
       this.queued = { action, target, seat };
       return true;
     }
-    if (routeToObj(target)) {
+    const reachedTarget = targetDef ? routeToTargetFront(target, targetDef) : routeToPivot(target);
+    if (reachedTarget) {
       this.queued = { action, target, seat: null };
       return true;
     }

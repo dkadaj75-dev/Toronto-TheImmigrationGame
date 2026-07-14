@@ -63,6 +63,27 @@ const napCb = doc.querySelector('input[data-path="interaction:nap"]');
 napCb.checked = true;
 napCb.dispatchEvent(new window.Event('change', { bubbles: true }));
 
+// --- buyable defaults to checked (absent = true); unchecking writes buyable:false explicitly
+const buyableCb = doc.querySelector('input[data-path="buyable"]');
+assert(buyableCb.checked === true, 'buyable defaults checked when absent');
+buyableCb.checked = false;
+buyableCb.dispatchEvent(new window.Event('change', { bubbles: true }));
+
+// --- facingDeg: blank by default, sparse round-trip
+const facingInput = doc.querySelector('input[data-path="facingDeg"]');
+assert(facingInput.value === '', 'facingDeg blank when absent');
+facingInput.value = '90';
+facingInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+
+// --- meshFit: sparse uniform scale, yawOffsetDeg, yOffset
+const scaleInput = doc.querySelector('input[data-path="meshFit.scale"]');
+assert(scaleInput.value === '', 'meshFit.scale blank when absent');
+scaleInput.value = '1.2';
+scaleInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+const yawInput = doc.querySelector('input[data-path="meshFit.yawOffsetDeg"]');
+yawInput.value = '45';
+yawInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+
 // --- clear the sparse seats field
 const seats = doc.querySelector('input[data-path="seats"]');
 seats.value = '';
@@ -72,6 +93,17 @@ seats.dispatchEvent(new window.Event('input', { bubbles: true }));
 doc.querySelector('[data-asset-id="tv"]').click();
 assert(doc.querySelector('input[data-path="buyPrice"]').value === '800', 'tv form rendered after select');
 assert(doc.querySelector('input[data-path="interaction:watch_tv"]').checked, 'tv has watch_tv checked');
+
+// --- per-axis meshFit.scale (overrides the uniform field) — read back via a re-render,
+// since the model itself isn't exposed on `window` (top-level `const state` in a classic
+// script is a lexical binding, not a window property)
+let scaleX = doc.querySelector('input[data-path="meshFit.scaleX"]');
+scaleX.value = '1.5';
+scaleX.dispatchEvent(new window.Event('input', { bubbles: true }));
+doc.querySelector('[data-asset-id="tv"]').click();
+scaleX = doc.querySelector('input[data-path="meshFit.scaleX"]');
+assert(scaleX.value === '1.5', 'per-axis scale writes an array (read back after re-render)');
+assert(doc.querySelector('input[data-path="meshFit.scale"]').value === '', 'uniform scale field reads blank once scale is an array');
 
 // --- delete TV (unused → plain confirm text)
 assert(doc.getElementById('delete').textContent === 'Delete', 'unused asset gets plain delete label');
@@ -87,6 +119,15 @@ doc.getElementById('new').click();
 assert(doc.querySelectorAll('.asset-item').length === 2, 'new asset appears');
 assert(doc.querySelector('input[data-path="id"]').value === 'lamp', 'new asset selected with prompted id');
 
+// --- meshFit sparse pruning on the fresh (untouched) lamp: set the uniform scale field,
+// then clear it — since it was the only meshFit sub-field ever set, the whole sparse
+// meshFit object should be pruned away, not left behind as an empty {}.
+const lampScale = doc.querySelector('input[data-path="meshFit.scale"]');
+lampScale.value = '2';
+lampScale.dispatchEvent(new window.Event('input', { bubbles: true }));
+lampScale.value = '';
+lampScale.dispatchEvent(new window.Event('input', { bubbles: true }));
+
 // --- save: PUT carries all edits
 doc.getElementById('save').click();
 await new Promise((r) => setTimeout(r, 50));
@@ -100,6 +141,15 @@ assert(savedCouch.seatTarget === true, 'untouched seatTarget preserved');
 assert(!saved.assets.some((a) => a.id === 'tv'), 'PUT reflects deletion');
 assert(saved.assets.some((a) => a.id === 'lamp'), 'PUT includes new asset');
 assert(doc.getElementById('save').disabled, 'save disabled after saving');
+assert(savedCouch.buyable === false, 'PUT carries explicit buyable:false');
+assert(savedCouch.facingDeg === 90, 'PUT carries edited facingDeg');
+assert(savedCouch.meshFit.scale === 1.2, 'PUT carries sparse meshFit.scale');
+assert(savedCouch.meshFit.yawOffsetDeg === 45, 'PUT carries sparse meshFit.yawOffsetDeg');
+assert(!('yOffset' in savedCouch.meshFit), 'untouched meshFit.yOffset stays absent (sparse)');
+const savedLamp = saved.assets.find((a) => a.id === 'lamp');
+assert(!('buyable' in savedLamp), 'new asset has no buyable key (defaults true)');
+assert(!('facingDeg' in savedLamp), 'new asset has no facingDeg key (defaults 0)');
+assert(!('meshFit' in savedLamp), 'new asset has no meshFit key (nothing set)');
 
 // --- search filters sidebar
 const search = doc.getElementById('search');

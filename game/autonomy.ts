@@ -6,7 +6,7 @@
 // Evaluation happens on the needs-decay tick, so no extra interval constant exists.
 
 import type * as THREE from 'three';
-import type { GameData, ActionDef } from './data';
+import type { GameData, ActionDef, AssetDef } from './data';
 import type { SimAgent } from './sim';
 import { findSeatFor } from './sim';
 import type { SimStats } from './stats';
@@ -44,8 +44,8 @@ export class Autonomy {
     const assetsById = new Map(data.assets.assets.map((a) => [a.id, a]));
     const simPos = this.agent.object.position;
 
-    // collect (object, action) pairs that can serve the lowest need, nearest first
-    const candidates: { obj: THREE.Object3D; action: ActionDef; dist: number }[] = [];
+    // collect (object, action, def) triples that can serve the lowest need, nearest first
+    const candidates: { obj: THREE.Object3D; action: ActionDef; def: AssetDef; dist: number }[] = [];
     for (const obj of this.getWorld().children) {
       const assetId = obj.userData?.assetId as string | undefined;
       if (!assetId) continue;
@@ -56,7 +56,7 @@ export class Autonomy {
         if (!action || !action.autonomyEligible) continue;
         if (action.primaryNeed !== lowest.def.id) continue;
         const dx = obj.position.x - simPos.x, dz = obj.position.z - simPos.z;
-        candidates.push({ obj, action, dist: Math.hypot(dx, dz) });
+        candidates.push({ obj, action, def, dist: Math.hypot(dx, dz) });
       }
     }
     candidates.sort((a, b) => a.dist - b.dist);
@@ -64,7 +64,7 @@ export class Autonomy {
     // nearest reachable wins — orderAction() path-checks, so unreachable ones are skipped
     for (const c of candidates) {
       const seat = c.action.seatAware ? findSeatFor(this.getWorld(), data, c.obj) : null;
-      if (this.agent.orderAction(c.action, c.obj, seat)) {
+      if (this.agent.orderAction(c.action, c.obj, seat, c.def)) {
         return { action: c.action, target: c.obj };
       }
     }

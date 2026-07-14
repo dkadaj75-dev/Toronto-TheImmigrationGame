@@ -173,7 +173,7 @@ async function start() {
           hud.showActionMenu(asset, actions, (action) => {
             autonomy.notePlayerCommand();
             const seat = action.seatAware ? findSeatFor(world, data, target) : null;
-            if (agent.orderAction(action, target, seat)) cue.showAt(target.position.x, target.position.z);
+            if (agent.orderAction(action, target, seat, asset)) cue.showAt(target.position.x, target.position.z);
             else console.log('no path to object', assetId);
           });
           return; // object tap opens the menu; don't also walk to the tap point

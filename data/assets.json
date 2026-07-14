@@ -26,7 +26,8 @@
       "interactions": [
         "sit",
         "nap"
-      ]
+      ],
+      "seatTarget": true
     },
     {
       "id": "armchair",
@@ -43,7 +44,8 @@
       "seats": 1,
       "interactions": [
         "sit"
-      ]
+      ],
+      "seatTarget": true
     },
     {
       "id": "dining_chair",
@@ -61,7 +63,8 @@
       "interactions": [
         "sit",
         "eat"
-      ]
+      ],
+      "seatTarget": true
     },
     {
       "id": "bed",
@@ -202,8 +205,7 @@
       ],
       "interactions": [
         "watch_tv"
-      ],
-      "seatTarget": true
+      ]
     },
     {
       "id": "bookshelf",
