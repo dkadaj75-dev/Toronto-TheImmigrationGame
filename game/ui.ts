@@ -9,10 +9,12 @@ import type { SimStats } from './stats';
 const CSS = `
 #hud { position: fixed; inset: 0; pointer-events: none; font-family: system-ui, sans-serif; z-index: 10; }
 #hud * { box-sizing: border-box; }
-.hud-panel { position: absolute; left: 8px; background: rgba(20,26,40,.82); border-radius: 10px;
+#hud, #hud * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.hud-panel { position: absolute; left: calc(8px + env(safe-area-inset-left, 0px));
+  background: rgba(20,26,40,.82); border-radius: 10px;
   padding: 8px 10px; width: 168px; pointer-events: auto; color: #dfe6f2; backdrop-filter: blur(4px); }
-#needs-panel { top: 8px; }
-#skills-panel { top: 8px; left: auto; right: 8px; }
+#needs-panel { top: calc(8px + env(safe-area-inset-top, 0px)); }
+#skills-panel { top: calc(8px + env(safe-area-inset-top, 0px)); left: auto; right: calc(8px + env(safe-area-inset-right, 0px)); }
 .hud-panel h3 { margin: 0 0 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
   color: #93a3c0; cursor: pointer; user-select: none; }
 .hud-panel h3::after { content: ' ▾'; }
@@ -25,34 +27,35 @@ const CSS = `
 .bar-fill.low { animation: hud-blink 1s infinite; }
 @keyframes hud-blink { 50% { filter: brightness(1.7); } }
 
-#time-bar { position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+#time-bar { position: absolute; top: calc(8px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%);
   background: rgba(20,26,40,.82); border-radius: 999px; padding: 5px 8px; pointer-events: auto;
   display: flex; align-items: center; gap: 4px; color: #dfe6f2; backdrop-filter: blur(4px); }
 #time-bar .clock { font-size: 14px; font-variant-numeric: tabular-nums; padding: 0 6px; min-width: 46px; text-align: center; }
 #time-bar.paused .clock { color: #e0b05f; }
 #time-bar button { border: 0; border-radius: 999px; width: 30px; height: 30px; font-size: 12px;
-  background: transparent; color: #93a3c0; cursor: pointer; }
+  background: transparent; color: #93a3c0; cursor: pointer; touch-action: manipulation; }
 #time-bar button.active { background: rgba(90,120,190,.4); color: #eaf0fb; }
 
-#action-menu { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+#action-menu { position: absolute; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
   background: rgba(20,26,40,.92); border-radius: 14px; padding: 10px 12px; pointer-events: auto;
   display: none; flex-direction: column; gap: 6px; min-width: 220px; max-width: 92vw;
   color: #dfe6f2; backdrop-filter: blur(6px); }
 #action-menu.open { display: flex; }
 #action-menu .am-title { font-size: 12px; color: #93a3c0; text-align: center; margin-bottom: 2px; }
 #action-menu button { pointer-events: auto; border: 0; border-radius: 9px; padding: 10px 14px;
-  font-size: 14px; background: #33406040; background: rgba(90,120,190,.28); color: #eaf0fb; cursor: pointer; }
+  font-size: 14px; background: #33406040; background: rgba(90,120,190,.28); color: #eaf0fb; cursor: pointer;
+  touch-action: manipulation; }
 #action-menu button:active { background: rgba(90,120,190,.55); }
 #action-menu button.am-cancel { background: transparent; color: #93a3c0; padding: 6px; font-size: 12px; }
 
-#activity-chip { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+#activity-chip { position: absolute; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
   background: rgba(20,26,40,.92); border-radius: 999px; padding: 8px 14px; color: #dfe6f2;
   font-size: 13px; display: none; align-items: center; gap: 10px; pointer-events: auto; }
 #activity-chip.open { display: flex; }
 #activity-chip button { border: 0; background: rgba(220,90,90,.35); color: #fbdada; border-radius: 999px;
-  padding: 4px 10px; font-size: 12px; cursor: pointer; }
+  padding: 4px 10px; font-size: 12px; cursor: pointer; touch-action: manipulation; }
 
-#quest-panel { bottom: 40px; max-height: 38vh; overflow-y: auto; }
+#quest-panel { bottom: calc(40px + env(safe-area-inset-bottom, 0px)); max-height: 38vh; overflow-y: auto; }
 #quest-panel .quest-section-title { font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
   color: #93a3c0; margin: 8px 0 4px; }
 #quest-panel .quest-section-title:first-child { margin-top: 0; }
@@ -61,13 +64,33 @@ const CSS = `
 .quest-item .qdesc { font-size: 10px; color: #b7c1d6; }
 .quest-empty { font-size: 10px; color: #6d7996; font-style: italic; }
 
-#quest-toasts { position: absolute; top: 56px; left: 50%; transform: translateX(-50%);
+#quest-toasts { position: absolute; top: calc(56px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%);
   display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; z-index: 11; }
 .quest-toast { background: rgba(20,26,40,.92); color: #eaf0fb; border-radius: 10px; padding: 8px 14px;
   font-size: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.35); opacity: 0; transform: translateY(-6px);
   transition: opacity .25s, transform .25s; border-left: 3px solid #5a9fd6; max-width: 80vw; text-align: center; }
 .quest-toast.show { opacity: 1; transform: translateY(0); }
 .quest-toast.completed { border-left-color: #6fce7a; }
+
+/* Mobile-polish audit (PROJECT_CONTEXT.md §8): at narrow portrait widths (~375-414px) the
+   top-center #time-bar (~210px wide) collides with the top-left/top-right needs/skills
+   panels (168px each) — three top:8px elements can't fit side by side under ~546px of
+   combined width. Fix: both side panels default to collapsed (header-only, like skills
+   already did) below the breakpoint, shrunk a bit further, and #time-bar/#quest-toasts
+   drop below the now-short collapsed header row instead of sharing it. Panels remain
+   tap-to-expand; a designer/player who expands one on a narrow screen may see it extend
+   under the time bar, which is an accepted tradeoff of an explicit user action rather than
+   the default collided-on-load state this fix targets. */
+@media (max-width: 500px) {
+  .hud-panel { width: 136px; padding: 6px 8px; }
+  .hud-panel h3 { font-size: 10px; }
+  .bar-row { grid-template-columns: 44px 1fr; gap: 4px; margin: 2px 0; }
+  .bar-row label { font-size: 9px; }
+  #time-bar { top: calc(46px + env(safe-area-inset-top, 0px)); padding: 4px 6px; gap: 3px; }
+  #time-bar button { width: 26px; height: 26px; }
+  #time-bar .clock { min-width: 38px; font-size: 12px; padding: 0 4px; }
+  #quest-toasts { top: calc(90px + env(safe-area-inset-top, 0px)); }
+}
 `;
 
 export class Hud {
@@ -141,8 +164,13 @@ export class Hud {
     for (const panel of [this.needsPanel, this.skillsPanel, this.questPanel]) {
       panel.querySelector('h3')!.addEventListener('click', () => panel.classList.toggle('collapsed'));
     }
-    // portrait phones start with skills collapsed to save space
-    if (window.innerWidth < 500) this.skillsPanel.classList.add('collapsed');
+    // Narrow portrait phones (~375-414px): both side panels start collapsed to save
+    // horizontal space so the top-center time-bar (and quest toasts below it) don't collide
+    // with them (PROJECT_CONTEXT.md §8 mobile-polish audit) — tap either header to expand.
+    if (window.innerWidth < 500) {
+      this.skillsPanel.classList.add('collapsed');
+      this.needsPanel.classList.add('collapsed');
+    }
 
     this.rebuildBars();
   }

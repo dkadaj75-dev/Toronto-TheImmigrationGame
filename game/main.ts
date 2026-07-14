@@ -269,10 +269,16 @@ async function start() {
 
   let hudAcc = 0;
 
-  window.addEventListener('resize', () => {
+  const handleResize = () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
     cam.resize(window.innerWidth / window.innerHeight);
-  });
+  };
+  window.addEventListener('resize', handleResize);
+  // Mobile polish: 'resize' already fires on orientation change in every modern engine, but
+  // some mobile browsers report stale innerWidth/innerHeight for a brief moment during the
+  // rotation animation — re-run once more shortly after 'orientationchange' as a safety net
+  // (harmless no-op double-call when dimensions already settled).
+  window.addEventListener('orientationchange', () => setTimeout(handleResize, 200));
 
   // --- data hot-reload (design pillar: tuning is play-test-live) ---
   let currentMapId = data.map.id;

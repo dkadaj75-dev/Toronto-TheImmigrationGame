@@ -4,14 +4,24 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#1b2230" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
   <title>Condo Life</title>
   <style>
     :root { --hud-bg: rgba(20, 26, 38, 0.82); --hud-fg: #e8ecf4; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; overscroll-behavior: none; }
-    body { background: #1b2230; font-family: system-ui, -apple-system, sans-serif; touch-action: none; overflow: hidden; }
-    #app { position: fixed; inset: 0; }
-    canvas { display: block; }
+    body {
+      background: #1b2230; font-family: system-ui, -apple-system, sans-serif;
+      touch-action: none; overflow: hidden;
+      /* mobile polish: no native double-tap-zoom/callout/selection anywhere in the game shell —
+         this is a game, not a document; the HUD (game/ui.ts) is appended into this same body. */
+      -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #app { position: fixed; inset: 0; overscroll-behavior: none; }
+    canvas { display: block; touch-action: none; }
     #boot {
       position: fixed; inset: 0; display: grid; place-items: center;
       color: var(--hud-fg); background: #1b2230; z-index: 10;
@@ -38,5 +48,19 @@
   </div>
   <script type="module" src="/game/main.ts"></script>
   <script src="/tools/nav.js"></script>
+  <script>
+    // PWA (PROJECT_CONTEXT.md §8): registered on the game page only, never the
+    // tool pages (tools/*.html don't include this). Module-typed so the SW can
+    // import sw-routing.js's pure predicate directly. Network-first strategy
+    // (see sw.js's own comments) means this is safe to leave registered during
+    // `npm run dev` too — the cache is only ever an offline fallback.
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js', { type: 'module' }).catch((err) => {
+          console.warn('service worker registration failed (offline support disabled):', err);
+        });
+      });
+    }
+  </script>
 </body>
 </html>

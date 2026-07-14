@@ -1,0 +1,15 @@
+{
+  "name": "Condo Life",
+  "short_name": "Condo Life",
+  "description": "A Sims-like life simulation played in your browser — tap where to go, tap objects to act, watch your sim's needs and skills grow.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#1b2230",
+  "theme_color": "#1b2230",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
