@@ -47,6 +47,12 @@ export interface AssetDef {
   /** Normal (non-accident) assets ONLY (§7.3): which accidents can spawn from using this
    *  asset, and how likely. See game/accidents.ts for the roll/placement/hierarchy logic. */
   accidents?: AccidentRisk[];
+  /** Only meaningful when `mesh` points at an image (`.png`/`.jpg`/`.jpeg`/`.webp`/`.gif`) rather
+   *  than a GLB — game/sprites.ts's classifyMeshPath detects this by extension, no separate flag
+   *  needed (§7.5). orientation: "billboard" (default, always faces the camera — fire, smoke) or
+   *  "flat" (lies on the floor — puddles, debris, scorch marks). fps overrides an animated GIF's
+   *  own per-frame delays if set. See game/sprites.ts. */
+  sprite?: { orientation?: 'billboard' | 'flat'; fps?: number };
 }
 export interface AssetsData { categories: string[]; assets: AssetDef[]; }
 

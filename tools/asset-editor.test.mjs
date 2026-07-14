@@ -224,6 +224,23 @@ const clearedCb = doc.querySelector('input[data-path="clearedBy:extinguish"]');
 assert(clearedCb, 'clearedBy checklist scoped to fire\'s own interactions (extinguish)');
 assert(clearedCb.checked === true, 'fire\'s existing clearedBy:["extinguish"] pre-checks the box');
 
+// --- sprite card (§7.5): only shown when the mesh path is an image, not a GLB
+doc.querySelector('[data-asset-id="fire"]').click();
+assert(doc.querySelector('select[data-path="sprite.orientation"]') === null, 'no sprite card while fire mesh is a .glb');
+const fireMeshInput = doc.querySelector('input[data-path="mesh"]');
+fireMeshInput.value = '/models/fire.gif';
+fireMeshInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+doc.querySelector('[data-asset-id="fire"]').click(); // reselect to re-render the guarded card
+assert(doc.querySelector('select[data-path="sprite.orientation"]') !== null, 'sprite card appears once mesh is an image path');
+assert(doc.querySelector('select[data-path="sprite.orientation"]').value === 'billboard', 'orientation defaults to billboard when absent');
+assert(doc.querySelector('input[data-path="sprite.fps"]').value === '', 'fps blank by default');
+const spriteOrient = doc.querySelector('select[data-path="sprite.orientation"]');
+spriteOrient.value = 'flat';
+spriteOrient.dispatchEvent(new window.Event('change', { bubbles: true }));
+const spriteFps = doc.querySelector('input[data-path="sprite.fps"]');
+spriteFps.value = '12';
+spriteFps.dispatchEvent(new window.Event('input', { bubbles: true }));
+
 // --- save: PUT carries all edits
 doc.getElementById('save').click();
 await new Promise((r) => setTimeout(r, 50));
@@ -269,8 +286,12 @@ assert(savedRisk.modifiers[0].pctAtMax === -2, 'PUT carries modifier.pctAtMax');
 
 const savedFire = saved.assets.find((a) => a.id === 'fire');
 assert(JSON.stringify(savedFire.clearedBy) === JSON.stringify(['extinguish']), 'PUT preserves fire\'s untouched clearedBy');
+assert(savedFire.mesh === '/models/fire.gif', 'PUT carries fire\'s mesh path change to .gif');
+assert(savedFire.sprite.orientation === 'flat', 'PUT carries sprite.orientation');
+assert(savedFire.sprite.fps === 12, 'PUT carries sprite.fps');
 const savedWaterPuddle = saved.assets.find((a) => a.id === 'water_puddle');
 assert(!('accidents' in savedWaterPuddle), 'accident-category asset never gets an accidents[] key');
+assert(!('sprite' in savedWaterPuddle), 'untouched accident asset (still a .glb mesh) has no sprite key');
 
 // --- search filters sidebar
 const search = doc.getElementById('search');

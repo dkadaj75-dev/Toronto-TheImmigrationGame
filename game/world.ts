@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { GameData, AssetDef, CharacterTuning } from './data';
+import { classifyMeshPath, createSpriteInstance } from './sprites';
 
 // ------------------------------------------------------------------ GLB furniture
 // Templates are cached per URL and cloned per placement; clones share geometry/materials
@@ -61,10 +62,51 @@ export function applyMeshFit(model: THREE.Object3D, fit: AssetDef['meshFit']) {
   if (fit.yOffset) model.position.y += fit.yOffset;
 }
 
-/** Swap a stand-in group's contents for the asset's GLB once it loads; keep the box on failure. */
-function attachMesh(group: THREE.Group, def: AssetDef) {
+/** public/ serves at root — normalize "models/x.glb" → "/models/x.glb"; leave absolute/http(s) alone. */
+export function normalizeMeshUrl(mesh: string): string {
+  return /^(\/|https?:)/.test(mesh) ? mesh : '/' + mesh;
+}
+
+/**
+ * Swap a stand-in group's contents for the asset's visual once it loads; keeps the stand-in box
+ * on ANY failure (missing GLB, 404'd image, failed GIF decode) — same "instant box, async swap,
+ * never leave the scene broken" philosophy for every mesh-loading call site.
+ *
+ * §7.5 extension detection lives HERE (not duplicated per call site): `def.mesh`'s extension
+ * decides GLB vs. image via game/sprites.ts's classifyMeshPath, so world.ts (furniture),
+ * doors.ts (door panels), and accidents.ts (accident instances) all agree on the same rule by
+ * calling this ONE function instead of three copies of the same loader.
+ *
+ * `allowSprite: false` (doors.ts only) explicitly REJECTS the image path: a billboard sprite
+ * always faces the camera regardless of the hinge pivot's rotation, and a floor-flat plane
+ * doesn't read as a door at all — neither sprite orientation can represent a swinging door
+ * panel, so a door pointed at an image just keeps its GLB-only stand-in box with a console
+ * warning, rather than silently rendering something that looks wrong. Every other call site
+ * (furniture, accidents) defaults to `allowSprite: true` and gets sprite support for free.
+ *
+ * When a sprite is created, `group.userData.spriteUpdate` is set to its per-frame GIF-advance
+ * callback — main.ts's render loop calls it via a single `world.traverse(...)` sweep each frame
+ * (see main.ts), so any group anywhere in the scene graph gets its frames advanced with zero
+ * additional per-call-site wiring.
+ */
+export function attachMesh(group: THREE.Group, def: AssetDef, opts: { allowSprite?: boolean } = {}) {
   if (!def.mesh) return;
-  const url = /^(\/|https?:)/.test(def.mesh) ? def.mesh : '/' + def.mesh; // public/ serves at root
+  const url = normalizeMeshUrl(def.mesh);
+  if (classifyMeshPath(url) === 'image') {
+    if (opts.allowSprite === false) {
+      console.warn(`Asset "${def.id}" mesh (${url}) is an image, but this attachment point doesn't support sprites (see world.ts's attachMesh doc comment) — keeping the stand-in.`);
+      return;
+    }
+    const inst = createSpriteInstance(def, url);
+    inst.ready
+      .then(() => {
+        group.clear();
+        group.add(inst.object);
+        group.userData.spriteUpdate = (dt: number) => inst.update(dt);
+      })
+      .catch(() => console.warn(`Could not load sprite image for "${def.id}" (${url}) — keeping stand-in.`));
+    return;
+  }
   loadMeshTemplate(url)
     .then((template) => {
       const model = template.clone(true);

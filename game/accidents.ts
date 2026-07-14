@@ -33,7 +33,7 @@ import type { AssetDef, AccidentRisk, AccidentRiskModifier, GameData, StatsData 
 import type { EvalContext } from './quests';
 import { resolveVar } from './quests';
 import { type NavGrid, type Cell, isWalkable, worldToCell, cellCenter } from './nav';
-import { loadMeshTemplate, applyMeshFit, normalizeModelToFootprint } from './world';
+import { attachMesh } from './world';
 
 // ==================================================================== pure risk math
 
@@ -249,8 +249,9 @@ function clamp01(v: number): number { return clamp(v, 0, 1); }
 const ACCIDENT_STANDIN_COLORS: Record<string, number> = { fire: 0xff6a3d, water_puddle: 0x4fa8e0 };
 
 /** Footprint-sized colored box, same "instant stand-in" philosophy as world.ts's makeStandIn —
- *  swapped for a GLB clone if/when `def.mesh` loads (attachAccidentMesh below). Puddles render
- *  thin/flat and non-shadow-casting; anything else (fire) gets a small upright block. */
+ *  swapped for a GLB clone OR (§7.5) an image/GIF sprite if/when `def.mesh` loads, via world.ts's
+ *  shared `attachMesh` (see buildGroup below). Puddles render thin/flat and non-shadow-casting;
+ *  anything else (fire) gets a small upright block. */
 function makeAccidentStandIn(def: AssetDef): THREE.Group {
   const g = new THREE.Group();
   g.name = `accident:${def.id}`;
@@ -264,23 +265,6 @@ function makeAccidentStandIn(def: AssetDef): THREE.Group {
   body.castShadow = !isFlat;
   g.add(body);
   return g;
-}
-
-function attachAccidentMesh(group: THREE.Group, def: AssetDef) {
-  if (!def.mesh) return;
-  const url = /^(\/|https?:)/.test(def.mesh) ? def.mesh : '/' + def.mesh;
-  loadMeshTemplate(url)
-    .then((template) => {
-      const model = template.clone(true);
-      normalizeModelToFootprint(model, def.footprint);
-      applyMeshFit(model, def.meshFit);
-      model.traverse((o) => {
-        if (o instanceof THREE.Mesh) { o.castShadow = true; o.userData.sharedResource = true; }
-      });
-      group.clear();
-      group.add(model);
-    })
-    .catch(() => console.warn(`Could not load mesh for accident "${def.id}" (${url}) — keeping stand-in.`));
 }
 
 function disposeAccidentGroup(g: THREE.Group) {
@@ -368,7 +352,7 @@ export class AccidentsController {
     group.position.set(rec.pos[0], 0, rec.pos[1]);
     group.rotation.y = THREE.MathUtils.degToRad(rec.rotDeg);
     group.userData = { assetId: def.id, interactions: def.interactions, accidentKey: rec.key };
-    attachAccidentMesh(group, def);
+    attachMesh(group, def); // §7.5: sprite support (allowSprite defaults true) is "for free" here
     this.groups.set(rec.key, group);
     this.getWorld().add(group);
   }

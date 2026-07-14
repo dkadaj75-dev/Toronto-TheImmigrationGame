@@ -336,6 +336,11 @@ async function start() {
     const simPos: [number, number] = [sim.position.x, sim.position.z];
     const simPath = agent.getPathPoints();
     for (const d of doors.instances) d.update(sdt, simPos, simPath);
+    // §7.5: animated-GIF sprites (furniture AND accidents — anything attached via world.ts's
+    // shared attachMesh) advance on the SAME sim time as doors/the animation mixer. One traversal
+    // covers every group in the current world (accidents' live groups and doors.group are both
+    // parented under it), so a sprite gets its frames ticked with no extra per-caller wiring.
+    world.traverse((o) => { o.userData.spriteUpdate?.(sdt); });
     anim?.update(sdt); // sim time: pause freezes the character, 2×/3× speed it up
     cue.update(dt); // UI feedback stays real-time
     autonomy.update(sdt);

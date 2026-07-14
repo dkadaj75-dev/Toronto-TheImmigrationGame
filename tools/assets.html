@@ -188,6 +188,15 @@ function selectInput(options, get, set, path) {
   sel.addEventListener('change', () => { set(sel.value); markDirty(); });
   return sel;
 }
+// §7.5: same extension list as game/sprites.ts's classifyMeshPath (kept in sync manually — this
+// classic inline script deliberately doesn't import game/*.ts, same convention as every other
+// tool's plain-script half, e.g. the Interaction Editor's own slugify).
+const IMAGE_MESH_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
+function isImageMesh(mesh) {
+  const m = /\.([a-z0-9]+)(?:[?#].*)?$/i.exec(String(mesh || '').trim());
+  return !!m && IMAGE_MESH_EXTENSIONS.includes(m[1].toLowerCase());
+}
+
 // needs.<id> / skills.<id> namespace, matching game/quests.ts's resolveVar / accidents.ts's
 // statMaxFor — the ONLY var paths accident risk modifiers meaningfully interpolate against.
 function accidentVarOptions() {
@@ -455,6 +464,28 @@ function renderEditor() {
     'meshFit.yOffset',
   )));
   root.appendChild(card4b);
+
+  // --- sprite (§7.5: only rendered when the mesh path is an image — png/jpg/webp/gif — rather
+  // than a GLB; sparse writes, same ensure/prune pattern as meshFit above).
+  if (isImageMesh(a.mesh)) {
+    const card4d = document.createElement('div');
+    card4d.className = 'card';
+    card4d.innerHTML = '<h2>Sprite</h2><div class="hint">This asset\'s mesh path looks like an image, not a GLB — it renders as a textured plane instead. Billboard (default) always faces the camera (fire, smoke); flat lies on the floor (puddles, debris). fps overrides an animated GIF\'s own frame delays; leave blank to use the GIF\'s native timing.</div>';
+    const ensureSprite = () => (a.sprite ??= {});
+    const pruneSprite = () => { if (a.sprite && Object.keys(a.sprite).length === 0) delete a.sprite; };
+    card4d.appendChild(frow('orientation', selectInput(
+      [{ value: 'billboard', label: 'billboard (faces camera)' }, { value: 'flat', label: 'flat (lies on floor)' }],
+      () => a.sprite?.orientation ?? 'billboard',
+      (v) => { if (v === 'billboard') { if (a.sprite) delete a.sprite.orientation; } else ensureSprite().orientation = v; pruneSprite(); },
+      'sprite.orientation',
+    )));
+    card4d.appendChild(frow('fps (blank = use the GIF\'s own frame delays)', numInput(
+      () => a.sprite?.fps,
+      (v) => { if (v === undefined) { if (a.sprite) delete a.sprite.fps; } else ensureSprite().fps = v; pruneSprite(); },
+      'sprite.fps',
+    )));
+    root.appendChild(card4d);
+  }
 
   // --- door (§7.1: only on category "door" — hingeOffset/openAngleDeg/openSeconds/closeSeconds/
   // triggerDistance, sparse — absent fields fall back to tuning.doors at runtime, see game/doors.ts)

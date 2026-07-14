@@ -25,7 +25,7 @@
 
 import * as THREE from 'three';
 import type { AssetDef, GameData, TuningData } from './data';
-import { loadMeshTemplate, applyMeshFit, normalizeModelToFootprint } from './world';
+import { attachMesh } from './world';
 
 /** Marker height for the stand-in panel — matches the pre-existing plain door marker in world.ts. */
 export const DOOR_HEIGHT = 2.1;
@@ -206,21 +206,10 @@ export function createDoorInstance(door: DoorEntry, def: AssetDef, tuning: Tunin
   box.castShadow = true;
   panel.add(box);
 
-  if (def.mesh) {
-    const url = /^(\/|https?:)/.test(def.mesh) ? def.mesh : '/' + def.mesh;
-    loadMeshTemplate(url)
-      .then((template) => {
-        const model = template.clone(true);
-        normalizeModelToFootprint(model, def.footprint);
-        applyMeshFit(model, def.meshFit);
-        model.traverse((o) => {
-          if (o instanceof THREE.Mesh) { o.castShadow = true; o.userData.sharedResource = true; }
-        });
-        panel.clear();
-        panel.add(model);
-      })
-      .catch(() => console.warn(`Could not load door mesh for "${def.id}" (${url}) — keeping stand-in panel.`));
-  }
+  // §7.5: door panels explicitly reject the image/sprite path (allowSprite: false) — see
+  // world.ts's attachMesh doc comment for why a billboard or floor-flat plane can't represent a
+  // swinging hinge panel. GLB behavior is completely unchanged (shared with furniture/accidents).
+  attachMesh(panel, def, { allowSprite: false });
 
   let angle = 0; // 0 = closed, degrees of swing added on top of baseYaw
   let open = false; // current target state (not the mid-swing angle)
