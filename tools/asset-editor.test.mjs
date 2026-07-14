@@ -8,7 +8,7 @@ import { JSDOM } from 'jsdom';
 const html = readFileSync(new URL('../tools/assets.html', import.meta.url), 'utf8');
 
 const assets = {
-  categories: ['seating', 'electronics'],
+  categories: ['seating', 'electronics', 'door'],
   assets: [
     { id: 'couch', name: 'Couch', category: 'seating', mesh: '/models/couch.glb', buyPrice: 500, sellPrice: 375, environmentScore: 5, footprint: [2, 1], seats: 3, seatTarget: true, interactions: [] },
     { id: 'tv', name: 'TV', category: 'electronics', mesh: '/models/tv.glb', buyPrice: 800, sellPrice: 600, environmentScore: 8, footprint: [1, 1], interactions: ['watch_tv'] },
@@ -128,6 +128,26 @@ lampScale.dispatchEvent(new window.Event('input', { bubbles: true }));
 lampScale.value = '';
 lampScale.dispatchEvent(new window.Event('input', { bubbles: true }));
 
+// --- door section (§7.1): only rendered when category === "door"; absent otherwise
+assert(doc.querySelector('input[data-path="door.hingeX"]') === null, 'no door section while lamp is category seating');
+const lampCat = doc.querySelector('select[data-path="category"]');
+lampCat.value = 'door';
+lampCat.dispatchEvent(new window.Event('change', { bubbles: true }));
+doc.querySelector('[data-asset-id="lamp"]').click(); // category change doesn't itself re-render the editor — reselect
+assert(doc.querySelector('input[data-path="door.hingeX"]') !== null, 'door section appears once category is door');
+assert(doc.querySelector('input[data-path="door.hingeX"]').value === '', 'hingeX blank by default');
+assert(doc.querySelector('input[data-path="door.openAngleDeg"]').value === '', 'openAngleDeg blank by default (tuning fallback)');
+const hingeX = doc.querySelector('input[data-path="door.hingeX"]');
+hingeX.value = '-0.5';
+hingeX.dispatchEvent(new window.Event('input', { bubbles: true }));
+const hingeZ = doc.querySelector('input[data-path="door.hingeZ"]');
+hingeZ.value = '0';
+hingeZ.dispatchEvent(new window.Event('input', { bubbles: true }));
+const openAngle = doc.querySelector('input[data-path="door.openAngleDeg"]');
+openAngle.value = '100';
+openAngle.dispatchEvent(new window.Event('input', { bubbles: true }));
+// openSeconds/closeSeconds/triggerDistance deliberately left blank — sparse, tuning fallback
+
 // --- save: PUT carries all edits
 doc.getElementById('save').click();
 await new Promise((r) => setTimeout(r, 50));
@@ -150,6 +170,12 @@ const savedLamp = saved.assets.find((a) => a.id === 'lamp');
 assert(!('buyable' in savedLamp), 'new asset has no buyable key (defaults true)');
 assert(!('facingDeg' in savedLamp), 'new asset has no facingDeg key (defaults 0)');
 assert(!('meshFit' in savedLamp), 'new asset has no meshFit key (nothing set)');
+assert(savedLamp.category === 'door', 'PUT carries lamp\'s category change to door');
+assert(savedLamp.door.hingeOffset[0] === -0.5 && savedLamp.door.hingeOffset[1] === 0, 'PUT carries door.hingeOffset');
+assert(savedLamp.door.openAngleDeg === 100, 'PUT carries door.openAngleDeg');
+assert(!('openSeconds' in savedLamp.door), 'untouched door.openSeconds stays absent (sparse, tuning fallback)');
+assert(!('closeSeconds' in savedLamp.door), 'untouched door.closeSeconds stays absent (sparse, tuning fallback)');
+assert(!('triggerDistance' in savedLamp.door), 'untouched door.triggerDistance stays absent (sparse, tuning fallback)');
 
 // --- search filters sidebar
 const search = doc.getElementById('search');

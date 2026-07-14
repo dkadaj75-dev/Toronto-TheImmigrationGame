@@ -7,7 +7,8 @@
     "plumbing",
     "electronics",
     "surfaces",
-    "decor"
+    "decor",
+    "door"
   ],
   "assets": [
     {
@@ -240,6 +241,27 @@
         "talk_to",
         "play"
       ]
+    },
+    {
+      "id": "door_basic",
+      "name": "Basic door",
+      "category": "door",
+      "mesh": "models/door.glb",
+      "buyPrice": 150,
+      "sellPrice": 110,
+      "environmentScore": 0,
+      "footprint": [
+        1,
+        0.12
+      ],
+      "interactions": [],
+      "buyable": false,
+      "door": {
+        "hingeOffset": [
+          -0.5,
+          0
+        ]
+      }
     }
   ]
 }

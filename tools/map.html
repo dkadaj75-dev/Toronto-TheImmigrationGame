@@ -707,6 +707,25 @@ function renderInspector() {
     host.appendChild(field('x', d.at[0], edit((v) => { d.at[0] = v; }), { data: 'door.x' }));
     host.appendChild(field('z', d.at[1], edit((v) => { d.at[1] = v; }), { data: 'door.z' }));
     host.appendChild(field('orientation', d.orientation, edit((v) => { d.orientation = v; }), { options: ['vertical', 'horizontal'], data: 'door.orientation' }));
+    // §7.1: door-category assets only, plus "(none)" → renders/animates the linked asset's
+    // mesh on the doorway; "(none)" keeps the old bare-opening behavior (deletes the key).
+    const doorAssetRow = document.createElement('div'); doorAssetRow.className = 'field';
+    const doorAssetLabel = document.createElement('label'); doorAssetLabel.textContent = 'door asset';
+    const doorAssetSel = document.createElement('select'); doorAssetSel.dataset.field = 'door.assetId';
+    const noneOpt = document.createElement('option'); noneOpt.value = ''; noneOpt.textContent = '(none)';
+    doorAssetSel.appendChild(noneOpt);
+    for (const a of state.assets.assets.filter((x) => x.category === 'door')) {
+      const o = document.createElement('option'); o.value = a.id; o.textContent = a.name;
+      doorAssetSel.appendChild(o);
+    }
+    doorAssetSel.value = d.assetId ?? '';
+    doorAssetSel.addEventListener('change', () => {
+      pushUndo();
+      if (doorAssetSel.value) d.assetId = doorAssetSel.value; else delete d.assetId;
+      markDirty(); redraw();
+    });
+    doorAssetRow.append(doorAssetLabel, doorAssetSel);
+    host.appendChild(doorAssetRow);
     host.appendChild(del);
   } else if (s.kind === 'spawn') {
     host.appendChild(Object.assign(document.createElement('h2'), { textContent: 'Spawn' }));

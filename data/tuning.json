@@ -41,6 +41,13 @@
     "seatViewDistance": 2.5,
     "_source": "Asset facing slice (PROJECT_CONTEXT.md §7.2). useSpotClearance = gap beyond an asset's footprint edge for a front-approach stand point; seatViewDistance = how far in front of a seat-aware target (e.g. the TV) the viewing point sits when ranking candidate seats — ports the Unreal prototype's RightVector*400 (~4m) at a web-appropriate scale."
   },
+  "doors": {
+    "openSeconds": 0.5,
+    "closeSeconds": 0.5,
+    "openAngleDeg": 90,
+    "triggerDistance": 1.5,
+    "_source": "Doors-as-assets slice (PROJECT_CONTEXT.md §7.1). Defaults for AssetDef.door fields a door instance doesn't override. 0.5s open/close is the designer's requested default; triggerDistance is meters (map gridSize=1 → 1 grid unit = 1m), sized so the door swings open a beat before the sim (walkSpeed 2 m/s) reaches it."
+  },
   "character": {
     "meshPath": "/models/character.glb",
     "heightMeters": 1.55,

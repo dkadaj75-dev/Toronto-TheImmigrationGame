@@ -193,6 +193,14 @@ export class SimAgent {
     return this.pathIndex < this.path.length;
   }
 
+  /** Current position + remaining unvisited waypoints — the "current nav path" systems like
+   *  game/doors.ts's crossing test need to know what the sim is about to walk through. Empty
+   *  while not moving (nothing planned to cross anything). */
+  getPathPoints(): [number, number][] {
+    if (!this.isMoving) return [];
+    return [[this.object.position.x, this.object.position.z], ...this.path.slice(this.pathIndex)];
+  }
+
   /** Moving, en route to an action, or performing one — autonomy stays out of the way. */
   get isBusy(): boolean {
     return this.isMoving || this.queued !== null || this.current !== null;

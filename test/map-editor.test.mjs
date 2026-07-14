@@ -191,6 +191,31 @@ console.log('map-editor.test — doors: place on wall / inferred orientation / m
   check('door deletable', st.doc.doors.length === before);
 }
 
+// ------------------------------------------------------------------ doors-as-assets (§7.1)
+console.log('map-editor.test — door asset dropdown (assetId round-trip)');
+{
+  ME.setMode('doors');
+  const before = st.doc.doors.length;
+  pointer('pointerdown', 9.15, 1.32);
+  pointer('pointerup', 9.15, 1.32);
+  const sel = doc.querySelector('select[data-field="door.assetId"]');
+  check('door asset dropdown renders, defaulting to (none)', !!sel && sel.value === '');
+  const doorAssets = assets.assets.filter((a) => a.category === 'door').map((a) => a.id);
+  const offered = [...sel.options].slice(1).map((o) => o.value); // skip the "(none)" option
+  check('dropdown offers exactly the door-category assets', doorAssets.length > 0 && offered.length === doorAssets.length && doorAssets.every((id) => offered.includes(id)), offered.join(','));
+
+  sel.value = 'door_basic';
+  sel.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('picking an asset sets doors[].assetId', st.doc.doors.at(-1).assetId === 'door_basic');
+
+  sel.value = '';
+  sel.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('picking (none) removes assetId — back to a bare opening', !('assetId' in st.doc.doors.at(-1)));
+
+  ME.deleteSelected(); // clean up the test door
+  check('cleanup: door count restored', st.doc.doors.length === before);
+}
+
 // ------------------------------------------------------------------ slice 2: spawn
 console.log('map-editor.test — spawn');
 {

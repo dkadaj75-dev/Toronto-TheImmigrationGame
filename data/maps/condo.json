@@ -226,6 +226,7 @@
         3.5
       ],
       "orientation": "vertical",
+      "assetId": "door_basic",
       "_note": "living ↔ kitchen"
     },
     {
@@ -234,6 +235,7 @@
         6
       ],
       "orientation": "horizontal",
+      "assetId": "door_basic",
       "_note": "living ↔ bedroom"
     },
     {
@@ -242,6 +244,7 @@
         6
       ],
       "orientation": "horizontal",
+      "assetId": "door_basic",
       "_note": "kitchen ↔ bathroom (hallway-less placeholder)"
     },
     {
@@ -250,6 +253,7 @@
         8
       ],
       "orientation": "vertical",
+      "assetId": "door_basic",
       "_note": "bedroom ↔ bathroom"
     }
   ],

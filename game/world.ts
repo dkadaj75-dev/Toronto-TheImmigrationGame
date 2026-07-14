@@ -11,7 +11,8 @@ import type { GameData, AssetDef, CharacterTuning } from './data';
 // with the template, so they're tagged sharedResource and skipped by disposal.
 const gltfCache = new Map<string, Promise<THREE.Group>>();
 
-function loadMeshTemplate(url: string): Promise<THREE.Group> {
+/** Exported for reuse by game/doors.ts (same cached-template-clone pattern for door panels). */
+export function loadMeshTemplate(url: string): Promise<THREE.Group> {
   let p = gltfCache.get(url);
   if (!p) {
     p = new Promise((resolve, reject) => new GLTFLoader().load(url, (g) => resolve(g.scene), undefined, reject));
@@ -47,8 +48,10 @@ export function normalizeModelToFootprint(model: THREE.Object3D, footprint: [num
  *    game's local +Z convention. AssetDef.facingDeg (game/facing.ts) is then defined in terms
  *    of the model's orientation AFTER this correction, so the two fields compose cleanly.
  *  - yOffset: nudges the model vertically post-grounding (e.g. a door sitting flush in its frame).
+ *
+ * Exported for reuse by game/doors.ts, which applies the same correction to a door panel's GLB.
  */
-function applyMeshFit(model: THREE.Object3D, fit: AssetDef['meshFit']) {
+export function applyMeshFit(model: THREE.Object3D, fit: AssetDef['meshFit']) {
   if (!fit) return;
   if (fit.scale !== undefined) {
     if (Array.isArray(fit.scale)) model.scale.set(model.scale.x * fit.scale[0], model.scale.y * fit.scale[1], model.scale.z * fit.scale[2]);
@@ -123,9 +126,15 @@ export function buildWorld(data: GameData): THREE.Group {
     root.add(mesh);
   }
 
-  // --- doors (frame markers for now; animated doors in Phase 1) ---
+  // --- doors: a bare frame-marker box UNLESS the door links to a door-capable asset (has an
+  // `AssetDef.door` block, §7.1) — those are rendered + animated by game/doors.ts's buildDoors()
+  // instead (main.ts adds its group into this same root). Doors without an assetId, or whose
+  // assetId doesn't resolve to a door-capable asset, keep this exact old behavior unchanged —
+  // old maps stay valid with zero visual/behavioral change.
   const doorMat = new THREE.MeshLambertMaterial({ color: 0x8a5a2b });
   for (const door of map.doors) {
+    const doorDef = door.assetId ? byId.get(door.assetId) : undefined;
+    if (doorDef?.door) continue; // handled by doors.ts
     const geo = door.orientation === 'vertical'
       ? new THREE.BoxGeometry(0.14, 2.1, 1.0)
       : new THREE.BoxGeometry(1.0, 2.1, 0.14);

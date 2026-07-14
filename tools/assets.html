@@ -296,6 +296,49 @@ function renderEditor() {
   )));
   root.appendChild(card4b);
 
+  // --- door (§7.1: only on category "door" — hingeOffset/openAngleDeg/openSeconds/closeSeconds/
+  // triggerDistance, sparse — absent fields fall back to tuning.doors at runtime, see game/doors.ts)
+  if (a.category === 'door') {
+    const card4c = document.createElement('div');
+    card4c.className = 'card';
+    card4c.innerHTML = '<h2>Door</h2><div class="hint">hingeOffset is in the door\'s own model-local frame (local X = the door\'s long/swing axis, local Z = its thickness axis) — see game/doors.ts. The other fields are sparse: blank = use the tuning.doors default.</div>';
+    const ensureDoor = () => (a.door ??= {});
+    const hingePair = document.createElement('div');
+    hingePair.className = 'pair';
+    const hingeAt = (i) => a.door?.hingeOffset?.[i];
+    const setHinge = (i) => (v) => {
+      const cur = Array.isArray(a.door?.hingeOffset) ? [...a.door.hingeOffset] : [0, 0];
+      cur[i] = v ?? 0;
+      ensureDoor().hingeOffset = cur;
+    };
+    hingePair.append(
+      numInput(() => hingeAt(0), setHinge(0), 'door.hingeX'),
+      numInput(() => hingeAt(1), setHinge(1), 'door.hingeZ'),
+    );
+    card4c.appendChild(frow('hinge offset x / z (model-local meters)', hingePair));
+    card4c.appendChild(frow('open angle ° (blank = tuning default)', numInput(
+      () => a.door?.openAngleDeg,
+      (v) => { if (v === undefined) { if (a.door) delete a.door.openAngleDeg; } else ensureDoor().openAngleDeg = v; },
+      'door.openAngleDeg',
+    )));
+    card4c.appendChild(frow('open seconds (blank = tuning default)', numInput(
+      () => a.door?.openSeconds,
+      (v) => { if (v === undefined) { if (a.door) delete a.door.openSeconds; } else ensureDoor().openSeconds = v; },
+      'door.openSeconds',
+    )));
+    card4c.appendChild(frow('close seconds (blank = tuning default)', numInput(
+      () => a.door?.closeSeconds,
+      (v) => { if (v === undefined) { if (a.door) delete a.door.closeSeconds; } else ensureDoor().closeSeconds = v; },
+      'door.closeSeconds',
+    )));
+    card4c.appendChild(frow('trigger distance (meters, blank = tuning default)', numInput(
+      () => a.door?.triggerDistance,
+      (v) => { if (v === undefined) { if (a.door) delete a.door.triggerDistance; } else ensureDoor().triggerDistance = v; },
+      'door.triggerDistance',
+    )));
+    root.appendChild(card4c);
+  }
+
   // --- danger zone
   const card5 = document.createElement('div');
   card5.className = 'card';

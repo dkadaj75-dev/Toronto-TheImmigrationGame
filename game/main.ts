@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { loadAll, watchData, type GameData } from './data';
 import { TouchCamera } from './camera';
 import { buildWorld, makeSimStandIn, makeLights, applyDayNight, loadRiggedCharacter } from './world';
+import { buildDoors } from './doors';
 import { AnimController } from './anim';
 import { bakeNavGrid } from './nav';
 import { TapInput } from './input';
@@ -41,6 +42,8 @@ async function start() {
   scene.background = new THREE.Color(0x2a3346);
 
   let world = buildWorld(data);
+  let doors = buildDoors(data);
+  world.add(doors.group);
   const lights = makeLights();
   scene.add(world, lights);
 
@@ -237,6 +240,8 @@ async function start() {
     scene.remove(world);
     disposeGroup(world);
     world = buildWorld(data);
+    doors = buildDoors(data);
+    world.add(doors.group);
     scene.add(world);
     cam.retune(data.tuning.camera, data.map);
     grid = bakeNavGrid(data.map, data.assets);
@@ -282,6 +287,11 @@ async function start() {
     applyDayNight(lights, scene, gameSeconds / 3600, data.tuning.time.nightStartHour, data.tuning.time.nightEndHour);
 
     agent.update(sdt);
+    // doors advance on the same sim time as the animation mixer (pause freezes them mid-swing,
+    // 2×/3× speeds them up) — reuses this per-frame loop, no dedicated door timer (§7.1).
+    const simPos: [number, number] = [sim.position.x, sim.position.z];
+    const simPath = agent.getPathPoints();
+    for (const d of doors.instances) d.update(sdt, simPos, simPath);
     anim?.update(sdt); // sim time: pause freezes the character, 2×/3× speed it up
     cue.update(dt); // UI feedback stays real-time
     autonomy.update(sdt);

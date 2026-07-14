@@ -35,6 +35,12 @@ export interface AssetDef {
    *  terms of the model's orientation AFTER this correction); yOffset nudges the model
    *  vertically post-grounding (e.g. a door needing to sit flush in its frame). */
   meshFit?: { scale?: number | [number, number, number]; yawOffsetDeg?: number; yOffset?: number };
+  /** Door-specific block on door-category assets (§7.1). hingeOffset is the rotation-axis
+   *  position in the door's CANONICAL model-local frame (local +X = the door's long/swing
+   *  axis, local +Z = its thickness axis — the SAME frame regardless of the door's orientation
+   *  in the map; game/doors.ts rotates that frame into place per-instance). The other fields
+   *  are sparse overrides of tuning.doors (absent = tuning default). See game/doors.ts. */
+  door?: { hingeOffset: [number, number]; openAngleDeg?: number; openSeconds?: number; closeSeconds?: number; triggerDistance?: number };
 }
 export interface AssetsData { categories: string[]; assets: AssetDef[]; }
 
@@ -76,7 +82,7 @@ export interface MapData {
   bounds: { w: number; h: number };
   floors: { id: string; polygon: [number, number][]; material: string }[];
   walls: { from: [number, number]; to: [number, number] }[];
-  doors: { at: [number, number]; orientation: 'vertical' | 'horizontal'; width?: number }[];
+  doors: { at: [number, number]; orientation: 'vertical' | 'horizontal'; width?: number; assetId?: string }[];
   spawn: { pos: [number, number]; facingDeg: number };
   placedObjects: { asset: string; pos: [number, number]; rotDeg: number }[];
 }
@@ -114,6 +120,10 @@ export interface TuningData {
    *  seatViewDistance = how far in front of a seat-aware target (e.g. the TV) the "viewing point"
    *  sits when ranking candidate seats — ports the Unreal prototype's RightVector·400 constant. */
   interaction?: { useSpotClearance?: number; seatViewDistance?: number };
+  /** Optional so pre-existing tuning fixtures/tests stay valid (same precedent as `interaction?`
+   *  above). Defaults for AssetDef.door fields when a door instance doesn't override them (§7.1).
+   *  triggerDistance is in meters (map gridSize=1 → 1 grid unit = 1 meter). */
+  doors?: { openSeconds?: number; closeSeconds?: number; openAngleDeg?: number; triggerDistance?: number };
   camera: { minZoom: number; maxZoom: number; minPitchDeg: number; maxPitchDeg: number; panBoundsPadding: number };
   /** quest log HUD tuning (§3 quest system) — no magic numbers in game/quests.ts or ui.ts */
   quests: { toastDurationSeconds: number; completedLogLimit: number };
