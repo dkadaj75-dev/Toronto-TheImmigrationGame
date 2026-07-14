@@ -41,8 +41,32 @@ export interface AssetDef {
    *  in the map; game/doors.ts rotates that frame into place per-instance). The other fields
    *  are sparse overrides of tuning.doors (absent = tuning default). See game/doors.ts. */
   door?: { hingeOffset: [number, number]; openAngleDeg?: number; openSeconds?: number; closeSeconds?: number; triggerDistance?: number };
+  /** Accident-category assets ONLY (§7.3): action ids whose completion on the accident
+   *  instance despawns it (e.g. fire's clearedBy: ["extinguish"]). See game/accidents.ts. */
+  clearedBy?: string[];
+  /** Normal (non-accident) assets ONLY (§7.3): which accidents can spawn from using this
+   *  asset, and how likely. See game/accidents.ts for the roll/placement/hierarchy logic. */
+  accidents?: AccidentRisk[];
 }
 export interface AssetsData { categories: string[]; assets: AssetDef[]; }
+
+/** One risk modifier: linear interpolation of a percentage-point contribution from `pctAt0`
+ *  (the referenced stat at 0) to `pctAtMax` (the stat at its max) — §7.3. `var` uses the SAME
+ *  condition namespace as quests (`needs.<id>`, `skills.<id>` — game/quests.ts's resolveVar). */
+export interface AccidentRiskModifier { var: string; pctAt0: number; pctAtMax: number; }
+
+/** Per-asset accident risk config (§7.3). `trigger` is a union of one today ("onUse", rolled
+ *  once when a sim finishes using the asset) — the union shape leaves room for future triggers
+ *  (time-based, idle) per the locked spec without a schema break. */
+export interface AccidentRisk {
+  accidentId: string;
+  trigger: 'onUse';
+  baseChancePercent: number;
+  placement: 'on' | 'adjacent';
+  /** grid-cell distance range for "adjacent" placement, e.g. [1,2] = 1–2 squares away. */
+  adjacentRange?: [number, number];
+  modifiers?: AccidentRiskModifier[];
+}
 
 /** Designer-defined sim-state variable (PROJECT_CONTEXT.md §3.1). `funds` is a separate built-in
  *  namespace (seeded from tuning.economy.startingFunds) and is NOT one of these. */

@@ -66,17 +66,18 @@
 <script>
 // ------------------------------------------------------------------ state
 const API = '/api/data/';
-const state = { assets: null, interactions: null, map: null, selected: null, dirty: false };
+const state = { assets: null, interactions: null, map: null, stats: null, selected: null, dirty: false };
 
 async function load() {
   setStatus('loading…');
   try {
-    const [a, i, m] = await Promise.all([
+    const [a, i, m, s] = await Promise.all([
       fetch(API + 'assets.json').then((r) => { if (!r.ok) throw new Error('assets.json HTTP ' + r.status); return r.json(); }),
       fetch(API + 'interactions.json').then((r) => { if (!r.ok) throw new Error('interactions.json HTTP ' + r.status); return r.json(); }),
       fetch(API + 'maps/condo.json').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(API + 'stats.json').then((r) => (r.ok ? r.json() : { needs: [], skills: [] })).catch(() => ({ needs: [], skills: [] })),
     ]);
-    state.assets = a; state.interactions = i; state.map = m;
+    state.assets = a; state.interactions = i; state.map = m; state.stats = s;
     state.dirty = false;
     if (!state.selected && a.assets.length) state.selected = a.assets[0].id;
     renderAll();
@@ -175,6 +176,131 @@ function checkInput(get, set, path) {
   i.addEventListener('change', () => { set(i.checked); markDirty(); });
   return i;
 }
+function selectInput(options, get, set, path) {
+  const sel = document.createElement('select');
+  sel.dataset.path = path;
+  for (const o of options) {
+    const opt = document.createElement('option');
+    opt.value = o.value; opt.textContent = o.label;
+    sel.appendChild(opt);
+  }
+  sel.value = get();
+  sel.addEventListener('change', () => { set(sel.value); markDirty(); });
+  return sel;
+}
+// needs.<id> / skills.<id> namespace, matching game/quests.ts's resolveVar / accidents.ts's
+// statMaxFor — the ONLY var paths accident risk modifiers meaningfully interpolate against.
+function accidentVarOptions() {
+  return [
+    ...state.stats.needs.map((n) => ({ value: 'needs.' + n.id, label: 'Need: ' + n.name })),
+    ...state.stats.skills.map((s) => ({ value: 'skills.' + s.id, label: 'Skill: ' + s.name })),
+  ];
+}
+
+// --- accidents risk section (§7.3), normal (non-accident) assets only.
+function accidentAssetOptions() {
+  return state.assets.assets.filter((x) => x.category === 'accident').map((x) => ({ value: x.id, label: x.name }));
+}
+function renderAccidentsCard(a) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = '<h2>Accidents</h2><div class="hint">What can go wrong while this asset is used, and how likely — accidentId options are accident-category assets only.</div>';
+  const accOpts = accidentAssetOptions();
+  const risks = a.accidents ?? [];
+
+  risks.forEach((risk, i) => {
+    const box = document.createElement('div');
+    box.className = 'card';
+    box.style.background = '#141c2e';
+    box.style.margin = '10px 0 0';
+
+    box.appendChild(frow('accident', selectInput(
+      accOpts.length ? accOpts : [{ value: risk.accidentId ?? '', label: '(no accident-category assets yet)' }],
+      () => risk.accidentId, (v) => { risk.accidentId = v; }, `accidents.${i}.accidentId`,
+    )));
+    box.appendChild(frow('trigger', selectInput([{ value: 'onUse', label: 'onUse' }], () => 'onUse', () => { risk.trigger = 'onUse'; }, `accidents.${i}.trigger`)));
+    box.appendChild(frow('base chance %', numInput(() => risk.baseChancePercent, (v) => { risk.baseChancePercent = v ?? 0; }, `accidents.${i}.baseChancePercent`)));
+    box.appendChild(frow('placement', selectInput(
+      [{ value: 'on', label: 'on (same cells as this asset)' }, { value: 'adjacent', label: 'adjacent (nearby free cell)' }],
+      () => risk.placement, (v) => { risk.placement = v; renderAll(); }, `accidents.${i}.placement`,
+    )));
+    if (risk.placement === 'adjacent') {
+      const rangePair = document.createElement('div');
+      rangePair.className = 'pair';
+      const rangeAt = (k) => risk.adjacentRange?.[k];
+      const setRange = (k) => (v) => {
+        const cur = Array.isArray(risk.adjacentRange) ? [...risk.adjacentRange] : [1, 2];
+        cur[k] = v ?? (k === 0 ? 1 : 2);
+        risk.adjacentRange = cur;
+      };
+      rangePair.append(
+        numInput(() => rangeAt(0), setRange(0), `accidents.${i}.adjacentRange.0`),
+        numInput(() => rangeAt(1), setRange(1), `accidents.${i}.adjacentRange.1`),
+      );
+      box.appendChild(frow('adjacent range (min/max grid squares)', rangePair));
+    }
+
+    // --- modifiers
+    const modsTitle = document.createElement('div');
+    modsTitle.className = 'hint';
+    modsTitle.textContent = 'Modifiers (linear lerp of a % contribution from the stat at 0 to the stat at its max):';
+    box.appendChild(modsTitle);
+    const mods = risk.modifiers ?? [];
+    mods.forEach((mod, j) => {
+      const modRow = document.createElement('div');
+      modRow.className = 'frow';
+      modRow.appendChild(selectInput(accidentVarOptions(), () => mod.var, (v) => { mod.var = v; }, `accidents.${i}.modifiers.${j}.var`));
+      const pctPair = document.createElement('div');
+      pctPair.className = 'pair';
+      pctPair.append(
+        numInput(() => mod.pctAt0, (v) => { mod.pctAt0 = v ?? 0; }, `accidents.${i}.modifiers.${j}.pctAt0`),
+        numInput(() => mod.pctAtMax, (v) => { mod.pctAtMax = v ?? 0; }, `accidents.${i}.modifiers.${j}.pctAtMax`),
+      );
+      modRow.appendChild(pctPair);
+      const rmMod = document.createElement('button');
+      rmMod.textContent = '× remove modifier';
+      rmMod.addEventListener('click', () => {
+        risk.modifiers = mods.filter((_, k) => k !== j);
+        if (!risk.modifiers.length) delete risk.modifiers;
+        markDirty(); renderAll();
+      });
+      modRow.appendChild(rmMod);
+      box.appendChild(modRow);
+    });
+    const addMod = document.createElement('button');
+    addMod.textContent = '+ Add modifier';
+    addMod.addEventListener('click', () => {
+      risk.modifiers = [...mods, { var: accidentVarOptions()[0]?.value ?? 'needs.hunger', pctAt0: 0, pctAtMax: 0 }];
+      markDirty(); renderAll();
+    });
+    box.appendChild(addMod);
+
+    const rmRisk = document.createElement('button');
+    rmRisk.className = 'danger';
+    rmRisk.textContent = '× Remove this risk';
+    rmRisk.style.marginTop = '8px';
+    rmRisk.addEventListener('click', () => {
+      a.accidents = risks.filter((_, k) => k !== i);
+      if (!a.accidents.length) delete a.accidents;
+      markDirty(); renderAll();
+    });
+    box.appendChild(rmRisk);
+
+    card.appendChild(box);
+  });
+
+  const addRisk = document.createElement('button');
+  addRisk.className = 'primary';
+  addRisk.style.marginTop = '10px';
+  addRisk.textContent = '+ Add accident risk';
+  addRisk.addEventListener('click', () => {
+    a.accidents = [...risks, { accidentId: accOpts[0]?.value ?? '', trigger: 'onUse', baseChancePercent: 0, placement: 'on' }];
+    markDirty(); renderAll();
+  });
+  card.appendChild(addRisk);
+
+  return card;
+}
 
 function renderEditor() {
   const root = document.getElementById('editor');
@@ -246,6 +372,40 @@ function renderEditor() {
   }
   card3.appendChild(checks);
   root.appendChild(card3);
+
+  // --- accidents (§7.3): accident-category assets get ONLY the clearedBy multi-select
+  // ("nothing special... beyond the clearedBy action multi-select" — spec verbatim); every
+  // other asset gets the risk-config section instead. Never both on the same asset.
+  if (a.category === 'accident') {
+    const cardCleared = document.createElement('div');
+    cardCleared.className = 'card';
+    cardCleared.innerHTML = '<h2>Cleanup</h2><div class="hint">Which of this accident\'s own interactions (above), once completed on it, despawn it.</div>';
+    const clearedChecks = document.createElement('div');
+    clearedChecks.className = 'checks';
+    for (const actId of a.interactions) {
+      const act = state.interactions.actions.find((x) => x.id === actId);
+      if (!act) continue;
+      const lab = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.dataset.path = 'clearedBy:' + act.id;
+      cb.checked = !!a.clearedBy?.includes(act.id);
+      cb.addEventListener('change', () => {
+        const list = a.clearedBy ? [...a.clearedBy] : [];
+        if (cb.checked) { if (!list.includes(act.id)) list.push(act.id); }
+        else { const i = list.indexOf(act.id); if (i >= 0) list.splice(i, 1); }
+        if (list.length) a.clearedBy = list; else delete a.clearedBy;
+        markDirty();
+      });
+      lab.append(cb, document.createTextNode(act.name));
+      clearedChecks.appendChild(lab);
+    }
+    if (!a.interactions.length) clearedChecks.innerHTML = '<span class="hint">Add an interaction above first (e.g. "extinguish", "mop") — clearedBy can only reference this asset\'s own actions.</span>';
+    cardCleared.appendChild(clearedChecks);
+    root.appendChild(cardCleared);
+  } else {
+    root.appendChild(renderAccidentsCard(a));
+  }
 
   // --- mesh & preview
   const card4 = document.createElement('div');

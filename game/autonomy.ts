@@ -10,6 +10,7 @@ import type { GameData, ActionDef, AssetDef } from './data';
 import type { SimAgent } from './sim';
 import { findSeatFor } from './sim';
 import type { SimStats } from './stats';
+import type { AccidentsController } from './accidents';
 
 export class Autonomy {
   private cooldownRemaining = 0;
@@ -19,6 +20,11 @@ export class Autonomy {
     private getWorld: () => THREE.Group,
     private agent: SimAgent,
     private stats: SimStats,
+    /** Optional (§7.3): when supplied, autonomy skips any base asset currently blocked by an
+     *  overlapping accident instance entirely — "impossible to cook while the kitchen is on
+     *  fire" extends to the sim's own free will, not just player taps. Omitting it (e.g. older
+     *  call sites / tests that predate the accidents slice) preserves the exact old behavior. */
+    private accidents?: AccidentsController,
   ) {}
 
   /** Call whenever the player issues a command (go-to, action, stop). */
@@ -51,6 +57,7 @@ export class Autonomy {
       if (!assetId) continue;
       const def = assetsById.get(assetId);
       if (!def) continue;
+      if (this.accidents?.isBlocked(obj, def)) continue; // §7.3: skip a base asset blocked by an accident
       for (const actionId of def.interactions) {
         const action = actionsById.get(actionId);
         if (!action || !action.autonomyEligible) continue;

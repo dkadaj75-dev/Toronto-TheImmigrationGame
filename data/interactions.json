@@ -166,6 +166,28 @@
       "animation": "stand_use",
       "autonomyEligible": false,
       "primaryNeed": null
+    },
+    {
+      "id": "extinguish",
+      "name": "Extinguish",
+      "needGains": {},
+      "skillGains": {},
+      "animation": "stand_use",
+      "autonomyEligible": false,
+      "primaryNeed": null,
+      "_note": "Accidents slice (PROJECT_CONTEXT.md §7.3) — cleanup action for the 'fire' accident asset's clearedBy. Player-only by design (autonomyEligible false), no need/skill effect."
+    },
+    {
+      "id": "mop",
+      "name": "Mop up",
+      "needGains": {
+        "hygiene": 0.5
+      },
+      "skillGains": {},
+      "animation": "stand_use",
+      "autonomyEligible": false,
+      "primaryNeed": null,
+      "_note": "Accidents slice (PROJECT_CONTEXT.md §7.3) — cleanup action for the 'water_puddle' accident asset's clearedBy. Player-only by design (autonomyEligible false); small hygiene gain for the mopping motion."
     }
   ]
 }

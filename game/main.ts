@@ -14,7 +14,8 @@ import { SimAgent, ClickCue, findSeatFor } from './sim';
 import { SimStats } from './stats';
 import { Hud } from './ui';
 import { Autonomy } from './autonomy';
-import { QuestRunner } from './quests';
+import { QuestRunner, type EvalContext } from './quests';
+import { AccidentsController, resolveTapAssetId } from './accidents';
 
 const app = document.getElementById('app')!;
 const boot = document.getElementById('boot')!;
@@ -61,6 +62,10 @@ async function start() {
   const cue = new ClickCue();
   scene.add(cue.object);
 
+  // --- accidents (PROJECT_CONTEXT.md §7.3): closures over the live `let world`/`grid` so a
+  // hot-reload rebake/rebuild is picked up automatically, same pattern as Autonomy below.
+  const accidents = new AccidentsController(() => data, () => world, () => grid);
+
   // --- rigged character: swap the capsule's contents for the GLB when it loads.
   // The `sim` group stays the agent's object, so position/rotation/pose logic is untouched.
   let anim: AnimController | null = null;
@@ -103,16 +108,20 @@ async function start() {
   const stats = new SimStats(data.stats);
   const hud = new Hud(stats);
 
-  // Environment need (Sims "Room" score) = Σ environment scores of placed objects
+  // Environment need (Sims "Room" score) = Σ environment scores of placed objects + any
+  // currently-live accident instances (§7.3: fire/puddles ship negative environmentScore and
+  // should drag the room score down while present — accidents.registry.all is the live list).
   const environmentScore = () => {
     const byId = new Map(data.assets.assets.map((a) => [a.id, a]));
-    return data.map.placedObjects.reduce((sum, p) => sum + (byId.get(p.asset)?.environmentScore ?? 0), 0);
+    const placedSum = data.map.placedObjects.reduce((sum, p) => sum + (byId.get(p.asset)?.environmentScore ?? 0), 0);
+    const accidentSum = accidents.registry.all.reduce((sum, inst) => sum + (byId.get(inst.accidentId)?.environmentScore ?? 0), 0);
+    return placedSum + accidentSum;
   };
   const envNeedId = () => data.stats.needs.find((n) => n.computed)?.id;
   const applyEnvironment = () => { const id = envNeedId(); if (id) stats.setComputed(id, environmentScore()); };
   applyEnvironment();
 
-  const autonomy = new Autonomy(() => data, () => world, agent, stats);
+  const autonomy = new Autonomy(() => data, () => world, agent, stats, accidents);
 
   // --- quest system (PROJECT_CONTEXT.md §3): runtime-only state, see quests.ts's persistence doc comment ---
   const quests = new QuestRunner(data.quests, data.simstate, data.tuning.economy.startingFunds);
@@ -156,28 +165,60 @@ async function start() {
     hud.showActivity(a.action.name);
     anim?.play(a.action.animation || 'idle'); // unmapped states fall back to idle inside AnimController
   };
-  agent.onActionStop = () => {
+  agent.onActionStop = (a) => {
     hud.hideActivity();
     anim?.play('idle');
+    // §7.3: roll for a new accident (normal asset finishing a use) or despawn one (a cleanup
+    // action just completed on an accident instance) — onActionStop fires for every stop
+    // reason (natural auto-stop, player cancel, override), which is deliberate: see
+    // accidents.ts's module doc comment for why "finishes" can't mean "auto-stopped only".
+    const assetId = a.target.userData?.assetId as string | undefined;
+    const def = assetId ? data.assets.assets.find((x) => x.id === assetId) : undefined;
+    if (def?.category === 'accident') {
+      accidents.maybeCleanup(a.target, a.action.id);
+    } else if (def) {
+      const ctx: EvalContext = {
+        needs: Object.fromEntries(stats.needs),
+        skills: Object.fromEntries(stats.skills),
+        funds: quests.funds,
+        time: { hour: Math.floor(gameSeconds / 3600), day: gameDay },
+        vars: quests.vars,
+        quests: quests.quests,
+      };
+      accidents.rollFor(a.target, def, ctx);
+    }
   };
   hud.onCancelAction = () => { autonomy.notePlayerCommand(); agent.stopAction(); };
 
   const tapInput = new TapInput(renderer.domElement, cam.camera, () => world, (hit) => {
     if (hit.object) {
       const assetId = hit.object.userData.assetId as string;
-      const asset = data.assets.assets.find((a) => a.id === assetId);
+      let asset = data.assets.assets.find((a) => a.id === assetId);
+      let target = hit.object;
+      // §7.3 hierarchy: tapping a base asset that's currently blocked by an overlapping
+      // accident redirects the whole interaction (menu + walk/action target) onto the
+      // accident instance itself — "impossible to cook while the kitchen is on fire".
+      if (asset && asset.category !== 'accident') {
+        const blocking = accidents.blockingFor(hit.object, asset);
+        const effectiveId = resolveTapAssetId(asset.id, blocking);
+        if (blocking && effectiveId === blocking.accidentId) {
+          const blockingDef = data.assets.assets.find((a) => a.id === effectiveId);
+          const blockingObj = accidents.groupFor(blocking.key);
+          if (blockingDef && blockingObj) { asset = blockingDef; target = blockingObj; }
+        }
+      }
       if (asset) {
         const actions = asset.interactions
           .map((id) => data.interactions.actions.find((x) => x.id === id))
           .filter((x): x is NonNullable<typeof x> => !!x);
         if (actions.length > 0) {
-          const target = hit.object;
+          const resolvedAsset = asset;
           setSelected(target);
-          hud.showActionMenu(asset, actions, (action) => {
+          hud.showActionMenu(resolvedAsset, actions, (action) => {
             autonomy.notePlayerCommand();
             const seat = action.seatAware ? findSeatFor(world, data, target) : null;
-            if (agent.orderAction(action, target, seat, asset)) cue.showAt(target.position.x, target.position.z);
-            else console.log('no path to object', assetId);
+            if (agent.orderAction(action, target, seat, resolvedAsset)) cue.showAt(target.position.x, target.position.z);
+            else console.log('no path to object', resolvedAsset.id);
           });
           return; // object tap opens the menu; don't also walk to the tap point
         }
@@ -243,6 +284,9 @@ async function start() {
     doors = buildDoors(data);
     world.add(doors.group);
     scene.add(world);
+    // §7.3: buildWorld() has no notion of runtime accident instances (never in map data) —
+    // re-parent every LIVE fire/puddle into the freshly-built world so hot-reload never wipes them.
+    accidents.reattach(world);
     cam.retune(data.tuning.camera, data.map);
     grid = bakeNavGrid(data.map, data.assets);
     agent.retune(data.tuning, grid);

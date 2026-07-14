@@ -28,7 +28,11 @@ export interface EvalContext {
   quests: Record<string, QuestState>;
 }
 
-function resolveVar(path: string, ctx: EvalContext): number | VarValue | undefined {
+/** Exported for reuse by game/accidents.ts (§7.3: accident risk modifiers read `needs.<id>`/
+ *  `skills.<id>` via this SAME path resolver — "reuse game/quests.ts's path resolution, don't
+ *  reinvent"). Any accidents-specific EvalContext fields it doesn't have a real value for
+ *  (funds/time/vars/quests) can be passed as safe defaults; only needs/skills paths matter there. */
+export function resolveVar(path: string, ctx: EvalContext): number | VarValue | undefined {
   if (path === 'funds') return ctx.funds;
   if (path === 'time.hour') return ctx.time.hour;
   if (path === 'time.day') return ctx.time.day;

@@ -8,17 +8,27 @@ import { JSDOM } from 'jsdom';
 const html = readFileSync(new URL('../tools/assets.html', import.meta.url), 'utf8');
 
 const assets = {
-  categories: ['seating', 'electronics', 'door'],
+  categories: ['seating', 'electronics', 'door', 'appliances', 'accident'],
   assets: [
     { id: 'couch', name: 'Couch', category: 'seating', mesh: '/models/couch.glb', buyPrice: 500, sellPrice: 375, environmentScore: 5, footprint: [2, 1], seats: 3, seatTarget: true, interactions: [] },
     { id: 'tv', name: 'TV', category: 'electronics', mesh: '/models/tv.glb', buyPrice: 800, sellPrice: 600, environmentScore: 8, footprint: [1, 1], interactions: ['watch_tv'] },
+    { id: 'stove', name: 'Stove', category: 'appliances', mesh: '/models/stove.glb', buyPrice: 400, sellPrice: 300, environmentScore: 1, footprint: [1, 1], interactions: ['cook'] },
+    { id: 'fire', name: 'Fire', category: 'accident', mesh: '/models/fire.glb', buyPrice: 0, sellPrice: 0, environmentScore: -10, footprint: [1, 1], interactions: ['extinguish'], clearedBy: ['extinguish'], buyable: false },
+    { id: 'water_puddle', name: 'Water puddle', category: 'accident', mesh: '/models/water_puddle.glb', buyPrice: 0, sellPrice: 0, environmentScore: -5, footprint: [1, 1], interactions: [], buyable: false },
   ],
 };
 const interactions = { actions: [
   { id: 'watch_tv', name: 'Watch TV', needGains: {}, skillGains: {}, animation: 'sit', autonomyEligible: true },
   { id: 'nap', name: 'Nap', needGains: {}, skillGains: {}, animation: 'lie', autonomyEligible: true },
+  { id: 'cook', name: 'Cook', needGains: {}, skillGains: { cooking: 0.05 }, animation: 'stand_use', autonomyEligible: true, primaryNeed: null },
+  { id: 'extinguish', name: 'Extinguish', needGains: {}, skillGains: {}, animation: 'stand_use', autonomyEligible: false, primaryNeed: null },
+  { id: 'mop', name: 'Mop up', needGains: {}, skillGains: {}, animation: 'stand_use', autonomyEligible: false, primaryNeed: null },
 ] };
 const condo = { placedObjects: [{ asset: 'couch', pos: [1, 1], rotDeg: 0 }, { asset: 'couch', pos: [3, 1], rotDeg: 0 }] };
+const stats = {
+  needs: [{ id: 'hunger', name: 'Hunger', color: '#e74c3c', default: 70, decayPerTick: 0.1, autonomy: true }],
+  skills: [{ id: 'cooking', name: 'Cooking', color: '#d35400', default: 0, max: 10 }],
+};
 
 const puts = {};
 const fetchMock = async (url, opts = {}) => {
@@ -27,7 +37,7 @@ const fetchMock = async (url, opts = {}) => {
     puts[path] = JSON.parse(opts.body);
     return { ok: true, status: 200, json: async () => ({}) };
   }
-  const body = { 'assets.json': assets, 'interactions.json': interactions, 'maps/condo.json': condo }[path];
+  const body = { 'assets.json': assets, 'interactions.json': interactions, 'maps/condo.json': condo, 'stats.json': stats }[path];
   return { ok: !!body, status: body ? 200 : 404, json: async () => structuredClone(body) };
 };
 
@@ -47,7 +57,7 @@ await new Promise((r) => setTimeout(r, 50));
 
 // --- sidebar rendered with usage badge
 const items = doc.querySelectorAll('.asset-item');
-assert(items.length === 2, `sidebar shows 2 assets (${items.length})`);
+assert(items.length === 5, `sidebar shows 5 assets (${items.length})`);
 assert(doc.querySelector('[data-asset-id="couch"] .badge')?.textContent === '×2 placed', 'couch shows ×2 placed badge');
 assert(doc.querySelector('[data-asset-id="tv"] .badge') === null, 'tv has no badge');
 
@@ -108,7 +118,7 @@ assert(doc.querySelector('input[data-path="meshFit.scale"]').value === '', 'unif
 // --- delete TV (unused → plain confirm text)
 assert(doc.getElementById('delete').textContent === 'Delete', 'unused asset gets plain delete label');
 doc.getElementById('delete').click();
-assert(doc.querySelectorAll('.asset-item').length === 1, 'tv removed from sidebar');
+assert(doc.querySelectorAll('.asset-item').length === 4, 'tv removed from sidebar');
 
 // --- couch delete button warns about usage
 doc.querySelector('[data-asset-id="couch"]').click();
@@ -116,7 +126,7 @@ assert(doc.getElementById('delete').textContent.includes('×2'), 'used asset del
 
 // --- new asset via prompt
 doc.getElementById('new').click();
-assert(doc.querySelectorAll('.asset-item').length === 2, 'new asset appears');
+assert(doc.querySelectorAll('.asset-item').length === 5, 'new asset appears');
 assert(doc.querySelector('input[data-path="id"]').value === 'lamp', 'new asset selected with prompted id');
 
 // --- meshFit sparse pruning on the fresh (untouched) lamp: set the uniform scale field,
@@ -148,6 +158,72 @@ openAngle.value = '100';
 openAngle.dispatchEvent(new window.Event('input', { bubbles: true }));
 // openSeconds/closeSeconds/triggerDistance deliberately left blank — sparse, tuning fallback
 
+// --- accidents (§7.3): normal (non-accident) asset gets the risk-config section
+doc.querySelector('[data-asset-id="stove"]').click();
+assert(doc.querySelector('.card h2')?.textContent !== undefined, 'stove editor rendered');
+assert(doc.querySelector('select[data-path^="accidents."]') === null, 'no risk rows yet — stove has no accidents[] to start');
+assert(doc.querySelector('input[data-path^="clearedBy:"]') === null, 'normal asset never shows the Cleanup clearedBy checklist');
+
+const addRiskBtn = [...doc.querySelectorAll('button')].find((b) => b.textContent === '+ Add accident risk');
+assert(addRiskBtn, '"+ Add accident risk" button present on a normal asset');
+addRiskBtn.click();
+
+// --- referential sanity: accidentId dropdown only lists accident-category assets
+const accidentIdSel = doc.querySelector('select[data-path="accidents.0.accidentId"]');
+assert(accidentIdSel, 'accident risk row rendered after adding');
+const accidentIdValues = [...accidentIdSel.options].map((o) => o.value);
+assert(accidentIdValues.length === 2 && accidentIdValues.includes('fire') && accidentIdValues.includes('water_puddle'), `accidentId options are exactly the accident-category assets (${accidentIdValues})`);
+assert(!accidentIdValues.includes('couch') && !accidentIdValues.includes('tv') && !accidentIdValues.includes('stove'), 'accidentId options exclude non-accident assets');
+assert(accidentIdSel.value === 'fire', 'new risk row defaults to the first accident-category asset');
+
+const triggerSel = doc.querySelector('select[data-path="accidents.0.trigger"]');
+assert(triggerSel.value === 'onUse' && triggerSel.options.length === 1, 'trigger is fixed to the single "onUse" option');
+
+const baseChanceInput = doc.querySelector('input[data-path="accidents.0.baseChancePercent"]');
+baseChanceInput.value = '2';
+baseChanceInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+
+// placement starts "on" — no adjacentRange fields until switched to "adjacent"
+assert(doc.querySelector('input[data-path="accidents.0.adjacentRange.0"]') === null, 'adjacentRange hidden while placement is "on"');
+const placementSel = doc.querySelector('select[data-path="accidents.0.placement"]');
+assert(placementSel.value === 'on', 'placement defaults to "on"');
+placementSel.value = 'adjacent';
+placementSel.dispatchEvent(new window.Event('change', { bubbles: true }));
+
+// placement change re-renders the editor (to reveal adjacentRange) — reselect the live inputs
+doc.querySelector('[data-asset-id="stove"]').click();
+assert(doc.querySelector('select[data-path="accidents.0.placement"]').value === 'adjacent', 'placement change persisted across the re-render');
+const rangeMin = doc.querySelector('input[data-path="accidents.0.adjacentRange.0"]');
+const rangeMax = doc.querySelector('input[data-path="accidents.0.adjacentRange.1"]');
+assert(rangeMin && rangeMax, 'adjacentRange fields appear once placement is "adjacent"');
+rangeMin.value = '1';
+rangeMin.dispatchEvent(new window.Event('input', { bubbles: true }));
+rangeMax.value = '2';
+rangeMax.dispatchEvent(new window.Event('input', { bubbles: true }));
+
+// --- modifier sub-row: var dropdown fed from stats.json needs+skills, namespace-prefixed
+const addModBtn = [...doc.querySelectorAll('button')].find((b) => b.textContent === '+ Add modifier');
+addModBtn.click();
+const modVarSel = doc.querySelector('select[data-path="accidents.0.modifiers.0.var"]');
+assert(modVarSel, 'modifier row rendered after adding');
+const modVarValues = [...modVarSel.options].map((o) => o.value);
+assert(modVarValues.includes('needs.hunger') && modVarValues.includes('skills.cooking'), `modifier var options are namespace-prefixed needs/skills (${modVarValues})`);
+modVarSel.value = 'skills.cooking';
+modVarSel.dispatchEvent(new window.Event('change', { bubbles: true }));
+const pctAt0Input = doc.querySelector('input[data-path="accidents.0.modifiers.0.pctAt0"]');
+pctAt0Input.value = '15';
+pctAt0Input.dispatchEvent(new window.Event('input', { bubbles: true }));
+const pctAtMaxInput = doc.querySelector('input[data-path="accidents.0.modifiers.0.pctAtMax"]');
+pctAtMaxInput.value = '-2';
+pctAtMaxInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+
+// --- accident-category asset: ONLY the clearedBy multi-select, never the risk section
+doc.querySelector('[data-asset-id="fire"]').click();
+assert(doc.querySelector('select[data-path^="accidents."]') === null, 'accident-category asset never shows the risk-config section');
+const clearedCb = doc.querySelector('input[data-path="clearedBy:extinguish"]');
+assert(clearedCb, 'clearedBy checklist scoped to fire\'s own interactions (extinguish)');
+assert(clearedCb.checked === true, 'fire\'s existing clearedBy:["extinguish"] pre-checks the box');
+
 // --- save: PUT carries all edits
 doc.getElementById('save').click();
 await new Promise((r) => setTimeout(r, 50));
@@ -176,6 +252,25 @@ assert(savedLamp.door.openAngleDeg === 100, 'PUT carries door.openAngleDeg');
 assert(!('openSeconds' in savedLamp.door), 'untouched door.openSeconds stays absent (sparse, tuning fallback)');
 assert(!('closeSeconds' in savedLamp.door), 'untouched door.closeSeconds stays absent (sparse, tuning fallback)');
 assert(!('triggerDistance' in savedLamp.door), 'untouched door.triggerDistance stays absent (sparse, tuning fallback)');
+
+// --- accidents (§7.3): stove's risk config round-trips exactly
+const savedStove = saved.assets.find((a) => a.id === 'stove');
+assert(savedStove.accidents?.length === 1, 'PUT carries the added accident risk');
+const savedRisk = savedStove.accidents[0];
+assert(savedRisk.accidentId === 'fire', 'PUT carries risk.accidentId');
+assert(savedRisk.trigger === 'onUse', 'PUT carries risk.trigger');
+assert(savedRisk.baseChancePercent === 2, 'PUT carries risk.baseChancePercent');
+assert(savedRisk.placement === 'adjacent', 'PUT carries risk.placement after the switch');
+assert(savedRisk.adjacentRange[0] === 1 && savedRisk.adjacentRange[1] === 2, 'PUT carries risk.adjacentRange');
+assert(savedRisk.modifiers.length === 1, 'PUT carries the added modifier');
+assert(savedRisk.modifiers[0].var === 'skills.cooking', 'PUT carries modifier.var');
+assert(savedRisk.modifiers[0].pctAt0 === 15, 'PUT carries modifier.pctAt0');
+assert(savedRisk.modifiers[0].pctAtMax === -2, 'PUT carries modifier.pctAtMax');
+
+const savedFire = saved.assets.find((a) => a.id === 'fire');
+assert(JSON.stringify(savedFire.clearedBy) === JSON.stringify(['extinguish']), 'PUT preserves fire\'s untouched clearedBy');
+const savedWaterPuddle = saved.assets.find((a) => a.id === 'water_puddle');
+assert(!('accidents' in savedWaterPuddle), 'accident-category asset never gets an accidents[] key');
 
 // --- search filters sidebar
 const search = doc.getElementById('search');
