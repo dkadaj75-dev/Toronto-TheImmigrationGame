@@ -120,7 +120,7 @@
         {
           "accidentId": "fire",
           "trigger": "onUse",
-          "baseChancePercent": 2,
+          "baseChancePercent": 100,
           "placement": "on",
           "modifiers": [
             {
