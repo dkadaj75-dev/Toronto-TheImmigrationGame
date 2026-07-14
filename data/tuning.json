@@ -57,8 +57,8 @@
     "sitHeight": 0.25,
     "lieHeight": 0.55,
     "clipMap": {
-      "idle": "1",
-      "walk": "Three fingerR",
+      "idle": "Armature|mixamo.com|Layer0",
+      "walk": "Armature|mixamo.com|Layer0",
       "sit": "Sit",
       "lie": "Lie",
       "lie_sleep": "Fall"
