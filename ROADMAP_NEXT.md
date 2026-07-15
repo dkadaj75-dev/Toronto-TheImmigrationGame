@@ -64,8 +64,8 @@ Root cause: NOT a math bug — `game/facing.ts`'s `rotateLocalOffset` was alread
 ## B2-3. Shower positioning + censor blur
 Sim must stand INSIDE the shower (usePose needs a stand/use entry, not just sit/lie). Plus Sims-style censor blur/pixelation over the sim while showering / using WC (flag per action, e.g. `censor: true` on shower/use_toilet).
 
-## B2-4. Bladder failure (pee self)
-Bladder hits 0 → sim pees itself: plays animation (new state, e.g. `pee`), spawns puddle transient at exact sim location, bladder relief minimal + tunable (default 30/100, tuning).
+## B2-4. Bladder failure (pee self) — ✅ DONE 2026-07-15
+Bladder hits 0 → sim pees itself: plays animation (new state, e.g. `pee`), spawns puddle transient at exact sim location, bladder relief minimal + tunable (default 30/100, tuning). See PROJECT_CONTEXT.md §7.17 as-built.
 
 ## B2-5. Panic + timed extinguish/clean with progress bar
 - Fire spawns → sims plays `panic` animation state (mappable in Animation Mapper).

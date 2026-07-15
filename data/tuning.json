@@ -98,6 +98,11 @@
     "buyModeMusic": "sounds/music_buymode.mp3",
     "_source": "ROADMAP_NEXT item 7 (audio placeholders). masterVolume/musicVolume/sfxVolume are 0..1 and multiply together per channel; musicCrossfadeSeconds is how long a music CONTEXT switch (map <-> buy mode) takes; buyModeMusic is the fixed track played while in Buy/Sell mode. See game/audio.ts's resolveAudioTuning for defaults when this whole block is absent."
   },
+  "bladderFailure": {
+    "durationSeconds": 4,
+    "reliefAmount": 30,
+    "_source": "ROADMAP_NEXT B2-4 (bladder failure). durationSeconds = how long the sim plays the 'pee' animation before autonomy resumes; reliefAmount (0..100) = bladder's value right after the accident (a minimal top-up, not a full refill — the sim likely still wants a real bathroom trip). game/bladder.ts's checkBladderFailure also uses reliefAmount as the re-arm threshold: the failure won't retrigger from a plain decay back down from the relief top-up, only once bladder climbs back ABOVE reliefAmount (e.g. via the toilet)."
+  },
   "camera": {
     "minZoom": 4,
     "maxZoom": 18,

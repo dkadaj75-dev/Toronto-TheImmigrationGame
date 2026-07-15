@@ -21,6 +21,7 @@ import { BuyModeController, catalogCategories, filterCatalog, isAffordable, icon
 import { createMarkerInstance, type MarkerInstance } from './marker';
 import { computeDurationSeconds, isDurationComplete } from './duration';
 import { AudioManager, loopSoundFor } from './audio';
+import { initBladderFailureState, checkBladderFailure } from './bladder';
 
 /** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
  *  a seat-aware action with no eligible seat in range) plays the dedicated 'sit_ground' state
@@ -224,6 +225,32 @@ async function start() {
   // `action` identity (not just id) is the guard against a stale timer surviving a stop+restart of
   // the very same action.
   let durationState: { action: ActiveAction; totalSeconds: number; elapsed: number } | null = null;
+
+  // --- ROADMAP_NEXT B2-4: bladder failure ("pees itself" at 0) ---------------------------------
+  // Trigger/cooldown decision is pure logic (game/bladder.ts, headless-tested in test/bladder.test.ts)
+  // — this closure only owns the actual event: interrupt whatever the sim was doing, play the
+  // 'pee' animation for tuning.bladderFailure.durationSeconds (own tiny elapsed/total timer,
+  // mirroring durationState's shape but NOT tied to an ActiveAction — this event isn't an
+  // interaction with any target asset, so sim.ts's action system doesn't apply), spawn a
+  // pee_puddle transient at the sim's exact current position/facing (reuses accidents.ts's
+  // spawnTransient exactly like garbage.ts's "drop" case does), then refill bladder to
+  // reliefAmount once the animation completes. autonomy.forceCooldown keeps free will from
+  // immediately walking the sim off toward the toilet mid-animation (agent.isBusy goes false the
+  // instant stopAction() runs below, since there's no queued/current action for this event) —
+  // after the cooldown lapses, the normal autonomy loop resumes on its own (per the roadmap note:
+  // "bladder at 30 may immediately seek the toilet — fine, that's Sims behavior").
+  const bladderFailureState = initBladderFailureState();
+  let peeState: { elapsed: number; totalSeconds: number } | null = null;
+  const triggerBladderFailure = () => {
+    agent.stopAction(); // fires onActionStop → animation reset to idle, activity chip hidden, etc.
+    const cfg = data.tuning.bladderFailure;
+    const durationSeconds = cfg?.durationSeconds ?? 4;
+    autonomy.forceCooldown(durationSeconds);
+    anim?.play('pee');
+    const rotDeg = THREE.MathUtils.radToDeg(sim.rotation.y);
+    accidents.spawnTransient('pee_puddle', [sim.position.x, sim.position.z], rotDeg, simClockSeconds);
+    peeState = { elapsed: 0, totalSeconds: durationSeconds };
+  };
 
   agent.onActionStart = (a) => {
     hud.showActivity(a.action.name);
@@ -475,6 +502,14 @@ async function start() {
       decayAcc -= decayEvery;
       stats.decayTick();
       applyEnvironment();
+      // ROADMAP_NEXT B2-4: zero-crossing check happens right after decay, on the same tick bladder
+      // could have just hit 0 — BEFORE autonomy.maybeAct() below, so a fresh failure preempts
+      // whatever free will would otherwise have picked this tick (matches "the event preempts
+      // everything").
+      const bladderNow = stats.needs.get('bladder');
+      if (bladderNow !== undefined && checkBladderFailure(bladderFailureState, bladderNow, data.tuning.bladderFailure?.reliefAmount ?? 30)) {
+        triggerBladderFailure();
+      }
       autonomy.maybeAct(); // free will evaluates on the decay tick
       // quest triggers/completions evaluate on the same tick (§3.2: "same reuse-an-existing-interval convention")
       quests.tick(
@@ -626,6 +661,18 @@ async function start() {
     if (durationState && agent.current === durationState.action) {
       durationState.elapsed += sdt;
       if (isDurationComplete(durationState.elapsed, durationState.totalSeconds)) agent.stopAction();
+    }
+    // ROADMAP_NEXT B2-4: bladder-failure's own tiny timer — same isDurationComplete helper as the
+    // §7.11 duration system, ticked on the same sim time (pause freezes the 'pee' animation,
+    // 2x/3x speeds it up). Not gated on agent.current (this event has no ActiveAction) — cleared
+    // to null the moment it completes so it can never double-fire.
+    if (peeState) {
+      peeState.elapsed += sdt;
+      if (isDurationComplete(peeState.elapsed, peeState.totalSeconds)) {
+        peeState = null;
+        anim?.play('idle');
+        stats.refillNeed('bladder', data.tuning.bladderFailure?.reliefAmount ?? 30);
+      }
     }
     // doors advance on the same sim time as the animation mixer (pause freezes them mid-swing,
     // 2×/3× speeds them up) — reuses this per-frame loop, no dedicated door timer (§7.1).

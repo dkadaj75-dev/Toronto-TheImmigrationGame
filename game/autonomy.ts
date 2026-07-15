@@ -39,6 +39,16 @@ export class Autonomy {
     this.cooldownRemaining = this.getData().tuning.autonomy.postPlayerCommandCooldownSeconds;
   }
 
+  /** ROADMAP_NEXT B2-4: suppress autonomy for an EXPLICIT number of seconds — distinct from
+   *  notePlayerCommand's fixed tuning-driven cooldown. Used by the bladder-failure event so free
+   *  will can't preempt the sim mid-"pee" animation (e.g. immediately walking it to the toilet
+   *  the instant `isBusy` goes false); the suppression window matches the event's own animation
+   *  duration, not an unrelated player-command constant. Only extends, never shortens, an
+   *  in-progress cooldown. */
+  forceCooldown(seconds: number) {
+    this.cooldownRemaining = Math.max(this.cooldownRemaining, seconds);
+  }
+
   /** Call every frame to run the cooldown down. */
   update(dt: number) {
     if (this.cooldownRemaining > 0) this.cooldownRemaining = Math.max(0, this.cooldownRemaining - dt);

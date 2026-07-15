@@ -58,6 +58,13 @@ export class SimStats {
     }
   }
 
+  /** ROADMAP_NEXT B2-4: an absolute refill (not a per-tick delta like applyGains) — e.g. the
+   *  bladder-failure event's fixed `reliefAmount`. No-op if `id` isn't a known need (mirrors
+   *  applyGains' own "undefined → skip" guard). */
+  refillNeed(id: string, value: number) {
+    if (this.needs.has(id)) this.needs.set(id, clamp(value, 0, 100));
+  }
+
   /** Environment = Σ environment scores of everything placed in the home (Sims "Room" score). */
   setComputed(id: string, value: number) {
     if (this.defs.needs.find((n) => n.id === id)?.computed !== undefined || this.needs.has(id)) {

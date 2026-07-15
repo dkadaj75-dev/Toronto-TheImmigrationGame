@@ -306,6 +306,13 @@ export interface TuningData {
    *  fixed track for buy mode (absent = silence in buy mode). See game/audio.ts's
    *  resolveAudioTuning for the exact defaults applied when this whole block is absent. */
   audio?: { masterVolume?: number; musicVolume?: number; sfxVolume?: number; musicCrossfadeSeconds?: number; buyModeMusic?: string };
+  /** Optional so pre-existing tuning fixtures/tests stay valid (same precedent as `fire?`/
+   *  `garbage?` above). ROADMAP_NEXT B2-4 (bladder failure): durationSeconds = how long the sim
+   *  plays the 'pee' animation before control returns to autonomy; reliefAmount (0..100) = the
+   *  bladder need's value immediately after the accident (a minimal top-up, not a full refill —
+   *  the sim likely still wants a real bathroom trip). game/bladder.ts falls back to `{4, 30}`
+   *  when this whole block (or an individual field) is absent. */
+  bladderFailure?: { durationSeconds?: number; reliefAmount?: number };
 }
 
 export interface GameData {

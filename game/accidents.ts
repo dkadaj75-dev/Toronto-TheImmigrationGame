@@ -325,10 +325,11 @@ function clamp01(v: number): number { return clamp(v, 0, 1); }
 
 // ==================================================================== three.js layer
 
-const ACCIDENT_STANDIN_COLORS: Record<string, number> = { fire: 0xff6a3d, water_puddle: 0x4fa8e0, ash: 0x5a5450, dirty_dishes: 0xcbb994 };
-/** Flat (non-upright) stand-ins — puddles, ash, and dropped dirty dishes (ROADMAP_NEXT item 10)
- *  all lie on the floor rather than standing up like a fire block. */
-const FLAT_ACCIDENT_IDS = new Set(['water_puddle', 'ash', 'dirty_dishes']);
+const ACCIDENT_STANDIN_COLORS: Record<string, number> = { fire: 0xff6a3d, water_puddle: 0x4fa8e0, ash: 0x5a5450, dirty_dishes: 0xcbb994, pee_puddle: 0xd8c14a };
+/** Flat (non-upright) stand-ins — puddles, ash, and dropped dirty dishes (ROADMAP_NEXT item 10;
+ *  pee_puddle, ROADMAP_NEXT B2-4, is the same shape as water_puddle) all lie on the floor rather
+ *  than standing up like a fire block. */
+const FLAT_ACCIDENT_IDS = new Set(['water_puddle', 'ash', 'dirty_dishes', 'pee_puddle']);
 
 /** Footprint-sized colored box, same "instant stand-in" philosophy as world.ts's makeStandIn —
  *  swapped for a GLB clone OR (§7.5) an image/GIF sprite if/when `def.mesh` loads, via world.ts's
