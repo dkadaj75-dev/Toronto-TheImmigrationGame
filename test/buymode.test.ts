@@ -2,11 +2,11 @@
 // Run: npx tsx test/buymode.test.ts
 import {
   isPurchasable, isAffordable, purchasableCatalog, catalogCategories, filterCatalog,
-  snapToHalfCell, snapPos, normalizeRotDeg, rotateStep, wallRect, isValidPlacement,
+  snapToHalfCell, snapPos, normalizeRotDeg, rotateStep, wallRect, isValidPlacement, footprintOnFloor,
   BuyOverlay, effectiveInstances, effectivePlacedObjects, isSelectableForSell,
   attemptBuy, attemptSell, attemptMove,
   iconFallbackColor, iconFallbackInitials,
-  type OtherInstance, type PlacedLike, type EffectiveInstance,
+  type OtherInstance, type PlacedLike, type EffectiveInstance, type FloorDef,
 } from '../game/buymode';
 import type { AssetDef, AssetsData } from '../game/data';
 
@@ -101,17 +101,50 @@ console.log('buymode.test — placement math: wallRect / isValidPlacement');
   const bounds = { w: 10, h: 10 };
   const walls = [{ from: [0, 0] as [number, number], to: [10, 0] as [number, number] }]; // wall along the top edge
   const noOthers: OtherInstance[] = [];
+  const gridSize = 1;
+  // a floor covering the entire bounds — existing in-bounds/wall/overlap tests shouldn't be
+  // affected by the new floor requirement at all.
+  const fullFloor: FloorDef[] = [{ id: 'f', polygon: [[0, 0], [10, 0], [10, 10], [0, 10]] }];
 
-  check('in-bounds, clear of walls/objects → valid', isValidPlacement({ pos: [5, 5], rotDeg: 0, footprint: [1, 1], bounds, walls, others: noOthers }) === true);
-  check('out of bounds (negative) → invalid', isValidPlacement({ pos: [-1, 5], rotDeg: 0, footprint: [1, 1], bounds, walls, others: noOthers }) === false);
-  check('out of bounds (beyond w) → invalid', isValidPlacement({ pos: [9.6, 5], rotDeg: 0, footprint: [1, 1], bounds, walls, others: noOthers }) === false);
-  check('overlapping the wall along the top edge → invalid', isValidPlacement({ pos: [5, 0.3], rotDeg: 0, footprint: [1, 1], bounds, walls, others: noOthers }) === false);
-  check('clear of the wall further into the room → valid', isValidPlacement({ pos: [5, 2], rotDeg: 0, footprint: [1, 1], bounds, walls, others: noOthers }) === true);
+  check('in-bounds, clear of walls/objects → valid', isValidPlacement({ pos: [5, 5], rotDeg: 0, footprint: [1, 1], bounds, walls, others: noOthers, floors: fullFloor, gridSize }) === true);
+  check('out of bounds (negative) → invalid', isValidPlacement({ pos: [-1, 5], rotDeg: 0, footprint: [1, 1], bounds, walls, others: noOthers, floors: fullFloor, gridSize }) === false);
+  check('out of bounds (beyond w) → invalid', isValidPlacement({ pos: [9.6, 5], rotDeg: 0, footprint: [1, 1], bounds, walls, others: noOthers, floors: fullFloor, gridSize }) === false);
+  check('overlapping the wall along the top edge → invalid', isValidPlacement({ pos: [5, 0.3], rotDeg: 0, footprint: [1, 1], bounds, walls, others: noOthers, floors: fullFloor, gridSize }) === false);
+  check('clear of the wall further into the room → valid', isValidPlacement({ pos: [5, 2], rotDeg: 0, footprint: [1, 1], bounds, walls, others: noOthers, floors: fullFloor, gridSize }) === true);
 
   const others: OtherInstance[] = [{ key: 'designer#0', pos: [5, 5], rotDeg: 0, footprint: [1, 1] }];
-  check('overlapping another placed object → invalid', isValidPlacement({ pos: [5.2, 5], rotDeg: 0, footprint: [1, 1], bounds, walls, others }) === false);
-  check('excludeKey lets an instance overlap its OWN previous footprint (moving in place)', isValidPlacement({ pos: [5, 5], rotDeg: 0, footprint: [1, 1], bounds, walls, others, excludeKey: 'designer#0' }) === true);
-  check('far from the other object → valid', isValidPlacement({ pos: [8, 8], rotDeg: 0, footprint: [1, 1], bounds, walls, others }) === true);
+  check('overlapping another placed object → invalid', isValidPlacement({ pos: [5.2, 5], rotDeg: 0, footprint: [1, 1], bounds, walls, others, floors: fullFloor, gridSize }) === false);
+  check('excludeKey lets an instance overlap its OWN previous footprint (moving in place)', isValidPlacement({ pos: [5, 5], rotDeg: 0, footprint: [1, 1], bounds, walls, others, floors: fullFloor, gridSize, excludeKey: 'designer#0' }) === true);
+  check('far from the other object → valid', isValidPlacement({ pos: [8, 8], rotDeg: 0, footprint: [1, 1], bounds, walls, others, floors: fullFloor, gridSize }) === true);
+}
+
+console.log('buymode.test — placement math: footprintOnFloor / isValidPlacement floor requirement (ROADMAP_NEXT.md item 8)');
+{
+  const bounds = { w: 10, h: 10 };
+  const noWalls: WallSeg[] = [];
+  const noOthers: OtherInstance[] = [];
+  const gridSize = 1;
+  // a partial floor — only the west half of the 10x10 room (x in [0,6]) — so the east half is
+  // "outside the apartment" per ROADMAP_NEXT.md item 8, even though it's still within `bounds`.
+  const partialFloor: FloorDef[] = [{ id: 'f', polygon: [[0, 0], [6, 0], [6, 10], [0, 10]] }];
+
+  check('footprintOnFloor: fully within a floor polygon → true', footprintOnFloor({ x0: 1, x1: 3, z0: 1, z1: 3 }, partialFloor, gridSize) === true);
+  check('footprintOnFloor: fully outside any floor polygon → false', footprintOnFloor({ x0: 7, x1: 9, z0: 1, z1: 3 }, partialFloor, gridSize) === false);
+  check('footprintOnFloor: straddling the floor edge (partial overhang) → false', footprintOnFloor({ x0: 5, x1: 7, z0: 1, z1: 3 }, partialFloor, gridSize) === false);
+
+  check('on-floor placement (footprint entirely on floor) → valid',
+    isValidPlacement({ pos: [3, 3], rotDeg: 0, footprint: [2, 1], bounds, walls: noWalls, others: noOthers, floors: partialFloor, gridSize }) === true);
+  check('partial-overhang placement (part of footprint off any floor, but still in bounds) → invalid',
+    isValidPlacement({ pos: [5.5, 3], rotDeg: 0, footprint: [2, 1], bounds, walls: noWalls, others: noOthers, floors: partialFloor, gridSize }) === false);
+
+  // rotated footprint: [2,1] at rotDeg 0 → x-extent 2 (would straddle the x=6 floor edge at pos.x=5.5);
+  // the SAME footprint rotated 90° swaps to [1,2] (x-extent 1) so it fits entirely on the west
+  // floor at the same position — exercises the same width/depth swap rule footprintRect already
+  // applies for overlap, now feeding the floor check too.
+  check('rotated footprint (90°) swaps width/depth so the same pos now fits on floor → valid',
+    isValidPlacement({ pos: [5.5, 3], rotDeg: 90, footprint: [2, 1], bounds, walls: noWalls, others: noOthers, floors: partialFloor, gridSize }) === true);
+  check('unrotated (0°) footprint at the same pos overhangs the floor edge → invalid',
+    isValidPlacement({ pos: [5.5, 3], rotDeg: 0, footprint: [2, 1], bounds, walls: noWalls, others: noOthers, floors: partialFloor, gridSize }) === false);
 }
 
 console.log('buymode.test — icon fallback');

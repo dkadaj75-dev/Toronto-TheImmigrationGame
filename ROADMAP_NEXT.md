@@ -23,8 +23,8 @@ Unextinguished fire after T seconds (tunable) DESTROYS the burning object → le
 ## 7. Sound effects + music placeholders
 Audio system, data-driven: sounds for ACTIONS, EVENTS, ASSETS (e.g. TV ON = noise; shower = noise), music per UI context (buy menu music, per-map music(s); later main menu + loading screen). Placeholder files fine. (TV should also emit LIGHT — designer unsure how; treat as stretch/separate.) Suggest `sound` fields on assets/actions + `tuning.audio` + a small game/audio.ts; drop-in files under public/sounds/.
 
-## 8. Buy mode: floor-only placement (BUG-ish)
-Placement validity must ALSO require every footprint cell to be on a floor rect — currently assets can be placed outside the apartment.
+## 8. Buy mode: floor-only placement (BUG-ish) — DONE 2026-07-15
+Placement validity must ALSO require every footprint cell to be on a floor rect — currently assets can be placed outside the apartment. Implemented in `game/buymode.ts`: `footprintOnFloor()` discretizes the footprint rect into nav-grid cells (same `gridSize`/cell-center convention as `nav.ts`'s `bakeNavGrid`) and requires every cell center to fall inside some `MapData.floors[].polygon` (point-in-polygon, mirroring nav.ts's own walkability test); `isValidPlacement` now rejects any placement failing that check, on top of the existing bounds/wall/overlap tests. Rotation's width/depth swap (via the existing `footprintRect`) is honored for free. Covered by new tests in `test/buymode.test.ts`.
 
 ## 9. Windows + exterior/suite door
 New map/wall elements: **windows**; and an **exterior door** asset type — does NOT open/close like interior doors; instead carries interactions (set later: e.g. "go to work", "empty garbage" — see item 10). Map Editor support for windows + marking a door as exterior.

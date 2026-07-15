@@ -120,6 +120,43 @@ export function wallRect(wall: WallSeg, thickness = WALL_THICKNESS): Rect {
 
 export interface OtherInstance { key: string; pos: [number, number]; rotDeg: number; footprint: [number, number]; }
 
+export interface FloorDef { id: string; polygon: [number, number][]; material?: string }
+
+/** Same point-in-polygon test nav.ts's bakeNavGrid uses for cell walkability (kept private there),
+ *  duplicated here (pure, no import cycle) so placement validity and nav agree on what "floor"
+ *  means for a single point. */
+function pointInPolygon(x: number, z: number, poly: [number, number][]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, zi] = poly[i], [xj, zj] = poly[j];
+    if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * True iff EVERY nav-grid cell the footprint rect covers has its center inside some floor polygon
+ * — i.e. the whole footprint sits on floor, not merely its center point (ROADMAP_NEXT.md item 8:
+ * "currently assets can be placed outside the apartment" — a large footprint's center can be
+ * comfortably indoors while an edge/corner hangs out over no floor at all). Cell centers/size
+ * mirror nav.ts's bakeNavGrid exactly (same gridSize, same `(c+0.5)*cellSize` convention), so
+ * "can I place it here" and "can I walk on top of it" use the identical floor test.
+ */
+export function footprintOnFloor(rect: Rect, floors: FloorDef[], gridSize: number): boolean {
+  const c0 = Math.floor(rect.x0 / gridSize);
+  const c1 = Math.floor((rect.x1 - 1e-6) / gridSize);
+  const r0 = Math.floor(rect.z0 / gridSize);
+  const r1 = Math.floor((rect.z1 - 1e-6) / gridSize);
+  for (let r = r0; r <= r1; r++) {
+    for (let c = c0; c <= c1; c++) {
+      const cx = (c + 0.5) * gridSize;
+      const cz = (r + 0.5) * gridSize;
+      if (!floors.some((f) => pointInPolygon(cx, cz, f.polygon))) return false;
+    }
+  }
+  return true;
+}
+
 export interface PlacementCheckInput {
   pos: [number, number];
   rotDeg: number;
@@ -127,18 +164,22 @@ export interface PlacementCheckInput {
   bounds: { w: number; h: number };
   walls: WallSeg[];
   others: OtherInstance[];
+  floors: FloorDef[];
+  gridSize: number;
   /** exclude this key from the overlap check — moving/rotating an instance shouldn't collide with itself */
   excludeKey?: string;
 }
 
-/** In-bounds + no wall overlap + no overlap with any other placed instance (§7.6: "green = in
- *  bounds + no footprint overlap with placed objects/walls; red = invalid"). Reuses
- *  accidents.ts's footprintRect/rectsOverlap — same 90°-step width/depth swap rule as nav.ts's
- *  bakeNavGrid and facing.ts's placedHalfExtents, so "what you can walk through" and "what you can
- *  place on top of" agree exactly. */
+/** In-bounds + fully on floor + no wall overlap + no overlap with any other placed instance
+ *  (§7.6: "green = in bounds + no footprint overlap with placed objects/walls; red = invalid";
+ *  ROADMAP_NEXT.md item 8 extends this to require the whole footprint be on a floor, not just in
+ *  the rectangular bounds). Reuses accidents.ts's footprintRect/rectsOverlap — same 90°-step
+ *  width/depth swap rule as nav.ts's bakeNavGrid and facing.ts's placedHalfExtents, so "what you
+ *  can walk through" and "what you can place on top of" agree exactly. */
 export function isValidPlacement(input: PlacementCheckInput): boolean {
   const rect = footprintRect(input.pos, input.rotDeg, input.footprint);
   if (rect.x0 < 0 || rect.z0 < 0 || rect.x1 > input.bounds.w || rect.z1 > input.bounds.h) return false;
+  if (!footprintOnFloor(rect, input.floors, input.gridSize)) return false;
   for (const w of input.walls) if (rectsOverlap(rect, wallRect(w))) return false;
   for (const o of input.others) {
     if (input.excludeKey && o.key === input.excludeKey) continue;
@@ -457,7 +498,7 @@ export class BuyModeController {
   private checkValidity(pos: [number, number], rotDeg: number, footprint: [number, number], excludeKey?: string): boolean {
     const { map } = this.getData();
     const others = this.instances().map((i): OtherInstance => ({ key: i.key, pos: i.pos, rotDeg: i.rotDeg, footprint: i.footprint }));
-    return isValidPlacement({ pos, rotDeg, footprint, bounds: map.bounds, walls: map.walls, others, excludeKey });
+    return isValidPlacement({ pos, rotDeg, footprint, bounds: map.bounds, walls: map.walls, others, floors: map.floors, gridSize: map.gridSize, excludeKey });
   }
 
   // -------------------------------------------------------------- starting a purchase (ghost)
