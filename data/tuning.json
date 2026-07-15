@@ -42,6 +42,11 @@
     "seatSearchRadius": 5,
     "_source": "Asset facing slice (PROJECT_CONTEXT.md §7.2). useSpotClearance = gap beyond an asset's footprint edge for a front-approach stand point; seatViewDistance = how far in front of a seat-aware target (e.g. the TV) the viewing point sits when ranking candidate seats — ports the Unreal prototype's RightVector*400 (~4m) at a web-appropriate scale. seatSearchRadius (ROADMAP_NEXT item 2, 2026-07-15) = max distance from a seat-aware target's own position a candidate seat may be to count as 'eligible' — beyond it, findSeatFor returns null and the sim sits on the ground instead (game/sim.ts's groundSit)."
   },
+  "fire": {
+    "burnSeconds": 30,
+    "spreadRadius": 2,
+    "_source": "ROADMAP_NEXT item 6 (fire destruction + spreading, PROJECT_CONTEXT.md §7.3 follow-on). burnSeconds = how long an unextinguished 'fire' instance burns before destroying its base object (replaced by a 'pile of ash' transient — see assets.json's ash row); spreadRadius (meters, map gridSize=1) = how far a live fire scans each tick for AssetDef.combustibility-bearing neighbors to roll spread onto. Sim-time seconds, same clock as needs decay/gains/doors."
+  },
   "doors": {
     "openSeconds": 0.25,
     "closeSeconds": 0.25,

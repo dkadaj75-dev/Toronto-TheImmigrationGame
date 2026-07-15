@@ -33,6 +33,10 @@
       "usePose": {
         "sit": { "y": 0.42 },
         "lie": { "y": 0.42 }
+      },
+      "combustibility": {
+        "chancePercent": 45,
+        "delaySeconds": 12
       }
     },
     {
@@ -54,6 +58,10 @@
       "seatTarget": true,
       "usePose": {
         "sit": { "y": 0.44 }
+      },
+      "combustibility": {
+        "chancePercent": 50,
+        "delaySeconds": 10
       }
     },
     {
@@ -99,6 +107,10 @@
       },
       "usePose": {
         "lie": { "y": 0.56 }
+      },
+      "combustibility": {
+        "chancePercent": 35,
+        "delaySeconds": 15
       }
     },
     {
@@ -167,6 +179,10 @@
       "interactions": [],
       "meshFit": {
         "scale": 0.9
+      },
+      "combustibility": {
+        "chancePercent": 10,
+        "delaySeconds": 20
       }
     },
     {
@@ -285,6 +301,10 @@
       "meshFit": {
         "yawOffsetDeg": 90,
         "scale": 1.25
+      },
+      "combustibility": {
+        "chancePercent": 60,
+        "delaySeconds": 8
       }
     },
     {
@@ -376,6 +396,27 @@
       ],
       "buyable": false,
       "_note": "Accidents slice (PROJECT_CONTEXT.md §7.3). Risk-configured on 'shower' (see its accidents[] entry). No real mesh yet — flat box stand-in until models/water_puddle.glb is imported."
+    },
+    {
+      "id": "ash",
+      "name": "Pile of ash",
+      "category": "transient",
+      "mesh": "models/ash.glb",
+      "buyPrice": 0,
+      "sellPrice": 0,
+      "environmentScore": -3,
+      "footprint": [
+        1,
+        1
+      ],
+      "interactions": [
+        "sweep"
+      ],
+      "clearedBy": [
+        "sweep"
+      ],
+      "buyable": false,
+      "_note": "ROADMAP_NEXT item 6 (fire destruction). Spawned by game/accidents.ts when an unextinguished 'fire' instance burns past tuning.fire.burnSeconds — replaces the destroyed base object at the same spot. No real mesh yet — flat box stand-in until models/ash.glb is imported."
     }
   ]
 }

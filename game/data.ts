@@ -82,6 +82,11 @@ export interface AssetDef {
    *  (worldFacingDeg(instance, def) — for a bed this already points along its long axis, since
    *  footprint depth is local Z, the same axis facingVector treats as "forward"). */
   usePose?: { sit?: UsePoseEntry; lie?: UsePoseEntry };
+  /** ROADMAP_NEXT item 6 (fire spreading): sparse, normal assets only. `chancePercent` is rolled
+   *  ONCE per (fire instance, this object) pair, `delaySeconds` after the fire's own spawn time,
+   *  provided this object is within `tuning.fire.spreadRadius` of it — see game/accidents.ts's
+   *  `spreadShouldRoll`. Absent = never catches fire from a nearby blaze. */
+  combustibility?: { chancePercent: number; delaySeconds: number };
 }
 export interface UsePoseEntry { offset?: [number, number]; y?: number; facingDeg?: number; }
 export interface AssetsData { categories: string[]; assets: AssetDef[]; }
@@ -211,6 +216,11 @@ export interface TuningData {
   };
   /** quest log HUD tuning (§3 quest system) — no magic numbers in game/quests.ts or ui.ts */
   quests: { toastDurationSeconds: number; completedLogLimit: number };
+  /** Optional so pre-existing tuning fixtures/tests stay valid (same precedent as `interaction?`
+   *  above). ROADMAP_NEXT item 6: burnSeconds = how long an unextinguished fire instance burns
+   *  before destroying its base object; spreadRadius (meters) = how far a live fire scans for
+   *  combustible neighbors each tick. game/accidents.ts falls back to `{30, 2}` when absent. */
+  fire?: { burnSeconds: number; spreadRadius: number };
   /** which map the game plays: data/maps/<active>.json (set from the Map Editor's "Play this map") */
   map?: { active: string };
   /** optional so pre-rig data files & test fixtures stay valid; game falls back to the capsule */

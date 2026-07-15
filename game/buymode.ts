@@ -196,7 +196,12 @@ export interface OverlayAddition { key: string; asset: string; pos: [number, num
 
 export type DesignerOverride =
   | { type: 'moved'; pos: [number, number]; rotDeg: number }
-  | { type: 'sold' };
+  | { type: 'sold' }
+  /** ROADMAP_NEXT item 6: an accidents-system fire burned this object down — same "gone, no
+   *  un-doing it" semantics as `sold` (hidden, excluded from effectiveInstances/nav), but kept
+   *  as its own variant (rather than reusing `sold`) so it's never confused with a refunded
+   *  player sale — no refund is ever given for a destroyed object. See `isRemoved`/`destroyDesigner`. */
+  | { type: 'destroyed' };
 
 export interface BuyOverlaySaveState {
   additions: OverlayAddition[];
@@ -220,6 +225,14 @@ export class BuyOverlay {
 
   overrideFor(designerIndex: number): DesignerOverride | undefined { return this.overrides.get(designerIndex); }
   isSold(designerIndex: number): boolean { return this.overrides.get(designerIndex)?.type === 'sold'; }
+  /** True if this designer object no longer exists in the live world — sold OR destroyed by fire
+   *  (ROADMAP_NEXT item 6). Everything that treats "sold" as "gone" (effectiveInstances, the
+   *  world-patching helpers below) should use this, not `isSold` — `isSold` stays strictly about
+   *  the player-sale case for existing callers/tests. */
+  isRemoved(designerIndex: number): boolean {
+    const t = this.overrides.get(designerIndex)?.type;
+    return t === 'sold' || t === 'destroyed';
+  }
 
   addPurchase(asset: string, pos: [number, number], rotDeg: number): OverlayAddition {
     const rec: OverlayAddition = { key: `buy#${this.seq++}`, asset, pos, rotDeg };
@@ -249,6 +262,12 @@ export class BuyOverlay {
    *  not a restoration of the original. */
   sellDesigner(designerIndex: number) {
     this.overrides.set(designerIndex, { type: 'sold' });
+  }
+
+  /** ROADMAP_NEXT item 6: fire consumed this designer object — no refund, no "un-destroy",
+   *  distinct from `sellDesigner` only in which override variant gets recorded. */
+  destroyDesigner(designerIndex: number) {
+    this.overrides.set(designerIndex, { type: 'destroyed' });
   }
 
   serialize(): BuyOverlaySaveState {
@@ -289,8 +308,8 @@ export function effectiveInstances(
 ): EffectiveInstance[] {
   const out: EffectiveInstance[] = [];
   designerObjects.forEach((p, i) => {
+    if (overlay.isRemoved(i)) return; // sold OR destroyed-by-fire (ROADMAP_NEXT item 6)
     const ov = overlay.overrideFor(i);
-    if (ov?.type === 'sold') return;
     const def = byId.get(p.asset);
     if (!def) return;
     const pos = ov?.type === 'moved' ? ov.pos : p.pos;
@@ -348,6 +367,16 @@ export function attemptSell(overlay: BuyOverlay, inst: EffectiveInstance, def: A
   if (inst.source === 'player') overlay.removeAddition(inst.key);
   else if (inst.designerIndex !== undefined) overlay.sellDesigner(inst.designerIndex);
   return { ok: true, refund: def.sellPrice };
+}
+
+/** ROADMAP_NEXT item 6: destroys an instance outright — no refund, no economy involvement (unlike
+ *  attemptSell). A player addition is deleted from the overlay entirely; a designer object gets a
+ *  `destroyed` override. Used by AccidentsController when an unextinguished fire consumes its base
+ *  object; the caller (main.ts) still owns removing/hiding the live THREE group and rebaking nav,
+ *  same division of labor as attemptSell/sellSelected. */
+export function attemptDestroy(overlay: BuyOverlay, inst: EffectiveInstance): void {
+  if (inst.source === 'player') overlay.removeAddition(inst.key);
+  else if (inst.designerIndex !== undefined) overlay.destroyDesigner(inst.designerIndex);
 }
 
 /** Applies a validated move (player addition or designer object) to the overlay. Validity must be
@@ -646,6 +675,16 @@ export class BuyModeController {
     return result.ok ? result.refund : 0;
   }
 
+  /** ROADMAP_NEXT item 6: destroys an effective instance outright (no refund, no selection state
+   *  touched) — called by AccidentsController via main.ts's `destroyBase` callback when a fire
+   *  finishes burning down its base object. Caller (main.ts) is still responsible for rebaking nav
+   *  afterward, same as every other overlay mutation here (buy/move/sell). */
+  destroyInstance(inst: EffectiveInstance) {
+    attemptDestroy(this.overlay, inst);
+    if (inst.source === 'player') this.removeAdditionGroup(inst.key);
+    else this.applyOverridesToWorld();
+  }
+
   // -------------------------------------------------------------- rendering
 
   private buildGhost(def: AssetDef, pos: [number, number], rotDeg: number, valid: boolean) {
@@ -691,7 +730,7 @@ export class BuyModeController {
       const idx = child.userData?.placedIndex as number | undefined;
       if (idx === undefined) continue;
       const ov = this.overlay.overrideFor(idx);
-      if (ov?.type === 'sold') { child.visible = false; continue; }
+      if (this.overlay.isRemoved(idx)) { child.visible = false; continue; }
       if (ov?.type === 'moved') {
         child.position.set(ov.pos[0], 0, ov.pos[1]);
         child.rotation.y = THREE.MathUtils.degToRad(ov.rotDeg);
@@ -717,7 +756,7 @@ export class BuyModeController {
       const idx = child.userData?.placedIndex as number | undefined;
       if (idx === undefined) continue;
       const ov = this.overlay.overrideFor(idx);
-      if (ov?.type === 'sold') child.visible = false;
+      if (this.overlay.isRemoved(idx)) child.visible = false;
       else if (ov?.type === 'moved') {
         child.position.set(ov.pos[0], 0, ov.pos[1]);
         child.rotation.y = THREE.MathUtils.degToRad(ov.rotDeg);

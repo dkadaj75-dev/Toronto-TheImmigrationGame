@@ -5,6 +5,7 @@ import {
   footprintRect, rectsOverlap,
   findAdjacentCell, planAccidentPlacement,
   AccidentRegistry, shouldDespawnOnCleanup, resolveTapAssetId, isAutonomyBlocked,
+  fireShouldDestroy, spreadShouldRoll, DEFAULT_FIRE_TUNING,
   type AccidentInstanceRecord,
 } from '../game/accidents';
 import type { AccidentRisk, StatsData } from '../game/data';
@@ -222,6 +223,73 @@ console.log('accidents.test — AccidentRegistry (spawn/despawn/no-duplicate-sta
   reg3.restore(snapshot);
   reg3.despawn(reg3.all[0].key);
   check('restore deep-copies — mutating the restored registry leaves the original snapshot untouched', snapshot.instances.length === snapshotCountBefore && reg3.all.length === snapshotCountBefore - 1);
+}
+
+console.log('accidents.test — fireShouldDestroy / spreadShouldRoll (ROADMAP_NEXT item 6 pure math)');
+{
+  check('DEFAULT_FIRE_TUNING matches the documented fallback', DEFAULT_FIRE_TUNING.burnSeconds === 30 && DEFAULT_FIRE_TUNING.spreadRadius === 2);
+
+  check('fireShouldDestroy false before burnSeconds elapses', fireShouldDestroy(0, 29, 30) === false);
+  check('fireShouldDestroy true exactly at burnSeconds', fireShouldDestroy(0, 30, 30) === true);
+  check('fireShouldDestroy true well past burnSeconds', fireShouldDestroy(100, 200, 30) === true);
+  check('fireShouldDestroy respects a non-zero bornAt (not just elapsed-since-0)', fireShouldDestroy(50, 79, 30) === false && fireShouldDestroy(50, 80, 30) === true);
+
+  check('spreadShouldRoll false once already rolled, regardless of everything else', spreadShouldRoll(true, 0, 10, 0, 100, 0) === false);
+  check('spreadShouldRoll false when candidate is out of radius', spreadShouldRoll(false, 3, 2, 0, 100, 0) === false);
+  check('spreadShouldRoll false before the candidate\'s own delaySeconds has elapsed', spreadShouldRoll(false, 1, 2, 0, 5, 10) === false);
+  check('spreadShouldRoll true exactly at delaySeconds, in range, not yet rolled', spreadShouldRoll(false, 1, 2, 0, 10, 10) === true);
+  check('spreadShouldRoll true well past delaySeconds', spreadShouldRoll(false, 1, 2, 0, 999, 10) === true);
+  check('spreadShouldRoll true at the exact radius boundary (inclusive)', spreadShouldRoll(false, 2, 2, 0, 10, 10) === true);
+}
+
+console.log('accidents.test — AccidentRegistry fire bookkeeping (destroyedBase / spreadRolled, ROADMAP_NEXT item 6)');
+{
+  const reg = new AccidentRegistry();
+  const fire = reg.spawn({ accidentId: 'fire', pos: [1, 1], rotDeg: 0, footprint: [1, 1], placement: 'on', baseKey: 'stove#A', bornAt: 0 });
+
+  // --- spreadRolled: one-time roll bookkeeping, scoped per (fireKey, candidateKey)
+  check('hasRolledSpread false before any roll', reg.hasRolledSpread(fire.key, 'sofa#A') === false);
+  reg.markSpreadRolled(fire.key, 'sofa#A');
+  check('hasRolledSpread true after marking', reg.hasRolledSpread(fire.key, 'sofa#A') === true);
+  check('a different candidate under the same fire is unaffected', reg.hasRolledSpread(fire.key, 'sofa#B') === false);
+  check('the same candidate under a DIFFERENT fire key is unaffected (scoped per fire)', reg.hasRolledSpread('fire#999', 'sofa#A') === false);
+
+  // --- despawning a fire clears its spreadRolled bookkeeping (no more meaning once it's gone)
+  reg.despawn(fire.key);
+  check('despawn clears spreadRolled for that fire key', reg.hasRolledSpread(fire.key, 'sofa#A') === false);
+
+  // --- destroyedBase: a burned-down spot can never spawn anything again, any accidentId
+  check('isDestroyed false before marking', reg.isDestroyed('stove#A') === false);
+  check('canSpawn true for a fresh baseKey before destruction', reg.canSpawn('fire', 'stove#A') === true);
+  reg.markDestroyed('stove#A');
+  check('isDestroyed true after marking', reg.isDestroyed('stove#A') === true);
+  check('canSpawn false for ANY accidentId on a destroyed baseKey (fire)', reg.canSpawn('fire', 'stove#A') === false);
+  check('canSpawn false for ANY accidentId on a destroyed baseKey (water_puddle too)', reg.canSpawn('water_puddle', 'stove#A') === false);
+  check('a different, non-destroyed baseKey is unaffected', reg.canSpawn('fire', 'stove#B') === true);
+
+  // --- serialize/restore round-trip carries the new fire-bookkeeping fields
+  const reg2 = new AccidentRegistry();
+  const fire2 = reg2.spawn({ accidentId: 'fire', pos: [2, 2], rotDeg: 0, footprint: [1, 1], placement: 'on', baseKey: 'bed#A', bornAt: 5 });
+  reg2.markSpreadRolled(fire2.key, 'bookshelf#A');
+  reg2.markDestroyed('stove#Z');
+  const snap = reg2.serialize();
+  check('serialize includes destroyedBase', JSON.stringify(snap.destroyedBase) === JSON.stringify(['stove#Z']));
+  check('serialize includes spreadRolled', JSON.stringify(snap.spreadRolled) === JSON.stringify([[fire2.key, ['bookshelf#A']]]));
+  check('serialize produces a plain JSON-cloneable shape (fire fields included)', JSON.stringify(JSON.parse(JSON.stringify(snap))) === JSON.stringify(snap));
+
+  const reg3 = new AccidentRegistry();
+  reg3.restore(snap);
+  check('restore reproduces isDestroyed', reg3.isDestroyed('stove#Z') === true);
+  check('restore reproduces hasRolledSpread', reg3.hasRolledSpread(fire2.key, 'bookshelf#A') === true);
+  check('restore rejects canSpawn for the restored destroyed baseKey', reg3.canSpawn('fire', 'stove#Z') === false);
+
+  // --- old-shape save state (pre-item-6, no destroyedBase/spreadRolled keys) restores cleanly
+  const reg4 = new AccidentRegistry();
+  reg4.restore({ instances: [], seq: 0 } as any);
+  check('restoring a pre-fire save shape (missing destroyedBase/spreadRolled) does not throw and starts clean', reg4.isDestroyed('anything') === false && reg4.all.length === 0);
+
+  // --- bornAt round-trips through spawn/serialize like any other field
+  check('spawned fire instance carries bornAt', fire.bornAt === 0 && fire2.bornAt === 5);
 }
 
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }

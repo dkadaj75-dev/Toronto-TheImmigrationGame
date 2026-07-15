@@ -4,7 +4,7 @@ import {
   isPurchasable, isAffordable, purchasableCatalog, catalogCategories, filterCatalog,
   snapToHalfCell, snapPos, normalizeRotDeg, rotateStep, wallRect, isValidPlacement, footprintOnFloor,
   BuyOverlay, effectiveInstances, effectivePlacedObjects, isSelectableForSell,
-  attemptBuy, attemptSell, attemptMove,
+  attemptBuy, attemptSell, attemptMove, attemptDestroy,
   iconFallbackColor, iconFallbackInitials,
   type OtherInstance, type PlacedLike, type EffectiveInstance, type FloorDef,
 } from '../game/buymode';
@@ -267,6 +267,33 @@ console.log('buymode.test — attemptBuy / attemptSell / attemptMove (funds + ov
     const i = effectiveInstances([], overlay2, byId).find((x) => x.key === realAddition.key);
     return !!i && i.pos[0] === 2 && i.pos[1] === 2 && i.rotDeg === 90;
   })());
+}
+
+console.log('buymode.test — attemptDestroy / isRemoved (ROADMAP_NEXT item 6 fire destruction, no refund)');
+{
+  const overlay = new BuyOverlay();
+
+  // --- destroying a designer object: no refund concept at this layer (attemptDestroy is void),
+  // marks a `destroyed` override distinct from `sold`.
+  const designerInst: EffectiveInstance = { key: 'designer#0', asset: 'sofa', pos: [1, 1], rotDeg: 0, footprint: [2, 1], source: 'designer', designerIndex: 0 };
+  check('isSold/isRemoved both false before anything happens', overlay.isSold(0) === false && overlay.isRemoved(0) === false);
+  attemptDestroy(overlay, designerInst);
+  check('destroyDesigner records a "destroyed" override, not "sold"', overlay.overrideFor(0)?.type === 'destroyed' && overlay.isSold(0) === false);
+  check('isRemoved is true for a destroyed designer object (same "gone" semantics as sold)', overlay.isRemoved(0) === true);
+
+  // --- destroying a player addition deletes it from the overlay outright (same as attemptSell's
+  // player-addition path) — no "destroyed" marker needed since it never existed in map data.
+  const overlay2 = new BuyOverlay();
+  const addition = overlay2.addPurchase('lamp', [3, 3], 0);
+  const playerInst: EffectiveInstance = { key: addition.key, asset: 'lamp', pos: [3, 3], rotDeg: 0, footprint: [1, 1], source: 'player' };
+  check('player addition present before destroy', overlay2.allAdditions.some((a) => a.key === addition.key));
+  attemptDestroy(overlay2, playerInst);
+  check('player addition removed after destroy', !overlay2.allAdditions.some((a) => a.key === addition.key));
+
+  // --- effectiveInstances excludes a destroyed designer object exactly like a sold one
+  const byId = new Map<string, AssetDef>([['sofa', asset({ id: 'sofa' })]]);
+  const designerObjects: PlacedLike[] = [{ asset: 'sofa', pos: [1, 1], rotDeg: 0 }];
+  check('destroyed designer object is excluded from effectiveInstances', !effectiveInstances(designerObjects, overlay, byId).some((i) => i.designerIndex === 0));
 }
 
 console.log('buymode.test — re-buy after sell (a fresh addition, not a restoration)');

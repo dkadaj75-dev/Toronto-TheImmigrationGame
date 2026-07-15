@@ -195,6 +195,16 @@
       "autonomyEligible": false,
       "primaryNeed": null,
       "_note": "Accidents slice (PROJECT_CONTEXT.md §7.3) — cleanup action for the 'water_puddle' accident asset's clearedBy. Player-only by design (autonomyEligible false); small hygiene gain for the mopping motion."
+    },
+    {
+      "id": "sweep",
+      "name": "Sweep up",
+      "needGains": {},
+      "skillGains": {},
+      "animation": "stand_use",
+      "autonomyEligible": false,
+      "primaryNeed": null,
+      "_note": "ROADMAP_NEXT item 6 (fire destruction) — cleanup action for the 'ash' transient asset's clearedBy. Player-only by design (autonomyEligible false), no need/skill effect, same shape as extinguish/mop."
     }
   ]
 }

@@ -76,10 +76,6 @@ async function start() {
   const cue = new ClickCue();
   scene.add(cue.object);
 
-  // --- accidents (PROJECT_CONTEXT.md §7.3): closures over the live `let world`/`grid` so a
-  // hot-reload rebake/rebuild is picked up automatically, same pattern as Autonomy below.
-  const accidents = new AccidentsController(() => data, () => world, () => grid);
-
   // --- Buy/Sell mode (§7.6): overlay of player purchases/moves/sells layered over
   // data.map.placedObjects (never written back to the map file — see buymode.ts's module doc
   // comment). `rebakeNav` is the single place that feeds the overlay's EFFECTIVE placed-object
@@ -91,6 +87,18 @@ async function start() {
     grid = bakeNavGrid({ ...data.map, placedObjects: buyMode.effectivePlacedObjectsList() }, data.assets);
     agent.retune(data.tuning, grid, assetsById(data));
   };
+
+  // --- accidents (PROJECT_CONTEXT.md §7.3 + ROADMAP_NEXT item 6 fire destruction/spread):
+  // closures over the live `let world`/`grid` so a hot-reload rebake/rebuild is picked up
+  // automatically, same pattern as Autonomy below. `destroyBase` is how a burned-out fire removes
+  // its base object from the world WITHOUT accidents.ts importing buymode.ts (that would be a
+  // circular import — buymode.ts already imports accidents.ts's footprintRect/rectsOverlap):
+  // resolve the live Object3D to a buy-mode EffectiveInstance and destroy it outright (no refund),
+  // then rebake nav since a destroyed object frees up floor space.
+  const accidents = new AccidentsController(() => data, () => world, () => grid, (obj) => {
+    const inst = buyMode.instanceForObject(obj);
+    if (inst) { buyMode.destroyInstance(inst); rebakeNav(); }
+  });
 
   // --- rigged character: swap the capsule's contents for the GLB when it loads.
   // The `sim` group stays the agent's object, so position/rotation/pose logic is untouched.
@@ -229,7 +237,7 @@ async function start() {
         vars: quests.vars,
         quests: quests.quests,
       };
-      accidents.rollFor(a.target, def, ctx);
+      accidents.rollFor(a.target, def, ctx, simClockSeconds);
     }
   };
   hud.onCancelAction = () => { autonomy.notePlayerCommand(); agent.stopAction(); };
@@ -506,6 +514,12 @@ async function start() {
   let gameSeconds = 8 * 3600; // start the day at 08:00
   let gameDay = 1;
   const clockScale = () => 86400 / data.tuning.time.secondsPerGameDay;
+  // ROADMAP_NEXT item 6: monotonic sim-time seconds elapsed since the game started, on the SAME
+  // sdt as everything else (pause/2x/3x affect it identically) but — unlike gameSeconds — never
+  // wraps at midnight, so a fire's burn timer never sees its elapsed time jump backward across a
+  // day boundary. Fire is the only current consumer; kept general in case anything else ever
+  // wants an unwrapping sim clock.
+  let simClockSeconds = 0;
 
   // --- render loop ---
   let frames = 0, fpsTimer = 0, last = performance.now();
@@ -521,6 +535,7 @@ async function start() {
     // mid-move when a buy-mode nav rebake happens (see the onBuyClose safety net for the leftover
     // stale-path edge case when it WAS mid-route at the moment buy mode opened).
     const sdt = buyMode.active ? 0 : dt * hud.speed;
+    simClockSeconds += sdt;
 
     gameSeconds += sdt * clockScale();
     while (gameSeconds >= 86400) { gameSeconds -= 86400; gameDay++; }
@@ -542,6 +557,9 @@ async function start() {
     const simPos: [number, number] = [sim.position.x, sim.position.z];
     const simPath = agent.getPathPoints();
     for (const d of doors.instances) d.update(sdt, simPos, simPath);
+    // ROADMAP_NEXT item 6: fire burn timers + spread rolls advance on the same sim time as doors —
+    // pause freezes a burning fire mid-blaze, 2x/3x speeds it toward destruction/spreading.
+    accidents.tick(simClockSeconds);
     // §7.5: animated-GIF sprites (furniture AND accidents — anything attached via world.ts's
     // shared attachMesh) advance on the SAME sim time as doors/the animation mixer. One traversal
     // covers every group in the current world (accidents' live groups and doors.group are both

@@ -166,6 +166,15 @@ lampScale.dispatchEvent(new window.Event('input', { bubbles: true }));
 lampScale.value = '';
 lampScale.dispatchEvent(new window.Event('input', { bubbles: true }));
 
+// --- combustibility sparse pruning (ROADMAP_NEXT item 6), same convention as meshFit above:
+// set chancePercent then clear it — the only sub-field ever touched, so the whole sparse
+// combustibility object should be pruned away, not left behind as an empty {}.
+const lampCombust = doc.querySelector('input[data-path="combustibility.chancePercent"]');
+lampCombust.value = '30';
+lampCombust.dispatchEvent(new window.Event('input', { bubbles: true }));
+lampCombust.value = '';
+lampCombust.dispatchEvent(new window.Event('input', { bubbles: true }));
+
 // --- door section (§7.1): only rendered when category === "door"; absent otherwise
 assert(doc.querySelector('input[data-path="door.hingeX"]') === null, 'no door section while lamp is category seating');
 const lampCat = doc.querySelector('select[data-path="category"]');
@@ -245,9 +254,20 @@ const pctAtMaxInput = doc.querySelector('input[data-path="accidents.0.modifiers.
 pctAtMaxInput.value = '-2';
 pctAtMaxInput.dispatchEvent(new window.Event('input', { bubbles: true }));
 
+// --- combustibility (ROADMAP_NEXT item 6): sparse round-trip on a normal (non-transient) asset
+assert(doc.querySelector('input[data-path="combustibility.chancePercent"]').value === '', 'combustibility.chancePercent blank when absent');
+assert(doc.querySelector('input[data-path="combustibility.delaySeconds"]').value === '', 'combustibility.delaySeconds blank when absent');
+const combustChance = doc.querySelector('input[data-path="combustibility.chancePercent"]');
+combustChance.value = '40';
+combustChance.dispatchEvent(new window.Event('input', { bubbles: true }));
+const combustDelay = doc.querySelector('input[data-path="combustibility.delaySeconds"]');
+combustDelay.value = '15';
+combustDelay.dispatchEvent(new window.Event('input', { bubbles: true }));
+
 // --- accident-category asset: ONLY the clearedBy multi-select, never the risk section
 doc.querySelector('[data-asset-id="fire"]').click();
 assert(doc.querySelector('select[data-path^="accidents."]') === null, 'accident-category asset never shows the risk-config section');
+assert(doc.querySelector('input[data-path="combustibility.chancePercent"]') === null, 'transient-category asset never shows the Combustibility card either');
 const clearedCb = doc.querySelector('input[data-path="clearedBy:extinguish"]');
 assert(clearedCb, 'clearedBy checklist scoped to fire\'s own interactions (extinguish)');
 assert(clearedCb.checked === true, 'fire\'s existing clearedBy:["extinguish"] pre-checks the box');
@@ -300,6 +320,7 @@ assert(!('meshFit' in savedLamp), 'new asset has no meshFit key (nothing set)');
 assert(!('usePose' in savedLamp), 'new asset has no usePose key (nothing set)');
 assert(!('requiresQuestUnlock' in savedLamp), 'new asset has no requiresQuestUnlock key (defaults unlocked)');
 assert(!('icon' in savedLamp), 'new asset has no icon key (falls back to initials tile)');
+assert(!('combustibility' in savedLamp), 'new asset has no combustibility key (set-then-cleared, pruned to absent)');
 assert(savedLamp.category === 'door', 'PUT carries lamp\'s category change to door');
 assert(savedLamp.door.hingeOffset[0] === -0.5 && savedLamp.door.hingeOffset[1] === 0, 'PUT carries door.hingeOffset');
 assert(savedLamp.door.openAngleDeg === 100, 'PUT carries door.openAngleDeg');
@@ -320,6 +341,8 @@ assert(savedRisk.modifiers.length === 1, 'PUT carries the added modifier');
 assert(savedRisk.modifiers[0].var === 'skills.cooking', 'PUT carries modifier.var');
 assert(savedRisk.modifiers[0].pctAt0 === 15, 'PUT carries modifier.pctAt0');
 assert(savedRisk.modifiers[0].pctAtMax === -2, 'PUT carries modifier.pctAtMax');
+assert(savedStove.combustibility.chancePercent === 40, 'PUT carries combustibility.chancePercent');
+assert(savedStove.combustibility.delaySeconds === 15, 'PUT carries combustibility.delaySeconds');
 
 const savedFire = saved.assets.find((a) => a.id === 'fire');
 assert(JSON.stringify(savedFire.clearedBy) === JSON.stringify(['extinguish']), 'PUT preserves fire\'s untouched clearedBy');

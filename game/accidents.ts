@@ -75,6 +75,39 @@ export function rollAccident(chancePercent: number, rng: () => number = Math.ran
   return rng() * 100 < chancePercent;
 }
 
+// ==================================================================== fire destruction/spread (ROADMAP_NEXT item 6, pure)
+
+/** Fallback when `tuning.fire` is absent (pre-existing tuning fixtures/tests). */
+export const DEFAULT_FIRE_TUNING = { burnSeconds: 30, spreadRadius: 2 };
+
+/** True once a fire instance has burned (while still un-extinguished — i.e. still present in the
+ *  registry; extinguishing already despawns it via the ordinary clearedBy/maybeCleanup path) for
+ *  at least `burnSeconds`. `now`/`bornAt` are sim-time elapsed seconds — game/main.ts's own
+ *  monotonic accumulator, NOT the wrapping day/night clock (a fire spanning midnight must not see
+ *  its elapsed time jump backward). */
+export function fireShouldDestroy(bornAt: number, now: number, burnSeconds: number): boolean {
+  return now - bornAt >= burnSeconds;
+}
+
+/** Should THIS fire attempt its one-time roll against this candidate object right now? False if
+ *  already rolled for this exact (fire, candidate) pair, the candidate is out of `spreadRadius`,
+ *  or its own `delaySeconds` (measured from the fire's own `bornAt`) hasn't elapsed yet. Doesn't
+ *  perform the roll itself — mirrors `computeAccidentChance`/`rollAccident`'s own decide-then-roll
+ *  split, and mirrors §7.3's "gets ONE roll (per fire, per object)" wording exactly: once this
+ *  returns true the caller must mark it rolled regardless of the roll's outcome. */
+export function spreadShouldRoll(
+  alreadyRolled: boolean,
+  distance: number,
+  spreadRadius: number,
+  fireBornAt: number,
+  now: number,
+  delaySeconds: number,
+): boolean {
+  if (alreadyRolled) return false;
+  if (distance > spreadRadius) return false;
+  return now - fireBornAt >= delaySeconds;
+}
+
 // ==================================================================== footprint geometry
 
 export interface Rect { x0: number; x1: number; z0: number; z1: number; }
@@ -163,9 +196,24 @@ export interface AccidentInstanceRecord {
    *  or null if spawned without a known trigger (e.g. restored from an old save). Used ONLY
    *  by the no-duplicate-stacking rule — hierarchy blocking is purely geometric (see below). */
   baseKey: string | null;
+  /** ROADMAP_NEXT item 6 (fire): sim-time elapsed seconds (game/main.ts's monotonic clock, NOT
+   *  the wrapping day clock) when this instance was spawned. Only meaningful for `fire` instances
+   *  (burn-timer/spread-delay math); left undefined for every other accident type, and for `ash`
+   *  it's just informational (ash has no timer of its own today). */
+  bornAt?: number;
 }
 
-export interface AccidentsSaveState { instances: AccidentInstanceRecord[]; seq: number; }
+export interface AccidentsSaveState {
+  instances: AccidentInstanceRecord[];
+  seq: number;
+  /** ROADMAP_NEXT item 6: baseKeys a fire has already burned down to ash — `canSpawn` refuses to
+   *  spawn ANY new accident on one (rule: "a fire on a destroyed/ash spot doesn't re-roll the same
+   *  object"). Optional so pre-fire save shapes/tests stay valid. */
+  destroyedBase?: string[];
+  /** ROADMAP_NEXT item 6: (fire instance key) → set of candidate baseKeys already given their
+   *  one-time spread roll against that fire, win or lose. Optional for the same reason. */
+  spreadRolled?: [string, string[]][];
+}
 
 /**
  * Pure runtime state — no THREE dependency, so spawn/despawn/hierarchy/serialize are all
@@ -176,6 +224,13 @@ export interface AccidentsSaveState { instances: AccidentInstanceRecord[]; seq: 
 export class AccidentRegistry {
   private instances: AccidentInstanceRecord[] = [];
   private seq = 0;
+  /** ROADMAP_NEXT item 6: baseKeys destroyed down to ash — persists past the fire instance's own
+   *  despawn (unlike the no-duplicate-stacking check below, which only looks at currently-live
+   *  instances) so a burned-down spot never re-ignites or hosts any other accident type either. */
+  private destroyedBase = new Set<string>();
+  /** ROADMAP_NEXT item 6: fire instance key → candidate baseKeys already given their one-time
+   *  spread roll against THAT fire (win or lose) — cleared automatically when the fire despawns. */
+  private spreadRolled = new Map<string, Set<string>>();
 
   get all(): readonly AccidentInstanceRecord[] { return this.instances; }
 
@@ -183,9 +238,11 @@ export class AccidentRegistry {
    *  null baseKey (unknown trigger) never blocks anything — only exact (accidentId, baseKey)
    *  pairs collide. Different accident types CAN coexist on the same base asset (not forbidden
    *  by the spec — e.g. nothing stops a stove from independently risking both fire and, if a
-   *  designer configured it, a puddle). */
+   *  designer configured it, a puddle). ROADMAP_NEXT item 6: a destroyed baseKey can never spawn
+   *  anything at all, regardless of accidentId — it's ash now, not a stove. */
   canSpawn(accidentId: string, baseKey: string | null): boolean {
     if (baseKey === null) return true;
+    if (this.destroyedBase.has(baseKey)) return false;
     return !this.instances.some((i) => i.accidentId === accidentId && i.baseKey === baseKey);
   }
 
@@ -198,7 +255,22 @@ export class AccidentRegistry {
   despawn(key: string): AccidentInstanceRecord | null {
     const idx = this.instances.findIndex((i) => i.key === key);
     if (idx === -1) return null;
+    this.spreadRolled.delete(key); // no more meaning once the fire itself is gone
     return this.instances.splice(idx, 1)[0];
+  }
+
+  /** ROADMAP_NEXT item 6: marks a baseKey as burned down to ash — see `canSpawn`/`destroyedBase`. */
+  markDestroyed(baseKey: string) { this.destroyedBase.add(baseKey); }
+  isDestroyed(baseKey: string): boolean { return this.destroyedBase.has(baseKey); }
+
+  /** ROADMAP_NEXT item 6: has `fireKey` already used its one-time roll against `candidateKey`? */
+  hasRolledSpread(fireKey: string, candidateKey: string): boolean {
+    return this.spreadRolled.get(fireKey)?.has(candidateKey) ?? false;
+  }
+  markSpreadRolled(fireKey: string, candidateKey: string) {
+    let set = this.spreadRolled.get(fireKey);
+    if (!set) { set = new Set(); this.spreadRolled.set(fireKey, set); }
+    set.add(candidateKey);
   }
 
   /** §7.3 hierarchy: the first live instance whose footprint overlaps the given base asset's
@@ -213,12 +285,19 @@ export class AccidentRegistry {
   }
 
   serialize(): AccidentsSaveState {
-    return { instances: this.instances.map((i) => ({ ...i })), seq: this.seq };
+    return {
+      instances: this.instances.map((i) => ({ ...i })),
+      seq: this.seq,
+      destroyedBase: [...this.destroyedBase],
+      spreadRolled: [...this.spreadRolled.entries()].map(([k, v]) => [k, [...v]]),
+    };
   }
 
   restore(s: AccidentsSaveState) {
     this.instances = s.instances.map((i) => ({ ...i }));
     this.seq = s.seq;
+    this.destroyedBase = new Set(s.destroyedBase ?? []);
+    this.spreadRolled = new Map((s.spreadRolled ?? []).map(([k, v]) => [k, new Set(v)]));
   }
 }
 
@@ -246,18 +325,21 @@ function clamp01(v: number): number { return clamp(v, 0, 1); }
 
 // ==================================================================== three.js layer
 
-const ACCIDENT_STANDIN_COLORS: Record<string, number> = { fire: 0xff6a3d, water_puddle: 0x4fa8e0 };
+const ACCIDENT_STANDIN_COLORS: Record<string, number> = { fire: 0xff6a3d, water_puddle: 0x4fa8e0, ash: 0x5a5450 };
+/** Flat (non-upright) stand-ins — puddles and ash both lie on the floor rather than standing up
+ *  like a fire block. */
+const FLAT_ACCIDENT_IDS = new Set(['water_puddle', 'ash']);
 
 /** Footprint-sized colored box, same "instant stand-in" philosophy as world.ts's makeStandIn —
  *  swapped for a GLB clone OR (§7.5) an image/GIF sprite if/when `def.mesh` loads, via world.ts's
- *  shared `attachMesh` (see buildGroup below). Puddles render thin/flat and non-shadow-casting;
+ *  shared `attachMesh` (see buildGroup below). Puddles/ash render thin/flat and non-shadow-casting;
  *  anything else (fire) gets a small upright block. */
 function makeAccidentStandIn(def: AssetDef): THREE.Group {
   const g = new THREE.Group();
   g.name = `accident:${def.id}`;
   const [fw, fd] = def.footprint;
   const color = ACCIDENT_STANDIN_COLORS[def.id] ?? 0xd14f4f;
-  const isFlat = def.id === 'water_puddle';
+  const isFlat = FLAT_ACCIDENT_IDS.has(def.id);
   const height = isFlat ? 0.03 : 0.5;
   const mat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.85 });
   const body = new THREE.Mesh(new THREE.BoxGeometry(fw * 0.9, height, fd * 0.9), mat);
@@ -291,6 +373,13 @@ export class AccidentsController {
     private getData: () => GameData,
     private getWorld: () => THREE.Group,
     private getGrid: () => NavGrid,
+    /** ROADMAP_NEXT item 6: called when a fire finishes burning down its base object. Kept as an
+     *  injected callback (not a direct import) so accidents.ts stays independent of buymode.ts —
+     *  the two modules already have a one-way import the other direction (buymode.ts reuses
+     *  accidents.ts's footprintRect/rectsOverlap), and a back-import would create a cycle.
+     *  main.ts wires this to `buyMode.instanceForObject` + `buyMode.destroyInstance` + a nav
+     *  rebake. Optional so tests/tools that don't care about destruction can omit it. */
+    private destroyBase?: (obj: THREE.Object3D) => void,
   ) {}
 
   /** Live THREE.Object3D for a registry instance (used to redirect a blocked tap's walk/action
@@ -316,7 +405,7 @@ export class AccidentsController {
    * snapshot (needs/skills/funds/time/vars/quests) built by the caller, reused as-is against
    * quests.ts's resolveVar (§7.3: "reuse game/quests.ts's path resolution, don't reinvent").
    */
-  rollFor(targetObj: THREE.Object3D, def: AssetDef, ctx: EvalContext, rng: () => number = Math.random) {
+  rollFor(targetObj: THREE.Object3D, def: AssetDef, ctx: EvalContext, now: number, rng: () => number = Math.random) {
     if (def.category === 'transient' || !def.accidents?.length) return;
     const baseKey = targetObj.uuid;
     const stats = this.getData().stats;
@@ -325,11 +414,11 @@ export class AccidentsController {
       if (!this.registry.canSpawn(risk.accidentId, baseKey)) continue;
       const chance = computeAccidentChance(risk, ctx, stats);
       if (!rollAccident(chance, rng)) continue;
-      this.spawn(risk, targetObj, baseKey, rng);
+      this.spawn(risk, targetObj, baseKey, now, rng);
     }
   }
 
-  private spawn(risk: AccidentRisk, baseObj: THREE.Object3D, baseKey: string, rng: () => number) {
+  private spawn(risk: AccidentRisk, baseObj: THREE.Object3D, baseKey: string, now: number, rng: () => number) {
     const data = this.getData();
     const accidentDef = data.assets.assets.find((a) => a.id === risk.accidentId && a.category === 'transient');
     if (!accidentDef) { console.warn(`accident risk references unknown accident asset "${risk.accidentId}"`); return; }
@@ -342,9 +431,82 @@ export class AccidentsController {
     const plan = planAccidentPlacement(risk, basePos, grid, isFree, rng);
     const rec = this.registry.spawn({
       accidentId: accidentDef.id, pos: plan.pos, rotDeg: 0,
-      footprint: accidentDef.footprint, placement: plan.placement, baseKey,
+      footprint: accidentDef.footprint, placement: plan.placement, baseKey, bornAt: now,
     });
     this.buildGroup(rec, accidentDef);
+  }
+
+  // ------------------------------------------------------ fire destruction/spread (ROADMAP_NEXT item 6)
+
+  /** Per-frame fire tick: call once per render frame with the sim-time monotonic clock (same `sdt`
+   *  accumulator doors/anim/sprites already advance on — pause freezes fire, 2x/3x speeds it up).
+   *  Rolls spread against nearby combustible objects for every live fire, then destroys (base
+   *  object → ash) any fire that's burned past `tuning.fire.burnSeconds`. Two separate passes over
+   *  a stable snapshot array (not `this.registry.all` directly) so destroying one fire mid-loop
+   *  never disturbs the other pass's iteration. */
+  tick(now: number, rng: () => number = Math.random) {
+    const tuning = this.getData().tuning.fire ?? DEFAULT_FIRE_TUNING;
+    const fires = this.registry.all.filter((i) => i.accidentId === 'fire' && i.bornAt !== undefined);
+    for (const fire of fires) this.rollSpreadFor(fire, tuning, now, rng);
+    for (const fire of fires) {
+      if (fireShouldDestroy(fire.bornAt!, now, tuning.burnSeconds)) this.destroyBaseAndAsh(fire, now);
+    }
+  }
+
+  /** Scans every live, visible, asset-tagged object in the world for spread candidacy against one
+   *  fire: within `spreadRadius`, has `combustibility` set, hasn't had its one-time roll against
+   *  THIS fire yet, and its `delaySeconds` has elapsed since the fire started. Invisible objects
+   *  (sold/destroyed via the buy-mode overlay) are skipped — a burned-down ash pile or a sold
+   *  object never catches fire (§7.3-adjacent rule: "a fire on a destroyed/ash spot doesn't
+   *  re-roll the same object"), and `registry.canSpawn`'s `destroyedBase` check is the
+   *  belt-and-braces backstop for the same rule at the pure-logic layer. */
+  private rollSpreadFor(fire: AccidentInstanceRecord, tuning: { burnSeconds: number; spreadRadius: number }, now: number, rng: () => number) {
+    const data = this.getData();
+    for (const obj of this.getWorld().children) {
+      if (obj.visible === false) continue;
+      const assetId = obj.userData?.assetId as string | undefined;
+      if (!assetId || obj.uuid === fire.baseKey) continue; // the burning object itself isn't a spread target
+      const def = data.assets.assets.find((a) => a.id === assetId);
+      if (!def?.combustibility) continue;
+      const candidateKey = obj.uuid;
+      const already = this.registry.hasRolledSpread(fire.key, candidateKey);
+      const dist = Math.hypot(obj.position.x - fire.pos[0], obj.position.z - fire.pos[1]);
+      if (!spreadShouldRoll(already, dist, tuning.spreadRadius, fire.bornAt!, now, def.combustibility.delaySeconds)) continue;
+      this.registry.markSpreadRolled(fire.key, candidateKey); // one roll, win or lose — never again for this pair
+      if (!this.registry.canSpawn('fire', candidateKey)) continue; // already burning (or destroyed) from elsewhere
+      if (!rollAccident(def.combustibility.chancePercent, rng)) continue;
+      this.spawnFireOn(obj, now);
+    }
+  }
+
+  /** A spread success: a brand-new fire instance "on" the candidate object, identical in every
+   *  way (burn timer, further spread, extinguishable) to a directly-rolled one (§7.3/item 6:
+   *  "Fires from spread behave identically"). */
+  private spawnFireOn(obj: THREE.Object3D, now: number) {
+    const fireDef = this.getData().assets.assets.find((a) => a.id === 'fire' && a.category === 'transient');
+    if (!fireDef) return;
+    const baseKey = obj.uuid;
+    const pos: [number, number] = [obj.position.x, obj.position.z];
+    const rec = this.registry.spawn({ accidentId: 'fire', pos, rotDeg: 0, footprint: fireDef.footprint, placement: 'on', baseKey, bornAt: now });
+    this.buildGroup(rec, fireDef);
+  }
+
+  /** Fire burned out unextinguished: despawns the fire itself, destroys its base object (via the
+   *  injected `destroyBase` callback, if the live object can still be found and a callback was
+   *  supplied), marks the baseKey permanently destroyed (`registry.markDestroyed` — see
+   *  `canSpawn`), and spawns an `ash` transient in its place at the same spot. */
+  private destroyBaseAndAsh(fire: AccidentInstanceRecord, now: number) {
+    const baseObj = fire.baseKey ? this.getWorld().children.find((c) => c.uuid === fire.baseKey) ?? null : null;
+    this.despawn(fire.key);
+    if (fire.baseKey) this.registry.markDestroyed(fire.baseKey);
+    if (baseObj) this.destroyBase?.(baseObj);
+    const ashDef = this.getData().assets.assets.find((a) => a.id === 'ash' && a.category === 'transient');
+    if (!ashDef) { console.warn('fire destruction fired but no "ash" transient asset is defined'); return; }
+    const rec = this.registry.spawn({
+      accidentId: 'ash', pos: fire.pos, rotDeg: fire.rotDeg, footprint: ashDef.footprint,
+      placement: 'on', baseKey: fire.baseKey, bornAt: now,
+    });
+    this.buildGroup(rec, ashDef);
   }
 
   private buildGroup(rec: AccidentInstanceRecord, def: AssetDef) {

@@ -489,6 +489,24 @@ function renderEditor() {
     root.appendChild(cardCleared);
   } else {
     root.appendChild(renderAccidentsCard(a));
+
+    // --- combustibility (ROADMAP_NEXT item 6): sparse, same ensure/prune convention as
+    // usePose/meshFit above — leave both fields blank to mean "never catches fire".
+    const cardCombust = document.createElement('div');
+    cardCombust.className = 'card';
+    cardCombust.innerHTML = '<h2>Combustibility</h2><div class="hint">If a live fire elsewhere is within tuning.fire.spreadRadius of this object, it gets ONE roll (per fire) to catch fire itself, delaySeconds after that fire started. Leave both blank for "never catches fire".</div>';
+    const pruneCombust = () => { if (a.combustibility && a.combustibility.chancePercent === undefined && a.combustibility.delaySeconds === undefined) delete a.combustibility; };
+    cardCombust.appendChild(frow('catch chance % (per fire)', numInput(
+      () => a.combustibility?.chancePercent,
+      (v) => { if (v === undefined) { if (a.combustibility) delete a.combustibility.chancePercent; } else (a.combustibility ??= {}).chancePercent = v; pruneCombust(); },
+      'combustibility.chancePercent',
+    )));
+    cardCombust.appendChild(frow('ignition delay (seconds)', numInput(
+      () => a.combustibility?.delaySeconds,
+      (v) => { if (v === undefined) { if (a.combustibility) delete a.combustibility.delaySeconds; } else (a.combustibility ??= {}).delaySeconds = v; pruneCombust(); },
+      'combustibility.delaySeconds',
+    )));
+    root.appendChild(cardCombust);
   }
 
   // --- mesh & preview
