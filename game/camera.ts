@@ -1,8 +1,26 @@
-// camera.ts — ¾ overhead camera. One-finger pan, pinch zoom, mouse drag/wheel fallback.
-// All clamps come from tuning.json (camera.*) — nothing hardcoded.
+// camera.ts — ¾ overhead camera. One-finger pan, pinch zoom, mouse drag/wheel fallback,
+// plus yaw rotation: desktop right-mouse drag, mobile two-finger twist (coexists with pinch).
+// All clamps/speeds come from tuning.json (camera.*) — nothing hardcoded.
 
 import * as THREE from 'three';
 import type { TuningData, MapData } from './data';
+
+const DEFAULT_ROTATE_SPEED_DEG_PER_PX = 0.3;
+const DEFAULT_TWIST_DEADZONE_DEG = 1.5;
+const DEFAULT_TWIST_SPEED = 1.2;
+
+/** Angle (degrees, atan2 convention) of the vector from touch a to touch b. Pure/testable. */
+export function twoTouchAngleDeg(ax: number, ay: number, bx: number, by: number): number {
+  return THREE.MathUtils.radToDeg(Math.atan2(by - ay, bx - ax));
+}
+
+/** Shortest signed delta (degrees, in [-180, 180]) rotating from `from` to `to`. Pure/testable. */
+export function shortestAngleDeltaDeg(from: number, to: number): number {
+  let delta = (to - from) % 360;
+  if (delta > 180) delta -= 360;
+  if (delta < -180) delta += 360;
+  return delta;
+}
 
 export class TouchCamera {
   readonly camera: THREE.PerspectiveCamera;
@@ -14,8 +32,9 @@ export class TouchCamera {
   private bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
 
   // gesture state
-  private pointers = new Map<number, { x: number; y: number }>();
+  private pointers = new Map<number, { x: number; y: number; button: number }>();
   private lastPinchDist = 0;
+  private lastTwistAngleDeg = 0;
 
   constructor(aspect: number, tuning: TuningData['camera'], map: MapData) {
     this.tuning = tuning;
@@ -37,24 +56,40 @@ export class TouchCamera {
   }
 
   attach(el: HTMLElement) {
+    // right-mouse drag rotates the camera rather than issuing a tap/move order (input.ts ignores
+    // non-left buttons for the same reason) — suppress the browser's own context menu on the canvas.
+    el.addEventListener('contextmenu', (e) => e.preventDefault());
     el.addEventListener('pointerdown', (e) => {
       el.setPointerCapture(e.pointerId);
-      this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (this.pointers.size === 2) this.lastPinchDist = this.pinchDist();
+      this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, button: e.button });
+      if (this.pointers.size === 2) {
+        this.lastPinchDist = this.pinchDist();
+        this.lastTwistAngleDeg = this.pinchAngle();
+      }
     });
     el.addEventListener('pointermove', (e) => {
       const prev = this.pointers.get(e.pointerId);
       if (!prev) return;
-      const cur = { x: e.clientX, y: e.clientY };
+      const cur = { x: e.clientX, y: e.clientY, button: prev.button };
 
       if (this.pointers.size === 1) {
-        this.pan(cur.x - prev.x, cur.y - prev.y, el.clientHeight);
+        if (prev.button === 2) this.rotateBy((cur.x - prev.x) * -this.rotateSpeedDegPerPx());
+        else this.pan(cur.x - prev.x, cur.y - prev.y, el.clientHeight);
       }
       this.pointers.set(e.pointerId, cur);
       if (this.pointers.size === 2) {
+        // pinch (distance) and twist (angle) are independent measurements of the same two
+        // touches, so both can apply within a single gesture without interfering.
         const d = this.pinchDist();
         if (this.lastPinchDist > 0) this.zoomBy(this.lastPinchDist / d);
         this.lastPinchDist = d;
+
+        const a = this.pinchAngle();
+        const delta = shortestAngleDeltaDeg(this.lastTwistAngleDeg, a);
+        this.lastTwistAngleDeg = a;
+        // dead zone: small angle jitter that naturally happens while pinching is dropped
+        // entirely (not accumulated) so it never "spins" the camera.
+        if (Math.abs(delta) > this.twistDeadzoneDeg()) this.rotateBy(delta * this.twistSpeed());
       }
     });
     const end = (e: PointerEvent) => { this.pointers.delete(e.pointerId); this.lastPinchDist = 0; };
@@ -63,9 +98,23 @@ export class TouchCamera {
     el.addEventListener('wheel', (e) => { e.preventDefault(); this.zoomBy(1 + Math.sign(e.deltaY) * 0.1); }, { passive: false });
   }
 
+  private rotateSpeedDegPerPx(): number { return this.tuning.rotateSpeedDegPerPx ?? DEFAULT_ROTATE_SPEED_DEG_PER_PX; }
+  private twistDeadzoneDeg(): number { return this.tuning.twistDeadzoneDeg ?? DEFAULT_TWIST_DEADZONE_DEG; }
+  private twistSpeed(): number { return this.tuning.twistSpeed ?? DEFAULT_TWIST_SPEED; }
+
   private pinchDist(): number {
     const [a, b] = [...this.pointers.values()];
     return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+
+  private pinchAngle(): number {
+    const [a, b] = [...this.pointers.values()];
+    return twoTouchAngleDeg(a.x, a.y, b.x, b.y);
+  }
+
+  private rotateBy(deltaDeg: number) {
+    this.yawDeg = (this.yawDeg + deltaDeg + 360) % 360;
+    this.apply();
   }
 
   private pan(dxPx: number, dyPx: number, viewportH: number) {

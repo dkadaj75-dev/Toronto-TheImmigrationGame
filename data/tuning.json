@@ -84,6 +84,9 @@
     "minPitchDeg": 30,
     "maxPitchDeg": 70,
     "panBoundsPadding": 2,
-    "_source": "PLACEHOLDER — clamps to be tuned against Sims reference screenshots"
+    "rotateSpeedDegPerPx": 0.3,
+    "twistDeadzoneDeg": 1.5,
+    "twistSpeed": 1.2,
+    "_source": "PLACEHOLDER — clamps to be tuned against Sims reference screenshots. rotateSpeedDegPerPx = desktop right-drag yaw sensitivity; twistDeadzoneDeg/twistSpeed = mobile two-finger twist (coexists with pinch-zoom), deadzone keeps pinch jitter from spinning the camera"
   }
 }

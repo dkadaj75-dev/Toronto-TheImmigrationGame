@@ -189,7 +189,16 @@ export interface TuningData {
    *  above). Defaults for AssetDef.door fields when a door instance doesn't override them (§7.1).
    *  triggerDistance is in meters (map gridSize=1 → 1 grid unit = 1 meter). */
   doors?: { openSeconds?: number; closeSeconds?: number; openAngleDeg?: number; triggerDistance?: number };
-  camera: { minZoom: number; maxZoom: number; minPitchDeg: number; maxPitchDeg: number; panBoundsPadding: number };
+  /** rotate* fields optional so pre-existing tuning fixtures/tests stay valid (same precedent as
+   *  `interaction?`/`doors?` above) — camera.ts falls back to sane defaults when absent.
+   *  rotateSpeedDegPerPx: desktop right-drag mouse sensitivity (yaw degrees per pixel of drag).
+   *  twistDeadzoneDeg: minimum per-move-event two-finger angle change (degrees) before it's treated
+   *  as an intentional twist rather than pinch jitter — must coexist with pinch-zoom in one gesture.
+   *  twistSpeed: multiplier applied to the raw two-finger angle delta once past the deadzone. */
+  camera: {
+    minZoom: number; maxZoom: number; minPitchDeg: number; maxPitchDeg: number; panBoundsPadding: number;
+    rotateSpeedDegPerPx?: number; twistDeadzoneDeg?: number; twistSpeed?: number;
+  };
   /** quest log HUD tuning (§3 quest system) — no magic numbers in game/quests.ts or ui.ts */
   quests: { toastDurationSeconds: number; completedLogLimit: number };
   /** which map the game plays: data/maps/<active>.json (set from the Map Editor's "Play this map") */

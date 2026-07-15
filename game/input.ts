@@ -30,6 +30,8 @@ export class TapInput {
     private onTap: (hit: TapResult) => void,
   ) {
     el.addEventListener('pointerdown', (e) => {
+      // right (and other non-left) buttons drive camera rotation (camera.ts), never a tap
+      if (e.button !== 0) return;
       // only track the first pointer — a second finger means pinch, never tap
       if (this.down === null) this.down = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() };
       else this.down = { id: -1, x: 0, y: 0, t: 0 }; // poisoned: multi-touch
