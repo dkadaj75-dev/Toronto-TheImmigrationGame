@@ -64,7 +64,7 @@ check('save disabled while clean', doc.getElementById('save').disabled);
 // ------------------------------------------------------------------ slice 1: objects
 console.log('map-editor.test — objects: hit test / snap / drag / rotate / delete');
 {
-  // sofa at [1.5,0.5] (condo.json), footprint 3×1, rot 0 → hit at x∈[0,3], z∈[0,1]
+  // sofa at [2,0.5] (condo.json), footprint 3×1, rot 0 → hit at x∈[0.5,3.5], z∈[0,1]
   check('hit inside footprint', ME.hitTest(2.7, 0.7)?.kind === 'object' && st.doc.placedObjects[ME.hitTest(2.7, 0.7).index].asset === 'sofa');
   check('miss outside footprint', ME.hitTest(3, 2.2) === null || st.doc.placedObjects[ME.hitTest(3, 2.2).index].asset !== 'sofa');
   // rotation-aware: bed at [1.5,8] footprint [2,3] rot 90 → spans x∈[0,3], z∈[7,9]
@@ -75,7 +75,7 @@ console.log('map-editor.test — objects: hit test / snap / drag / rotate / dele
   check('rot normalization -90→270', ME.normRot(-90) === 270);
 
   // drag the sofa (pointerdown exactly on its actual pos so the drag anchor offset is 0)
-  pointer('pointerdown', 1.5, 0.5);
+  pointer('pointerdown', 2, 0.5);
   check('pointerdown selects', st.sel?.kind === 'object' && st.doc.placedObjects[st.sel.index].asset === 'sofa');
   pointer('pointermove', 4.13, 2.86);
   pointer('pointerup', 4.13, 2.86);
