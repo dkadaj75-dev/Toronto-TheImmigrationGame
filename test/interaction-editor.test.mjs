@@ -35,6 +35,15 @@ const stats = {
     { id: 'cooking', name: 'Cooking', color: '#d35400', default: 0, max: 10 },
   ],
 };
+// ROADMAP_NEXT B2-1: read-only reference data feeding the Conditions card's var-path dropdowns
+// (vars.<id> / quests.<id>.state), same fixtures shape as test/quest-editor.test.mjs.
+const simstate = {
+  variables: [
+    { id: 'job', name: 'Job', type: 'string', default: null },
+    { id: 'visaStatus', name: 'Visa Status', type: 'string', default: 'tourist' },
+  ],
+};
+const quests = { quests: [{ id: 'first_words', name: 'First Words', description: '', trigger: { all: [] }, completion: { all: [] }, rewards: [], onceOnly: true }] };
 
 const puts = {};
 const fetchMock = async (url, opts = {}) => {
@@ -43,7 +52,7 @@ const fetchMock = async (url, opts = {}) => {
     puts[path] = JSON.parse(opts.body);
     return { ok: true, status: 200, json: async () => ({}) };
   }
-  const body = { 'interactions.json': interactions, 'assets.json': assets, 'stats.json': stats }[path];
+  const body = { 'interactions.json': interactions, 'assets.json': assets, 'stats.json': stats, 'simstate.json': simstate, 'quests.json': quests }[path];
   return { ok: !!body, status: body ? 200 : 404, json: async () => structuredClone(body) };
 };
 
@@ -240,6 +249,63 @@ assert(savedAssets, 'PUT sent to assets.json (referential integrity strip)');
 const savedStove = savedAssets.assets.find((x) => x.id === 'stove');
 assert(!savedStove.interactions.includes('cook'), 'PUT assets.json stripped the dangling "cook" interaction id from Stove');
 assert(doc.getElementById('save').disabled, 'save disabled again after saving');
+
+// --- conditions card (ROADMAP_NEXT B2-1): do_yoga has no conditions by default
+doc.querySelector('[data-action-id="do_yoga"]').click();
+assert(doc.getElementById('addConditions'), '"+ Add condition" button shown when action has no conditions');
+assert(doc.getElementById('removeConditions') === null, 'no "remove all conditions" button when absent');
+doc.getElementById('addConditions').click();
+assert(doc.querySelector('.cond-group'), 'adding conditions renders an empty ALL group');
+assert(doc.getElementById('removeConditions'), '"remove all conditions" button appears once conditions exist');
+
+// add a leaf, point it at vars.job, set operator to neq, leave value at its type-appropriate default (null-ish string '')
+doc.querySelector('[data-action="add-leaf"]').click();
+const condVarSel = doc.querySelector('.cond-var-select');
+const condVarValues = [...condVarSel.options].map((o) => o.value);
+assert(condVarValues.includes('vars.job') && condVarValues.includes('quests.first_words.state'), 'condition var dropdown offers Variables and Quests namespaces');
+condVarSel.value = 'vars.job';
+condVarSel.dispatchEvent(new window.Event('change', { bubbles: true }));
+const condOpSel = doc.querySelector('select[data-role="op"]');
+condOpSel.value = 'neq';
+condOpSel.dispatchEvent(new window.Event('change', { bubbles: true }));
+
+doc.getElementById('save').click();
+await new Promise((r) => setTimeout(r, 50));
+let savedYoga = puts['interactions.json'].actions.find((a) => a.id === 'do_yoga');
+assert(JSON.stringify(savedYoga.conditions) === JSON.stringify({ all: [{ var: 'vars.job', neq: '' }] }), `PUT carries the built condition tree exactly (${JSON.stringify(savedYoga.conditions)})`);
+
+// removing the whole conditions block prunes the sparse key entirely
+doc.getElementById('removeConditions').click();
+assert(doc.getElementById('addConditions'), '"+ Add condition" reappears after removing all conditions');
+doc.getElementById('save').click();
+await new Promise((r) => setTimeout(r, 50));
+savedYoga = puts['interactions.json'].actions.find((a) => a.id === 'do_yoga');
+assert(!('conditions' in savedYoga), 'PUT: conditions key fully removed (sparse) after "remove all conditions"');
+
+// --- shipped leave_for_work-style data (a pre-existing conditions tree, not built through the UI)
+// renders correctly — separate DOM instance so it doesn't disturb the shared `doc`'s state above.
+{
+  const interactions2 = { actions: [
+    { id: 'leave_for_work', name: 'Leave for work', needGains: {}, skillGains: {}, animation: '', autonomyEligible: false, primaryNeed: null, conditions: { all: [{ var: 'vars.job', neq: null }] } },
+  ] };
+  const fetchMock2 = async (url, opts = {}) => {
+    const path = String(url).replace('/api/data/', '');
+    if (opts.method === 'PUT') return { ok: true, status: 200, json: async () => ({}) };
+    const body = { 'interactions.json': interactions2, 'assets.json': assets, 'stats.json': stats, 'simstate.json': simstate, 'quests.json': quests }[path];
+    return { ok: !!body, status: body ? 200 : 404, json: async () => structuredClone(body) };
+  };
+  const dom2 = new JSDOM(html, {
+    url: 'http://localhost:5173/tools/interactions.html',
+    runScripts: 'dangerously',
+    beforeParse(window) { window.fetch = fetchMock2; window.confirm = () => true; window.prompt = () => ''; window.alert = () => {}; },
+  });
+  await new Promise((r) => setTimeout(r, 50));
+  const doc2 = dom2.window.document;
+  assert(doc2.getElementById('removeConditions'), 'pre-existing conditions render the builder (not the empty-state button)');
+  const leafRow = doc2.querySelector('.cond-leaf');
+  assert(leafRow.querySelector('.cond-var-select').value === 'vars.job', 'shipped leaf var (vars.job) renders selected');
+  assert(leafRow.querySelector('select[data-role="op"]').value === 'neq', 'shipped leaf operator (neq) renders selected');
+}
 
 // --- search filters sidebar
 const search = doc.getElementById('search');

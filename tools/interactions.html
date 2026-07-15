@@ -38,6 +38,21 @@
   .frow input[readonly] { color: #6f7fa3; }
   .hint-line { font-size: 11px; color: #5f6f93; margin-top: 4px; }
   .row-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+  .cond-group { border: 1px solid #2c3a58; border-radius: 10px; padding: 8px 10px; margin: 6px 0; background: #10182a; }
+  .cond-group-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .cond-group-head select { background: #1c2436; border: 1px solid #2c3a58; color: #dfe6f2; border-radius: 6px; padding: 4px 8px; font-size: 12px; }
+  .cond-hint { font-size: 11px; color: #8fa3c8; }
+  .cond-children { display: flex; flex-direction: column; gap: 6px; }
+  .cond-child { display: flex; align-items: flex-start; gap: 8px; }
+  .cond-child > *:first-child { flex: 1; }
+  .cond-leaf { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: #1a2133; border: 1px solid #26304a;
+    border-radius: 8px; padding: 6px 8px; flex: 1; }
+  .cond-leaf select, .cond-leaf input { background: #10182a; border: 1px solid #2c3a58; color: #dfe6f2; border-radius: 6px; padding: 5px 7px; font-size: 12px; }
+  .cond-var-select { min-width: 190px; }
+  .cond-add-row { display: flex; gap: 6px; margin-top: 6px; }
+  .cond-add-row button, .cond-remove { font-size: 11px; padding: 5px 9px; }
+  .cond-remove { background: #7a3040; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -61,17 +76,23 @@
 // animation state, autonomy eligibility, seat-awareness. Mirrors tools/assets.html's
 // sidebar+editor architecture (see PROJECT_CONTEXT.md §5 "Tool architecture").
 const API = '/api/data/';
-const state = { interactions: null, assets: null, stats: null, selected: null, dirty: new Set() };
+// ROADMAP_NEXT B2-1: simstate.json/quests.json are read-only reference data here (same role as
+// assets.json/stats.json already play) — they only feed the Conditions card's var-path dropdowns
+// (vars.<id> / quests.<id>.state), mirroring the Quest Editor's own condition builder exactly.
+// Neither file is ever PUT by this tool.
+const state = { interactions: null, assets: null, stats: null, simstate: null, quests: null, selected: null, dirty: new Set() };
 
 async function load() {
   setStatus('loading…');
   try {
-    const [i, a, s] = await Promise.all([
+    const [i, a, s, simstate, quests] = await Promise.all([
       fetch(API + 'interactions.json').then((r) => { if (!r.ok) throw new Error('interactions.json HTTP ' + r.status); return r.json(); }),
       fetch(API + 'assets.json').then((r) => { if (!r.ok) throw new Error('assets.json HTTP ' + r.status); return r.json(); }),
       fetch(API + 'stats.json').then((r) => { if (!r.ok) throw new Error('stats.json HTTP ' + r.status); return r.json(); }),
+      fetch(API + 'simstate.json').then((r) => { if (!r.ok) throw new Error('simstate.json HTTP ' + r.status); return r.json(); }),
+      fetch(API + 'quests.json').then((r) => { if (!r.ok) throw new Error('quests.json HTTP ' + r.status); return r.json(); }),
     ]);
-    state.interactions = i; state.assets = a; state.stats = s;
+    state.interactions = i; state.assets = a; state.stats = s; state.simstate = simstate; state.quests = quests;
     state.dirty.clear();
     if (!state.selected && i.actions.length) state.selected = i.actions[0].id;
     renderAll();
@@ -163,6 +184,208 @@ function animationStatesInUse() {
     if (v) set.add(v);
   }
   return [...set].sort();
+}
+
+// ------------------------------------------------------------------ condition builder
+// ROADMAP_NEXT B2-1: `ActionDef.conditions?: Condition` reuses the EXACT quest condition
+// tree/namespace/evaluator (game/quests.ts's `Condition`/`evaluate`) — this builder is adapted
+// verbatim from tools/quests.html's condition builder (same helpers, same markup/behavior),
+// just writing into `a.conditions` instead of a quest's `trigger`/`completion`. Empty/absent
+// `conditions` = always available (sparse, checked in game/main.ts's tap-menu filter and
+// game/autonomy.ts's `maybeAct`).
+function isLeafCond(c) { return c != null && typeof c === 'object' && !('all' in c) && !('any' in c); }
+function getLeafOp(leaf) { for (const op of ['gte', 'lte', 'eq', 'neq']) if (op in leaf) return op; return null; }
+function describeVarPath(path) {
+  if (path === 'funds' || path === 'time.hour' || path === 'time.day') return { kind: 'number' };
+  if (path.startsWith('needs.') || path.startsWith('skills.')) return { kind: 'number' };
+  if (path.startsWith('vars.')) {
+    const v = state.simstate.variables.find((x) => x.id === path.slice(5));
+    return { kind: 'var', varType: v ? v.type : 'string' };
+  }
+  const m = /^quests\.(.+)\.state$/.exec(path);
+  if (m) return { kind: 'queststate', questId: m[1] };
+  return { kind: 'unknown' };
+}
+function defaultVarPath() {
+  if (state.stats.needs.length) return 'needs.' + state.stats.needs[0].id;
+  return 'funds';
+}
+function defaultValueFor(path, op, oldVal) {
+  const info = describeVarPath(path);
+  if (op === 'gte' || op === 'lte') return typeof oldVal === 'number' ? oldVal : 0;
+  if (info.kind === 'queststate') return ['locked', 'active', 'done'].includes(oldVal) ? oldVal : 'locked';
+  if (info.kind === 'var') {
+    if (info.varType === 'boolean') return typeof oldVal === 'boolean' ? oldVal : false;
+    if (info.varType === 'number') return typeof oldVal === 'number' ? oldVal : 0;
+    return typeof oldVal === 'string' ? oldVal : '';
+  }
+  return typeof oldVal === 'number' ? oldVal : 0;
+}
+function resetLeafOperatorAndValue(leaf, op) {
+  const oldOp = getLeafOp(leaf);
+  const oldVal = oldOp ? leaf[oldOp] : undefined;
+  delete leaf.gte; delete leaf.lte; delete leaf.eq; delete leaf.neq;
+  leaf[op] = defaultValueFor(leaf.var, op, oldVal);
+}
+function appendVarOptions(sel, currentValue) {
+  sel.innerHTML = '';
+  const groups = [
+    ['Needs', state.stats.needs.map((n) => ({ value: 'needs.' + n.id, label: n.name }))],
+    ['Skills', state.stats.skills.map((s) => ({ value: 'skills.' + s.id, label: s.name }))],
+    ['Economy', [{ value: 'funds', label: 'Funds' }]],
+    ['Time', [{ value: 'time.hour', label: 'Hour of day' }, { value: 'time.day', label: 'Day' }]],
+    ['Variables', state.simstate.variables.map((v) => ({ value: 'vars.' + v.id, label: v.name }))],
+    ['Quests', state.quests.quests.map((q) => ({ value: 'quests.' + q.id + '.state', label: q.name + ' (state)' }))],
+  ];
+  const known = new Set();
+  for (const [label, opts] of groups) {
+    if (!opts.length) continue;
+    const og = document.createElement('optgroup'); og.label = label;
+    for (const o of opts) {
+      const opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.label;
+      og.appendChild(opt); known.add(o.value);
+    }
+    sel.appendChild(og);
+  }
+  if (currentValue && !known.has(currentValue)) {
+    const og = document.createElement('optgroup'); og.label = 'Unknown (stale id)';
+    const opt = document.createElement('option'); opt.value = currentValue; opt.textContent = currentValue;
+    og.appendChild(opt); sel.appendChild(og);
+  }
+  sel.value = currentValue;
+}
+function valueInputFor(path, value, onChange, condPath) {
+  const info = describeVarPath(path);
+  let input;
+  if (info.kind === 'queststate') {
+    input = document.createElement('select');
+    for (const s of ['locked', 'active', 'done']) { const o = document.createElement('option'); o.value = s; o.textContent = s; input.appendChild(o); }
+    input.value = ['locked', 'active', 'done'].includes(value) ? value : 'locked';
+    input.addEventListener('change', () => onChange(input.value));
+  } else if (info.kind === 'var' && info.varType === 'boolean') {
+    input = document.createElement('select');
+    for (const b of ['true', 'false']) { const o = document.createElement('option'); o.value = b; o.textContent = b; input.appendChild(o); }
+    input.value = String(!!value);
+    input.addEventListener('change', () => onChange(input.value === 'true'));
+  } else if (info.kind === 'number' || (info.kind === 'var' && info.varType === 'number')) {
+    input = document.createElement('input'); input.type = 'number'; input.step = 'any';
+    input.value = value === undefined || value === null ? '' : value;
+    input.addEventListener('input', () => onChange(input.value === '' ? 0 : Number(input.value)));
+  } else {
+    input = document.createElement('input'); input.type = 'text';
+    input.value = value === undefined || value === null ? '' : value;
+    input.addEventListener('input', () => onChange(input.value));
+  }
+  input.dataset.role = 'value';
+  input.dataset.condPath = condPath;
+  return input;
+}
+function renderConditionNode(node, path) {
+  return isLeafCond(node) ? renderLeafRow(node, path) : renderGroupBox(node, path);
+}
+function renderGroupBox(node, path) {
+  const key = 'all' in node ? 'all' : 'any';
+  const box = document.createElement('div');
+  box.className = 'cond-group';
+  box.dataset.condPath = path;
+
+  const head = document.createElement('div');
+  head.className = 'cond-group-head';
+  const sel = document.createElement('select');
+  sel.dataset.role = 'combinator'; sel.dataset.condPath = path;
+  for (const opt of ['all', 'any']) { const o = document.createElement('option'); o.value = opt; o.textContent = opt.toUpperCase(); sel.appendChild(o); }
+  sel.value = key;
+  sel.addEventListener('change', () => {
+    const arr = node[key];
+    delete node.all; delete node.any;
+    node[sel.value] = arr;
+    markDirty('interactions.json');
+    renderEditor();
+  });
+  head.appendChild(sel);
+  const hint = document.createElement('span');
+  hint.className = 'cond-hint';
+  hint.textContent = key === 'all' ? '(every child must hold; empty = vacuously TRUE)' : '(any child must hold; empty = FALSE — nothing to satisfy)';
+  head.appendChild(hint);
+  box.appendChild(head);
+
+  const children = document.createElement('div');
+  children.className = 'cond-children';
+  node[key].forEach((child, i) => {
+    const childPath = path + '.' + i;
+    const wrap = document.createElement('div');
+    wrap.className = 'cond-child';
+    wrap.appendChild(renderConditionNode(child, childPath));
+    const rm = document.createElement('button');
+    rm.className = 'cond-remove'; rm.textContent = '× remove';
+    rm.dataset.action = 'remove-cond'; rm.dataset.condPath = childPath;
+    rm.addEventListener('click', () => {
+      node[key].splice(i, 1);
+      markDirty('interactions.json');
+      renderEditor();
+    });
+    wrap.appendChild(rm);
+    children.appendChild(wrap);
+  });
+  box.appendChild(children);
+
+  const addRow = document.createElement('div');
+  addRow.className = 'cond-add-row';
+  const addLeaf = document.createElement('button');
+  addLeaf.textContent = '+ Condition'; addLeaf.dataset.action = 'add-leaf'; addLeaf.dataset.condPath = path;
+  addLeaf.addEventListener('click', () => {
+    node[key].push({ var: defaultVarPath(), gte: 0 });
+    markDirty('interactions.json');
+    renderEditor();
+  });
+  const addGroup = document.createElement('button');
+  addGroup.textContent = '+ Group'; addGroup.dataset.action = 'add-group'; addGroup.dataset.condPath = path;
+  addGroup.addEventListener('click', () => {
+    node[key].push({ all: [] });
+    markDirty('interactions.json');
+    renderEditor();
+  });
+  addRow.append(addLeaf, addGroup);
+  box.appendChild(addRow);
+  return box;
+}
+function renderLeafRow(leaf, path) {
+  const row = document.createElement('div');
+  row.className = 'cond-leaf';
+  row.dataset.condPath = path;
+
+  const varSel = document.createElement('select');
+  varSel.className = 'cond-var-select';
+  varSel.dataset.role = 'var'; varSel.dataset.condPath = path;
+  appendVarOptions(varSel, leaf.var);
+  varSel.addEventListener('change', () => {
+    const op = getLeafOp(leaf) || 'gte';
+    leaf.var = varSel.value;
+    resetLeafOperatorAndValue(leaf, op);
+    markDirty('interactions.json');
+    renderEditor();
+  });
+  row.appendChild(varSel);
+
+  const opSel = document.createElement('select');
+  opSel.dataset.role = 'op'; opSel.dataset.condPath = path;
+  for (const op of ['gte', 'lte', 'eq', 'neq']) { const o = document.createElement('option'); o.value = op; o.textContent = op; opSel.appendChild(o); }
+  const currentOp = getLeafOp(leaf) || 'gte';
+  opSel.value = currentOp;
+  opSel.addEventListener('change', () => {
+    resetLeafOperatorAndValue(leaf, opSel.value);
+    markDirty('interactions.json');
+    renderEditor();
+  });
+  row.appendChild(opSel);
+
+  const valueWrap = document.createElement('div');
+  valueWrap.appendChild(valueInputFor(leaf.var, leaf[currentOp], (v) => { leaf[currentOp] = v; markDirty('interactions.json'); }, path));
+  row.appendChild(valueWrap);
+
+  // The remove button for this leaf is rendered by the parent group (renderGroupBox), which
+  // knows the leaf's index in the combinator array and can splice it out.
+  return row;
 }
 
 // ------------------------------------------------------------------ editor
@@ -324,6 +547,45 @@ function renderEditor() {
     )));
   }
   root.appendChild(card4);
+
+  // --- conditions (ROADMAP_NEXT B2-1): sparse, same dropdown-driven recursive builder as the
+  // Quest Editor's trigger/completion cards (tools/quests.html). Empty/absent = no conditions =
+  // always available; the empty-group semantics are the same as quests' (an empty top-level
+  // `all` is vacuously TRUE — i.e. still "always available" — so the "+ Add condition" button
+  // seeds `{ all: [] }` rather than leaving the field half-defined).
+  const cardCond = document.createElement('div');
+  cardCond.className = 'card';
+  cardCond.innerHTML = '<h2>Conditions <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#5f6f93">(optional — unmet conditions hide this action from the tap menu and skip it for autonomy)</span></h2>';
+  if (!a.conditions) {
+    const addCondBtn = document.createElement('button');
+    addCondBtn.id = 'addConditions'; addCondBtn.textContent = '+ Add condition';
+    addCondBtn.addEventListener('click', () => {
+      a.conditions = { all: [] };
+      markDirty('interactions.json');
+      renderEditor();
+    });
+    cardCond.appendChild(addCondBtn);
+    const hint = document.createElement('div');
+    hint.className = 'hint-line';
+    hint.textContent = 'No conditions — always available.';
+    cardCond.appendChild(hint);
+  } else {
+    const condRoot = document.createElement('div');
+    condRoot.dataset.condRoot = 'conditions';
+    condRoot.appendChild(renderConditionNode(a.conditions, 'conditions'));
+    cardCond.appendChild(condRoot);
+    const removeAllBtn = document.createElement('button');
+    removeAllBtn.className = 'danger'; removeAllBtn.id = 'removeConditions';
+    removeAllBtn.textContent = 'Remove all conditions (always available)';
+    removeAllBtn.style.marginTop = '8px';
+    removeAllBtn.addEventListener('click', () => {
+      delete a.conditions;
+      markDirty('interactions.json');
+      renderEditor();
+    });
+    cardCond.appendChild(removeAllBtn);
+  }
+  root.appendChild(cardCond);
 
   // --- danger zone
   const card5 = document.createElement('div');

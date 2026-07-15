@@ -216,7 +216,8 @@
       "animation": "",
       "autonomyEligible": false,
       "primaryNeed": null,
-      "_note": "ROADMAP_NEXT item 9 — placeholder interaction on 'door_exterior' so the exterior door has something to show in its tap menu. Player-only by design; no real effect wired yet (a future slice ties this into funds/vars/quests, and item 10's garbage-emptying interaction shares this door)."
+      "conditions": { "all": [ { "var": "vars.job", "neq": null } ] },
+      "_note": "ROADMAP_NEXT item 9 — placeholder interaction on 'door_exterior' so the exterior door has something to show in its tap menu. Player-only by design; no real effect wired yet (a future slice ties this into funds/vars/quests, and item 10's garbage-emptying interaction shares this door). ROADMAP_NEXT B2-1: gated by `conditions` — hidden from the tap menu until a future job system sets vars.job away from its simstate.json default of null."
     },
     {
       "id": "clean_up",

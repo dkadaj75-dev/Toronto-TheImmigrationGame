@@ -34,6 +34,15 @@ console.log('quests.test — operators');
   check('eq null true (vars.job is null)', evaluate({ var: 'vars.job', eq: null }, c) === true);
   check('neq true', evaluate({ var: 'vars.visaStatus', neq: 'student' }, c) === true);
   check('neq false', evaluate({ var: 'vars.visaStatus', neq: 'tourist' }, c) === false);
+  // ROADMAP_NEXT B2-1: leave_for_work ships `{ all: [{ var: "vars.job", neq: null }] }`. job's
+  // simstate.json default is null, and QuestRunner seeds `vars.job = null` (an actual present key,
+  // not an absent one) — so resolveVar returns `null`, not `undefined`, and the `value === undefined`
+  // early-return in evaluateLeaf does NOT fire; the neq comparison runs for real: null !== null is
+  // false, matching the intended "unavailable until a job exists" semantics. Once a job system sets
+  // vars.job to a real string, the same leaf flips true. No evaluator change was needed — this just
+  // pins the behavior down as a regression test.
+  check('neq null vs null (job unset) — condition UNMET', evaluate({ var: 'vars.job', neq: null }, c) === false);
+  check('neq null vs a real job — condition MET', evaluate({ var: 'vars.job', neq: null }, ctx({ vars: { ...c.vars, job: 'chef' } })) === true);
 }
 
 console.log('quests.test — namespaces');

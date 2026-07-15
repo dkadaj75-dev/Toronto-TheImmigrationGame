@@ -55,7 +55,7 @@ Implemented: new static `personality` stat family (`stats.json`, ships `cleanlin
 
 # Batch 2 — designer requests 2026-07-15 (evening)
 
-## B2-1. Interaction conditions
+## B2-1. Interaction conditions — ✅ DONE 2026-07-15, see PROJECT_CONTEXT.md §7.16 as-built
 Actions get availability CONDITIONS (reuse quest condition evaluator/namespace from game/quests.ts — vars.job etc.): `ActionDef.conditions?: Condition`. Unmet → hidden from tap menu + skipped by autonomy. Ship: `leave_for_work` requires `vars.job neq null` (job system later). Interaction Editor: condition builder (reuse Quest Editor's dropdown-driven builder pattern).
 
 ## B2-2. BUG: negative usePose offset rotates wrong — ✅ DONE 2026-07-15 (no math bug found)

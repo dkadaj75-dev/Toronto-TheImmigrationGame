@@ -41,6 +41,16 @@ export interface ActionDef {
    *  decideWasteHandling) auto-tidies it into a nearby garbage can instead. Absent = this action
    *  produces no waste. See game/garbage.ts's module doc comment for the full decision flow. */
   producesWaste?: string;
+  /** ROADMAP_NEXT B2-1: optional availability gate, reusing the EXACT quest condition tree/
+   *  namespace/evaluator (game/quests.ts's `Condition`/`evaluate` — needs.<id>, skills.<id>, funds,
+   *  time.hour/day, vars.<name>, quests.<id>.state). Absent = always available (sparse, same
+   *  convention as `duration`/`seatAware`). Unmet → the action is hidden from the tap action menu
+   *  (game/main.ts's tap handler) and skipped as an autonomy candidate (game/autonomy.ts's
+   *  `maybeAct`) — both evaluated against a freshly-built EvalContext at decision time (menu-open /
+   *  each autonomy scan), never cached, so a condition becoming true mid-game is picked up
+   *  immediately. Ships on `leave_for_work`: `{ all: [{ var: "vars.job", neq: null }] }` — hidden
+   *  until a future job system sets `vars.job` away from its `simstate.json` default of `null`. */
+  conditions?: Condition;
 }
 export interface InteractionsData { actions: ActionDef[]; }
 

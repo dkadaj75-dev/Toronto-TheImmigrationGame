@@ -61,6 +61,18 @@ export function evaluate(cond: Condition, ctx: EvalContext): boolean {
   return evaluateLeaf(cond, ctx);
 }
 
+/**
+ * ROADMAP_NEXT B2-1: shared availability gate for `ActionDef.conditions` — a sparse field, so
+ * "absent" reads as "always available" (same reasoning as `all([])` being vacuously true, just
+ * one level up: no condition tree at all is the least restrictive case). Reused verbatim by
+ * game/main.ts's tap-menu action filter (unmet → hidden from the menu) and game/autonomy.ts's
+ * `maybeAct` candidate loop (unmet → skipped), so both call sites can never drift apart on what
+ * "available" means. Pure/headless-testable (test/interaction-conditions.test.ts).
+ */
+export function isActionAvailable(conditions: Condition | undefined, ctx: EvalContext): boolean {
+  return !conditions || evaluate(conditions, ctx);
+}
+
 /** Everything the runner tracks that a save system would need to persist (see the class doc below). */
 export interface QuestSaveState {
   quests: Record<string, QuestState>;

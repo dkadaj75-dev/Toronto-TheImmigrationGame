@@ -11,6 +11,7 @@ import type { SimAgent } from './sim';
 import { findSeatFor } from './sim';
 import type { SimStats } from './stats';
 import type { AccidentsController } from './accidents';
+import { isActionAvailable, type EvalContext } from './quests';
 
 export class Autonomy {
   private cooldownRemaining = 0;
@@ -25,6 +26,12 @@ export class Autonomy {
      *  fire" extends to the sim's own free will, not just player taps. Omitting it (e.g. older
      *  call sites / tests that predate the accidents slice) preserves the exact old behavior. */
     private accidents?: AccidentsController,
+    /** Optional (ROADMAP_NEXT B2-1): builds a fresh EvalContext for gating candidates on
+     *  `ActionDef.conditions` — same evaluator/namespace as quests (game/quests.ts's `evaluate`).
+     *  Omitting it (older call sites) preserves old behavior: an action with `conditions` set is
+     *  then treated as unmet (skipped) rather than silently always-available, since there's no
+     *  context to check it against. Actions with no `conditions` are unaffected either way. */
+    private getEvalContext?: () => EvalContext,
   ) {}
 
   /** Call whenever the player issues a command (go-to, action, stop). */
@@ -62,6 +69,10 @@ export class Autonomy {
         const action = actionsById.get(actionId);
         if (!action || !action.autonomyEligible) continue;
         if (action.primaryNeed !== lowest.def.id) continue;
+        // ROADMAP_NEXT B2-1: unmet conditions make this action ineligible for autonomy, same as
+        // it being hidden from the tap menu — evaluated fresh per candidate (cheap: no per-tick
+        // caching needed, this loop already runs once per needs-decay tick, not per frame).
+        if (action.conditions && (!this.getEvalContext || !isActionAvailable(action.conditions, this.getEvalContext()))) continue;
         const dx = obj.position.x - simPos.x, dz = obj.position.z - simPos.z;
         candidates.push({ obj, action, def, dist: Math.hypot(dx, dz) });
       }

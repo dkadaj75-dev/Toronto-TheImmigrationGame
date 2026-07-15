@@ -14,7 +14,7 @@ import { SimAgent, ClickCue, findSeatFor, type ActiveAction } from './sim';
 import { SimStats } from './stats';
 import { Hud } from './ui';
 import { Autonomy } from './autonomy';
-import { QuestRunner, type EvalContext } from './quests';
+import { QuestRunner, isActionAvailable, type EvalContext } from './quests';
 import { AccidentsController, resolveTapAssetId } from './accidents';
 import { GarbageController } from './garbage';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials } from './buymode';
@@ -170,7 +170,7 @@ async function start() {
   const applyEnvironment = () => { const id = envNeedId(); if (id) stats.setComputed(id, environmentScore()); };
   applyEnvironment();
 
-  const autonomy = new Autonomy(() => data, () => world, agent, stats, accidents);
+  const autonomy = new Autonomy(() => data, () => world, agent, stats, accidents, buildEvalContext);
 
   // --- quest system (PROJECT_CONTEXT.md §3): runtime-only state, see quests.ts's persistence doc comment ---
   const quests = new QuestRunner(data.quests, data.simstate, data.tuning.economy.startingFunds);
@@ -260,15 +260,7 @@ async function start() {
       // why this doesn't need a real second walk-leg).
       if (a.action.id === 'clean_up') garbage.depositAtNearestCan([sim.position.x, sim.position.z]);
     } else if (def) {
-      const ctx: EvalContext = {
-        needs: Object.fromEntries(stats.needs),
-        skills: Object.fromEntries(stats.skills),
-        funds: quests.funds,
-        time: { hour: Math.floor(gameSeconds / 3600), day: gameDay },
-        vars: quests.vars,
-        quests: quests.quests,
-      };
-      accidents.rollFor(a.target, def, ctx, simClockSeconds);
+      accidents.rollFor(a.target, def, buildEvalContext(), simClockSeconds);
     }
     // ROADMAP_NEXT item 10: waste production lives on the ACTION (not the asset) — independent of
     // the def.category branch above so it applies no matter what the action's target turned out to
@@ -325,9 +317,14 @@ async function start() {
         }
       }
       if (asset) {
+        // ROADMAP_NEXT B2-1: an action with unmet `conditions` is hidden from the tap menu
+        // entirely (not shown-disabled) — evaluated fresh against the live EvalContext at
+        // menu-open time, same evaluator/namespace as quests (game/quests.ts's `evaluate`).
+        const evalCtx = buildEvalContext();
         const actions = asset.interactions
           .map((id) => data.interactions.actions.find((x) => x.id === id))
-          .filter((x): x is NonNullable<typeof x> => !!x);
+          .filter((x): x is NonNullable<typeof x> => !!x)
+          .filter((x) => isActionAvailable(x.conditions, evalCtx));
         if (actions.length > 0) {
           const resolvedAsset = asset;
           setSelected(target);
@@ -571,6 +568,22 @@ async function start() {
   // --- game clock (display only in Phase 0; drives day/night in Phase 1; day count feeds quests' time.day) ---
   let gameSeconds = 8 * 3600; // start the day at 08:00
   let gameDay = 1;
+  // ROADMAP_NEXT B2-1: single builder for the EvalContext the quest evaluator (`evaluate` from
+  // game/quests.ts) runs against — reused by the accident-roll call below (was already inlined
+  // here), the tap-menu action-visibility filter, and Autonomy's condition check (passed in as a
+  // callback at construction time; `let` bindings closed over here are fine to reference from a
+  // callback invoked later, since by the time anything actually calls this, gameSeconds/gameDay/
+  // stats/quests are all initialized — function declarations hoist within `start()`'s scope).
+  function buildEvalContext(): EvalContext {
+    return {
+      needs: Object.fromEntries(stats.needs),
+      skills: Object.fromEntries(stats.skills),
+      funds: quests.funds,
+      time: { hour: Math.floor(gameSeconds / 3600), day: gameDay },
+      vars: quests.vars,
+      quests: quests.quests,
+    };
+  }
   const clockScale = () => 86400 / data.tuning.time.secondsPerGameDay;
   // ROADMAP_NEXT item 6: monotonic sim-time seconds elapsed since the game started, on the SAME
   // sdt as everything else (pause/2x/3x affect it identically) but — unlike gameSeconds — never
