@@ -19,6 +19,7 @@ import { AccidentsController, resolveTapAssetId } from './accidents';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials } from './buymode';
 import { createMarkerInstance, type MarkerInstance } from './marker';
 import { computeDurationSeconds, isDurationComplete } from './duration';
+import { AudioManager, loopSoundFor } from './audio';
 
 /** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
  *  a seat-aware action with no eligible seat in range) plays the dedicated 'sit_ground' state
@@ -202,6 +203,13 @@ async function start() {
   };
   hud.onMenuHidden = () => setSelected(null);
 
+  // --- ROADMAP_NEXT item 7: audio (data-driven sfx/asset loops + per-context music) ------------
+  // Thin HTMLAudioElement layer (game/audio.ts) — construction is safe pre-gesture (it only queues
+  // playback attempts behind the module's own pointerdown/keydown unlock listener), so it can be
+  // built here unconditionally like every other subsystem.
+  const audio = new AudioManager(data.tuning);
+  audio.setMusicContext('map', data.map); // starts (or queues, pre-gesture) the active map's playlist
+
   // --- ROADMAP_NEXT item 5: per-action duration timer (§7.11) ---------------------------------
   // Computed once when an action starts (skill snapshot at that moment — matches "how long THIS
   // attempt takes", not a moving target as the skill grows mid-action). Ticked every render frame
@@ -215,11 +223,22 @@ async function start() {
     anim?.play(animStateFor(a)); // unmapped states fall back to idle inside AnimController
     const totalSeconds = computeDurationSeconds(a.action.duration, Object.fromEntries(stats.skills), data.stats.skills);
     durationState = totalSeconds !== null ? { action: a, totalSeconds, elapsed: 0 } : null;
+    // ROADMAP_NEXT item 7: start whichever of the target asset's own `sound` (wins, per-instance
+    // key so two placed instances of the same asset loop independently) or the action's `sound`
+    // (shared key — this single-sim game only ever has one action in flight at a time) applies.
+    const startAssetId = a.target.userData?.assetId as string | undefined;
+    const startAssetDef = startAssetId ? data.assets.assets.find((x) => x.id === startAssetId) : undefined;
+    const loopPath = loopSoundFor(a.action, startAssetDef);
+    if (loopPath) audio.startLoop(startAssetDef?.sound ? `asset:${a.target.uuid}` : `action:${a.action.id}`, loopPath);
   };
   agent.onActionStop = (a) => {
     hud.hideActivity();
     anim?.play('idle');
     durationState = null;
+    // ROADMAP_NEXT item 7: stop whichever loop onActionStart may have started for this activity —
+    // both keys are harmless no-ops to stop if they weren't the one actually playing.
+    audio.stopLoop(`asset:${a.target.uuid}`);
+    audio.stopLoop(`action:${a.action.id}`);
     // §7.3: roll for a new accident (normal asset finishing a use) or despawn one (a cleanup
     // action just completed on an accident instance) — onActionStop fires for every stop
     // reason (natural auto-stop, player cancel, override), which is deliberate: see
@@ -336,6 +355,7 @@ async function start() {
   hud.onBuyOpen = () => {
     buyMode.enter();
     hud.setBuyModeActive(true);
+    audio.setMusicContext('buymode', data.map); // ROADMAP_NEXT item 7: crossfade to the buy-mode track
     buyActiveCategory = '';
     buySearchQuery = '';
     buyModeChangedSomething = false;
@@ -345,6 +365,7 @@ async function start() {
   hud.onBuyClose = () => {
     buyMode.exit();
     hud.setBuyModeActive(false);
+    audio.setMusicContext('map', data.map); // ROADMAP_NEXT item 7: crossfade back to the map's music
     // Safety net: sim-time freeze means the agent never advances while shopping, but it may have
     // been mid-route when buy mode opened, and a rebake during shopping can invalidate that stale
     // path (moved/sold/bought furniture). Cancelling in place is simpler and safer than trying to
@@ -483,12 +504,17 @@ async function start() {
     buyMode.reattach(world);
     cam.retune(data.tuning.camera, data.map);
     rebakeNav();
+    audio.retune(data.tuning); // ROADMAP_NEXT item 7: volumes/crossfade/buyModeMusic may have changed
     if (data.map.id !== currentMapId) {
       // map switch (tuning.map.active changed) — respawn the sim on the new map
       currentMapId = data.map.id;
       agent.teleportTo(data.map.spawn.pos[0], data.map.spawn.pos[1], data.map.spawn.facingDeg);
       hud.hideActionMenu();
+      audio.mapChanged(); // restart the new map's playlist from the top rather than resuming the old cycle position
     }
+    // keep the music channel pointed at the right context (its own track/playlist content may
+    // have changed even without a context switch — setMusicContext no-ops when nothing changed)
+    audio.setMusicContext(buyMode.active ? 'buymode' : 'map', data.map);
     stats.retune(data.stats);
     hud.rebuildBars();
     applyEnvironment();
@@ -536,6 +562,10 @@ async function start() {
     // stale-path edge case when it WAS mid-route at the moment buy mode opened).
     const sdt = buyMode.active ? 0 : dt * hud.speed;
     simClockSeconds += sdt;
+    // ROADMAP_NEXT item 7: sfx/action/asset loops pause whenever sim time isn't advancing (the
+    // pause button OR buy mode's own freeze); music is deliberately NOT touched here (see
+    // audio.ts's module doc comment on the PAUSE decision).
+    audio.setPaused(hud.speed === 0 || buyMode.active);
 
     gameSeconds += sdt * clockScale();
     while (gameSeconds >= 86400) { gameSeconds -= 86400; gameDay++; }

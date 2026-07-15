@@ -391,5 +391,9 @@
       ],
       "rotDeg": 270
     }
+  ],
+  "music": [
+    "sounds/music_condo_1.wav",
+    "sounds/music_condo_2.wav"
   ]
 }

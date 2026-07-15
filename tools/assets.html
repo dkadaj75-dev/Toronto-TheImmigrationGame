@@ -509,6 +509,17 @@ function renderEditor() {
     root.appendChild(cardCombust);
   }
 
+  // --- sound (ROADMAP_NEXT item 7): loops for as long as an action targets THIS placed instance
+  // (e.g. a TV's hum, a shower's running water) — wins over the target action's own `sound` if
+  // both are set. Sparse: absent = no asset-driven loop. See game/audio.ts's module doc comment.
+  const cardSound = document.createElement('div');
+  cardSound.className = 'card';
+  cardSound.innerHTML = '<h2>Sound</h2><div class="hint">Loops while an action targets this placed instance (e.g. TV hum, shower running water) — wins over the action\'s own sound field if both are set. Path under public/ (drop a file under public/sounds/). Leave blank for none.</div>';
+  const soundInput = textInput(() => a.sound, (v) => { if (v) a.sound = v; else delete a.sound; }, 'sound');
+  soundInput.placeholder = '/sounds/tv_hum.wav';
+  cardSound.appendChild(frow('loop sound path', soundInput));
+  root.appendChild(cardSound);
+
   // --- mesh & preview
   const card4 = document.createElement('div');
   card4.className = 'card';

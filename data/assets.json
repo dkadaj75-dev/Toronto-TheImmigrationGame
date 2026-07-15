@@ -31,8 +31,12 @@
       ],
       "seatTarget": true,
       "usePose": {
-        "sit": { "y": 0.42 },
-        "lie": { "y": 0.42 }
+        "sit": {
+          "y": 0.42
+        },
+        "lie": {
+          "y": 0.42
+        }
       },
       "combustibility": {
         "chancePercent": 45,
@@ -57,7 +61,9 @@
       ],
       "seatTarget": true,
       "usePose": {
-        "sit": { "y": 0.44 }
+        "sit": {
+          "y": 0.44
+        }
       },
       "combustibility": {
         "chancePercent": 50,
@@ -83,7 +89,9 @@
       ],
       "seatTarget": true,
       "usePose": {
-        "sit": { "y": 0.46 }
+        "sit": {
+          "y": 0.46
+        }
       }
     },
     {
@@ -106,7 +114,9 @@
         "yawOffsetDeg": -90
       },
       "usePose": {
-        "lie": { "y": 0.56 }
+        "lie": {
+          "y": 0.56
+        }
       },
       "combustibility": {
         "chancePercent": 35,
@@ -245,7 +255,8 @@
       ],
       "meshFit": {
         "yawOffsetDeg": 90
-      }
+      },
+      "sound": "sounds/shower_running.wav"
     },
     {
       "id": "sink",
@@ -280,7 +291,8 @@
       ],
       "meshFit": {
         "yawOffsetDeg": 0
-      }
+      },
+      "sound": "sounds/tv_hum.wav"
     },
     {
       "id": "bookshelf",

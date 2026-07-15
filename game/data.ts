@@ -23,6 +23,11 @@ export interface ActionDef {
    *  `baseSeconds` (skill at 0) to `atMaxSeconds` (skill at its own `max`) via the skill's current
    *  value; either one absent falls back to a fixed `baseSeconds`. See game/duration.ts. */
   duration?: { baseSeconds: number; skillVar?: string; atMaxSeconds?: number };
+  /** ROADMAP_NEXT item 7 (audio): path under public/sounds/ (or any /public path) that loops for
+   *  as long as the SIM is performing this action, regardless of which asset it targets — see
+   *  game/audio.ts's module doc comment for why this is a separate semantic from AssetDef.sound
+   *  (asset sound wins if both are set on the same activity). Absent = no action-driven loop. */
+  sound?: string;
 }
 export interface InteractionsData { actions: ActionDef[]; }
 
@@ -87,6 +92,12 @@ export interface AssetDef {
    *  provided this object is within `tuning.fire.spreadRadius` of it — see game/accidents.ts's
    *  `spreadShouldRoll`. Absent = never catches fire from a nearby blaze. */
   combustibility?: { chancePercent: number; delaySeconds: number };
+  /** ROADMAP_NEXT item 7 (audio): path under public/sounds/ (or any /public path) that loops for
+   *  as long as an action targets THIS PLACED INSTANCE (e.g. a TV's hum, a shower's running-water
+   *  noise) — keyed per-instance in game/audio.ts so two placed TVs each get their own independent
+   *  loop. Wins over the target action's own `sound` if both are set (see game/audio.ts). Absent =
+   *  no asset-driven loop. */
+  sound?: string;
 }
 export interface UsePoseEntry { offset?: [number, number]; y?: number; facingDeg?: number; }
 export interface AssetsData { categories: string[]; assets: AssetDef[]; }
@@ -150,6 +161,10 @@ export interface MapData {
   doors: { at: [number, number]; orientation: 'vertical' | 'horizontal'; width?: number; assetId?: string }[];
   spawn: { pos: [number, number]; facingDeg: number };
   placedObjects: { asset: string; pos: [number, number]; rotDeg: number }[];
+  /** ROADMAP_NEXT item 7 (audio): playlist of paths under public/sounds/ (or any /public path) that
+   *  this map's music context cycles through (advances to the next entry when one finishes — see
+   *  game/audio.ts's module doc comment). Absent/empty = silence while this map is active. */
+  music?: string[];
 }
 
 /** Rigged character setup — all of it data, so a different GLB export is a JSON edit. */
@@ -225,6 +240,13 @@ export interface TuningData {
   map?: { active: string };
   /** optional so pre-rig data files & test fixtures stay valid; game falls back to the capsule */
   character?: CharacterTuning;
+  /** Optional so pre-existing tuning fixtures/tests stay valid (same precedent as `interaction?`/
+   *  `doors?`/`fire?` above). ROADMAP_NEXT item 7 (audio): master/music/sfx volumes (0..1, each
+   *  independently clamped) multiply together for a channel's effective gain; musicCrossfadeSeconds
+   *  is how long a music CONTEXT switch (map ↔ buy mode) takes to cross-fade; buyModeMusic is the
+   *  fixed track for buy mode (absent = silence in buy mode). See game/audio.ts's
+   *  resolveAudioTuning for the exact defaults applied when this whole block is absent. */
+  audio?: { masterVolume?: number; musicVolume?: number; sfxVolume?: number; musicCrossfadeSeconds?: number; buyModeMusic?: string };
 }
 
 export interface GameData {

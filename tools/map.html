@@ -663,6 +663,12 @@ function renderInspector() {
     host.appendChild(field('grid size', doc.gridSize, edit((v) => { doc.gridSize = Math.max(0.25, v); }), { data: 'map.gridSize' }));
     host.appendChild(field('bounds w', doc.bounds.w, edit((v) => { doc.bounds.w = Math.max(2, v); fitView(); }), { data: 'map.bounds.w' }));
     host.appendChild(field('bounds h', doc.bounds.h, edit((v) => { doc.bounds.h = Math.max(2, v); fitView(); }), { data: 'map.bounds.h' }));
+    // ROADMAP_NEXT item 7 (audio): comma-separated playlist this map's music context cycles
+    // through (advances to the next entry when one finishes — see game/audio.ts). Blank = silence.
+    host.appendChild(field('music (comma-separated paths)', (doc.music ?? []).join(', '), edit((v) => {
+      const list = v.split(',').map((s) => s.trim()).filter(Boolean);
+      if (list.length) doc.music = list; else delete doc.music;
+    }), { text: true, data: 'map.music' }));
     if (state.mode === 'floors') {
       host.appendChild(Object.assign(document.createElement('h2'), { textContent: 'New floors' }));
       host.appendChild(field('material', state.newFloorMaterial, (v) => { state.newFloorMaterial = v; }, { options: [...FLOOR_MATERIALS], id: 'floor-material' }));

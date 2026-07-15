@@ -84,6 +84,14 @@
     },
     "_source": "edit this block through tools/animations.html (Animation Mapper): it lists the GLB's actual clips, previews them in 3D, and maps them to states. animationPaths = extra GLBs whose clips are merged in (Mixamo one-clip-per-file exports, same skeleton). sitHeight/lieHeight replace the old hardcoded 0.25/0.55. Missing/failed GLB keeps the capsule stand-in."
   },
+  "audio": {
+    "masterVolume": 0.8,
+    "musicVolume": 0.6,
+    "sfxVolume": 0.8,
+    "musicCrossfadeSeconds": 1.5,
+    "buyModeMusic": "sounds/music_buymode.wav",
+    "_source": "ROADMAP_NEXT item 7 (audio placeholders). masterVolume/musicVolume/sfxVolume are 0..1 and multiply together per channel; musicCrossfadeSeconds is how long a music CONTEXT switch (map <-> buy mode) takes; buyModeMusic is the fixed track played while in Buy/Sell mode. See game/audio.ts's resolveAudioTuning for defaults when this whole block is absent."
+  },
   "camera": {
     "minZoom": 4,
     "maxZoom": 18,

@@ -115,6 +115,16 @@ console.log('map-editor.test — floors: draw rect / material / edit / delete');
   bh.value = '14';
   bh.dispatchEvent(new window.Event('change', { bubbles: true }));
   check('bounds editable from map properties', st.doc.bounds.h === 14);
+  // ROADMAP_NEXT item 7 (audio): music playlist field, comma-separated round-trip, sparse when empty
+  const musicField = doc.querySelector('input[data-field="map.music"]');
+  check('music field rendered', !!musicField);
+  check('music field reflects the fixture\'s current playlist', musicField.value === (st.doc.music ?? []).join(', '), musicField.value);
+  musicField.value = 'sounds/a.wav, sounds/b.wav';
+  musicField.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('music comma-separated input parses to a trimmed array', JSON.stringify(st.doc.music) === JSON.stringify(['sounds/a.wav', 'sounds/b.wav']), JSON.stringify(st.doc.music));
+  musicField.value = '';
+  musicField.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('clearing the music field prunes the key entirely (sparse)', !('music' in st.doc));
   const materialSel = doc.getElementById('floor-material');
   materialSel.value = 'tile';
   materialSel.dispatchEvent(new window.Event('change', { bubbles: true }));

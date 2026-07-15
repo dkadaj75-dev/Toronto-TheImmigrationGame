@@ -98,6 +98,13 @@ assert(doc.getElementById('icon-thumb'), 'icon thumbnail <img> element rendered'
 iconInput.value = '/models/icons/sofa.png';
 iconInput.dispatchEvent(new window.Event('input', { bubbles: true }));
 
+// --- sound (ROADMAP_NEXT item 7): blank by default, sparse round-trip
+const soundInput = doc.querySelector('input[data-path="sound"]');
+assert(soundInput, 'sound field rendered');
+assert(soundInput.value === '', 'sound blank when absent');
+soundInput.value = '/sounds/couch_creak.wav';
+soundInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+
 // --- usePose (§7.8, roadmap item 1): sparse per-pose sit/lie override, offset/y/facingDeg
 const sitOffsetX = doc.querySelector('input[data-path="usePose.sit.offsetX"]');
 assert(sitOffsetX, 'usePose.sit offset fields rendered');
@@ -313,6 +320,7 @@ assert(savedCouch.usePose.sit.facingDeg === 180, 'PUT carries usePose.sit.facing
 assert(!('lie' in savedCouch.usePose), 'untouched usePose.lie stays absent (sparse, per-pose)');
 assert(savedCouch.requiresQuestUnlock === true, 'PUT carries checked requiresQuestUnlock');
 assert(savedCouch.icon === '/models/icons/sofa.png', 'PUT carries edited icon path');
+assert(savedCouch.sound === '/sounds/couch_creak.wav', 'PUT carries edited sound path');
 const savedLamp = saved.assets.find((a) => a.id === 'lamp');
 assert(!('buyable' in savedLamp), 'new asset has no buyable key (defaults true)');
 assert(!('facingDeg' in savedLamp), 'new asset has no facingDeg key (defaults 0)');
@@ -320,6 +328,7 @@ assert(!('meshFit' in savedLamp), 'new asset has no meshFit key (nothing set)');
 assert(!('usePose' in savedLamp), 'new asset has no usePose key (nothing set)');
 assert(!('requiresQuestUnlock' in savedLamp), 'new asset has no requiresQuestUnlock key (defaults unlocked)');
 assert(!('icon' in savedLamp), 'new asset has no icon key (falls back to initials tile)');
+assert(!('sound' in savedLamp), 'new asset has no sound key (no loop by default)');
 assert(!('combustibility' in savedLamp), 'new asset has no combustibility key (set-then-cleared, pruned to absent)');
 assert(savedLamp.category === 'door', 'PUT carries lamp\'s category change to door');
 assert(savedLamp.door.hingeOffset[0] === -0.5 && savedLamp.door.hingeOffset[1] === 0, 'PUT carries door.hingeOffset');

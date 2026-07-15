@@ -219,6 +219,17 @@ function renderEditor() {
   card2.appendChild(frow('primary need (auto-stop threshold target)', needSel));
   root.appendChild(card2);
 
+  // --- sound (ROADMAP_NEXT item 7): loops for as long as the sim is performing THIS action,
+  // regardless of which asset it targets — a target asset's own `sound` (Asset Editor) wins if
+  // both are set. See game/audio.ts's module doc comment for the exact precedence rule.
+  const cardSound = document.createElement('div');
+  cardSound.className = 'card';
+  cardSound.innerHTML = '<h2>Sound <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#5f6f93">(optional — loops while this action runs; the target asset\'s own sound field wins if set)</span></h2>';
+  const soundInput = textInput(() => a.sound, (v) => { if (v) a.sound = v; else delete a.sound; }, 'sound');
+  soundInput.placeholder = '/sounds/action_beep.wav';
+  cardSound.appendChild(frow('loop sound path', soundInput));
+  root.appendChild(cardSound);
+
   // --- duration (ROADMAP_NEXT item 5, §7.11): sparse, mirrors the seatAware/usePose convention —
   // the whole `duration` object is absent when no field has been touched, and skillVar/atMaxSeconds
   // only mean anything together (a base-only duration is a fixed timer with no skill influence).

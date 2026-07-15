@@ -126,6 +126,13 @@ assert(englishGain.value === '0.02', 'existing skill gain rendered');
 const cookingGainOnTv = doc.querySelector('input[data-path="gain.skill.cooking"]');
 assert(cookingGainOnTv.value === '', 'unrelated skill gain renders blank on watch_tv');
 
+// --- sound (ROADMAP_NEXT item 7): blank by default, sparse round-trip
+const soundInput = doc.querySelector('input[data-path="sound"]');
+assert(soundInput, 'sound field rendered');
+assert(soundInput.value === '', 'watch_tv has no sound set (blank)');
+soundInput.value = '/sounds/action_beep.wav';
+soundInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+
 // --- duration fields (ROADMAP_NEXT item 5, §7.11): watch_tv has none, cook ships the worked example
 assert(doc.querySelector('input[data-path="duration.baseSeconds"]').value === '', 'watch_tv has no duration.baseSeconds (blank)');
 assert(doc.querySelector('select[data-path="duration.skillVar"]').value === '', 'watch_tv duration skillVar defaults to none');
@@ -161,6 +168,7 @@ assert(!('fun' in savedTv.needGains), 'PUT removed blanked need gain key');
 assert(savedTv.needGains.hunger === 1.5, 'PUT added new need gain key');
 assert(savedTv.skillGains.english === 0.02, 'untouched skill gain preserved');
 assert(savedTv.duration === undefined, 'PUT: watch_tv still has no duration key (never touched)');
+assert(savedTv.sound === '/sounds/action_beep.wav', 'PUT carries edited sound path');
 let savedCook = saved.actions.find((a) => a.id === 'cook');
 assert(savedCook.duration.baseSeconds === 50, 'PUT carries edited cook duration.baseSeconds');
 assert(savedCook.duration.skillVar === undefined, 'PUT: clearing skillVar prunes only that key');
@@ -177,6 +185,7 @@ assert(doc.querySelector('input[data-path="animation"]').value === '', 'new acti
 assert(doc.querySelector('input[data-path="autonomyEligible"]').checked, 'new action defaults autonomy-eligible');
 assert(doc.querySelector('select[data-path="primaryNeed"]').value === '', 'new action defaults to no primary need');
 assert(doc.querySelector('input[data-path="duration.baseSeconds"]').value === '', 'new action defaults to no duration');
+assert(doc.querySelector('input[data-path="sound"]').value === '', 'new action defaults to no sound');
 
 // duration full sparse round trip on the new action: set baseSeconds only, then clear it back —
 // the whole `duration` object should be pruned, not left as an empty {}
