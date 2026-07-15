@@ -45,7 +45,8 @@
   "fire": {
     "burnSeconds": 30,
     "spreadRadius": 2,
-    "_source": "ROADMAP_NEXT item 6 (fire destruction + spreading, PROJECT_CONTEXT.md §7.3 follow-on). burnSeconds = how long an unextinguished 'fire' instance burns before destroying its base object (replaced by a 'pile of ash' transient — see assets.json's ash row); spreadRadius (meters, map gridSize=1) = how far a live fire scans each tick for AssetDef.combustibility-bearing neighbors to roll spread onto. Sim-time seconds, same clock as needs decay/gains/doors."
+    "panicSeconds": 3,
+    "_source": "ROADMAP_NEXT item 6 (fire destruction + spreading, PROJECT_CONTEXT.md §7.3 follow-on). burnSeconds = how long an unextinguished 'fire' instance burns before destroying its base object (replaced by a 'pile of ash' transient — see assets.json's ash row); spreadRadius (meters, map gridSize=1) = how far a live fire scans each tick for AssetDef.combustibility-bearing neighbors to roll spread onto. Sim-time seconds, same clock as needs decay/gains/doors. panicSeconds (ROADMAP_NEXT B2-5) = how long the sim plays the 'panic' animation state whenever ANY fire spawns (initial risk roll or spread) before autonomy resumes — see game/accidents.ts's onFireSpawned hook + game/main.ts's triggerPanic."
   },
   "garbage": {
     "autoTidyRadius": 4,

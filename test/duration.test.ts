@@ -1,7 +1,8 @@
 // duration.test.ts — game/duration.ts pure logic (ROADMAP_NEXT item 5, PROJECT_CONTEXT.md §7.11).
 // Run: npx tsx test/duration.test.ts
+import { readFileSync } from 'node:fs';
 import { computeDurationSeconds, isDurationComplete } from '../game/duration';
-import type { SkillDef } from '../game/data';
+import type { SkillDef, ActionDef } from '../game/data';
 
 let failures = 0;
 function check(name: string, cond: boolean, detail = '') {
@@ -55,6 +56,75 @@ console.log('duration.test — computeDurationSeconds');
 
   const inverted = computeDurationSeconds({ baseSeconds: 20, skillVar: 'skills.cooking', atMaxSeconds: 60 }, { cooking: 5 }, skillDefs);
   check('inverted base/atMax (duration grows with skill) lerps correctly too', approx(inverted!, 40), String(inverted));
+}
+
+console.log('duration.test — computeDurationSeconds modifiers (ROADMAP_NEXT B2-5)');
+{
+  // no modifiers → identical to the pre-existing base/lerp math (backward compat check)
+  const noMods = computeDurationSeconds({ baseSeconds: 10 }, {}, skillDefs);
+  check('no modifiers key → unchanged from base', noMods === 10, String(noMods));
+
+  const emptyMods = computeDurationSeconds({ baseSeconds: 10, modifiers: [] }, {}, skillDefs);
+  check('empty modifiers array → unchanged from base', emptyMods === 10, String(emptyMods));
+
+  // single modifier, skills-namespaced: intelligence 0..10, atMin 1 (at 0) -> atMax 0.5 (at max)
+  const intel0 = computeDurationSeconds({ baseSeconds: 10, modifiers: [{ var: 'skills.cooking', atMin: 1, atMax: 0.5 }] }, { cooking: 0 }, skillDefs);
+  check('modifier at var=0 applies atMin exactly', intel0 === 10, String(intel0)); // 10 * 1
+  const intelMax = computeDurationSeconds({ baseSeconds: 10, modifiers: [{ var: 'skills.cooking', atMin: 1, atMax: 0.5 }] }, { cooking: 10 }, skillDefs);
+  check('modifier at var=max applies atMax exactly', approx(intelMax!, 5), String(intelMax)); // 10 * 0.5
+  const intelHalf = computeDurationSeconds({ baseSeconds: 10, modifiers: [{ var: 'skills.cooking', atMin: 1, atMax: 0.5 }] }, { cooking: 5 }, skillDefs);
+  check('modifier at var=50% lerps the multiplier halfway', approx(intelHalf!, 7.5), String(intelHalf)); // 10 * 0.75
+
+  // needs-namespaced modifier: needs are always 0..100 (game/stats.ts), no SkillDef lookup needed
+  const energyLow = computeDurationSeconds({ baseSeconds: 10, modifiers: [{ var: 'needs.energy', atMin: 1.6, atMax: 1 }] }, {}, skillDefs, { energy: 0 });
+  check('needs. modifier at 0 applies atMin exactly (tired sim is slower)', approx(energyLow!, 16), String(energyLow)); // 10 * 1.6
+  const energyFull = computeDurationSeconds({ baseSeconds: 10, modifiers: [{ var: 'needs.energy', atMin: 1.6, atMax: 1 }] }, {}, skillDefs, { energy: 100 });
+  check('needs. modifier at 100 applies atMax exactly', approx(energyFull!, 10), String(energyFull)); // 10 * 1
+
+  // stacking: two modifiers multiply together, in array order — the shipped "extinguish" shape
+  const extinguishDur = { baseSeconds: 10, modifiers: [{ var: 'skills.cooking', atMin: 1, atMax: 0.5 }, { var: 'needs.energy', atMin: 1.6, atMax: 1 }] };
+  const stacked = computeDurationSeconds(extinguishDur, { cooking: 10 }, skillDefs, { energy: 0 });
+  check('two modifiers stack by multiplication', approx(stacked!, 8), String(stacked)); // 10 * 0.5 * 1.6
+
+  // unresolvable modifier var → no-op ×1, same "unknown id → safe fallback" convention as skillVar
+  const unknownVar = computeDurationSeconds({ baseSeconds: 10, modifiers: [{ var: 'needs.nonexistent', atMin: 2, atMax: 4 }] }, {}, skillDefs, {});
+  check('unresolvable needs. modifier var → no-op (×1)', unknownVar === 10, String(unknownVar));
+  const unknownSkillMod = computeDurationSeconds({ baseSeconds: 10, modifiers: [{ var: 'skills.nonexistent', atMin: 2, atMax: 4 }] }, {}, skillDefs, {});
+  check('unresolvable skills. modifier var → no-op (×1)', unknownSkillMod === 10, String(unknownSkillMod));
+
+  // modifiers compose with the base skillVar/atMaxSeconds lerp too, not just fixed baseSeconds
+  const withBaseLerp = computeDurationSeconds(
+    { baseSeconds: 60, skillVar: 'skills.cooking', atMaxSeconds: 20, modifiers: [{ var: 'needs.energy', atMin: 2, atMax: 1 }] },
+    { cooking: 10 }, skillDefs, { energy: 0 },
+  );
+  check('modifiers apply on top of the skillVar/atMaxSeconds lerp result', approx(withBaseLerp!, 40), String(withBaseLerp)); // lerp->20, *2 energy penalty -> 40
+
+  // needs defaults to {} when the 4th arg is omitted — every pre-existing 3-arg call site keeps
+  // working, a needs. modifier just no-ops (backward compat, see the module doc comment)
+  const omittedNeeds = computeDurationSeconds({ baseSeconds: 10, modifiers: [{ var: 'needs.energy', atMin: 2, atMax: 4 }] }, {}, skillDefs);
+  check('omitting the needs arg entirely → needs. modifiers no-op (backward compat)', omittedNeeds === 10, String(omittedNeeds));
+}
+
+console.log('duration.test — shipped data sanity (data/interactions.json + data/stats.json)');
+{
+  const interactions = JSON.parse(readFileSync(new URL('../data/interactions.json', import.meta.url), 'utf8'));
+  const stats = JSON.parse(readFileSync(new URL('../data/stats.json', import.meta.url), 'utf8'));
+  const intel = stats.skills.find((s: SkillDef) => s.id === 'intelligence');
+  check('stats.json ships an "intelligence" skill, default 0 max 10', !!intel && intel.default === 0 && intel.max === 10, JSON.stringify(intel));
+
+  for (const id of ['extinguish', 'clean_up', 'sweep', 'mop']) {
+    const action = interactions.actions.find((a: ActionDef) => a.id === id);
+    check(`${id} ships a duration block`, !!action?.duration, JSON.stringify(action?.duration));
+    const seconds = computeDurationSeconds(action.duration, {}, stats.skills, {});
+    check(`${id} computeDurationSeconds resolves without throwing/NaN (no skill/need snapshot)`, typeof seconds === 'number' && !Number.isNaN(seconds), String(seconds));
+  }
+
+  const extinguish = interactions.actions.find((a: ActionDef) => a.id === 'extinguish');
+  const fastExtinguish = computeDurationSeconds(extinguish.duration, { intelligence: 10 }, stats.skills, { energy: 100 });
+  const slowExtinguish = computeDurationSeconds(extinguish.duration, { intelligence: 0 }, stats.skills, { energy: 0 });
+  check('extinguish: smart + energetic sim is faster than dumb + tired sim', fastExtinguish! < slowExtinguish!, `${fastExtinguish} vs ${slowExtinguish}`);
+  check('extinguish base 10s: smart+energetic ≈ 5s (10 * 0.5 * 1)', approx(fastExtinguish!, 5), String(fastExtinguish));
+  check('extinguish base 10s: dumb+tired ≈ 16s (10 * 1 * 1.6)', approx(slowExtinguish!, 16), String(slowExtinguish));
 }
 
 console.log('duration.test — isDurationComplete');

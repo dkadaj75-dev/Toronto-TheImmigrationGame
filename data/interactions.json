@@ -184,10 +184,18 @@
       "name": "Extinguish",
       "needGains": {},
       "skillGains": {},
-      "animation": "stand_use",
+      "animation": "extinguishing_fire",
       "autonomyEligible": false,
       "primaryNeed": null,
-      "_note": "Accidents slice (PROJECT_CONTEXT.md §7.3) — cleanup action for the 'fire' accident asset's clearedBy. Player-only by design (autonomyEligible false), no need/skill effect."
+      "_note": "Accidents slice (PROJECT_CONTEXT.md §7.3) — cleanup action for the 'fire' accident asset's clearedBy. Player-only by design (autonomyEligible false), no need/skill effect.",
+      "_durationNote": "ROADMAP_NEXT B2-5 — base 10s, faster with intelligence (atMin 1 -> atMax 0.5, a smarter sim extinguishes faster), slower when tired (energy atMin 1.6 -> atMax 1, a low-energy sim is slower). Both modifiers multiply onto baseSeconds (no skillVar/atMaxSeconds lerp on this action). See game/duration.ts.",
+      "duration": {
+        "baseSeconds": 10,
+        "modifiers": [
+          { "var": "skills.intelligence", "atMin": 1, "atMax": 0.5 },
+          { "var": "needs.energy", "atMin": 1.6, "atMax": 1 }
+        ]
+      }
     },
     {
       "id": "mop",
@@ -196,20 +204,34 @@
         "hygiene": 0.5
       },
       "skillGains": {},
-      "animation": "stand_use",
+      "animation": "cleaning",
       "autonomyEligible": false,
       "primaryNeed": null,
-      "_note": "Accidents slice (PROJECT_CONTEXT.md §7.3) — cleanup action for the 'water_puddle' accident asset's clearedBy. Player-only by design (autonomyEligible false); small hygiene gain for the mopping motion."
+      "_note": "Accidents slice (PROJECT_CONTEXT.md §7.3) — cleanup action for the 'water_puddle' accident asset's clearedBy. Player-only by design (autonomyEligible false); small hygiene gain for the mopping motion.",
+      "_durationNote": "ROADMAP_NEXT B2-5 — base ~6s, slower when tired (same energy modifier as extinguish/clean_up/sweep).",
+      "duration": {
+        "baseSeconds": 6,
+        "modifiers": [
+          { "var": "needs.energy", "atMin": 1.6, "atMax": 1 }
+        ]
+      }
     },
     {
       "id": "sweep",
       "name": "Sweep up",
       "needGains": {},
       "skillGains": {},
-      "animation": "stand_use",
+      "animation": "cleaning",
       "autonomyEligible": false,
       "primaryNeed": null,
-      "_note": "ROADMAP_NEXT item 6 (fire destruction) — cleanup action for the 'ash' transient asset's clearedBy. Player-only by design (autonomyEligible false), no need/skill effect, same shape as extinguish/mop."
+      "_note": "ROADMAP_NEXT item 6 (fire destruction) — cleanup action for the 'ash' transient asset's clearedBy. Player-only by design (autonomyEligible false), no need/skill effect, same shape as extinguish/mop.",
+      "_durationNote": "ROADMAP_NEXT B2-5 — base ~6s, slower when tired (same energy modifier as extinguish/clean_up/mop).",
+      "duration": {
+        "baseSeconds": 6,
+        "modifiers": [
+          { "var": "needs.energy", "atMin": 1.6, "atMax": 1 }
+        ]
+      }
     },
     {
       "id": "leave_for_work",
@@ -234,10 +256,17 @@
       "name": "Clean up",
       "needGains": {},
       "skillGains": {},
-      "animation": "stand_use",
+      "animation": "cleaning",
       "autonomyEligible": false,
       "primaryNeed": null,
-      "_note": "ROADMAP_NEXT item 10 — cleanup action for the 'dirty_dishes' transient's clearedBy (player-taps-it path). game/main.ts refuses to order this action at all (HUD toast) if every garbage can is full/none exist; on completion it deposits into the nearest non-full can (see game/garbage.ts's depositAtNearestCan)."
+      "_note": "ROADMAP_NEXT item 10 — cleanup action for the 'dirty_dishes' transient's clearedBy (player-taps-it path). game/main.ts refuses to order this action at all (HUD toast) if every garbage can is full/none exist; on completion it deposits into the nearest non-full can (see game/garbage.ts's depositAtNearestCan).",
+      "_durationNote": "ROADMAP_NEXT B2-5 — base ~6s, slower when tired (same energy modifier as extinguish/sweep/mop). Duration completion goes through the same agent.stopAction() path as any other stop, so the existing clearedBy/deposit flow above still fires normally.",
+      "duration": {
+        "baseSeconds": 6,
+        "modifiers": [
+          { "var": "needs.energy", "atMin": 1.6, "atMax": 1 }
+        ]
+      }
     },
     {
       "id": "empty_garbage",

@@ -29,8 +29,18 @@ export interface ActionDef {
    *  auto-stopped on its own before this field existed). `skillVar` ("skills.<id>", the same
    *  namespace as game/quests.ts's resolveVar) + `atMaxSeconds` together lerp the duration from
    *  `baseSeconds` (skill at 0) to `atMaxSeconds` (skill at its own `max`) via the skill's current
-   *  value; either one absent falls back to a fixed `baseSeconds`. See game/duration.ts. */
-  duration?: { baseSeconds: number; skillVar?: string; atMaxSeconds?: number };
+   *  value; either one absent falls back to a fixed `baseSeconds`. See game/duration.ts.
+   *
+   *  `modifiers` (ROADMAP_NEXT B2-5): sparse array of ADDITIONAL multipliers stacked onto the
+   *  base/lerped seconds above — each entry lerps a MULTIPLIER (not seconds) from `atMin` (the
+   *  named var at 0) to `atMax` (the var at its own max — a skill's `max` from stats.json, or 100
+   *  for any `needs.<id>`, since needs are always clamped 0..100, see game/stats.ts), then
+   *  multiplies it onto the running total. `var` reuses the exact same "skills.<id>"/"needs.<id>"
+   *  namespace as `skillVar`/quest conditions. An unresolvable var (unknown id, missing value)
+   *  contributes a no-op ×1, same "unknown id → safe no-op" convention as skillVar/quests. See
+   *  game/duration.ts's computeDurationSeconds. Ships on extinguish (intelligence + energy) and
+   *  clean_up/sweep/mop (energy only) — see data/interactions.json. */
+  duration?: { baseSeconds: number; skillVar?: string; atMaxSeconds?: number; modifiers?: { var: string; atMin: number; atMax: number }[] };
   /** ROADMAP_NEXT item 7 (audio): path under public/sounds/ (or any /public path) that loops for
    *  as long as the SIM is performing this action, regardless of which asset it targets — see
    *  game/audio.ts's module doc comment for why this is a separate semantic from AssetDef.sound
@@ -302,7 +312,11 @@ export interface TuningData {
    *  above). ROADMAP_NEXT item 6: burnSeconds = how long an unextinguished fire instance burns
    *  before destroying its base object; spreadRadius (meters) = how far a live fire scans for
    *  combustible neighbors each tick. game/accidents.ts falls back to `{30, 2}` when absent. */
-  fire?: { burnSeconds: number; spreadRadius: number };
+  /** ROADMAP_NEXT B2-5: how long (sim-time seconds) the sim plays the 'panic' animation state
+   *  whenever a fire spawns (initial risk roll OR spread — see game/accidents.ts's onFireSpawned
+   *  hook) before control returns to autonomy — same shape/precedent as `bladderFailure.
+   *  durationSeconds` below. game/main.ts falls back to 3 when absent. */
+  fire?: { burnSeconds: number; spreadRadius: number; panicSeconds?: number };
   /** Optional so pre-existing tuning fixtures/tests stay valid (same precedent as `fire?` above).
    *  ROADMAP_NEXT item 10 (garbage/tidying): autoTidyRadius (meters) = how close a non-full garbage
    *  can must be to the sim for the sim to walk over and deposit waste itself rather than dropping

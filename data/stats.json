@@ -120,6 +120,14 @@
       "max": 10,
       "enabled": false,
       "_note": "Planned — disabled until Phase 4 decision (open decision #4)."
+    },
+    {
+      "id": "intelligence",
+      "name": "Intelligence",
+      "color": "#f39c12",
+      "default": 0,
+      "max": 10,
+      "_note": "ROADMAP_NEXT B2-5 — drives extinguish's duration modifier (smarter sims extinguish fires faster). No gain activity maps to it yet; designer edits later."
     }
   ],
   "personality": [

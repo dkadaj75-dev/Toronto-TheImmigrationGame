@@ -381,6 +381,14 @@ export class AccidentsController {
      *  main.ts wires this to `buyMode.instanceForObject` + `buyMode.destroyInstance` + a nav
      *  rebake. Optional so tests/tools that don't care about destruction can omit it. */
     private destroyBase?: (obj: THREE.Object3D) => void,
+    /** ROADMAP_NEXT B2-5: called whenever a `fire` instance SPAWNS — either a direct onUse risk
+     *  roll (`spawn`, below) or a spread success (`spawnFireOn`, below). Fired AFTER the live group
+     *  is built (so the fire is already visible/queryable when the callback runs), and only for
+     *  `accidentId === 'fire'` (a non-fire accident, e.g. water_puddle, never panics the sim).
+     *  Injected callback, same reasoning as `destroyBase` above (keeps accidents.ts independent of
+     *  main.ts's panic-timer state) — main.ts wires this to its own triggerPanic closure. Optional
+     *  so tests/tools that don't care about panic can omit it. */
+    private onFireSpawned?: (rec: AccidentInstanceRecord) => void,
   ) {}
 
   /** Live THREE.Object3D for a registry instance (used to redirect a blocked tap's walk/action
@@ -451,6 +459,9 @@ export class AccidentsController {
       footprint: accidentDef.footprint, placement: plan.placement, baseKey, bornAt: now,
     });
     this.buildGroup(rec, accidentDef);
+    // ROADMAP_NEXT B2-5: an onUse risk can spawn any accident (fire, water_puddle, ...) — only a
+    // fire triggers panic.
+    if (accidentDef.id === 'fire') this.onFireSpawned?.(rec);
   }
 
   // ------------------------------------------------------ fire destruction/spread (ROADMAP_NEXT item 6)
@@ -506,6 +517,7 @@ export class AccidentsController {
     const pos: [number, number] = [obj.position.x, obj.position.z];
     const rec = this.registry.spawn({ accidentId: 'fire', pos, rotDeg: 0, footprint: fireDef.footprint, placement: 'on', baseKey, bornAt: now });
     this.buildGroup(rec, fireDef);
+    this.onFireSpawned?.(rec); // ROADMAP_NEXT B2-5: spread fires panic the sim identically to a direct roll
   }
 
   /** Fire burned out unextinguished: despawns the fire itself, destroys its base object (via the

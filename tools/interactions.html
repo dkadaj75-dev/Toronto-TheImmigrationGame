@@ -254,6 +254,33 @@ function appendVarOptions(sel, currentValue) {
   }
   sel.value = currentValue;
 }
+// ROADMAP_NEXT B2-5: duration-modifier var options, scoped to needs+skills only (the only
+// namespaces game/duration.ts's computeDurationSeconds resolves — funds/time/vars/quests would be
+// meaningless as a duration multiplier). Deliberately a separate small function rather than
+// reusing appendVarOptions's full group list (see the Duration card's own comment).
+function appendDurationVarOptions(sel, currentValue) {
+  sel.innerHTML = '';
+  const groups = [
+    ['Needs', state.stats.needs.map((n) => ({ value: 'needs.' + n.id, label: n.name }))],
+    ['Skills', state.stats.skills.map((s) => ({ value: 'skills.' + s.id, label: s.name }))],
+  ];
+  const known = new Set();
+  for (const [label, opts] of groups) {
+    if (!opts.length) continue;
+    const og = document.createElement('optgroup'); og.label = label;
+    for (const o of opts) {
+      const opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.label;
+      og.appendChild(opt); known.add(o.value);
+    }
+    sel.appendChild(og);
+  }
+  if (currentValue && !known.has(currentValue)) {
+    const og = document.createElement('optgroup'); og.label = 'Unknown (stale id)';
+    const opt = document.createElement('option'); opt.value = currentValue; opt.textContent = currentValue;
+    og.appendChild(opt); sel.appendChild(og);
+  }
+  sel.value = currentValue;
+}
 function valueInputFor(path, value, onChange, condPath) {
   const info = describeVarPath(path);
   let input;
@@ -499,6 +526,76 @@ function renderEditor() {
     'duration.atMaxSeconds',
   );
   card2b.appendChild(frow('seconds at max skill (blank = ignore skill, fixed base)', atMaxInput));
+
+  // --- duration modifiers (ROADMAP_NEXT B2-5): sparse array of ADDITIONAL multipliers stacked
+  // onto the base/lerped seconds above — each row lerps a MULTIPLIER (not seconds) from `atMin`
+  // (the named var at 0) to `atMax` (the var at its own max). Var options are scoped to needs +
+  // skills only (the only namespaces game/duration.ts's computeDurationSeconds resolves), reusing
+  // appendVarOptions's grouped-<optgroup> style but a purpose-built subset (see
+  // appendDurationVarOptions below) rather than the full condition-builder var list (funds/time/
+  // vars/quests make no sense as a duration modifier).
+  const modsHint = document.createElement('div');
+  modsHint.className = 'hint-line';
+  modsHint.textContent = 'each row multiplies onto the seconds above — atMin = multiplier when the var is 0, atMax = multiplier when the var is at its own max';
+  card2b.appendChild(frow('modifiers', modsHint));
+
+  const modsList = document.createElement('div');
+  const ensureModifiers = () => { const d = ensureDuration(); if (!d.modifiers) d.modifiers = []; return d.modifiers; };
+  const pruneModifiersIfEmpty = () => { if (a.duration?.modifiers && a.duration.modifiers.length === 0) { delete a.duration.modifiers; pruneDurationIfEmpty(); } };
+
+  function renderModifierRow(mod, idx) {
+    const row = document.createElement('div');
+    row.className = 'cond-leaf';
+    row.dataset.modIndex = String(idx);
+
+    const varSel = document.createElement('select');
+    varSel.className = 'cond-var-select';
+    varSel.dataset.path = `duration.modifiers.${idx}.var`;
+    appendDurationVarOptions(varSel, mod.var);
+    varSel.addEventListener('change', () => { mod.var = varSel.value; markDirty('interactions.json'); });
+    row.appendChild(varSel);
+
+    const minInput = numInput(() => mod.atMin, (v) => { mod.atMin = v ?? 0; markDirty('interactions.json'); }, `duration.modifiers.${idx}.atMin`);
+    const minLabel = frow('atMin', minInput);
+    minLabel.style.gridTemplateColumns = '50px 1fr';
+    row.appendChild(minLabel);
+
+    const maxInput = numInput(() => mod.atMax, (v) => { mod.atMax = v ?? 0; markDirty('interactions.json'); }, `duration.modifiers.${idx}.atMax`);
+    const maxLabel = frow('atMax', maxInput);
+    maxLabel.style.gridTemplateColumns = '50px 1fr';
+    row.appendChild(maxLabel);
+
+    const rm = document.createElement('button');
+    rm.className = 'cond-remove'; rm.textContent = '× remove';
+    rm.dataset.action = 'remove-modifier'; rm.dataset.removeIndex = String(idx);
+    rm.addEventListener('click', () => {
+      a.duration.modifiers.splice(idx, 1);
+      pruneModifiersIfEmpty();
+      markDirty('interactions.json');
+      renderEditor();
+    });
+    row.appendChild(rm);
+    return row;
+  }
+
+  function renderModifiers() {
+    modsList.innerHTML = '';
+    for (const [idx, mod] of (a.duration?.modifiers ?? []).entries()) modsList.appendChild(renderModifierRow(mod, idx));
+    const addRow = document.createElement('div');
+    addRow.className = 'cond-add-row';
+    const addBtn = document.createElement('button');
+    addBtn.textContent = '+ Modifier'; addBtn.dataset.action = 'add-modifier';
+    addBtn.addEventListener('click', () => {
+      const defaultVar = state.stats.needs.length ? 'needs.' + state.stats.needs[0].id : (state.stats.skills.length ? 'skills.' + state.stats.skills[0].id : '');
+      ensureModifiers().push({ var: defaultVar, atMin: 1, atMax: 1 });
+      markDirty('interactions.json');
+      renderEditor();
+    });
+    addRow.appendChild(addBtn);
+    modsList.appendChild(addRow);
+  }
+  renderModifiers();
+  card2b.appendChild(modsList);
   root.appendChild(card2b);
 
   // --- waste (ROADMAP_NEXT item 10): sparse — a transient-asset dropdown fed from assets.json's

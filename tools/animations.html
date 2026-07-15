@@ -127,6 +127,7 @@ window.AnimTool = (() => {
     { id: 'lie',  detail: 'core — bed actions (sleep)' },
     { id: 'sit_ground', detail: 'core — seat-aware action with no eligible seat in range (e.g. Watch TV with nothing to sit on): sim sits on the floor where it stands' },
     { id: 'pee', detail: 'core — ROADMAP_NEXT B2-4 bladder failure: plays for tuning.bladderFailure.durationSeconds, then autonomy resumes' },
+    { id: 'panic', detail: 'core — ROADMAP_NEXT B2-5 fire panic: plays for tuning.fire.panicSeconds whenever any fire spawns (initial roll or spread), then autonomy resumes' },
   ];
   const DEFAULT_CHARACTER = {
     meshPath: '/models/character.glb', heightMeters: 1.55, yawOffsetDeg: 0,

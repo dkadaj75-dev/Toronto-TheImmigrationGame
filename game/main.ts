@@ -20,6 +20,7 @@ import { GarbageController } from './garbage';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials } from './buymode';
 import { createMarkerInstance, type MarkerInstance } from './marker';
 import { createCensorInstance, type CensorInstance } from './censor';
+import { createProgressBarInstance, type ProgressBarInstance } from './progressbar';
 import { computeDurationSeconds, isDurationComplete } from './duration';
 import { AudioManager, loopSoundFor } from './audio';
 import { initBladderFailureState, checkBladderFailure } from './bladder';
@@ -92,6 +93,25 @@ async function start() {
     agent.retune(data.tuning, grid, assetsById(data));
   };
 
+  // --- ROADMAP_NEXT B2-5: fire panic — interrupts whatever the sim is doing and plays 'panic' for
+  // tuning.fire.panicSeconds whenever ANY fire spawns (initial risk roll OR spread — see
+  // accidents.ts's onFireSpawned hook, wired below). Mirrors triggerBladderFailure's shape exactly
+  // (own tiny elapsed/total timer alongside durationState/peeState, forceCooldown so autonomy can't
+  // immediately walk the sim toward/away from the fire mid-panic) — declared here, ahead of
+  // `accidents`/`autonomy`, so it can be passed as the controller's onFireSpawned callback; the
+  // `autonomy`/`anim` references inside are safe despite being declared later in this function
+  // (same "closures over `let`/`const` bindings assigned later are fine, since this only ever runs
+  // on a later tick" precedent as `buildEvalContext` below). Only fires for a fire on THIS map
+  // (currently the only map that exists, so always true — no extra gating needed).
+  let panicState: { elapsed: number; totalSeconds: number } | null = null;
+  const triggerPanic = () => {
+    agent.stopAction(); // fires onActionStop → animation reset to idle, activity chip hidden, etc.
+    const panicSeconds = data.tuning.fire?.panicSeconds ?? 3;
+    autonomy.forceCooldown(panicSeconds);
+    anim?.play('panic');
+    panicState = { elapsed: 0, totalSeconds: panicSeconds };
+  };
+
   // --- accidents (PROJECT_CONTEXT.md §7.3 + ROADMAP_NEXT item 6 fire destruction/spread):
   // closures over the live `let world`/`grid` so a hot-reload rebake/rebuild is picked up
   // automatically, same pattern as Autonomy below. `destroyBase` is how a burned-out fire removes
@@ -102,7 +122,7 @@ async function start() {
   const accidents = new AccidentsController(() => data, () => world, () => grid, (obj) => {
     const inst = buyMode.instanceForObject(obj);
     if (inst) { buyMode.destroyInstance(inst); rebakeNav(); }
-  });
+  }, () => triggerPanic());
 
   // --- garbage cans + autonomous tidying (ROADMAP_NEXT item 10): scans the live world for placed
   // garbage-can instances (closures over the same `let world` as accidents, so a hot-reload
@@ -150,6 +170,12 @@ async function start() {
   // pure overlay quad, not part of the rig), visibility polled from agent.current every render
   // frame below rather than event-driven — see game/censor.ts's module doc comment.
   const censor: CensorInstance = createCensorInstance(scene);
+
+  // --- ROADMAP_NEXT B2-5: progress bar above the sim's head, visible only while the active action
+  // has a `duration` (§7.11 + this slice's modifiers) — always created (no character-block gate,
+  // same convention as censor above; it's a procedural overlay, not part of the rig) and shown
+  // purely by polling `durationState` every render frame below.
+  const progressBar: ProgressBarInstance = createProgressBarInstance(scene);
 
   agent.onLocomotionChange = (moving) => {
     if (!anim) return;
@@ -261,7 +287,7 @@ async function start() {
   agent.onActionStart = (a) => {
     hud.showActivity(a.action.name);
     anim?.play(animStateFor(a)); // unmapped states fall back to idle inside AnimController
-    const totalSeconds = computeDurationSeconds(a.action.duration, Object.fromEntries(stats.skills), data.stats.skills);
+    const totalSeconds = computeDurationSeconds(a.action.duration, Object.fromEntries(stats.skills), data.stats.skills, Object.fromEntries(stats.needs));
     durationState = totalSeconds !== null ? { action: a, totalSeconds, elapsed: 0 } : null;
     // ROADMAP_NEXT item 7: start whichever of the target asset's own `sound` (wins, per-instance
     // key so two placed instances of the same asset loop independently) or the action's `sound`
@@ -680,6 +706,18 @@ async function start() {
         stats.refillNeed('bladder', data.tuning.bladderFailure?.reliefAmount ?? 30);
       }
     }
+    // ROADMAP_NEXT B2-5: panic's own tiny timer — same isDurationComplete helper, same sim time.
+    // Not gated on agent.current (this event has no ActiveAction either, like bladder failure);
+    // cleared to null the moment it completes so it can never double-fire. Resuming behavior after
+    // this is simply "autonomy.forceCooldown's window lapses" — no explicit action needed here,
+    // same as bladder failure's own doc comment.
+    if (panicState) {
+      panicState.elapsed += sdt;
+      if (isDurationComplete(panicState.elapsed, panicState.totalSeconds)) {
+        panicState = null;
+        anim?.play('idle');
+      }
+    }
     // doors advance on the same sim time as the animation mixer (pause freezes them mid-swing,
     // 2×/3× speeds them up) — reuses this per-frame loop, no dedicated door timer (§7.1).
     const simPos: [number, number] = [sim.position.x, sim.position.z];
@@ -695,6 +733,10 @@ async function start() {
     world.traverse((o) => { o.userData.spriteUpdate?.(sdt); });
     anim?.update(sdt); // sim time: pause freezes the character, 2×/3× speed it up
     if (marker && data.tuning.character) marker.update(sdt, data.tuning.character); // §7.7: same sim time as the mixer/doors/sprites
+    // ROADMAP_NEXT B2-5: progress bar tracks durationState directly (elapsed/total, both already
+    // sim-time) — visible for ANY duration-timed action, cook included (free consistency win).
+    const durationProgress = durationState ? (durationState.totalSeconds > 0 ? durationState.elapsed / durationState.totalSeconds : 1) : 0;
+    progressBar.update(sim, !!durationState, durationProgress, data.tuning.character?.heightMeters ?? 1.55);
     cue.update(dt); // UI feedback stays real-time
     // ROADMAP_NEXT B2-3: censor quad — real-time dt (see game/censor.ts's module doc comment),
     // active purely from the current action's own `censor` flag (covers autonomy-driven AND

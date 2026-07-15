@@ -67,7 +67,7 @@ Sim must stand INSIDE the shower (usePose needs a stand/use entry, not just sit/
 ## B2-4. Bladder failure (pee self) — ✅ DONE 2026-07-15
 Bladder hits 0 → sim pees itself: plays animation (new state, e.g. `pee`), spawns puddle transient at exact sim location, bladder relief minimal + tunable (default 30/100, tuning). See PROJECT_CONTEXT.md §7.17 as-built.
 
-## B2-5. Panic + timed extinguish/clean with progress bar
+## B2-5. Panic + timed extinguish/clean with progress bar — DONE 2026-07-15 (panic state + tuning.fire.panicSeconds; duration modifiers [{var,atMin,atMax}] multiply onto base — extinguish 10s w/ intelligence+energy, clean_up/sweep/mop 6s w/ energy; world-anchored progress bar (game/progressbar.ts) above sim for ANY duration action incl. cook)
 - Fire spawns → sims plays `panic` animation state (mappable in Animation Mapper).
 - Extinguish = timed action: baseline 10s (tunable), FASTER with intelligence skill (designer will add the skill), SLOWER with low energy → duration system needs multi-variable modifiers (extend §7.11 duration schema). Progress bar ABOVE the sim (world-anchored, like marker) showing extinguish progress; flame disappears on completion; `extinguishing_fire` animation state.
 - Cleaning/tidying (clean_up, sweep, mop): same treatment — progress bar, timed, auto-stop + transient removal on completion, `cleaning` animation state.

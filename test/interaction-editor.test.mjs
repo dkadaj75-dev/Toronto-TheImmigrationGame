@@ -15,7 +15,7 @@ const html = readFileSync(join(here, '../tools/interactions.html'), 'utf8');
 const interactions = {
   actions: [
     { id: 'watch_tv', name: 'Watch TV', needGains: { fun: 2.5 }, skillGains: { english: 0.02 }, animation: 'sit_idle', autonomyEligible: true, primaryNeed: 'fun', seatAware: true },
-    { id: 'cook', name: 'Cook', needGains: {}, skillGains: { cooking: 0.05 }, animation: 'stand_use', autonomyEligible: false, primaryNeed: null, duration: { baseSeconds: 60, skillVar: 'skills.cooking', atMaxSeconds: 20 } },
+    { id: 'cook', name: 'Cook', needGains: {}, skillGains: { cooking: 0.05 }, animation: 'stand_use', autonomyEligible: false, primaryNeed: null, duration: { baseSeconds: 60, skillVar: 'skills.cooking', atMaxSeconds: 20, modifiers: [{ var: 'needs.hunger', atMin: 1.2, atMax: 1 }] } },
   ],
 };
 const assets = {
@@ -161,6 +161,27 @@ assert(skillVarSel.value === 'skills.cooking', 'cook duration.skillVar rendered 
 assert([...skillVarSel.options].map((o) => o.value).includes('skills.english'), 'duration skillVar dropdown offers every stats.json skill');
 assert(doc.querySelector('input[data-path="duration.atMaxSeconds"]').value === '20', 'cook duration.atMaxSeconds rendered from data');
 
+// --- duration modifiers (ROADMAP_NEXT B2-5): cook ships one (needs.hunger, atMin 1.2/atMax 1)
+assert(doc.querySelectorAll('[data-mod-index]').length === 1, 'cook renders its 1 existing duration modifier');
+const modVarSel = doc.querySelector('select[data-path="duration.modifiers.0.var"]');
+assert(modVarSel.value === 'needs.hunger', 'modifier var rendered from data');
+assert([...modVarSel.options].map((o) => o.value).includes('skills.cooking'), 'modifier var dropdown offers skills too, not just needs');
+assert(doc.querySelector('input[data-path="duration.modifiers.0.atMin"]').value === '1.2', 'modifier atMin rendered from data');
+assert(doc.querySelector('input[data-path="duration.modifiers.0.atMax"]').value === '1', 'modifier atMax rendered from data');
+
+// add a second modifier row, edit its fields, then remove the FIRST row
+doc.querySelector('[data-action="add-modifier"]').click();
+assert(doc.querySelectorAll('[data-mod-index]').length === 2, '+ Modifier appends a second row');
+const mod1Min = doc.querySelector('input[data-path="duration.modifiers.1.atMin"]');
+mod1Min.value = '0.6';
+mod1Min.dispatchEvent(new window.Event('input', { bubbles: true }));
+const mod1Max = doc.querySelector('input[data-path="duration.modifiers.1.atMax"]');
+mod1Max.value = '0.9';
+mod1Max.dispatchEvent(new window.Event('input', { bubbles: true }));
+doc.querySelector('button[data-action="remove-modifier"][data-remove-index="0"]').click();
+assert(doc.querySelectorAll('[data-mod-index]').length === 1, 'removing the first row leaves exactly 1 modifier');
+assert(doc.querySelector('input[data-path="duration.modifiers.0.atMin"]').value === '0.6', 'the surviving modifier is the edited second row, reindexed to 0');
+
 // edit base + clear skillVar (prunes only the skillVar key — baseSeconds/atMaxSeconds remain, since
 // the object itself is only pruned when baseSeconds is cleared)
 const durBaseCook = doc.querySelector('input[data-path="duration.baseSeconds"]');
@@ -190,6 +211,11 @@ let savedCook = saved.actions.find((a) => a.id === 'cook');
 assert(savedCook.duration.baseSeconds === 50, 'PUT carries edited cook duration.baseSeconds');
 assert(savedCook.duration.skillVar === undefined, 'PUT: clearing skillVar prunes only that key');
 assert(savedCook.duration.atMaxSeconds === 20, 'PUT: untouched atMaxSeconds preserved after skillVar was cleared');
+assert(savedCook.duration.modifiers.length === 1, 'PUT carries exactly 1 modifier (the removed first row is gone)');
+// the surviving row is the SECOND one added (default var = first stats.json need, "fun" in this
+// fixture — the original "needs.hunger" row was the one removed), with its edited atMin/atMax.
+assert(savedCook.duration.modifiers[0].var === 'needs.fun' && savedCook.duration.modifiers[0].atMin === 0.6 && savedCook.duration.modifiers[0].atMax === 0.9,
+  `PUT carries the surviving modifier's edited fields (${JSON.stringify(savedCook.duration.modifiers[0])})`);
 assert(doc.getElementById('save').disabled, 'save disabled after saving');
 
 // --- add action: prompted name, slugified+uniquified id, sane defaults
@@ -211,6 +237,19 @@ yogaBase.value = '15';
 yogaBase.dispatchEvent(new window.Event('input', { bubbles: true }));
 yogaBase.value = '';
 yogaBase.dispatchEvent(new window.Event('input', { bubbles: true }));
+
+// ROADMAP_NEXT B2-5: same sparse round trip, but WITH a modifier added — clearing baseSeconds
+// prunes the whole duration object (modifiers included), matching the pre-existing
+// "only baseSeconds gates the whole object" convention (pruneDurationIfEmpty).
+const yogaBase2 = doc.querySelector('input[data-path="duration.baseSeconds"]');
+yogaBase2.value = '15';
+yogaBase2.dispatchEvent(new window.Event('input', { bubbles: true }));
+doc.querySelector('[data-action="add-modifier"]').click();
+assert(doc.querySelectorAll('[data-mod-index]').length === 1, 'do_yoga: add-modifier works on a freshly-created duration too');
+doc.querySelector('input[data-path="duration.baseSeconds"]').value = '';
+doc.querySelector('input[data-path="duration.baseSeconds"]').dispatchEvent(new window.Event('input', { bubbles: true }));
+// pruneDurationIfEmpty deletes the whole `duration` object (modifiers included) the moment
+// baseSeconds is cleared — verified below via the PUT payload once do_yoga is saved.
 
 // duplicate name → uniquified id, not a collision
 window.prompt = () => 'Do Yoga';
