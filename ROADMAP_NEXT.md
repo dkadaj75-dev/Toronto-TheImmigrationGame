@@ -7,8 +7,10 @@ Character lies/sits completely OUTSIDE the asset (bed: lies across/beyond it; so
 
 Actual root cause turned out to be simpler than the pivot-math guess above: `sim.ts`'s `applyPose` compared `action.animation` against the exact strings `'sit'`/`'lie'`, but shipped actions use clip names like `"sit_idle"`/`"lie_sleep"` — the comparison never matched, so the perch-snap silently never ran and the sim was left standing at its walk-up approach point (outside the footprint). Fixed via prefix matching + `perch` defaulting to the target itself (not just seat-aware resolved seats), plus the requested `AssetDef.usePose?: { sit?, lie? }` schema (sparse offset/y/facingDeg) with sensible footprint-center + tuning-height + long-axis-facing defaults when absent. Shipped `y` overrides for sofa/armchair/dining_chair/bed. See PROJECT_CONTEXT.md §7.8 for full details.
 
-## 2. Sit-on-ground fallback for Watch TV
+## 2. Sit-on-ground fallback for Watch TV — ✅ DONE 2026-07-15, see PROJECT_CONTEXT.md §7.10 as-built
 No seat within N meters of the TV (tunable, ~5m default, `tuning.interaction.seatSearchRadius` or similar) → sim sits on the ground where it stands (needs a dedicated `sit_ground` animation state; designer will map a clip in the Animation Mapper).
+
+Implemented: `game/sim.ts`'s `findSeatFor` rejects candidate seats beyond `tuning.interaction.seatSearchRadius` (new, default 5) from the target; `ActiveAction.groundSit` flags the fallback (no eligible seat, or a resolved seat that's unreachable) so `applyPose` leaves the sim at its walked-to spot at ground height instead of snapping onto the target itself, and `game/main.ts`'s new `animStateFor()` helper plays the dedicated `'sit_ground'` state instead of the action's own `animation`. `sit_ground` added to the Animation Mapper's core-states list so it's listed even though no action references it directly. See §7.10 for full details.
 
 ## 3. Camera rotation — ✅ DONE 2026-07-15
 Orbit/rotate camera — desktop (mouse, e.g. right-drag or modifier+drag) AND mobile (two-finger twist). Extends game/camera.ts TouchCamera (currently pan+pinch only).

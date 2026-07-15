@@ -71,7 +71,7 @@ export class Autonomy {
     // nearest reachable wins — orderAction() path-checks, so unreachable ones are skipped
     for (const c of candidates) {
       const seat = c.action.seatAware ? findSeatFor(this.getWorld(), data, c.obj) : null;
-      if (this.agent.orderAction(c.action, c.obj, seat, c.def)) {
+      if (this.agent.orderAction(c.action, c.obj, seat, c.def, c.action.seatAware)) {
         return { action: c.action, target: c.obj };
       }
     }

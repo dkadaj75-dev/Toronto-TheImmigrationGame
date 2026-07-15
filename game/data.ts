@@ -184,7 +184,7 @@ export interface TuningData {
    *  useSpotClearance = gap beyond the footprint edge for a front-approach stand point;
    *  seatViewDistance = how far in front of a seat-aware target (e.g. the TV) the "viewing point"
    *  sits when ranking candidate seats — ports the Unreal prototype's RightVector·400 constant. */
-  interaction?: { useSpotClearance?: number; seatViewDistance?: number };
+  interaction?: { useSpotClearance?: number; seatViewDistance?: number; seatSearchRadius?: number };
   /** Optional so pre-existing tuning fixtures/tests stay valid (same precedent as `interaction?`
    *  above). Defaults for AssetDef.door fields when a door instance doesn't override them (§7.1).
    *  triggerDistance is in meters (map gridSize=1 → 1 grid unit = 1 meter). */

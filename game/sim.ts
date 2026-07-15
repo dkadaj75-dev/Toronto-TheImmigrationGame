@@ -20,18 +20,24 @@ export interface ActiveAction {
   target: THREE.Object3D;
   /** where the sim actually sits/lies while performing (couch for TV, the bed itself for sleep) */
   seat: THREE.Object3D | null;
+  /** ROADMAP_NEXT item 2: true when a seat-aware action found no eligible seat (none within
+   *  tuning.interaction.seatSearchRadius, or the resolved seat was unreachable) — the sim sits
+   *  on the ground at its walked-to spot instead of snapping onto the target object itself. */
+  groundSit?: boolean;
 }
 
 /**
  * For a seat-aware action, find the best seat-target object to serve the action's object
  * (e.g. the couch that faces the TV) — §7.2's "sit in front of the TV" screen: candidate
  * seats are filtered to the target's front half-space (dot(seatPos − targetPos, targetFacing)
- * > 0), then the nearest to a viewing point projected out along the target's facing wins.
+ * > 0) AND within `tuning.interaction.seatSearchRadius` of the target itself (ROADMAP_NEXT
+ * item 2, default 5 — "no eligible seat" beyond this range), then the nearest to a viewing
+ * point projected out along the target's facing wins among survivors.
  * This replaces the old "nearest seat regardless of side" heuristic and the TV-specific
  * RightVector exception the Unreal prototype needed (CLAUDE.md ANIMATION_PLAN Phase A) —
  * with per-asset facingDeg, any seat-aware asset gets the same treatment for free.
- * Returns null when the home has no seat in front of the target — the sim then just
- * stands at the target, the graceful fallback.
+ * Returns null when the home has no seat in front of the target within range — the caller
+ * (sim.ts's orderAction) then falls back to sitting the sim on the ground (groundSit).
  */
 export function findSeatFor(world: THREE.Group, data: GameData, target: THREE.Object3D): THREE.Object3D | null {
   const assetsById = new Map(data.assets.assets.map((a) => [a.id, a]));
@@ -39,6 +45,7 @@ export function findSeatFor(world: THREE.Group, data: GameData, target: THREE.Ob
   if (!targetDef) return null;
   const targetInstance = facingInstanceOf(target);
   const viewPoint = viewingPointFor(targetInstance, targetDef, data.tuning);
+  const searchRadius = data.tuning.interaction?.seatSearchRadius ?? 5;
 
   let best: THREE.Object3D | null = null;
   let bestDist = Infinity;
@@ -48,6 +55,8 @@ export function findSeatFor(world: THREE.Group, data: GameData, target: THREE.Ob
     const def = assetsById.get(assetId);
     if (!def?.seatTarget) continue;
     if (!isInFrontHalfSpace([obj.position.x, obj.position.z], targetInstance, targetDef)) continue;
+    const distToTarget = Math.hypot(obj.position.x - targetInstance.pos[0], obj.position.z - targetInstance.pos[1]);
+    if (distToTarget > searchRadius) continue;
     const d = Math.hypot(obj.position.x - viewPoint[0], obj.position.z - viewPoint[1]);
     if (d < bestDist) { bestDist = d; best = obj; }
   }
@@ -108,8 +117,17 @@ export class SimAgent {
    * heuristic. The seat branch is unchanged — sitting is still ON the seat, not in front
    * of it — and either way the FINAL sit/lie position still snaps onto the seat/target
    * itself once arrived (applyPose, below), so this only changes where the sim walks to.
+   *
+   * `seatAware` (optional, ROADMAP_NEXT item 2): pass the action's own `seatAware` flag (NOT
+   * just "was a seat resolved") so that BOTH "no eligible seat found" (`seat` is null) AND
+   * "a seat was found but is unreachable" (falls through to the target-front branch below)
+   * are treated the same way — the queued action is flagged `groundSit`, and the sim sits on
+   * the floor at wherever it walked to instead of snapping onto the target object itself
+   * (which, for something like a TV, made no sense — see sim.ts's applyPose doc comment).
+   * Actions that aren't seat-aware at all (seatAware omitted/false) never set groundSit; they
+   * keep whatever pose their own `action.animation` implies, unchanged.
    */
-  orderAction(action: ActionDef, target: THREE.Object3D, seat: THREE.Object3D | null = null, targetDef?: AssetDef): boolean {
+  orderAction(action: ActionDef, target: THREE.Object3D, seat: THREE.Object3D | null = null, targetDef?: AssetDef, seatAware = false): boolean {
     this.stopAction();
     const routeToPivot = (obj: THREE.Object3D): boolean => {
       const stand = nearestWalkable(this.grid, worldToCell(this.grid, obj.position.x, obj.position.z));
@@ -130,7 +148,7 @@ export class SimAgent {
     }
     const reachedTarget = targetDef ? routeToTargetFront(target, targetDef) : routeToPivot(target);
     if (reachedTarget) {
-      this.queued = { action, target, seat: null };
+      this.queued = { action, target, seat: null, groundSit: seatAware };
       return true;
     }
     return false;
@@ -172,6 +190,15 @@ export class SimAgent {
    * stays at its walked-to spot, which is already a sensible "stand in front of it" position.
    */
   private applyPose(a: ActiveAction) {
+    if (a.groundSit) {
+      // ROADMAP_NEXT item 2: no eligible seat in range — sit right where the sim already
+      // walked to (useSpotFor's in-front-of-the-target spot) instead of snapping onto the
+      // target object itself (which, e.g. for a TV, made no geometric sense). Animation state
+      // is resolved separately by the caller (main.ts) to 'sit_ground', not action.animation.
+      this.savedPose = { pos: this.object.position.clone(), rotX: this.object.rotation.x };
+      this.object.position.y = 0;
+      return;
+    }
     const anim = a.action.animation;
     const pose: 'sit' | 'lie' | null = anim.startsWith('lie') ? 'lie' : anim.startsWith('sit') ? 'sit' : null;
     if (!pose) return;

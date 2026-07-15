@@ -39,7 +39,8 @@
   "interaction": {
     "useSpotClearance": 0.4,
     "seatViewDistance": 2.5,
-    "_source": "Asset facing slice (PROJECT_CONTEXT.md §7.2). useSpotClearance = gap beyond an asset's footprint edge for a front-approach stand point; seatViewDistance = how far in front of a seat-aware target (e.g. the TV) the viewing point sits when ranking candidate seats — ports the Unreal prototype's RightVector*400 (~4m) at a web-appropriate scale."
+    "seatSearchRadius": 5,
+    "_source": "Asset facing slice (PROJECT_CONTEXT.md §7.2). useSpotClearance = gap beyond an asset's footprint edge for a front-approach stand point; seatViewDistance = how far in front of a seat-aware target (e.g. the TV) the viewing point sits when ranking candidate seats — ports the Unreal prototype's RightVector*400 (~4m) at a web-appropriate scale. seatSearchRadius (ROADMAP_NEXT item 2, 2026-07-15) = max distance from a seat-aware target's own position a candidate seat may be to count as 'eligible' — beyond it, findSeatFor returns null and the sim sits on the ground instead (game/sim.ts's groundSit)."
   },
   "doors": {
     "openSeconds": 0.25,

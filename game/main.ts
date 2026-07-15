@@ -10,7 +10,7 @@ import { buildDoors } from './doors';
 import { AnimController } from './anim';
 import { bakeNavGrid } from './nav';
 import { TapInput, type TapResult } from './input';
-import { SimAgent, ClickCue, findSeatFor } from './sim';
+import { SimAgent, ClickCue, findSeatFor, type ActiveAction } from './sim';
 import { SimStats } from './stats';
 import { Hud } from './ui';
 import { Autonomy } from './autonomy';
@@ -18,6 +18,14 @@ import { QuestRunner, type EvalContext } from './quests';
 import { AccidentsController, resolveTapAssetId } from './accidents';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials } from './buymode';
 import { createMarkerInstance, type MarkerInstance } from './marker';
+
+/** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
+ *  a seat-aware action with no eligible seat in range) plays the dedicated 'sit_ground' state
+ *  instead of the action's own `animation` field, which would otherwise imply sitting/lying ON
+ *  the target object itself. */
+function animStateFor(a: ActiveAction): string {
+  return a.groundSit ? 'sit_ground' : a.action.animation || 'idle';
+}
 
 const app = document.getElementById('app')!;
 const boot = document.getElementById('boot')!;
@@ -105,7 +113,7 @@ async function start() {
         console.info(`character clips available: ${clips.map((k) => k.name).join(', ')} — map them in tuning.character.clipMap`);
         agent.hasRig = true;
         // enter the correct state immediately (mid-walk / mid-action hot-swaps included)
-        anim.play(agent.current ? agent.current.action.animation : agent.isMoving ? 'walk' : 'idle');
+        anim.play(agent.current ? animStateFor(agent.current) : agent.isMoving ? 'walk' : 'idle');
         anim.setWalkSpeed(data.tuning.movement.walkSpeed);
       })
       .catch((err) => console.warn(`rigged character failed to load (${c.meshPath}) — keeping the capsule stand-in.`, err));
@@ -187,7 +195,7 @@ async function start() {
 
   agent.onActionStart = (a) => {
     hud.showActivity(a.action.name);
-    anim?.play(a.action.animation || 'idle'); // unmapped states fall back to idle inside AnimController
+    anim?.play(animStateFor(a)); // unmapped states fall back to idle inside AnimController
   };
   agent.onActionStop = (a) => {
     hud.hideActivity();
@@ -263,7 +271,7 @@ async function start() {
           hud.showActionMenu(resolvedAsset, actions, (action) => {
             autonomy.notePlayerCommand();
             const seat = action.seatAware ? findSeatFor(world, data, target) : null;
-            if (agent.orderAction(action, target, seat, resolvedAsset)) cue.showAt(target.position.x, target.position.z);
+            if (agent.orderAction(action, target, seat, resolvedAsset, action.seatAware)) cue.showAt(target.position.x, target.position.z);
             else console.log('no path to object', resolvedAsset.id);
           });
           return; // object tap opens the menu; don't also walk to the tap point
