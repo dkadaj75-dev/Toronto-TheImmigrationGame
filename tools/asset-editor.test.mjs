@@ -202,6 +202,14 @@ openAngle.value = '100';
 openAngle.dispatchEvent(new window.Event('input', { bubbles: true }));
 // openSeconds/closeSeconds/triggerDistance deliberately left blank — sparse, tuning fallback
 
+// --- exterior checkbox (ROADMAP_NEXT item 9): sparse, absent = false/interior
+const exteriorCb = doc.querySelector('input[data-path="door.exterior"]');
+assert(exteriorCb, 'exterior checkbox rendered on the door card');
+assert(exteriorCb.checked === false, 'exterior unchecked by default');
+exteriorCb.checked = true;
+exteriorCb.dispatchEvent(new window.Event('change', { bubbles: true }));
+assert(exteriorCb.checked === true, 'exterior checkbox togglable');
+
 // --- accidents (§7.3): normal (non-accident) asset gets the risk-config section
 doc.querySelector('[data-asset-id="stove"]').click();
 assert(doc.querySelector('.card h2')?.textContent !== undefined, 'stove editor rendered');
@@ -336,6 +344,7 @@ assert(savedLamp.door.openAngleDeg === 100, 'PUT carries door.openAngleDeg');
 assert(!('openSeconds' in savedLamp.door), 'untouched door.openSeconds stays absent (sparse, tuning fallback)');
 assert(!('closeSeconds' in savedLamp.door), 'untouched door.closeSeconds stays absent (sparse, tuning fallback)');
 assert(!('triggerDistance' in savedLamp.door), 'untouched door.triggerDistance stays absent (sparse, tuning fallback)');
+assert(savedLamp.door.exterior === true, 'PUT carries checked door.exterior (ROADMAP_NEXT item 9)');
 
 // --- accidents (§7.3): stove's risk config round-trips exactly
 const savedStove = saved.assets.find((a) => a.id === 'stove');

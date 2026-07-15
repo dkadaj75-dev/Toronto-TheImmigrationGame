@@ -631,6 +631,13 @@ function renderEditor() {
       (v) => { if (v === undefined) { if (a.door) delete a.door.triggerDistance; } else ensureDoor().triggerDistance = v; },
       'door.triggerDistance',
     )));
+    // ROADMAP_NEXT item 9: exterior doors never open/close on path-crossing (game/doors.ts skips
+    // them in the tick) — they're tappable interactables instead. Sparse: absent = false/interior.
+    card4c.appendChild(frow('exterior (tappable interactable, never opens/closes automatically)', checkInput(
+      () => a.door?.exterior === true,
+      (v) => { if (v) ensureDoor().exterior = true; else if (a.door) delete a.door.exterior; },
+      'door.exterior',
+    )));
     root.appendChild(card4c);
   }
 

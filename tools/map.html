@@ -68,6 +68,7 @@
   <button class="mode" data-mode="floors">Floors</button>
   <button class="mode" data-mode="walls">Walls</button>
   <button class="mode" data-mode="doors">Doors</button>
+  <button class="mode" data-mode="windows">Windows</button>
   <button class="mode" data-mode="spawn">Spawn</button>
   <span class="muted" id="mode-help"></span>
 </header>
@@ -108,6 +109,7 @@ const MODE_HELP = {
   floors:  'drag on empty space to draw a floor rectangle · click a floor to edit it',
   walls:   'drag to draw a wall (axis-locked) · click a wall to edit endpoints',
   doors:   'click on a wall to place a door · drag a door to move it',
+  windows: 'click on a wall to place a window · drag a window to move it · R flips orientation',
   spawn:   'click to place the spawn point',
 };
 const FLOOR_MATERIALS = ['wood', 'tile', 'carpet'];
@@ -144,6 +146,7 @@ async function boot() {
 async function selectMap(id) {
   if (state.dirty && !confirm('Discard unsaved changes to the current map?')) { renderMapSelect(); return; }
   state.doc = await getJson(API + 'maps/' + id + '.json');
+  state.doc.windows ??= []; // ROADMAP_NEXT item 9: old maps saved before windows existed
   state.mapId = id;
   state.sel = null; state.dirty = false; state.undoStack = []; state.navDirty = true;
   renderMapSelect(); renderInspector(); updateSaveButton(); fitView(); redraw();
@@ -170,7 +173,7 @@ async function newMap(idArg) {
   if (state.maps.includes(id)) { setStatus('a map with that id already exists', 'err'); return false; }
   const doc = {
     id, name: id, gridSize: 1.0, bounds: { w: 14, h: 10 },
-    floors: [], walls: [], doors: [],
+    floors: [], walls: [], doors: [], windows: [],
     spawn: { pos: [2, 2], facingDeg: 0 },
     placedObjects: [],
   };
@@ -290,6 +293,13 @@ function hitTest(x, z, mode = state.mode) {
     }
     return null;
   }
+  if (mode === 'windows') {
+    for (let i = doc.windows.length - 1; i >= 0; i--) {
+      const w = doc.windows[i];
+      if (Math.hypot(x - w.at[0], z - w.at[1]) < 0.6) return { kind: 'window', index: i };
+    }
+    return null;
+  }
   return null;
 }
 
@@ -345,6 +355,10 @@ function rotateSelected() {
     pushUndo();
     const d = state.doc.doors[state.sel.index];
     d.orientation = d.orientation === 'vertical' ? 'horizontal' : 'vertical';
+  } else if (state.sel?.kind === 'window') {
+    pushUndo();
+    const w = state.doc.windows[state.sel.index];
+    w.orientation = w.orientation === 'vertical' ? 'horizontal' : 'vertical';
   } else return;
   markDirty(); renderInspector(); redraw();
 }
@@ -357,6 +371,7 @@ function deleteSelected() {
   if (s.kind === 'floor') state.doc.floors.splice(s.index, 1);
   if (s.kind === 'wall') state.doc.walls.splice(s.index, 1);
   if (s.kind === 'door') state.doc.doors.splice(s.index, 1);
+  if (s.kind === 'window') state.doc.windows.splice(s.index, 1);
   state.sel = null;
   markDirty(); renderInspector(); redraw();
 }
@@ -476,6 +491,16 @@ function redraw() {
     else ctx.fillRect(px - long, py - short, long * 2, short * 2);
   }
 
+  // windows
+  for (let i = 0; i < doc.windows.length; i++) {
+    const w = doc.windows[i];
+    const [px, py] = worldToPx(w.at[0], w.at[1]);
+    const long = view.s * 0.5, short = view.s * 0.08;
+    ctx.fillStyle = state.sel?.kind === 'window' && state.sel.index === i ? '#ffd166' : '#7ec8e3';
+    if (w.orientation === 'vertical') ctx.fillRect(px - short, py - long, short * 2, long * 2);
+    else ctx.fillRect(px - long, py - short, long * 2, short * 2);
+  }
+
   // placed objects
   for (let i = 0; i < doc.placedObjects.length; i++) {
     const p = doc.placedObjects[i];
@@ -568,6 +593,23 @@ function onPointerDown(e) {
         markDirty();
       } else state.sel = null;
     }
+  } else if (state.mode === 'windows') {
+    const hit = hitTest(x, z);
+    if (hit) {
+      state.sel = hit;
+      state.drag = { kind: 'move', dx: state.doc.windows[hit.index].at[0] - x, dz: state.doc.windows[hit.index].at[1] - z, moved: false };
+    } else {
+      const w = nearestWall(x, z);
+      if (w) {
+        pushUndo();
+        const vertical = Math.abs(w.wall.to[0] - w.wall.from[0]) < Math.abs(w.wall.to[1] - w.wall.from[1]);
+        // snap along the wall axis, stay on the wall line on the cross axis (mirrors doors mode)
+        const at = vertical ? [w.px, snapVal(w.pz)] : [snapVal(w.px), w.pz];
+        state.doc.windows.push({ at, orientation: vertical ? 'vertical' : 'horizontal' });
+        state.sel = { kind: 'window', index: state.doc.windows.length - 1 };
+        markDirty();
+      } else state.sel = null;
+    }
   } else if (state.mode === 'spawn') {
     pushUndo();
     state.doc.spawn.pos = snapPoint(x, z);
@@ -586,6 +628,7 @@ function onPointerMove(e) {
     const [nx, nz] = snapPoint(x + d.dx, z + d.dz);
     if (state.sel?.kind === 'object') state.doc.placedObjects[state.sel.index].pos = [nx, nz];
     if (state.sel?.kind === 'door') state.doc.doors[state.sel.index].at = [nx, nz];
+    if (state.sel?.kind === 'window') state.doc.windows[state.sel.index].at = [nx, nz];
     markDirty(); renderInspector();
   } else if (d.kind === 'floorRect' || d.kind === 'wallLine') {
     [d.x2, d.z2] = snapPoint(x, z);
@@ -674,7 +717,7 @@ function renderInspector() {
       host.appendChild(field('material', state.newFloorMaterial, (v) => { state.newFloorMaterial = v; }, { options: [...FLOOR_MATERIALS], id: 'floor-material' }));
     }
     const p = document.createElement('div'); p.className = 'hint';
-    p.textContent = `${doc.floors.length} floors · ${doc.walls.length} walls · ${doc.doors.length} doors · ${doc.placedObjects.length} objects`;
+    p.textContent = `${doc.floors.length} floors · ${doc.walls.length} walls · ${doc.doors.length} doors · ${doc.windows.length} windows · ${doc.placedObjects.length} objects`;
     host.appendChild(p);
     return;
   }
@@ -732,6 +775,47 @@ function renderInspector() {
     });
     doorAssetRow.append(doorAssetLabel, doorAssetSel);
     host.appendChild(doorAssetRow);
+    host.appendChild(del);
+  } else if (s.kind === 'window') {
+    const w = doc.windows[s.index];
+    host.appendChild(Object.assign(document.createElement('h2'), { textContent: 'Window' }));
+    host.appendChild(field('x', w.at[0], edit((v) => { w.at[0] = v; }), { data: 'window.x' }));
+    host.appendChild(field('z', w.at[1], edit((v) => { w.at[1] = v; }), { data: 'window.z' }));
+    host.appendChild(field('orientation', w.orientation, edit((v) => { w.orientation = v; }), { options: ['vertical', 'horizontal'], data: 'window.orientation' }));
+    // width is sparse (blank clears back to the tuning default) — plain field() always writes a
+    // number, so this needs its own blank-aware input rather than the shared helper.
+    const widthRow = document.createElement('div'); widthRow.className = 'field';
+    const widthLabel = document.createElement('label'); widthLabel.textContent = 'width (blank = tuning default)';
+    const widthInput = document.createElement('input'); widthInput.type = 'number'; widthInput.step = 'any';
+    widthInput.value = w.width ?? ''; widthInput.dataset.field = 'window.width';
+    widthInput.addEventListener('change', () => {
+      pushUndo();
+      const v = widthInput.value === '' ? undefined : Number(widthInput.value);
+      if (v === undefined || !Number.isFinite(v)) delete w.width; else w.width = v;
+      markDirty(); renderInspector(); redraw();
+    });
+    widthRow.append(widthLabel, widthInput);
+    host.appendChild(widthRow);
+    // §ROADMAP_NEXT item 9: window-category assets only, plus "(none)" — mirrors the door asset
+    // dropdown exactly (§7.1); not consumed by rendering yet (see game/windows.ts), carried for
+    // a future real-mesh consumer.
+    const windowAssetRow = document.createElement('div'); windowAssetRow.className = 'field';
+    const windowAssetLabel = document.createElement('label'); windowAssetLabel.textContent = 'window asset';
+    const windowAssetSel = document.createElement('select'); windowAssetSel.dataset.field = 'window.assetId';
+    const noneOpt2 = document.createElement('option'); noneOpt2.value = ''; noneOpt2.textContent = '(none)';
+    windowAssetSel.appendChild(noneOpt2);
+    for (const a of state.assets.assets.filter((x) => x.category === 'window')) {
+      const o = document.createElement('option'); o.value = a.id; o.textContent = a.name;
+      windowAssetSel.appendChild(o);
+    }
+    windowAssetSel.value = w.assetId ?? '';
+    windowAssetSel.addEventListener('change', () => {
+      pushUndo();
+      if (windowAssetSel.value) w.assetId = windowAssetSel.value; else delete w.assetId;
+      markDirty(); redraw();
+    });
+    windowAssetRow.append(windowAssetLabel, windowAssetSel);
+    host.appendChild(windowAssetRow);
     host.appendChild(del);
   } else if (s.kind === 'spawn') {
     host.appendChild(Object.assign(document.createElement('h2'), { textContent: 'Spawn' }));

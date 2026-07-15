@@ -135,6 +135,16 @@
       ],
       "to": [
         0,
+        2.5
+      ]
+    },
+    {
+      "from": [
+        0,
+        1.5
+      ],
+      "to": [
+        0,
         0
       ]
     },
@@ -245,6 +255,44 @@
       "orientation": "vertical",
       "assetId": "door_basic",
       "_note": "bedroom ↔ bathroom"
+    },
+    {
+      "at": [
+        0,
+        2
+      ],
+      "orientation": "vertical",
+      "assetId": "door_exterior",
+      "_note": "ROADMAP_NEXT item 9 — apartment entrance, exterior door (living room outer wall). Static/tappable, never auto-opens."
+    }
+  ],
+  "windows": [
+    {
+      "at": [
+        2,
+        0
+      ],
+      "orientation": "horizontal",
+      "assetId": "window_basic",
+      "_note": "living room, north wall"
+    },
+    {
+      "at": [
+        12,
+        0
+      ],
+      "orientation": "horizontal",
+      "assetId": "window_basic",
+      "_note": "kitchen, north wall"
+    },
+    {
+      "at": [
+        2,
+        10
+      ],
+      "orientation": "horizontal",
+      "assetId": "window_basic",
+      "_note": "bedroom, south wall"
     }
   ],
   "spawn": {

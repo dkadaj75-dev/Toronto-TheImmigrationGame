@@ -226,6 +226,80 @@ console.log('map-editor.test — door asset dropdown (assetId round-trip)');
   check('cleanup: door count restored', st.doc.doors.length === before);
 }
 
+// ------------------------------------------------------------------ windows (ROADMAP_NEXT item 9)
+console.log('map-editor.test — windows: place on wall / inferred orientation / move / R flip / delete');
+{
+  check('windows array normalized on load', Array.isArray(st.doc.windows));
+  ME.setMode('windows');
+  const before = st.doc.windows.length;
+  // click near the same vertical kitchen wall segment used by the doors test above
+  pointer('pointerdown', 9.15, 1.32);
+  pointer('pointerup', 9.15, 1.32);
+  check('click near wall places a window', st.doc.windows.length === before + 1);
+  const w = st.doc.windows.at(-1);
+  check('window snapped onto the wall line', w.at[0] === 9 && w.at[1] === 1.5, w.at.join(','));
+  check('orientation inferred from wall axis', w.orientation === 'vertical');
+  // clicking far from any wall does nothing
+  pointer('pointerdown', 2, 12);
+  pointer('pointerup', 2, 12);
+  check('no window in open space', st.doc.windows.length === before + 1);
+  // move an existing window by drag
+  ME.setMode('windows');
+  pointer('pointerdown', 9, 1.5);
+  pointer('pointermove', 9.03, 2.04);
+  pointer('pointerup', 9.03, 2.04);
+  check('window draggable with snap', st.doc.windows.at(-1).at[1] === 2, st.doc.windows.at(-1).at.join(','));
+  st.sel = { kind: 'window', index: st.doc.windows.length - 1 };
+  ME.rotateSelected();
+  check('R flips orientation', st.doc.windows.at(-1).orientation === 'horizontal');
+  ME.deleteSelected();
+  check('window deletable', st.doc.windows.length === before);
+}
+
+console.log('map-editor.test — window inspector: x/z/orientation/width/assetId round-trip');
+{
+  ME.setMode('windows');
+  const before = st.doc.windows.length;
+  pointer('pointerdown', 9.15, 1.32);
+  pointer('pointerup', 9.15, 1.32);
+
+  const xInput = doc.querySelector('input[data-field="window.x"]');
+  check('x field renders with the placed value', !!xInput && Number(xInput.value) === 9);
+  xInput.value = '9.5';
+  xInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('x editable', st.doc.windows.at(-1).at[0] === 9.5);
+
+  const orientSel = doc.querySelector('select[data-field="window.orientation"]');
+  check('orientation dropdown renders', !!orientSel && orientSel.value === 'vertical');
+  orientSel.value = 'horizontal';
+  orientSel.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('orientation editable via dropdown', st.doc.windows.at(-1).orientation === 'horizontal');
+
+  const widthInput = doc.querySelector('input[data-field="window.width"]');
+  check('width blank by default (sparse — tuning fallback)', !!widthInput && widthInput.value === '');
+  widthInput.value = '2';
+  widthInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('width settable', st.doc.windows.at(-1).width === 2);
+  widthInput.value = '';
+  widthInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('blanking width removes it (sparse)', !('width' in st.doc.windows.at(-1)));
+
+  const assetSel = doc.querySelector('select[data-field="window.assetId"]');
+  check('window asset dropdown renders, defaulting to (none)', !!assetSel && assetSel.value === '');
+  const windowAssets = assets.assets.filter((a) => a.category === 'window').map((a) => a.id);
+  const offered = [...assetSel.options].slice(1).map((o) => o.value);
+  check('dropdown offers exactly the window-category assets', windowAssets.length > 0 && offered.length === windowAssets.length && windowAssets.every((id) => offered.includes(id)), offered.join(','));
+  assetSel.value = 'window_basic';
+  assetSel.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('picking an asset sets windows[].assetId', st.doc.windows.at(-1).assetId === 'window_basic');
+  assetSel.value = '';
+  assetSel.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('picking (none) removes assetId', !('assetId' in st.doc.windows.at(-1)));
+
+  ME.deleteSelected();
+  check('cleanup: window count restored', st.doc.windows.length === before);
+}
+
 // ------------------------------------------------------------------ slice 2: spawn
 console.log('map-editor.test — spawn');
 {

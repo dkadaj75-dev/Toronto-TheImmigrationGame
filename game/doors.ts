@@ -46,6 +46,8 @@ export interface DoorConfig {
   openSeconds: number;
   closeSeconds: number;
   triggerDistance: number;
+  /** ROADMAP_NEXT item 9: true for an exterior door — see resolveDoorTickOpen. */
+  exterior: boolean;
 }
 
 /**
@@ -63,6 +65,7 @@ export function resolveDoorConfig(def: AssetDef | undefined, tuning: TuningData)
     openSeconds: def.door.openSeconds ?? t?.openSeconds ?? 0.5,
     closeSeconds: def.door.closeSeconds ?? t?.closeSeconds ?? 0.5,
     triggerDistance: def.door.triggerDistance ?? t?.triggerDistance ?? 1.5,
+    exterior: def.door.exterior === true,
   };
 }
 
@@ -144,6 +147,17 @@ export function doorShouldBeOpen(withinTrigger: boolean, pathCrosses: boolean, c
 }
 
 /**
+ * ROADMAP_NEXT item 9: an exterior door "does NOT open/close like interior doors" — it's static
+ * and always rendered closed, regardless of proximity/path-crossing. Wraps doorShouldBeOpen so
+ * every caller (and test) expresses the exterior gate through one function instead of a
+ * special-cased early-return at each call site.
+ */
+export function doorShouldBeOpenExt(exterior: boolean, withinTrigger: boolean, pathCrosses: boolean, currentlyOpen: boolean): boolean {
+  if (exterior) return false;
+  return doorShouldBeOpen(withinTrigger, pathCrosses, currentlyOpen);
+}
+
+/**
  * Linear swing toward the target angle (0 = closed, config.openAngleDeg = open) at a rate that
  * covers the FULL swing in openSeconds/closeSeconds respectively (§7.1: "rotate open... over
  * openSeconds"/"rotate closed... over closeSeconds") — reaches the target exactly, never
@@ -192,6 +206,12 @@ export function createDoorInstance(door: DoorEntry, def: AssetDef, tuning: Tunin
   const pivot = new THREE.Group();
   pivot.name = `door-hinge:${def.id}`;
   pivot.position.set(hx, 0, hz);
+  // ROADMAP_NEXT item 9: exterior doors are tappable interactables (their own AssetDef.interactions
+  // surface in the tap menu, e.g. a future "go to work") — same userData.assetId convention
+  // world.ts uses for furniture, so input.ts's existing raycast-and-climb-to-userData.assetId tap
+  // resolution picks this up with zero changes elsewhere. Interior doors get no userData at all,
+  // exactly as before this field existed — they stay non-tappable.
+  if (config.exterior) pivot.userData = { assetId: def.id, interactions: def.interactions };
 
   const panel = new THREE.Group();
   panel.position.set(px, 0, pz);
@@ -219,7 +239,7 @@ export function createDoorInstance(door: DoorEntry, def: AssetDef, tuning: Tunin
     update(dt, simPos, simPath) {
       const within = distanceToDoor(simPos, door) < config.triggerDistance;
       const crosses = within && pathCrossesDoorway(simPath, door);
-      open = doorShouldBeOpen(within, crosses, open);
+      open = doorShouldBeOpenExt(config.exterior, within, crosses, open);
       angle = stepDoorAngle(angle, open, config, dt);
       pivot.rotation.y = THREE.MathUtils.degToRad(baseYaw + angle);
     },

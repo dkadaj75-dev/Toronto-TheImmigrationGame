@@ -8,6 +8,7 @@ import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import type { GameData, AssetDef, CharacterTuning } from './data';
 import { classifyMeshPath, createSpriteInstance } from './sprites';
 import { retargetTrackName, stripPositionTracks, resolveClipName, fileStem } from './fbxclips';
+import { resolveWindowConfig, windowPaneRect } from './windows';
 
 // ------------------------------------------------------------------ GLB furniture
 // Templates are cached per URL and cloned per placement; clones share geometry/materials
@@ -185,6 +186,28 @@ export function buildWorld(data: GameData): THREE.Group {
     const mesh = new THREE.Mesh(geo, doorMat);
     mesh.position.set(door.at[0], 1.05, door.at[1]);
     root.add(mesh);
+  }
+
+  // --- windows: translucent glass-pane stand-in (ROADMAP_NEXT item 9, game/windows.ts) — purely
+  // decorative, drawn ON TOP of the wall (the wall segment itself is never split/cut, unlike a
+  // door's gap). No real window GLB exists yet, so `assetId` (if any) is carried on the map entry
+  // for a future real-mesh consumer but isn't read here — same "data now, consumer later"
+  // precedent as several other sparse fields in this codebase (e.g. AssetDef.combustibility
+  // before ROADMAP item 6 landed).
+  const windowPaneMat = new THREE.MeshPhysicalMaterial({ color: 0xbfe6f4, transparent: true, opacity: 0.4, roughness: 0.05, metalness: 0.1 });
+  const windowFrameMat = new THREE.MeshLambertMaterial({ color: 0xe8e2d0 });
+  for (const win of map.windows ?? []) {
+    const config = resolveWindowConfig(win, data.tuning);
+    const rect = windowPaneRect(win, config);
+    const yaw = THREE.MathUtils.degToRad(rect.yawDeg);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(rect.size[0] + 0.08, rect.size[1] + 0.08, rect.size[2] + 0.02), windowFrameMat);
+    frame.position.set(rect.position[0], rect.position[1], rect.position[2]);
+    frame.rotation.y = yaw;
+    root.add(frame);
+    const pane = new THREE.Mesh(new THREE.BoxGeometry(rect.size[0], rect.size[1], rect.size[2]), windowPaneMat);
+    pane.position.set(rect.position[0], rect.position[1], rect.position[2]);
+    pane.rotation.y = yaw;
+    root.add(pane);
   }
 
   // --- placed objects: instant stand-in, async GLB swap when asset.mesh is set ---

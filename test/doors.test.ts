@@ -2,7 +2,7 @@
 // Run: npx tsx test/doors.test.ts
 import {
   resolveDoorConfig, doorBaseYawDeg, hingeWorldPos, panelLocalOffset,
-  segmentCrossesDoorway, pathCrossesDoorway, distanceToDoor, doorShouldBeOpen,
+  segmentCrossesDoorway, pathCrossesDoorway, distanceToDoor, doorShouldBeOpen, doorShouldBeOpenExt,
   stepDoorAngle, isAnimatedDoor, type DoorEntry, type DoorConfig,
 } from '../game/doors';
 import type { AssetDef, TuningData } from '../game/data';
@@ -130,7 +130,7 @@ console.log('doors.test — doorShouldBeOpen (§7.1 state machine)');
 
 console.log('doors.test — stepDoorAngle (linear swing over openSeconds/closeSeconds)');
 {
-  const cfg: DoorConfig = { hingeOffset: [-0.5, 0], openAngleDeg: 90, openSeconds: 0.5, closeSeconds: 0.5, triggerDistance: 1.5 };
+  const cfg: DoorConfig = { hingeOffset: [-0.5, 0], openAngleDeg: 90, openSeconds: 0.5, closeSeconds: 0.5, triggerDistance: 1.5, exterior: false };
   check('opening: half the duration → half the angle', approx(stepDoorAngle(0, true, cfg, 0.25), 45));
   check('opening: full duration reaches exactly openAngleDeg', approx(stepDoorAngle(0, true, cfg, 0.5), 90));
   check('opening never overshoots past a big dt', approx(stepDoorAngle(0, true, cfg, 10), 90));
@@ -139,11 +139,11 @@ console.log('doors.test — stepDoorAngle (linear swing over openSeconds/closeSe
   check('already at target: no-op', approx(stepDoorAngle(90, true, cfg, 0.1), 90));
   check('zero dt: no movement', approx(stepDoorAngle(10, true, cfg, 0), 10));
 
-  const asymCfg: DoorConfig = { hingeOffset: [-0.5, 0], openAngleDeg: 90, openSeconds: 1, closeSeconds: 0.25, triggerDistance: 1.5 };
+  const asymCfg: DoorConfig = { hingeOffset: [-0.5, 0], openAngleDeg: 90, openSeconds: 1, closeSeconds: 0.25, triggerDistance: 1.5, exterior: false };
   check('opening rate uses openSeconds (slower)', approx(stepDoorAngle(0, true, asymCfg, 0.5), 45));
   check('closing rate uses closeSeconds (faster)', approx(stepDoorAngle(90, false, asymCfg, 0.125), 45));
 
-  const instantCfg: DoorConfig = { hingeOffset: [-0.5, 0], openAngleDeg: 90, openSeconds: 0, closeSeconds: 0, triggerDistance: 1.5 };
+  const instantCfg: DoorConfig = { hingeOffset: [-0.5, 0], openAngleDeg: 90, openSeconds: 0, closeSeconds: 0, triggerDistance: 1.5, exterior: false };
   check('zero-second config snaps instantly (guards div-by-zero)', approx(stepDoorAngle(0, true, instantCfg, 0.001), 90));
 
   // full simulated opening then closing sequence, sub-stepped
@@ -152,6 +152,31 @@ console.log('doors.test — stepDoorAngle (linear swing over openSeconds/closeSe
   check('sub-stepped opening converges to openAngleDeg', approx(angle, 90, 1e-4), String(angle));
   for (let i = 0; i < 5; i++) angle = stepDoorAngle(angle, false, cfg, 0.1); // 0.5s total
   check('sub-stepped closing converges to 0', approx(angle, 0, 1e-4), String(angle));
+}
+
+console.log('doors.test — resolveDoorConfig exposes the exterior flag (ROADMAP_NEXT item 9)');
+{
+  const interior = asset({ door: { hingeOffset: [-0.5, 0] } });
+  check('absent door.exterior resolves to false', resolveDoorConfig(interior, tuning)!.exterior === false);
+
+  const exterior = asset({ door: { hingeOffset: [-0.5, 0], exterior: true } });
+  check('door.exterior:true passes through', resolveDoorConfig(exterior, tuning)!.exterior === true);
+}
+
+console.log('doors.test — doorShouldBeOpenExt: exterior doors skip the open/close tick entirely');
+{
+  check('exterior door stays closed even within trigger and crossing', doorShouldBeOpenExt(true, true, true, false) === false);
+  check('exterior door is forced closed even if currentlyOpen was somehow true', doorShouldBeOpenExt(true, true, true, true) === false);
+  check('exterior gate never opens regardless of proximity', doorShouldBeOpenExt(true, false, false, false) === false);
+  for (const [within, crosses, currentlyOpen] of [
+    [true, true, false], [true, false, false], [true, false, true], [true, true, true],
+    [false, false, true], [false, true, true], [false, false, false],
+  ] as [boolean, boolean, boolean][]) {
+    check(
+      `non-exterior matches doorShouldBeOpen exactly (within=${within} crosses=${crosses} open=${currentlyOpen})`,
+      doorShouldBeOpenExt(false, within, crosses, currentlyOpen) === doorShouldBeOpen(within, crosses, currentlyOpen),
+    );
+  }
 }
 
 console.log('doors.test — isAnimatedDoor');

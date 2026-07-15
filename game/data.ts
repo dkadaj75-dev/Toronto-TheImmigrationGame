@@ -63,7 +63,14 @@ export interface AssetDef {
    *  axis, local +Z = its thickness axis — the SAME frame regardless of the door's orientation
    *  in the map; game/doors.ts rotates that frame into place per-instance). The other fields
    *  are sparse overrides of tuning.doors (absent = tuning default). See game/doors.ts. */
-  door?: { hingeOffset: [number, number]; openAngleDeg?: number; openSeconds?: number; closeSeconds?: number; triggerDistance?: number };
+  /** ROADMAP_NEXT item 9: sparse, absent = false (a normal interior door). An exterior door
+   *  never participates in the path-crossing open/close tick (game/doors.ts's DoorInstance.update
+   *  skips it entirely, so it stays visually shut) and is instead a tappable INTERACTABLE like any
+   *  other asset — its own `interactions` (AssetDef.interactions, e.g. a future "go to work")
+   *  surface in the tap menu via the SAME userData.assetId mechanism world.ts uses for furniture;
+   *  doors.ts sets that userData on the door's hinge pivot only when exterior is true, so interior
+   *  doors stay non-tappable exactly as before this field existed. */
+  door?: { hingeOffset: [number, number]; openAngleDeg?: number; openSeconds?: number; closeSeconds?: number; triggerDistance?: number; exterior?: boolean };
   /** Accident-category assets ONLY (§7.3): action ids whose completion on the accident
    *  instance despawns it (e.g. fire's clearedBy: ["extinguish"]). See game/accidents.ts. */
   clearedBy?: string[];
@@ -159,6 +166,15 @@ export interface MapData {
   floors: { id: string; polygon: [number, number][]; material: string }[];
   walls: { from: [number, number]; to: [number, number] }[];
   doors: { at: [number, number]; orientation: 'vertical' | 'horizontal'; width?: number; assetId?: string }[];
+  /** ROADMAP_NEXT item 9: wall openings that are purely visual — a window never affects the nav
+   *  grid or wall collision (the wall segment it sits on stays a single unbroken box, unlike a
+   *  door which needs its own gap encoded as separate wall segments in `walls[]`; "the opening is
+   *  visual, above walk height" — see game/windows.ts). Optional so pre-existing maps without a
+   *  `windows` key stay valid (mirrors `music?`'s precedent above). `at`/`orientation`/`width` use
+   *  the SAME convention as a door entry (a point on a wall + which way the wall runs); `assetId`
+   *  optionally names a window-category asset for a future real mesh (§ shipped `window_basic`
+   *  carries no consumed mesh yet — see game/windows.ts's doc comment). */
+  windows?: { at: [number, number]; orientation: 'vertical' | 'horizontal'; width?: number; assetId?: string }[];
   spawn: { pos: [number, number]; facingDeg: number };
   placedObjects: { asset: string; pos: [number, number]; rotDeg: number }[];
   /** ROADMAP_NEXT item 7 (audio): playlist of paths under public/sounds/ (or any /public path) that
@@ -219,6 +235,12 @@ export interface TuningData {
    *  above). Defaults for AssetDef.door fields when a door instance doesn't override them (§7.1).
    *  triggerDistance is in meters (map gridSize=1 → 1 grid unit = 1 meter). */
   doors?: { openSeconds?: number; closeSeconds?: number; openAngleDeg?: number; triggerDistance?: number };
+  /** ROADMAP_NEXT item 9: defaults for a window's glass-pane stand-in when a map.windows[] entry
+   *  doesn't override `width` itself (a per-window sparse field, same convention as a door's
+   *  `width`). Optional so pre-existing tuning fixtures/tests stay valid (same precedent as
+   *  `interaction?`/`doors?` above). See game/windows.ts's resolveWindowConfig for the hardcoded
+   *  fallbacks applied when this whole block is absent. */
+  windows?: { width?: number; height?: number; sillHeight?: number };
   /** rotate* fields optional so pre-existing tuning fixtures/tests stay valid (same precedent as
    *  `interaction?`/`doors?` above) — camera.ts falls back to sane defaults when absent.
    *  rotateSpeedDegPerPx: desktop right-drag mouse sensitivity (yaw degrees per pixel of drag).

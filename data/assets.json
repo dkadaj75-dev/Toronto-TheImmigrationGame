@@ -9,6 +9,7 @@
     "surfaces",
     "decor",
     "door",
+    "window",
     "transient"
   ],
   "assets": [
@@ -366,6 +367,55 @@
         ],
         "yOffset": 0
       }
+    },
+    {
+      "id": "door_exterior",
+      "name": "Exterior door",
+      "category": "door",
+      "mesh": "models/door.glb",
+      "buyPrice": 200,
+      "sellPrice": 150,
+      "environmentScore": 0,
+      "footprint": [
+        1,
+        0.12
+      ],
+      "_note": "ROADMAP_NEXT item 9: does NOT open/close on path-crossing (game/doors.ts skips it in the tick, see door.exterior) — it's a tappable interactable instead. Interactions are placeholder for now; the designer will wire real ones later (e.g. 'go to work', tied into item 10's garbage-emptying interaction).",
+      "interactions": [
+        "leave_for_work"
+      ],
+      "buyable": false,
+      "door": {
+        "hingeOffset": [
+          -0.5,
+          0
+        ],
+        "exterior": true
+      },
+      "meshFit": {
+        "scale": [
+          1.5,
+          1.75,
+          1.8
+        ],
+        "yOffset": 0
+      }
+    },
+    {
+      "id": "window_basic",
+      "name": "Window",
+      "category": "window",
+      "mesh": "",
+      "_note": "ROADMAP_NEXT item 9: no real mesh yet — game/world.ts always renders the procedural glass-pane stand-in for windows regardless of this field (see game/windows.ts's doc comment); mesh/assetId are carried for a future real-mesh consumer only.",
+      "buyPrice": 120,
+      "sellPrice": 90,
+      "environmentScore": 1,
+      "footprint": [
+        1.2,
+        0.08
+      ],
+      "interactions": [],
+      "buyable": false
     },
     {
       "id": "fire",
