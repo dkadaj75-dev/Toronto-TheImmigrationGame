@@ -271,19 +271,26 @@
         {
           "accidentId": "water_puddle",
           "trigger": "onUse",
-          "baseChancePercent": 4,
+          "baseChancePercent": 10,
           "placement": "adjacent",
           "adjacentRange": [
             1,
             2
           ],
-          "_note": "PROJECT_CONTEXT.md §7.3 'leak' case: no modifiers — a small flat chance of splashing a puddle onto the floor next to the shower."
+          "_note": "PROJECT_CONTEXT.md §7.3 'leak' case: no modifiers — a small flat chance of splashing a puddle onto the floor next to the shower.",
+          "modifiers": [
+            {
+              "var": "needs.energy",
+              "pctAt0": 50,
+              "pctAtMax": 0
+            }
+          ]
         }
       ],
       "meshFit": {
         "yawOffsetDeg": 90
       },
-      "sound": "sounds/shower_running.wav",
+      "sound": "sounds/actions/shower.mp3",
       "usePose": {
         "lie": {
           "offset": [

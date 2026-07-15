@@ -18,10 +18,6 @@
           {
             "var": "needs.fun",
             "gte": 80
-          },
-          {
-            "var": "funds",
-            "gte": 500
           }
         ]
       },
