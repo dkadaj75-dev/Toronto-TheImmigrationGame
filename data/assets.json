@@ -25,7 +25,7 @@
         3,
         1
       ],
-      "seats": 3,
+      "seats": 2,
       "interactions": [
         "sit",
         "nap"
@@ -33,16 +33,26 @@
       "seatTarget": true,
       "usePose": {
         "sit": {
-          "y": 0.42
+          "offset": [
+            0,
+            0
+          ],
+          "y": -0.05
         },
         "lie": {
-          "y": 0.42
+          "offset": [
+            0,
+            0
+          ],
+          "facingDeg": 90,
+          "y": -0.35
         }
       },
       "combustibility": {
         "chancePercent": 45,
         "delaySeconds": 12
-      }
+      },
+      "requiresQuestUnlock": true
     },
     {
       "id": "armchair",
@@ -63,7 +73,8 @@
       "seatTarget": true,
       "usePose": {
         "sit": {
-          "y": 0.44
+          "y": 0.15,
+          "facingDeg": 0
         }
       },
       "combustibility": {
@@ -80,8 +91,8 @@
       "sellPrice": 60,
       "environmentScore": 1,
       "footprint": [
-        1,
-        1
+        0.6,
+        0.6
       ],
       "seats": 1,
       "interactions": [
@@ -91,7 +102,7 @@
       "seatTarget": true,
       "usePose": {
         "sit": {
-          "y": 0.46
+          "y": 0.15
         }
       }
     },
@@ -116,7 +127,17 @@
       },
       "usePose": {
         "lie": {
-          "y": 0.56
+          "offset": [
+            0,
+            -0.2
+          ],
+          "y": -0.4
+        },
+        "sit": {
+          "offset": [
+            0,
+            -0.5
+          ]
         }
       },
       "combustibility": {
@@ -152,8 +173,8 @@
       "sellPrice": 300,
       "environmentScore": 1,
       "footprint": [
-        1,
-        1
+        0.7,
+        0.7
       ],
       "interactions": [
         "cook"
@@ -184,8 +205,8 @@
       "sellPrice": 110,
       "environmentScore": 1,
       "footprint": [
-        1,
-        1
+        0.7,
+        0.7
       ],
       "interactions": [],
       "meshFit": {
@@ -224,7 +245,12 @@
       ],
       "interactions": [
         "use_toilet"
-      ]
+      ],
+      "usePose": {
+        "sit": {
+          "y": -0.15
+        }
+      }
     },
     {
       "id": "shower",
@@ -257,7 +283,15 @@
       "meshFit": {
         "yawOffsetDeg": 90
       },
-      "sound": "sounds/shower_running.wav"
+      "sound": "sounds/shower_running.wav",
+      "usePose": {
+        "lie": {
+          "offset": [
+            0,
+            0
+          ]
+        }
+      }
     },
     {
       "id": "sink",
@@ -437,13 +471,16 @@
         "extinguish"
       ],
       "buyable": false,
-      "_note": "Accidents slice (PROJECT_CONTEXT.md §7.3). Risk-configured on 'stove' (see its accidents[] entry). No real mesh yet — box stand-in until models/fire.glb is imported."
+      "_note": "Accidents slice (PROJECT_CONTEXT.md §7.3). Risk-configured on 'stove' (see its accidents[] entry). No real mesh yet — box stand-in until models/fire.glb is imported.",
+      "meshFit": {
+        "yOffset": 1
+      }
     },
     {
       "id": "water_puddle",
       "name": "Water puddle",
       "category": "transient",
-      "mesh": "models/water_puddle.glb",
+      "mesh": "models/puddle.png",
       "buyPrice": 0,
       "sellPrice": 0,
       "environmentScore": -5,
@@ -503,7 +540,7 @@
       "id": "ash",
       "name": "Pile of ash",
       "category": "transient",
-      "mesh": "models/ash.glb",
+      "mesh": "models/ashpile.png",
       "buyPrice": 0,
       "sellPrice": 0,
       "environmentScore": -3,

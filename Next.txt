@@ -1,0 +1,8 @@
+- Leave for work option: should not be available if we don't have a job (will be implemented later). It means that conditions for interactions should be implemented.
+- bug: when inputing a negative value in the z offset for sitting / lying in an asset: in rotates the asset in the wrong direction.
+- When showering, the Sim should be inside the shower. By the way it could be great to implement a blurring system like in the Sims when they are in the shower / WC.
+- If a Sim does not go to the toilets when the bladder need is empty, they "pee" themselves, playing an animation and creating a puddle at the exact location, the amount of need relief is minimal, e.g. 30/100 and tunable.
+- When a fire appears, the sim should play an animation, it can be added in the character animations and called "panic".
+- When the fire is extinguished, another animation should play (extinguishing fire), also I want a progress bar above my sim that shows the progress of the fire extinguishment (e.g. baseline = 10s and can be linked to the intelligence (=faster) and energy level (=slower)). When the fire is extinguished, the flame disappears.
+- Same than above for cleaning / tyding up: I need a progress bar and removing the asset once done (and the sim stops automatically). Also these actions should have a linked animation, e.g. "Cleaning".
+- Generally, I believe that each action should have an animation linked to it.

@@ -96,7 +96,7 @@
       "name": "Cooking",
       "color": "#d35400",
       "default": 0,
-      "max": 10
+      "max": 100
     },
     {
       "id": "engineering",

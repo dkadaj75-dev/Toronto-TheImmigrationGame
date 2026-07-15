@@ -22,7 +22,7 @@
     "_source": "which data/maps/<active>.json the game plays; set from the Map Editor \"Play this map\" button"
   },
   "economy": {
-    "startingFunds": 20000,
+    "startingFunds": 250,
     "currencyName": "$",
     "_source": "PLACEHOLDER — open decision #1 (Phase 3)"
   },
@@ -95,7 +95,7 @@
     "musicVolume": 0.6,
     "sfxVolume": 0.8,
     "musicCrossfadeSeconds": 1.5,
-    "buyModeMusic": "sounds/music_buymode.wav",
+    "buyModeMusic": "sounds/music_buymode.mp3",
     "_source": "ROADMAP_NEXT item 7 (audio placeholders). masterVolume/musicVolume/sfxVolume are 0..1 and multiply together per channel; musicCrossfadeSeconds is how long a music CONTEXT switch (map <-> buy mode) takes; buyModeMusic is the fixed track played while in Buy/Sell mode. See game/audio.ts's resolveAudioTuning for defaults when this whole block is absent."
   },
   "camera": {

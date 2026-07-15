@@ -269,8 +269,8 @@
   "windows": [
     {
       "at": [
-        2,
-        0
+        8,
+        10
       ],
       "orientation": "horizontal",
       "assetId": "window_basic",
@@ -306,7 +306,7 @@
     {
       "asset": "sofa",
       "pos": [
-        1.5,
+        2,
         0.5
       ],
       "rotDeg": 0
@@ -354,7 +354,7 @@
     {
       "asset": "counter",
       "pos": [
-        10.5,
+        10.75,
         0.5
       ],
       "rotDeg": 0
@@ -363,7 +363,7 @@
       "asset": "counter",
       "pos": [
         13.5,
-        2.5
+        2.4
       ],
       "rotDeg": 270
     },
@@ -400,14 +400,6 @@
       "rotDeg": 180
     },
     {
-      "asset": "toilet",
-      "pos": [
-        13.5,
-        9.5
-      ],
-      "rotDeg": 180
-    },
-    {
       "asset": "shower",
       "pos": [
         11.5,
@@ -435,13 +427,21 @@
       "asset": "counter",
       "pos": [
         13.5,
-        3.5
+        3.3
       ],
       "rotDeg": 270
+    },
+    {
+      "asset": "garbage_can",
+      "pos": [
+        9.5,
+        0.5
+      ],
+      "rotDeg": 0
     }
   ],
   "music": [
-    "sounds/music_condo_1.wav",
-    "sounds/music_condo_2.wav"
+    "sounds/music_condo_1.mp3",
+    "sounds/music_condo_2.mp3"
   ]
 }

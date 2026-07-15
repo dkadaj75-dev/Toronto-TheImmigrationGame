@@ -394,7 +394,7 @@ function renderEditor() {
   // game/facing.ts's usePoseFor doc comment.
   const cardPose = document.createElement('div');
   cardPose.className = 'card';
-  cardPose.innerHTML = '<h2>Sit / lie pose</h2><div class="hint">Where the sim ends up for a sit/lie action on this asset (an "eat"/"sit" action perches "sit"; "sleep"/"nap" perches "lie"). Leave everything blank to use the default: centered on the footprint, tuning\'s sitHeight/lieHeight, facing this asset\'s own facing°. offset is model-local meters from the footprint center (rotates with the instance\'s placement, like a nudge — not a direction); facing° is model-local like the facing° field above (world = instance rot° + this).</div>';
+  cardPose.innerHTML = '<h2>Sit / lie pose</h2><div class="hint">Where the sim ends up for a sit/lie action on this asset (an "eat"/"sit" action perches "sit"; "sleep"/"nap" perches "lie"). Leave everything blank to use the default: centered on the footprint, tuning\'s sitHeight/lieHeight, facing this asset\'s own facing°. offset is model-local meters from the footprint center, and rotates with the instance\'s placement (a nudge, not a direction) — <strong>+z = toward the asset\'s facing direction, −z = behind it</strong> (ROADMAP_NEXT B2-2: verified correct at every 90° placement rotation, game/facing.ts\'s rotateLocalOffset + test/usepose.test.ts); +x/−x = to the right/left of that facing direction. facing° is model-local like the facing° field above (world = instance rot° + this).</div>';
   const ensurePose = (key) => ((a.usePose ??= {}), (a.usePose[key] ??= {}));
   const prunePose = (key) => {
     if (a.usePose?.[key] && Object.keys(a.usePose[key]).length === 0) delete a.usePose[key];

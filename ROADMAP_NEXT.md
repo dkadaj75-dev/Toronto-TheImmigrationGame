@@ -58,8 +58,8 @@ Implemented: new static `personality` stat family (`stats.json`, ships `cleanlin
 ## B2-1. Interaction conditions
 Actions get availability CONDITIONS (reuse quest condition evaluator/namespace from game/quests.ts — vars.job etc.): `ActionDef.conditions?: Condition`. Unmet → hidden from tap menu + skipped by autonomy. Ship: `leave_for_work` requires `vars.job neq null` (job system later). Interaction Editor: condition builder (reuse Quest Editor's dropdown-driven builder pattern).
 
-## B2-2. BUG: negative usePose offset rotates wrong
-Negative z offset in Asset Editor sit/lie pose rotates/offsets the wrong direction — investigate usePoseFor's model-local offset rotation math (sign convention for negative values vs instance rot).
+## B2-2. BUG: negative usePose offset rotates wrong — ✅ DONE 2026-07-15 (no math bug found)
+Root cause: NOT a math bug — `game/facing.ts`'s `rotateLocalOffset` was already correct (re-derived by hand and cross-checked against a live `THREE.Object3D` parent/child transform: matches to float precision at rotDeg 0/90/180/270). The real gap was that the Asset Editor's "Sit / lie pose" hint text never stated the sign convention, so a designer typing a negative z had no way to predict which way it would move — any result looked "wrong" without a documented expectation to check it against. Fixed by stating the convention plainly in the hint ("+z = toward the asset's facing direction, −z = behind it") and locking it down with `test/usepose.test.ts`'s new B2-2 regression block (offset `[0,-0.5]` at all 4 instance rotations, asserted against `-0.5 * facingVector(worldFacingDeg)`). No code behavior changed.
 
 ## B2-3. Shower positioning + censor blur
 Sim must stand INSIDE the shower (usePose needs a stand/use entry, not just sit/lie). Plus Sims-style censor blur/pixelation over the sim while showering / using WC (flag per action, e.g. `censor: true` on shower/use_toilet).

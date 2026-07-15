@@ -75,5 +75,39 @@ console.log('usepose.test — usePose overrides (offset rotates with the instanc
   check('explicit facingDeg composes with instance rotDeg', approx(rf.facingDeg, 75), `${rf.facingDeg}`);
 }
 
+console.log('usepose.test — B2-2: negative-offset regression, all 4 instance rotations');
+{
+  // Ground-truth check for game/facing.ts's rotateLocalOffset: a negative-z model-local offset
+  // must consistently land BEHIND the instance's world-facing direction (i.e. at
+  // -|offset.z| * facingVector(worldFacingDeg)), the same relationship at every 90°-step
+  // rotation. Verified independently against a live THREE.Object3D parent/child transform
+  // (matches to 1e-9) — this suite only re-asserts the pure-math side so it stays dependency-free.
+  const bed = asset({ footprint: [2, 3], category: 'beds', usePose: { lie: { offset: [0, -0.5] } } });
+  const cases: Array<{ rotDeg: number; expected: [number, number] }> = [
+    { rotDeg: 0, expected: [0, -0.5] },   // facing +Z: -z offset stays -Z (behind)
+    { rotDeg: 90, expected: [-0.5, 0] },  // facing +X: -z offset becomes -X (behind)
+    { rotDeg: 180, expected: [0, 0.5] },  // facing -Z: -z offset becomes +Z (behind)
+    { rotDeg: 270, expected: [0.5, 0] },  // facing -X: -z offset becomes +X (behind)
+  ];
+  for (const { rotDeg, expected } of cases) {
+    const inst: FacingInstance = { pos: [0, 0], rotDeg };
+    const r = usePoseFor('lie', inst, bed, tuning);
+    check(
+      `rotDeg ${rotDeg}: offset [0,-0.5] lands at ${JSON.stringify(expected)} (behind facing)`,
+      approx(r.pos[0], expected[0]) && approx(r.pos[1], expected[1]),
+      JSON.stringify(r.pos),
+    );
+    // Cross-check: the result must equal -0.5 * facingVector(worldFacingDeg) at every rotation —
+    // i.e. "negative z = behind the asset's facing direction" holds uniformly, not just at rot 0.
+    const rad = (rotDeg * Math.PI) / 180;
+    const facing: [number, number] = [Math.sin(rad), Math.cos(rad)];
+    check(
+      `rotDeg ${rotDeg}: matches -0.5 * facingVector uniformly`,
+      approx(r.pos[0], -0.5 * facing[0]) && approx(r.pos[1], -0.5 * facing[1]),
+      JSON.stringify(r.pos),
+    );
+  }
+}
+
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }
 console.log('\nall usepose tests passed');

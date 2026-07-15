@@ -107,13 +107,12 @@
       "animation": "stand_use",
       "autonomyEligible": true,
       "primaryNeed": null,
-      "duration": {
-        "baseSeconds": 60,
-        "skillVar": "skills.cooking",
-        "atMaxSeconds": 20
-      },
       "_durationNote": "ROADMAP_NEXT item 5 (§7.11) — first duration-driven action, ships the spec's own worked example. Sim-time seconds (same clock as needsDecayTickSeconds=1/activityGainTickSeconds=2): a novice (cooking skill 0) takes 60s to cook, a master (skill at its max, 10) takes 20s. Also fixes 'cook' never auto-stopping on its own (primaryNeed is null — see accidents.ts's onActionStop doc comment).",
-      "sound": "sounds/action_beep.wav"
+      "sound": "sounds/action_beep.wav",
+      "duration": {
+        "baseSeconds": 20,
+        "atMaxSeconds": 8
+      }
     },
     {
       "id": "read_book",
