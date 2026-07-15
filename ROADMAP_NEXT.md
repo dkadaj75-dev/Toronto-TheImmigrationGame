@@ -74,3 +74,31 @@ Bladder hits 0 → sim pees itself: plays animation (new state, e.g. `pee`), spa
 
 ## B2-6. Every action has an animation — DONE 2026-07-15 (only gap was `leave_for_work`, filled with `stand_use`, same vocabulary as `empty_garbage`; Interaction Editor now shows an inline ⚠ hint when the animation field is blank; Animation Mapper's state list already auto-derives from `interactions.json` so it needed no change — confirmed live, `stand_use` lists all 8 actions incl. Leave for work)
 Audit all shipped actions have an `animation` state; Interaction Editor warns when blank; Animation Mapper already lists action states (verify coverage).
+
+---
+
+# Batch 3 — designer requests 2026-07-15 (night)
+
+## B3-1. BUG: fire should appear instantly
+When cooking sets the stove on fire: (a) evaluate whether the roll should fire DURING cooking (not only at action stop) so the fire appears while cooking; (b) the fire sprite/GIF does not show immediately when a fire starts (likely async decode → preload/cache the fire visual so it pops instantly).
+
+## B3-2. BUG: pee → hygiene 0
+Bladder failure must also set hygiene to 0.
+
+## B3-3. BUG: second bladder failure never triggers
+Latch re-arms only when bladder rises STRICTLY ABOVE reliefAmount — but decay only goes down, so after relief to 30 it can never re-arm without a toilet trip. Re-arm as soon as the failure event completes.
+
+## B3-4. BUG: interrupted clean/extinguish counts as completed
+Interrupting a duration action (e.g. via reload/hot-reload or new order) still despawns the fire/transient. clearedBy despawn must only fire on COMPLETED durations (distinguish completed vs cancelled in the stop path).
+
+## B3-5. Carry cleaned items to garbage
+clean_up on non-puddle transients (dirty_dishes, ash…): after the timed clean, the sim automatically walks to a non-full garbage can and deposits (fill+1) before the item despawns; puddles (mop) just vanish. If no can available: HUD toast refusal (existing behavior).
+
+## B3-6. Visa status system (game core loop!)
+`visaStatus` variable becomes a real system: start "visitor" with 15 in-game days (tunable). Statuses have expiry; failing to hold a valid status = GAME OVER screen. Upgrades via quests (quest rewards already setVar visaStatus) and/or applications (B3-7). Losable statuses (LMIA, temp worker) trigger a grace period (3 days, tunable) to find a new job/status. Status state machine data-driven (data/visas.json + editor or Tuning/Quest integration — design to lock in PROJECT_CONTEXT §7.20).
+
+## B3-7. Smartphone + jobs
+Phone = UI overlay (modifiable icon) with actions incl. "Search a job": refreshes a random job list every in-game hour (tunable). data/jobs.json: each job has requirements (visa status, skills), grants access to statuses (e.g. cook job → LMIA, time-limited/tunable), work hours, pay. Apply-for-status takes in-game time (pending period — must keep current status valid meanwhile). Permanent residence = application requiring skills, not quests. Lose job if skipped too many times (tunable). Jobs Editor tool (or JSON + editor section).
+
+## B3-8. Going to work
+Leave via suite door during job hours → sim disappears, game speed auto-set (5x tunable) until return; each job has its own hours; pay on completion (funds). leave_for_work conditions already gate on vars.job.
