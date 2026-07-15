@@ -18,13 +18,27 @@
 //        be cleaned up later (the "clean_up" action, or emptying every can via the exterior door's
 //        "empty_garbage" interaction).
 //
-// SIMPLIFICATION (documented, not an oversight): auto-tidy does NOT walk the sim to the can with a
-// dedicated animation — deposit is instant/teleport-free the moment the waste-producing action
-// stops. The roadmap brief explicitly allows this ("deposit is instant on arrival via existing
-// activity flow if feasible, else teleport-free direct handling") and it mirrors the SAME
-// simplification PROJECT_CONTEXT.md §7.14 already made for the exterior door ("no carrying sim
-// animation" when emptying garbage). A full walk-then-deposit activity chain would need new
-// multi-leg orchestration in sim.ts that nothing else in this codebase does yet; out of scope here.
+// SIMPLIFICATION (documented, not an oversight): auto-tidy (waste production's own step 2 above)
+// does NOT walk the sim to the can with a dedicated animation — deposit is instant/teleport-free
+// the moment the waste-producing action stops. The roadmap brief explicitly allows this ("deposit
+// is instant on arrival via existing activity flow if feasible, else teleport-free direct
+// handling") and it mirrors the SAME simplification PROJECT_CONTEXT.md §7.14 already made for the
+// exterior door ("no carrying sim animation" when emptying garbage).
+//
+// CARRY TO GARBAGE (ROADMAP_NEXT B3-5, upgrades the "drop" case's own cleanup path): completing
+// clean_up (on dirty_dishes) or sweep (on ash) — i.e. the PLAYER-triggered cleanup of an already-
+// dropped transient, not auto-tidy above — no longer despawns the transient in place. Instead
+// game/main.ts's onActionStop routes the sim to nearestNonFullCanPos via a bare agent.goTo (no new
+// ActionDef/ActiveAction — sim.ts still has no multi-leg activity chaining, so this is a second,
+// independent walk order tracked by main.ts's own `carryState`, not sim.ts), and only on arrival
+// (agent.isMoving going false) does it deposit (depositAtNearestCan, re-resolved at arrival time)
+// and despawn (accidents.maybeCleanup). No carried-item visual follows the sim (documented skip of
+// the brief's own "nice-to-have, skip if it bloats" clause) — the transient simply stays visible at
+// its original spot until the sim reaches the can. Any other order (fresh tap, panic, bladder
+// failure, a buy-mode stop-in-place) cancels the walk (main.ts's cancelCarry) and leaves the
+// transient exactly where it was, still dirty, can fill untouched. `mop` (water_puddle/pee_puddle)
+// is NOT part of this — puddles still despawn in place instantly, per the brief ("puddles just
+// vanish").
 //
 // EMPTYING (the same roadmap slice's item 4: `empty_garbage` on `door_exterior`): resets EVERY
 // garbage can's fill to 0 in one shot (GarbageRegistry.emptyAll) — same "no carrying sim animation"
@@ -166,6 +180,15 @@ export class GarbageController {
     return cans.some((c) => this.registry.fillOf(c.key) < c.capacity);
   }
 
+  /** ROADMAP_NEXT B3-5 "carry to garbage": the nearest non-full can's world position from `simPos`,
+   *  or null if every can is full (or none exist) — main.ts routes the sim there (agent.goTo) once
+   *  a clean_up/sweep action completes on a non-puddle transient, instead of despawning it in place. */
+  nearestNonFullCanPos(simPos: [number, number]): [number, number] | null {
+    const cans = this.cans();
+    const nearest = findNearestNonFullCan(simPos, cans, (k) => this.registry.fillOf(k));
+    return nearest ? nearest.pos : null;
+  }
+
   /** Call from main.ts's onActionStop whenever the just-stopped action's `producesWaste` is set.
    *  `cleanliness` is the sim's current value of `cleanlinessVarId()` (or undefined if that stat
    *  doesn't exist). `accidents` supplies spawnTransient for the drop case. Returns the plan taken
@@ -182,12 +205,14 @@ export class GarbageController {
     return plan;
   }
 
-  /** Item 3's clean_up completion: deposit into the nearest non-full can (the transient itself is
-   *  already despawned by the ordinary clearedBy/maybeCleanup mechanism in onActionStop — see
-   *  main.ts). Returns false (no-op) if none is available (a race between the pre-check in
-   *  hasNonFullCan and completion; the transient still despawns via clearedBy either way, the
-   *  waste just doesn't "count" toward any can — an acceptable, documented edge case rather than
-   *  adding rollback complexity). */
+  /** ROADMAP_NEXT B3-5: called once the sim's "carry to garbage" walk (main.ts's carryState)
+   *  arrives at the can — deposits into whichever can is nearest AT ARRIVAL TIME (re-resolved, not
+   *  necessarily the same can `nearestNonFullCanPos` picked when the walk started, in case another
+   *  deposit filled it up in the meantime), then main.ts despawns the transient via the ordinary
+   *  clearedBy/maybeCleanup mechanism right after. Returns false (no-op) if every can somehow
+   *  filled up during the walk — the transient still despawns via clearedBy either way (the sim
+   *  did carry it out, it just didn't "count" toward any can) — an acceptable, documented edge case
+   *  rather than adding rollback/retry complexity. */
   depositAtNearestCan(simPos: [number, number]): boolean {
     const cans = this.cans();
     const nearest = findNearestNonFullCan(simPos, cans, (k) => this.registry.fillOf(k));

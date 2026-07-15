@@ -91,8 +91,10 @@ Latch re-arms only when bladder rises STRICTLY ABOVE reliefAmount — but decay 
 ## B3-4. BUG: interrupted clean/extinguish counts as completed — ✅ DONE 2026-07-15
 Interrupting a duration action (e.g. via reload/hot-reload or new order) still despawns the fire/transient. clearedBy despawn must only fire on COMPLETED durations (distinguish completed vs cancelled in the stop path). See PROJECT_CONTEXT.md §7.21 as-built.
 
-## B3-5. Carry cleaned items to garbage
+## B3-5. Carry cleaned items to garbage — DONE 2026-07-15 night, see PROJECT_CONTEXT.md §7.15 B3-5 update
 clean_up on non-puddle transients (dirty_dishes, ash…): after the timed clean, the sim automatically walks to a non-full garbage can and deposits (fill+1) before the item despawns; puddles (mop) just vanish. If no can available: HUD toast refusal (existing behavior).
+
+Implemented: `game/main.ts`'s `onActionStop` routes the sim (bare `agent.goTo`, no new ActionDef) to `garbage.nearestNonFullCanPos(simPos)` when `clean_up`/`sweep` completes (`CARRY_TO_GARBAGE_ACTIONS` set); `carryState` tracks it, a render-loop check on arrival (`!agent.isMoving`) deposits (`depositAtNearestCan`, re-resolved) then despawns (`accidents.maybeCleanup`). No can reachable → HUD toast, transient untouched. Any other order (`cancelCarry`, wired into the ground-tap/action-menu/panic/bladder-failure/buy-mode-close paths) cancels the walk, leaving the transient dirty in place. Autonomy is suppressed for free via `agent.isBusy`/`isMoving`. No carried-item visual (documented skip). `mop`/puddles unaffected — still vanish in place instantly.
 
 ## B3-6. Visa status system (game core loop!)
 `visaStatus` variable becomes a real system: start "visitor" with 15 in-game days (tunable). Statuses have expiry; failing to hold a valid status = GAME OVER screen. Upgrades via quests (quest rewards already setVar visaStatus) and/or applications (B3-7). Losable statuses (LMIA, temp worker) trigger a grace period (3 days, tunable) to find a new job/status. Status state machine data-driven (data/visas.json + editor or Tuning/Quest integration — design to lock in PROJECT_CONTEXT §7.20).

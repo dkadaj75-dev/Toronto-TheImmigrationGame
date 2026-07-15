@@ -15,7 +15,7 @@ import { SimStats } from './stats';
 import { Hud } from './ui';
 import { Autonomy } from './autonomy';
 import { QuestRunner, isActionAvailable, type EvalContext } from './quests';
-import { AccidentsController, resolveTapAssetId } from './accidents';
+import { AccidentsController, resolveTapAssetId, shouldDespawnOnCleanup } from './accidents';
 import { GarbageController } from './garbage';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials } from './buymode';
 import { createMarkerInstance, type MarkerInstance } from './marker';
@@ -32,6 +32,11 @@ import { initBladderFailureState, checkBladderFailure, rearmBladderFailure } fro
 function animStateFor(a: ActiveAction): string {
   return a.groundSit ? 'sit_ground' : a.action.animation || 'idle';
 }
+
+/** ROADMAP_NEXT B3-5: actions whose completed cleanup "carries" the cleared transient to a garbage
+ *  can instead of despawning it in place — dirty_dishes (clean_up) and ash (sweep). `mop` (water_
+ *  puddle/pee_puddle) is deliberately excluded per the brief ("puddles just vanish"). */
+const CARRY_TO_GARBAGE_ACTIONS = new Set(['clean_up', 'sweep']);
 
 const app = document.getElementById('app')!;
 const boot = document.getElementById('boot')!;
@@ -106,6 +111,7 @@ async function start() {
   let panicState: { elapsed: number; totalSeconds: number } | null = null;
   const triggerPanic = () => {
     agent.stopAction(); // fires onActionStop → animation reset to idle, activity chip hidden, etc.
+    cancelCarry(); // ROADMAP_NEXT B3-5: panic interrupts an in-progress carry-to-garbage walk too
     const panicSeconds = data.tuning.fire?.panicSeconds ?? 3;
     autonomy.forceCooldown(panicSeconds);
     anim?.play('panic');
@@ -257,6 +263,22 @@ async function start() {
   // `action` identity (not just id) is the guard against a stale timer surviving a stop+restart of
   // the very same action.
   let durationState: { action: ActiveAction; totalSeconds: number; elapsed: number } | null = null;
+  // ROADMAP_NEXT B3-5: "carry to garbage" — set right after a clean_up/sweep action completes on
+  // a non-puddle transient (dirty_dishes/ash) whose nearest non-full can is reachable; the actual
+  // despawn/deposit is deferred until the render loop below observes the sim has arrived (or the
+  // walk gets cancelled by any other order, in which case the transient simply stays put, still
+  // dirty — see cancelCarry). `target` is the transient's own Object3D (still valid/undespawned
+  // while carrying) so accidents.maybeCleanup can be called normally on arrival; deposit itself is
+  // re-resolved at arrival time (not the can chosen at carry-start) via depositAtNearestCan, same
+  // "recompute, don't assume" convention garbage.ts's own doc comment already uses for the no-carry
+  // clean_up path this replaces.
+  let carryState: { target: THREE.Object3D; actionId: string } | null = null;
+  /** Any order that redirects the sim away from an in-progress "carry to garbage" walk cancels it —
+   *  the transient stays exactly where it was (still dirty), the can's fill is untouched. Call this
+   *  from every place that can send the sim somewhere else: a fresh ground-tap/action order, the
+   *  buy-mode "stop in place" safety net, and the panic/bladder-failure interrupts (both of which
+   *  otherwise leave the sim mid-walk toward the can while "reacting" to something else). */
+  const cancelCarry = () => { carryState = null; };
 
   // --- ROADMAP_NEXT B2-4: bladder failure ("pees itself" at 0) ---------------------------------
   // Trigger/cooldown decision is pure logic (game/bladder.ts, headless-tested in test/bladder.test.ts)
@@ -275,6 +297,7 @@ async function start() {
   let peeState: { elapsed: number; totalSeconds: number } | null = null;
   const triggerBladderFailure = () => {
     agent.stopAction(); // fires onActionStop → animation reset to idle, activity chip hidden, etc.
+    cancelCarry(); // ROADMAP_NEXT B3-5: bladder failure interrupts an in-progress carry walk too
     const cfg = data.tuning.bladderFailure;
     const durationSeconds = cfg?.durationSeconds ?? 4;
     autonomy.forceCooldown(durationSeconds);
@@ -331,12 +354,23 @@ async function start() {
     const assetId = a.target.userData?.assetId as string | undefined;
     const def = assetId ? data.assets.assets.find((x) => x.id === assetId) : undefined;
     if (def?.category === 'transient') {
-      accidents.maybeCleanup(a.target, a.action.id);
-      // ROADMAP_NEXT item 10: clean_up completing on a dirty_dishes transient deposits into the
-      // nearest non-full garbage can (the transient itself is already despawned by the ordinary
-      // clearedBy/maybeCleanup call above — see garbage.ts's depositAtNearestCan doc comment for
-      // why this doesn't need a real second walk-leg).
-      if (a.action.id === 'clean_up') garbage.depositAtNearestCan([sim.position.x, sim.position.z]);
+      // ROADMAP_NEXT B3-5: clean_up (dirty_dishes) / sweep (ash) no longer despawn the transient
+      // instantly — the sim carries it to a garbage can first (see carryState above + the render
+      // loop's arrival check below). mop (water_puddle/pee_puddle) is NOT in this set and keeps the
+      // old immediate in-place despawn — puddles have nothing to carry anywhere.
+      if (CARRY_TO_GARBAGE_ACTIONS.has(a.action.id) && shouldDespawnOnCleanup(a.action.id, def.clearedBy)) {
+        const canPos = garbage.nearestNonFullCanPos([sim.position.x, sim.position.z]);
+        if (canPos && agent.goTo(canPos[0], canPos[1])) {
+          carryState = { target: a.target, actionId: a.action.id };
+        } else {
+          // No reachable non-full can right now — reuse the existing "reuse quest toast" refusal
+          // pattern (garbage.ts's own module doc comment / the clean_up order-time pre-check
+          // below). The transient is untouched: still there, still dirty, can fill unchanged.
+          hud.showQuestToast('No empty garbage can available', 'started', 2500);
+        }
+      } else {
+        accidents.maybeCleanup(a.target, a.action.id);
+      }
     } else if (def && !a.action.duration) {
       accidents.rollFor(a.target, def, buildEvalContext(), simClockSeconds);
     }
@@ -407,15 +441,18 @@ async function start() {
           const resolvedAsset = asset;
           setSelected(target);
           hud.showActionMenu(resolvedAsset, actions, (action) => {
-            // ROADMAP_NEXT item 10 (item 3's "if ALL cans full/none, action refuses with a HUD
+            // ROADMAP_NEXT item 10/B3-5 (item 3's "if ALL cans full/none, action refuses with a HUD
             // toast"): checked BEFORE ordering the walk so the sim never sets off toward a
-            // dirty_dishes pile it can't actually finish cleaning up. Reuses the quest toast
-            // surface per the brief ("reuse quest toast") rather than a new UI component.
-            if (action.id === 'clean_up' && !garbage.hasNonFullCan()) {
+            // dirty_dishes/ash pile it can't actually finish carrying anywhere. Reuses the quest
+            // toast surface per the brief ("reuse quest toast") rather than a new UI component.
+            // (A can can still go full between now and completion — the render-loop carry check
+            // re-verifies and shows the same toast then, transient left untouched either way.)
+            if (CARRY_TO_GARBAGE_ACTIONS.has(action.id) && !garbage.hasNonFullCan()) {
               hud.showQuestToast('No empty garbage can available', 'started', 2500);
               return;
             }
             autonomy.notePlayerCommand();
+            cancelCarry(); // ROADMAP_NEXT B3-5: a fresh order interrupts any in-progress carry walk
             const seat = action.seatAware ? findSeatFor(world, data, target) : null;
             if (agent.orderAction(action, target, seat, resolvedAsset, action.seatAware)) cue.showAt(target.position.x, target.position.z);
             else console.log('no path to object', resolvedAsset.id);
@@ -427,6 +464,7 @@ async function start() {
     hud.hideActionMenu();
     if (hit.ground) {
       autonomy.notePlayerCommand();
+      cancelCarry(); // ROADMAP_NEXT B3-5: a fresh move order interrupts any in-progress carry walk
       const ok = agent.goTo(hit.ground.x, hit.ground.z);
       if (ok) cue.showAt(hit.ground.x, hit.ground.z);
     }
@@ -477,7 +515,7 @@ async function start() {
     // been mid-route when buy mode opened, and a rebake during shopping can invalidate that stale
     // path (moved/sold/bought furniture). Cancelling in place is simpler and safer than trying to
     // resume a path computed against a nav grid that may no longer match.
-    if (buyModeChangedSomething && agent.isMoving) agent.goTo(sim.position.x, sim.position.z);
+    if (buyModeChangedSomething && agent.isMoving) { cancelCarry(); agent.goTo(sim.position.x, sim.position.z); }
   };
   hud.onBuyCategoryPick = (cat) => { buyActiveCategory = cat; refreshBuyCatalog(); };
   hud.onBuySearch = (q) => { buySearchQuery = q; refreshBuyCatalog(); };
@@ -710,6 +748,21 @@ async function start() {
     applyDayNight(lights, scene, gameSeconds / 3600, data.tuning.time.nightStartHour, data.tuning.time.nightEndHour);
 
     agent.update(sdt);
+    // ROADMAP_NEXT B3-5: "carry to garbage" arrival check — carryState is only ever set right after
+    // agent.goTo() successfully routed the sim to a can (see onActionStop above), and only ever
+    // cleared early by cancelCarry() when some other order redirects the sim mid-walk. So observing
+    // `!agent.isMoving` here means one of exactly two things: the sim genuinely reached the can (the
+    // common case), or goTo's arrivalRadius snapped it onto a cell it was already standing on this
+    // same frame (astronomically rare, harmless — same "deposit, then despawn" happens either way).
+    // Deposit is re-resolved at arrival (not the can picked at carry-start) via depositAtNearestCan,
+    // matching that method's own "recompute, don't assume" doc comment; despawn reuses the ordinary
+    // clearedBy/maybeCleanup path exactly like the pre-B3-5 instant-despawn code did.
+    if (carryState && !agent.isMoving) {
+      const cs = carryState;
+      carryState = null;
+      garbage.depositAtNearestCan([sim.position.x, sim.position.z]);
+      accidents.maybeCleanup(cs.target, cs.actionId);
+    }
     // ROADMAP_NEXT item 5 (§7.11): duration-timed actions auto-complete on the same sim time as
     // everything else here — a normal stop (triggers onActionStop → accident roll, animation
     // reset, etc.), just driven by elapsed time instead of a filled primaryNeed.

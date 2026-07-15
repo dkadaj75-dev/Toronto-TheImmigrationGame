@@ -64,6 +64,13 @@ console.log('garbage.test — findNearestNonFullCan');
 
   const none = findNearestNonFullCan([0, 0], [], () => 0);
   check('no cans at all → null', none === null);
+
+  // ROADMAP_NEXT B3-5: main.ts's GarbageController.nearestNonFullCanPos is a thin wrapper around
+  // this exact function (just plucking `.pos` off the result) to get a walk target for the sim's
+  // "carry to garbage" order — assert the position it hands back is the can's own, not some
+  // recomputed/rounded value, since that position feeds agent.goTo() directly.
+  check("nearest result's pos is the can's own position (feeds agent.goTo directly)",
+    result !== null && result.pos[0] === 1 && result.pos[1] === 0, JSON.stringify(result));
 }
 
 console.log('garbage.test — decideWasteHandling');
