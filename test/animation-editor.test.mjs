@@ -101,7 +101,15 @@ console.log('animation-editor.test — animation sources');
   document.querySelector('#add-source').click();
   check('source added with leading slash normalized', AnimTool.character().animationPaths.includes('/models/anims/walk.glb'));
   check('duplicate source rejected', AnimTool.addSource('/models/anims/walk.glb') === false);
-  document.querySelector('#sources-list button.danger').click();
+  // Windows filesystem paths (the designer pastes them from Explorer) — normalized to the URL
+  // after /public/ when possible, rejected with a message when not (never saved raw: raw paths
+  // 404 silently and the clips just never appear in the dropdowns).
+  check('windows path under public normalized', AnimTool.addSource('D:\\WebCreation\\condo-life-web\\public\\models\\anims\\Run.fbx') === true
+    && AnimTool.character().animationPaths.includes('/models/anims/Run.fbx'));
+  check('windows path with stray leading slash normalized', AnimTool.addSource('/D:\\proj\\public\\models\\anims\\Jump.fbx') === true
+    && AnimTool.character().animationPaths.includes('/models/anims/Jump.fbx'));
+  check('windows path outside public rejected', AnimTool.addSource('C:\\somewhere\\else\\Walk.fbx') === false);
+  while (document.querySelector('#sources-list button.danger')) document.querySelector('#sources-list button.danger').click();
   check('source removable', AnimTool.character().animationPaths.length === 0);
 }
 

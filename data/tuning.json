@@ -57,13 +57,19 @@
     "sitHeight": 0.25,
     "lieHeight": 0.55,
     "clipMap": {
-      "idle": "Armature|mixamo.com|Layer0",
-      "walk": "Armature|mixamo.com|Layer0",
-      "sit": "Sit",
-      "lie": "Lie",
-      "lie_sleep": "Fall"
+      "idle": "IDLE.001",
+      "walk": "Walking",
+      "sit": "Sitting",
+      "lie": "mixamo.com",
+      "lie_sleep": "mixamo.com",
+      "sit_eat": "mixamo.com",
+      "sit_idle": "mixamo.com",
+      "stand_use": "mixamo.com"
     },
-    "animationPaths": [],
+    "animationPaths": [
+      "/models/anims/Walking.fbx",
+      "/models/anims/Talking.fbx"
+    ],
     "marker": {
       "mesh": "",
       "yOffset": 0.35,

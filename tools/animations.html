@@ -405,10 +405,30 @@ window.AnimTool = (() => {
     renderStates();
   }
 
+  // A pasted Windows filesystem path (e.g. "D:\...\public\models\anims\Walk.fbx", with or
+  // without an accidental leading "/") is not a URL the dev server can fetch — silently saving
+  // it means the source 404s and its clips never appear in the dropdowns (bit the designer once).
+  // If the path contains a "public" segment, everything after it IS the served URL; otherwise
+  // we can't guess, so return null and let addSource show why.
+  function normalizeSourcePath(raw) {
+    let p = String(raw ?? '').trim();
+    if (!p) return null;
+    const looksWindows = /^\/?[a-zA-Z]:[\\/]/.test(p) || p.includes('\\');
+    if (looksWindows) {
+      const unified = p.replace(/\\/g, '/');
+      const m = /\/public(\/.+)$/i.exec(unified);
+      if (!m) return { error: 'That looks like a Windows file path. Use the URL under public/ instead, e.g. /models/anims/Walking.fbx' };
+      p = m[1];
+    }
+    if (!/^(\/|https?:)/.test(p)) p = '/' + p;
+    return { path: p };
+  }
+
   function addSource(path) {
-    path = String(path ?? '').trim();
-    if (!path) return false;
-    if (!/^(\/|https?:)/.test(path)) path = '/' + path;
+    const norm = normalizeSourcePath(path);
+    if (!norm) return false;
+    if (norm.error) { previewMessage(norm.error); return false; }
+    path = norm.path;
     const c = tuning.character;
     if (c.animationPaths.includes(path)) return false;
     c.animationPaths.push(path);
@@ -585,20 +605,21 @@ async function loadCharacter() {
     const targetBoneNames = collectBoneNames(gltf.scene);
     const usedClipNames = new Set(clipObjs.map((k) => k.name).filter(Boolean));
     const unmatchedTracks = [];
+    const failedSources = []; // surfaced in the preview message — a designer never reads the console
     for (const p of c.animationPaths) {
       if (isFbxPath(p)) {
         try {
           const { clips: fbxClips, unmatchedTracks: unmatched } = await loadFbxClips(p, targetBoneNames, usedClipNames);
           clipObjs.push(...fbxClips);
           unmatchedTracks.push(...unmatched);
-        } catch (e) { console.warn('animation source failed to load:', p, e); }
+        } catch (e) { failedSources.push(p); console.warn('animation source failed to load:', p, e); }
         continue;
       }
       try {
         const extra = await load(p);
         for (const k of extra.animations) if (k.name) usedClipNames.add(k.name);
         clipObjs.push(...extra.animations);
-      } catch (e) { console.warn('animation source failed to load:', p, e); }
+      } catch (e) { failedSources.push(p); console.warn('animation source failed to load:', p, e); }
     }
     if (unmatchedTracks.length) {
       console.warn(`FBX animation source(s) had ${unmatchedTracks.length} bone track(s) that didn't match the character rig (game/fbxclips.ts) — those tracks will be static in-game:`, unmatchedTracks);
@@ -612,7 +633,11 @@ async function loadCharacter() {
     mixer = new THREE.AnimationMixer(model);
     frameModel(model);
     AnimTool.setClips(clipObjs.map((k) => k.name));
-    AnimTool.previewMessage(clipObjs.length ? '' : 'model loaded — no clips (add animation sources)');
+    AnimTool.previewMessage(
+      failedSources.length
+        ? `⚠ could not load: ${failedSources.join(', ')} — the path must be the URL under public/ (e.g. /models/anims/Walking.fbx)`
+        : clipObjs.length ? '' : 'model loaded — no clips (add animation sources)',
+    );
   } catch (e) {
     console.warn(e);
     AnimTool.previewMessage('could not load ' + c.meshPath + ' — check the path (files under public/ are served at /)');
