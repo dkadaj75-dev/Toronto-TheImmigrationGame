@@ -53,7 +53,7 @@
       "id": "dining_chair",
       "name": "Dining chair",
       "category": "seating",
-      "mesh": "models/dining_chair.glb",
+      "mesh": "models/chair.glb",
       "buyPrice": 80,
       "sellPrice": 60,
       "environmentScore": 1,
@@ -83,7 +83,10 @@
       "interactions": [
         "sleep",
         "nap"
-      ]
+      ],
+      "meshFit": {
+        "yawOffsetDeg": -90
+      }
     },
     {
       "id": "fridge",
@@ -99,7 +102,10 @@
       ],
       "interactions": [
         "eat"
-      ]
+      ],
+      "meshFit": {
+        "yawOffsetDeg": -90
+      }
     },
     {
       "id": "stove",
@@ -145,13 +151,16 @@
         1,
         1
       ],
-      "interactions": []
+      "interactions": [],
+      "meshFit": {
+        "scale": 0.9
+      }
     },
     {
       "id": "dining_table",
       "name": "Dining table",
       "category": "surfaces",
-      "mesh": "models/dining_table.glb",
+      "mesh": "models/diningtable.glb",
       "buyPrice": 250,
       "sellPrice": 185,
       "environmentScore": 2,
@@ -204,7 +213,10 @@
           ],
           "_note": "PROJECT_CONTEXT.md §7.3 'leak' case: no modifiers — a small flat chance of splashing a puddle onto the floor next to the shower."
         }
-      ]
+      ],
+      "meshFit": {
+        "yawOffsetDeg": 90
+      }
     },
     {
       "id": "sink",
@@ -238,7 +250,7 @@
         "watch_tv"
       ],
       "meshFit": {
-        "yawOffsetDeg": -90
+        "yawOffsetDeg": 0
       }
     },
     {
@@ -256,7 +268,11 @@
       "interactions": [
         "read_book",
         "practice_english"
-      ]
+      ],
+      "meshFit": {
+        "yawOffsetDeg": 90,
+        "scale": 1.25
+      }
     },
     {
       "id": "phone",
@@ -293,7 +309,17 @@
         "hingeOffset": [
           -0.5,
           0
-        ]
+        ],
+        "openSeconds": 0.1,
+        "closeSeconds": 0.1
+      },
+      "meshFit": {
+        "scale": [
+          1.5,
+          1.75,
+          1.8
+        ],
+        "yOffset": 0
       }
     },
     {
