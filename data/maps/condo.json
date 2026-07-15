@@ -1,26 +1,26 @@
 {
   "_comment": "Starter condo map. LAYOUT IS PLACEHOLDER — to be redrawn against Unreal prototype screenshots for parity (Phase 1 reference). Units = grid cells (1 cell = 1 m). navGrid is derived at load in Phase 0; the Map Editor will bake it in Phase 2.",
   "id": "condo",
-  "name": "The Condo",
+  "name": "Shitty basement",
   "gridSize": 1,
   "bounds": {
-    "w": 14,
-    "h": 10
+    "w": 9,
+    "h": 9
   },
   "floors": [
     {
-      "id": "living",
+      "id": "LivingRoom",
       "polygon": [
         [
           0,
           0
         ],
         [
-          9,
+          6,
           0
         ],
         [
-          9,
+          6,
           6
         ],
         [
@@ -31,107 +31,77 @@
       "material": "wood"
     },
     {
-      "id": "kitchen",
+      "id": "Kitchen",
       "polygon": [
+        [
+          6,
+          0
+        ],
         [
           9,
           0
         ],
         [
-          14,
-          0
-        ],
-        [
-          14,
+          9,
           6
         ],
         [
-          9,
+          6,
           6
         ]
       ],
       "material": "tile"
     },
     {
-      "id": "floor_1",
+      "id": "Bedroom",
       "polygon": [
         [
+          0,
+          6
+        ],
+        [
+          6,
+          6
+        ],
+        [
+          6,
+          9
+        ],
+        [
+          0,
+          9
+        ]
+      ],
+      "material": "carpet"
+    },
+    {
+      "id": "Washroom",
+      "polygon": [
+        [
+          6,
+          6
+        ],
+        [
           9,
           6
         ],
         [
-          14,
-          6
-        ],
-        [
-          14,
-          10
-        ],
-        [
           9,
-          10
+          9
+        ],
+        [
+          6,
+          9
         ]
       ],
       "material": "tile"
-    },
-    {
-      "id": "floor_2",
-      "polygon": [
-        [
-          0,
-          6
-        ],
-        [
-          9,
-          6
-        ],
-        [
-          9,
-          10
-        ],
-        [
-          0,
-          10
-        ]
-      ],
-      "material": "wood"
     }
   ],
   "walls": [
     {
       "from": [
         0,
-        0
-      ],
-      "to": [
-        14,
-        0
-      ]
-    },
-    {
-      "from": [
-        14,
-        0
-      ],
-      "to": [
-        14,
-        10
-      ]
-    },
-    {
-      "from": [
-        14,
-        10
-      ],
-      "to": [
-        0,
-        10
-      ]
-    },
-    {
-      "from": [
-        0,
-        10
+        9
       ],
       "to": [
         0,
@@ -150,26 +120,6 @@
     },
     {
       "from": [
-        9,
-        0
-      ],
-      "to": [
-        9,
-        3
-      ]
-    },
-    {
-      "from": [
-        9,
-        4
-      ],
-      "to": [
-        9,
-        6
-      ]
-    },
-    {
-      "from": [
         0,
         6
       ],
@@ -180,12 +130,32 @@
     },
     {
       "from": [
-        9,
+        6,
+        4
+      ],
+      "to": [
+        6,
+        5
+      ]
+    },
+    {
+      "from": [
+        4,
         6
       ],
       "to": [
+        6,
+        6
+      ]
+    },
+    {
+      "from": [
         9,
-        8
+        5
+      ],
+      "to": [
+        6,
+        5
       ]
     },
     {
@@ -195,110 +165,102 @@
       ],
       "to": [
         9,
-        10
+        0
       ]
     },
     {
       "from": [
-        4,
-        6
+        9,
+        0
       ],
       "to": [
-        10,
+        0,
+        0
+      ]
+    },
+    {
+      "from": [
+        9,
+        9
+      ],
+      "to": [
+        0,
+        9
+      ]
+    },
+    {
+      "from": [
+        6,
+        9
+      ],
+      "to": [
+        6,
+        8
+      ]
+    },
+    {
+      "from": [
+        6,
+        7
+      ],
+      "to": [
+        6,
         6
       ]
     },
     {
       "from": [
-        11,
+        6,
+        1
+      ],
+      "to": [
+        6,
+        0
+      ]
+    },
+    {
+      "from": [
+        6,
         6
       ],
       "to": [
-        14,
-        6
+        6,
+        5
       ]
     }
   ],
   "doors": [
     {
       "at": [
-        9,
-        3.65
-      ],
-      "orientation": "vertical",
-      "assetId": "door_basic",
-      "_note": "living ↔ kitchen"
-    },
-    {
-      "at": [
-        3.5,
-        6
-      ],
-      "orientation": "horizontal",
-      "assetId": "door_basic",
-      "_note": "living ↔ bedroom"
-    },
-    {
-      "at": [
-        10.35,
-        6
-      ],
-      "orientation": "horizontal",
-      "assetId": "door_basic",
-      "_note": "kitchen ↔ bathroom (hallway-less placeholder)"
-    },
-    {
-      "at": [
-        9,
-        8.65
-      ],
-      "orientation": "vertical",
-      "assetId": "door_basic",
-      "_note": "bedroom ↔ bathroom"
-    },
-    {
-      "at": [
         0,
-        2
+        2.17
       ],
       "orientation": "vertical",
       "assetId": "door_exterior",
       "_note": "ROADMAP_NEXT item 9 — apartment entrance, exterior door (living room outer wall). Static/tappable, never auto-opens."
-    }
-  ],
-  "windows": [
-    {
-      "at": [
-        8,
-        10
-      ],
-      "orientation": "horizontal",
-      "assetId": "window_basic",
-      "_note": "living room, north wall"
     },
     {
       "at": [
-        12,
-        0
+        3.35,
+        6
       ],
       "orientation": "horizontal",
-      "assetId": "window_basic",
-      "_note": "kitchen, north wall"
+      "assetId": "door_basic"
     },
     {
       "at": [
-        2,
-        10
+        6,
+        7.67
       ],
-      "orientation": "horizontal",
-      "assetId": "window_basic",
-      "_note": "bedroom, south wall"
+      "orientation": "vertical",
+      "assetId": "door_basic"
     }
   ],
+  "windows": [],
   "spawn": {
     "pos": [
-      4.5,
-      3
+      1,
+      2.5
     ],
     "facingDeg": 180
   },
@@ -306,47 +268,87 @@
     {
       "asset": "sofa",
       "pos": [
-        2,
-        0.5
+        2.5,
+        4.5
       ],
-      "rotDeg": 0
+      "rotDeg": 270
     },
     {
       "asset": "tv",
       "pos": [
-        1.5,
+        0.5,
         4.5
       ],
-      "rotDeg": 180
+      "rotDeg": 90
     },
     {
-      "asset": "armchair",
+      "asset": "shower",
       "pos": [
-        3,
-        2.5
+        7.5,
+        5.5
       ],
       "rotDeg": 0
     },
     {
-      "asset": "phone",
+      "asset": "sink",
       "pos": [
-        8,
+        8.5,
+        5.5
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "toilet",
+      "pos": [
+        8.5,
+        7.5
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "counter",
+      "pos": [
+        6.35,
+        0.35
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "dining_table",
+      "pos": [
+        4,
         0.5
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "dining_chair",
+      "pos": [
+        3.5,
+        1.5
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "dining_chair",
+      "pos": [
+        4.5,
+        1.5
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "stove",
+      "pos": [
+        7.05,
+        0.35
       ],
       "rotDeg": 0
     },
     {
       "asset": "fridge",
       "pos": [
-        12.5,
-        0.5
-      ],
-      "rotDeg": 0
-    },
-    {
-      "asset": "stove",
-      "pos": [
-        11.5,
+        8.5,
         0.5
       ],
       "rotDeg": 0
@@ -354,94 +356,37 @@
     {
       "asset": "counter",
       "pos": [
-        10.75,
-        0.5
-      ],
-      "rotDeg": 0
-    },
-    {
-      "asset": "counter",
-      "pos": [
-        13.5,
-        2.4
+        8.65,
+        3.5
       ],
       "rotDeg": 270
-    },
-    {
-      "asset": "sink",
-      "pos": [
-        13.5,
-        1.5
-      ],
-      "rotDeg": 270
-    },
-    {
-      "asset": "dining_chair",
-      "pos": [
-        7.5,
-        3
-      ],
-      "rotDeg": 0
-    },
-    {
-      "asset": "bed",
-      "pos": [
-        1.5,
-        8
-      ],
-      "rotDeg": 90
     },
     {
       "asset": "bookshelf",
       "pos": [
         5.5,
-        9.8
-      ],
-      "rotDeg": 180
-    },
-    {
-      "asset": "shower",
-      "pos": [
-        11.5,
-        9.5
-      ],
-      "rotDeg": 180
-    },
-    {
-      "asset": "sink",
-      "pos": [
-        10,
-        9.5
-      ],
-      "rotDeg": 180
-    },
-    {
-      "asset": "dining_table",
-      "pos": [
-        7,
-        4.5
-      ],
-      "rotDeg": 0
-    },
-    {
-      "asset": "counter",
-      "pos": [
-        13.5,
-        3.3
+        5
       ],
       "rotDeg": 270
     },
     {
+      "asset": "bed",
+      "pos": [
+        1.5,
+        7.5
+      ],
+      "rotDeg": 90
+    },
+    {
       "asset": "garbage_can",
       "pos": [
-        9.5,
-        0.5
+        8.5,
+        4.5
       ],
-      "rotDeg": 0
+      "rotDeg": 270
     }
   ],
   "music": [
-    "sounds/music_condo_1.mp3",
     "sounds/music_condo_2.mp3"
   ]
 }

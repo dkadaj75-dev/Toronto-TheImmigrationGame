@@ -1,8 +1,23 @@
 {
   "_comment": "Designer-defined sim-state variables beyond needs/skills (PROJECT_CONTEXT.md §3.1). Readable by quest conditions as vars.<id>, writable by quest rewards (setVar). `funds` is a separate built-in namespace — NOT listed here — seeded from tuning.economy.startingFunds by game/quests.ts's QuestRunner.",
   "variables": [
-    { "id": "visaStatus", "name": "Visa Status", "type": "string", "default": "tourist" },
-    { "id": "job", "name": "Job", "type": "string", "default": null },
-    { "id": "income", "name": "Income", "type": "number", "default": 0 }
+    {
+      "id": "visaStatus",
+      "name": "Visa Status",
+      "type": "string",
+      "default": "Tourist"
+    },
+    {
+      "id": "job",
+      "name": "Job",
+      "type": "string",
+      "default": null
+    },
+    {
+      "id": "income",
+      "name": "Income",
+      "type": "number",
+      "default": 0
+    }
   ]
 }

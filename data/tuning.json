@@ -74,10 +74,15 @@
       "sit": "Sitting",
       "lie": "Sleeping",
       "lie_sleep": "Sleeping",
-      "sit_eat": "Sitting",
+      "sit_eat": "SttingTalking",
       "sit_idle": "Sitting",
-      "stand_use": "Idle",
-      "idle": "Idle"
+      "stand_use": "Easting",
+      "idle": "Idle",
+      "sit_ground": "Sitting",
+      "pee": "Defeated",
+      "panic": "Yelling",
+      "extinguishing_fire": "Yelling",
+      "cleaning": "Cleaning"
     },
     "animationPaths": [],
     "marker": {
@@ -93,7 +98,7 @@
   },
   "audio": {
     "masterVolume": 0.8,
-    "musicVolume": 0.6,
+    "musicVolume": 0.4,
     "sfxVolume": 0.8,
     "musicCrossfadeSeconds": 1.5,
     "buyModeMusic": "sounds/music_buymode.mp3",

@@ -1,8 +1,10 @@
-- Leave for work option: should not be available if we don't have a job (will be implemented later). It means that conditions for interactions should be implemented.
-- bug: when inputing a negative value in the z offset for sitting / lying in an asset: in rotates the asset in the wrong direction.
-- When showering, the Sim should be inside the shower. By the way it could be great to implement a blurring system like in the Sims when they are in the shower / WC.
-- If a Sim does not go to the toilets when the bladder need is empty, they "pee" themselves, playing an animation and creating a puddle at the exact location, the amount of need relief is minimal, e.g. 30/100 and tunable.
-- When a fire appears, the sim should play an animation, it can be added in the character animations and called "panic".
-- When the fire is extinguished, another animation should play (extinguishing fire), also I want a progress bar above my sim that shows the progress of the fire extinguishment (e.g. baseline = 10s and can be linked to the intelligence (=faster) and energy level (=slower)). When the fire is extinguished, the flame disappears.
-- Same than above for cleaning / tyding up: I need a progress bar and removing the asset once done (and the sim stops automatically). Also these actions should have a linked animation, e.g. "Cleaning".
-- Generally, I believe that each action should have an animation linked to it.
+- I have done some tuning / added/replaced assets etc. Just ignore it, this should not affect the code.
+- When the sim is cooking and the stove catches fire, the fire does not appear instantly, it should.
+- When a sim pee itself, the hygiene should go to zero.
+- There is a small bug where the first time a sim's bladder goes to zero, the sim pees itself, but the second time, nothing happens.
+- If I interrupt an action (e.g. fire extinguished) while loading, the fire, for example, is extinguished. This should NOT be the case. Also when the fire starts, the fire sprite does not show direcly.
+- When cleaning up stuff (expect puddles), the sim should, by himself, bring it to the nearby garbage can.
+- We need to have a "Visa status", e.g. we start as a visitor with 15 days (in-game). If we were not able to upgrade our status, it is game over.
+- We upgrade visas by doing quests.
+- We find a job by using our smartphone, it can be an icon (modifiable) with a list of actions, such as "Search a job" which, randomly every in-game hour would update randomly a list of job. Each job has its requirements (e.g. being a citizen or a permanent resident) and can give access to Visas, for example applying for a cook job gives you a LMIA status, which will be limited in time (tunable). To gain the next status, we can do quests and/or increase skills. We can loose certain status such as temporary worker, LMIA... which gives us 3 days (tunable) to find a new job and apply to a new status. Every time we apply for a status from our phone (permanent resident is not given through quests for example, but we need to apply if we meet the skills), it will take time, during this time we need to maintain our status by all means. We can loose a job if we skip it too many times.
+- Every time we leave for our job through the suite door, the Sim "disappear" and time is automatically set at , for example, 5x (tunable) and goes back to normal when the sim comes back. Each job has its own hours.

@@ -194,7 +194,8 @@
           ],
           "_note": "PROJECT_CONTEXT.md §7.3 example, verbatim: novice cook (skills.cooking=0) risks 2+15=17%, master (=max) 2-2=0%."
         }
-      ]
+      ],
+      "sound": "/sounds/actions/stove.mp3"
     },
     {
       "id": "counter",
@@ -335,7 +336,7 @@
       "meshFit": {
         "yawOffsetDeg": 0
       },
-      "sound": "sounds/tv_hum.wav"
+      "sound": "sounds/actions/TV.mp3"
     },
     {
       "id": "bookshelf",
@@ -467,7 +468,7 @@
       "mesh": "models/fire.gif",
       "buyPrice": 0,
       "sellPrice": 0,
-      "environmentScore": -10,
+      "environmentScore": -50,
       "footprint": [
         1,
         1
@@ -482,7 +483,8 @@
       "_note": "Accidents slice (PROJECT_CONTEXT.md §7.3). Risk-configured on 'stove' (see its accidents[] entry). No real mesh yet — box stand-in until models/fire.glb is imported.",
       "meshFit": {
         "yOffset": 1
-      }
+      },
+      "sound": "/sounds/fire.mp3"
     },
     {
       "id": "water_puddle",
@@ -512,7 +514,7 @@
       "mesh": "models/puddle.png",
       "buyPrice": 0,
       "sellPrice": 0,
-      "environmentScore": -6,
+      "environmentScore": -50,
       "footprint": [
         1,
         1
@@ -551,7 +553,7 @@
       "mesh": "models/dirty_dishes.glb",
       "buyPrice": 0,
       "sellPrice": 0,
-      "environmentScore": -2,
+      "environmentScore": -5,
       "footprint": [
         0.5,
         0.5

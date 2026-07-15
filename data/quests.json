@@ -25,13 +25,49 @@
         {
           "type": "funds",
           "amount": 200
-        },
-        {
-          "type": "setVar",
-          "var": "visaStatus",
-          "value": "student"
         }
       ],
+      "onceOnly": true
+    },
+    {
+      "id": "find_a_job",
+      "name": "Find a job",
+      "description": "Use your smartphone to find your first job as a temporary foreign worker.",
+      "trigger": {
+        "all": [
+          {
+            "var": "skills.english",
+            "gte": 0
+          }
+        ]
+      },
+      "completion": {
+        "all": []
+      },
+      "rewards": [],
+      "onceOnly": true
+    },
+    {
+      "id": "pass_the_english_test",
+      "name": "Pass the english test - B1",
+      "description": "Reach level 30 in English.",
+      "trigger": {
+        "all": [
+          {
+            "var": "skills.english",
+            "gte": 0
+          }
+        ]
+      },
+      "completion": {
+        "all": [
+          {
+            "var": "skills.english",
+            "gte": 30
+          }
+        ]
+      },
+      "rewards": [],
       "onceOnly": true
     }
   ]
