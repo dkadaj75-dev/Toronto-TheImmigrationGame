@@ -72,5 +72,5 @@ Bladder hits 0 → sim pees itself: plays animation (new state, e.g. `pee`), spa
 - Extinguish = timed action: baseline 10s (tunable), FASTER with intelligence skill (designer will add the skill), SLOWER with low energy → duration system needs multi-variable modifiers (extend §7.11 duration schema). Progress bar ABOVE the sim (world-anchored, like marker) showing extinguish progress; flame disappears on completion; `extinguishing_fire` animation state.
 - Cleaning/tidying (clean_up, sweep, mop): same treatment — progress bar, timed, auto-stop + transient removal on completion, `cleaning` animation state.
 
-## B2-6. Every action has an animation
+## B2-6. Every action has an animation — DONE 2026-07-15 (only gap was `leave_for_work`, filled with `stand_use`, same vocabulary as `empty_garbage`; Interaction Editor now shows an inline ⚠ hint when the animation field is blank; Animation Mapper's state list already auto-derives from `interactions.json` so it needed no change — confirmed live, `stand_use` lists all 8 actions incl. Leave for work)
 Audit all shipped actions have an `animation` state; Interaction Editor warns when blank; Animation Mapper already lists action states (verify coverage).

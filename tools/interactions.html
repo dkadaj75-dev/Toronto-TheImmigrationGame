@@ -37,6 +37,7 @@
     color: #dfe6f2; border-radius: 6px; padding: 6px 8px; font-size: 13px; }
   .frow input[readonly] { color: #6f7fa3; }
   .hint-line { font-size: 11px; color: #5f6f93; margin-top: 4px; }
+  .hint-line.warn { color: #e0a44a; }
   .row-actions { display: flex; gap: 8px; margin-top: 8px; }
 
   .cond-group { border: 1px solid #2c3a58; border-radius: 10px; padding: 8px 10px; margin: 6px 0; background: #10182a; }
@@ -439,8 +440,18 @@ function renderEditor() {
   card1.appendChild(frow('name', textInput(() => a.name, (v) => { a.name = v; renderSidebar(); }, 'name')));
 
   const animWrap = document.createElement('div');
-  animWrap.appendChild(textInput(() => a.animation, (v) => { a.animation = v; }, 'animation', { list: 'anim-states-list' }));
+  const animInput = textInput(() => a.animation, (v) => { a.animation = v; }, 'animation', { list: 'anim-states-list' });
+  animWrap.appendChild(animInput);
+  const warn = document.createElement('div');
+  warn.id = 'anim-warn';
+  warn.className = 'hint-line warn';
+  warn.textContent = '⚠ no animation set — sim will fall back to idle for this action';
+  const updateWarn = () => { warn.style.display = animInput.value.trim() ? 'none' : ''; };
+  updateWarn();
+  animInput.addEventListener('input', updateWarn);
+  animWrap.appendChild(warn);
   const hint = document.createElement('div');
+  hint.id = 'anim-states-hint';
   hint.className = 'hint-line';
   hint.textContent = 'states in use: ' + animationStatesInUse().join(', ') + ' — feeds the Animation Mapper’s state list';
   animWrap.appendChild(hint);

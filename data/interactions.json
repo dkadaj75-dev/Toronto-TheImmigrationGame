@@ -238,7 +238,7 @@
       "name": "Leave for work",
       "needGains": {},
       "skillGains": {},
-      "animation": "",
+      "animation": "stand_use",
       "autonomyEligible": false,
       "primaryNeed": null,
       "conditions": {

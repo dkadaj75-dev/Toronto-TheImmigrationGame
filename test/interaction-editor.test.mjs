@@ -95,10 +95,20 @@ assert(doc.querySelector('[data-action-id="watch_tv"] span')?.textContent === 'W
 
 const animInput = doc.querySelector('input[data-path="animation"]');
 assert(animInput.value === 'sit_idle', 'animation field rendered');
+assert(doc.getElementById('anim-warn').style.display === 'none', 'no blank-animation warning while animation is set');
 animInput.value = 'sit_watch';
 animInput.dispatchEvent(new window.Event('input', { bubbles: true }));
-assert(doc.querySelector('.hint-line').textContent.includes('idle'), 'animation hint lists core states');
-assert(doc.querySelector('.hint-line').textContent.includes('sit_idle') || doc.querySelector('.hint-line').textContent.includes('stand_use'), 'animation hint lists states already used by other actions');
+assert(doc.getElementById('anim-states-hint').textContent.includes('idle'), 'animation hint lists core states');
+assert(doc.getElementById('anim-states-hint').textContent.includes('sit_idle') || doc.getElementById('anim-states-hint').textContent.includes('stand_use'), 'animation hint lists states already used by other actions');
+assert(doc.getElementById('anim-warn').style.display === 'none', 'no blank-animation warning after editing to a non-blank value');
+
+// --- blank-animation warning: clear the field, warning appears; re-fill, it disappears
+animInput.value = '';
+animInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+assert(doc.getElementById('anim-warn').style.display !== 'none', 'blank-animation warning shown when animation field is cleared');
+animInput.value = 'sit_watch';
+animInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+assert(doc.getElementById('anim-warn').style.display === 'none', 'blank-animation warning hidden again once refilled');
 
 // --- autonomy eligible + seat aware toggles round-trip
 const autoCb = doc.querySelector('input[data-path="autonomyEligible"]');
@@ -352,6 +362,7 @@ assert(!('conditions' in savedYoga), 'PUT: conditions key fully removed (sparse)
   const leafRow = doc2.querySelector('.cond-leaf');
   assert(leafRow.querySelector('.cond-var-select').value === 'vars.job', 'shipped leaf var (vars.job) renders selected');
   assert(leafRow.querySelector('select[data-role="op"]').value === 'neq', 'shipped leaf operator (neq) renders selected');
+  assert(doc2.getElementById('anim-warn').style.display !== 'none', 'blank shipped animation (leave_for_work-style) shows the warning on load, no edit needed');
 }
 
 // --- search filters sidebar
