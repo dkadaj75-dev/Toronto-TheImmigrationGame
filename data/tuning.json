@@ -107,7 +107,8 @@
   "bladderFailure": {
     "durationSeconds": 4,
     "reliefAmount": 30,
-    "_source": "ROADMAP_NEXT B2-4 (bladder failure). durationSeconds = how long the sim plays the 'pee' animation before autonomy resumes; reliefAmount (0..100) = bladder's value right after the accident (a minimal top-up, not a full refill — the sim likely still wants a real bathroom trip). game/bladder.ts's checkBladderFailure also uses reliefAmount as the re-arm threshold: the failure won't retrigger from a plain decay back down from the relief top-up, only once bladder climbs back ABOVE reliefAmount (e.g. via the toilet)."
+    "hygieneAfter": 0,
+    "_source": "ROADMAP_NEXT B2-4 (bladder failure). durationSeconds = how long the sim plays the 'pee' animation before autonomy resumes; reliefAmount (0..100) = bladder's value right after the accident (a minimal top-up, not a full refill — the sim likely still wants a real bathroom trip). ROADMAP_NEXT B3-2: hygieneAfter (0..100) = hygiene's value right after the accident too (an absolute set, like reliefAmount — not a delta); 0 = fully soiled. game/bladder.ts's checkBladderFailure re-arms as soon as the failure event COMPLETES (main.ts calls initBladderFailureState's re-arm at that point, ROADMAP_NEXT B3-3) rather than waiting on bladder to climb back above reliefAmount via decay alone, which can never happen without a real bathroom trip."
   },
   "camera": {
     "minZoom": 4,

@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import type { GameData, AssetDef, CharacterTuning } from './data';
-import { classifyMeshPath, createSpriteInstance } from './sprites';
+import { classifyMeshPath, createSpriteInstance, preloadGif } from './sprites';
 import { retargetTrackName, stripPositionTracks, resolveClipName, fileStem } from './fbxclips';
 import { resolveWindowConfig, windowPaneRect } from './windows';
 
@@ -124,6 +124,29 @@ export function attachMesh(group: THREE.Group, def: AssetDef, opts: { allowSprit
     .catch(() => console.warn(`Could not load mesh for "${def.id}" (${url}) — keeping stand-in.`));
 }
 
+/**
+ * ROADMAP_NEXT B3-1(b): warms the mesh/sprite caches for every transient-category asset (fire,
+ * water_puddle, ash, dirty_dishes, pee_puddle, ...) at world-build time — BEFORE any of them are
+ * ever actually spawned by accidents.ts/garbage.ts/bladder.ts. Transient assets are never in
+ * `map.placedObjects` (they're runtime-only), so unlike ordinary furniture they'd otherwise never
+ * hit `loadMeshTemplate`/the gif-decode cache until the moment a designer/player actually
+ * triggered one — the classic "first spawn shows the stand-in box for a beat" symptom the brief
+ * called out for fire specifically. GLB meshes reuse the existing `gltfCache` (loadMeshTemplate
+ * already dedupes by URL, so this is just an eager cache-fill, same pattern as the ordinary
+ * placed-object path); image/GIF meshes go through sprites.ts's own `preloadGif`. Fire-and-forget:
+ * failures are swallowed here and re-reported (with a console.warn) the first time something
+ * actually tries to attach that mesh for real. Called once per `buildWorld()` (i.e. also on every
+ * hot-reload) — cheap no-op on repeats since both caches are keyed by URL.
+ */
+function warmTransientAssets(data: GameData) {
+  for (const def of data.assets.assets) {
+    if (def.category !== 'transient' || !def.mesh) continue;
+    const url = normalizeMeshUrl(def.mesh);
+    if (classifyMeshPath(url) === 'image') preloadGif(url);
+    else loadMeshTemplate(url).catch(() => {}); // real attachMesh call still reports+keeps the stand-in on failure
+  }
+}
+
 const FLOOR_COLORS: Record<string, number> = {
   wood: 0xb08a5a,
   tile: 0xc8cdd4,
@@ -145,6 +168,7 @@ export function buildWorld(data: GameData): THREE.Group {
   root.name = 'world';
   const { map, assets } = data;
   const byId = new Map(assets.assets.map((a) => [a.id, a]));
+  warmTransientAssets(data); // ROADMAP_NEXT B3-1(b): fire/other transients render instantly on first real spawn
 
   // --- floors ---
   for (const floor of map.floors) {

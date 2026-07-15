@@ -182,7 +182,7 @@ export function createSpriteInstance(def: AssetDef, url: string): SpriteInstance
   const canTryGifDecode = isGifPath(url) && typeof (globalThis as { ImageDecoder?: unknown }).ImageDecoder !== 'undefined';
 
   const ready: Promise<void> = canTryGifDecode
-    ? decodeGifFrames(url)
+    ? cachedDecodeGifFrames(url)
         .then(({ frames: decoded, delaysMs }) => {
           frames = decoded;
           durationsMs = frameDurationsMs(delaysMs, cfg.fps);
@@ -230,6 +230,33 @@ export function createSpriteInstance(def: AssetDef, url: string): SpriteInstance
  * the /1000; a codec that reports no duration falls back to a 100ms default per frame rather
  * than throwing.
  */
+// ROADMAP_NEXT B3-1(b): decoded GIF frames are cached per URL (mirrors world.ts's gltfCache for
+// GLB templates) — without this, every spawned instance of the same transient asset (e.g. a
+// second stove fire) re-fetched and re-decoded the SAME gif from scratch, which is also why the
+// FIRST spawn ever always showed the stand-in box for a beat (async decode with nothing warm to
+// reuse). `preloadGif`/`warmSpriteCache` (below) kick this cache off eagerly at world-build time
+// so by the time anything actually spawns, decode is already done or in flight.
+const gifDecodeCache = new Map<string, Promise<{ frames: HTMLCanvasElement[]; delaysMs: number[] }>>();
+
+function cachedDecodeGifFrames(url: string): Promise<{ frames: HTMLCanvasElement[]; delaysMs: number[] }> {
+  let p = gifDecodeCache.get(url);
+  if (!p) {
+    p = decodeGifFrames(url);
+    gifDecodeCache.set(url, p);
+  }
+  return p;
+}
+
+/** Eagerly warms the GIF-decode cache for one URL — fire-and-forget, errors swallowed (the real
+ *  consumer, createSpriteInstance's `ready` promise, still runs its own decode-then-fallback path
+ *  and reports failures there; this is purely a "get a head start" call). No-op for a non-gif URL
+ *  or when `ImageDecoder` isn't available — callers should gate on the same conditions
+ *  `createSpriteInstance` itself uses (see `warmSpriteCache` below, world.ts's one caller). */
+export function preloadGif(url: string): void {
+  if (!isGifPath(url) || typeof (globalThis as { ImageDecoder?: unknown }).ImageDecoder === 'undefined') return;
+  cachedDecodeGifFrames(url).catch(() => {}); // failure is handled by the real decode attempt later
+}
+
 async function decodeGifFrames(url: string): Promise<{ frames: HTMLCanvasElement[]; delaysMs: number[] }> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`);

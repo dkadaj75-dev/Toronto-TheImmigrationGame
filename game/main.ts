@@ -23,7 +23,7 @@ import { createCensorInstance, type CensorInstance } from './censor';
 import { createProgressBarInstance, type ProgressBarInstance } from './progressbar';
 import { computeDurationSeconds, isDurationComplete } from './duration';
 import { AudioManager, loopSoundFor } from './audio';
-import { initBladderFailureState, checkBladderFailure } from './bladder';
+import { initBladderFailureState, checkBladderFailure, rearmBladderFailure } from './bladder';
 
 /** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
  *  a seat-aware action with no eligible seat in range) plays the dedicated 'sit_ground' state
@@ -296,8 +296,20 @@ async function start() {
     const startAssetDef = startAssetId ? data.assets.assets.find((x) => x.id === startAssetId) : undefined;
     const loopPath = loopSoundFor(a.action, startAssetDef);
     if (loopPath) audio.startLoop(startAssetDef?.sound ? `asset:${a.target.uuid}` : `action:${a.action.id}`, loopPath);
+    // ROADMAP_NEXT B3-1(a): a `duration`-timed action (e.g. "cook") rolls its accident risk RIGHT
+    // NOW, at the start of the attempt, instead of waiting for onActionStop — the designer's
+    // complaint was literally "the stove should be able to catch fire WHILE cooking," and rolling
+    // at stop can't do that (the sim isn't even done cooking yet). This is the simplest honest
+    // reading of "appears instantly": one roll per attempt, made as early as possible, with the
+    // fire spawning immediately if it hits. Non-duration actions are UNCHANGED — they still roll
+    // at onActionStop (see below), which for them is the only "the sim is done with this" moment
+    // that exists at all. onActionStop's own roll call is skipped for duration actions so this
+    // never double-rolls the same attempt.
+    if (a.action.duration && startAssetDef) {
+      accidents.rollFor(a.target, startAssetDef, buildEvalContext(), simClockSeconds);
+    }
   };
-  agent.onActionStop = (a) => {
+  agent.onActionStop = (a, completed) => {
     hud.hideActivity();
     anim?.play('idle');
     durationState = null;
@@ -305,10 +317,17 @@ async function start() {
     // both keys are harmless no-ops to stop if they weren't the one actually playing.
     audio.stopLoop(`asset:${a.target.uuid}`);
     audio.stopLoop(`action:${a.action.id}`);
+    // ROADMAP_NEXT B3-4: every side effect below represents "the sim actually finished doing
+    // this" (clearedBy despawn, an onUse accident roll, waste production, resetting every garbage
+    // can) — none of them should fire on a CANCELLED action (player override, a fresh order, a
+    // hot-reload teleport, an interrupt like bladder-failure/panic). `completed` is only ever true
+    // for main.ts's own two natural-finish call sites (primaryNeed threshold below, and the
+    // `duration` timer running out in the render loop) — see sim.ts's stopAction doc comment.
+    if (!completed) return;
     // §7.3: roll for a new accident (normal asset finishing a use) or despawn one (a cleanup
-    // action just completed on an accident instance) — onActionStop fires for every stop
-    // reason (natural auto-stop, player cancel, override), which is deliberate: see
-    // accidents.ts's module doc comment for why "finishes" can't mean "auto-stopped only".
+    // action just completed on an accident instance). Non-duration actions still roll HERE (their
+    // only "the sim is done with this" moment — see accidents.ts's module doc comment); duration
+    // actions already rolled at onActionStart (B3-1a above) and must NOT roll again here.
     const assetId = a.target.userData?.assetId as string | undefined;
     const def = assetId ? data.assets.assets.find((x) => x.id === assetId) : undefined;
     if (def?.category === 'transient') {
@@ -318,7 +337,7 @@ async function start() {
       // clearedBy/maybeCleanup call above — see garbage.ts's depositAtNearestCan doc comment for
       // why this doesn't need a real second walk-leg).
       if (a.action.id === 'clean_up') garbage.depositAtNearestCan([sim.position.x, sim.position.z]);
-    } else if (def) {
+    } else if (def && !a.action.duration) {
       accidents.rollFor(a.target, def, buildEvalContext(), simClockSeconds);
     }
     // ROADMAP_NEXT item 10: waste production lives on the ACTION (not the asset) — independent of
@@ -539,7 +558,11 @@ async function start() {
       // whatever free will would otherwise have picked this tick (matches "the event preempts
       // everything").
       const bladderNow = stats.needs.get('bladder');
-      if (bladderNow !== undefined && checkBladderFailure(bladderFailureState, bladderNow, data.tuning.bladderFailure?.reliefAmount ?? 30)) {
+      // ROADMAP_NEXT B3-3: checkBladderFailure only decides the zero-crossing fire now — re-arming
+      // happens explicitly once the event completes (see peeState's completion below), not from a
+      // later bladder reading (bladder-only decay can never climb back above reliefAmount on its
+      // own, which made the old re-arm condition unreachable in practice).
+      if (bladderNow !== undefined && checkBladderFailure(bladderFailureState, bladderNow)) {
         triggerBladderFailure();
       }
       autonomy.maybeAct(); // free will evaluates on the decay tick
@@ -561,7 +584,7 @@ async function start() {
         // auto-stop when the action's primary need is satisfied
         const pn = active.action.primaryNeed;
         if (pn && (stats.needs.get(pn) ?? 0) >= data.tuning.autonomy.stopAtThreshold) {
-          agent.stopAction();
+          agent.stopAction(true); // ROADMAP_NEXT B3-4: natural finish, not a cancel
         }
       }
     }
@@ -692,7 +715,7 @@ async function start() {
     // reset, etc.), just driven by elapsed time instead of a filled primaryNeed.
     if (durationState && agent.current === durationState.action) {
       durationState.elapsed += sdt;
-      if (isDurationComplete(durationState.elapsed, durationState.totalSeconds)) agent.stopAction();
+      if (isDurationComplete(durationState.elapsed, durationState.totalSeconds)) agent.stopAction(true); // ROADMAP_NEXT B3-4: natural finish, not a cancel
     }
     // ROADMAP_NEXT B2-4: bladder-failure's own tiny timer — same isDurationComplete helper as the
     // §7.11 duration system, ticked on the same sim time (pause freezes the 'pee' animation,
@@ -704,6 +727,12 @@ async function start() {
         peeState = null;
         anim?.play('idle');
         stats.refillNeed('bladder', data.tuning.bladderFailure?.reliefAmount ?? 30);
+        // ROADMAP_NEXT B3-2: pees itself → hygiene takes a hit too (absolute set, same convention
+        // as the bladder relief top-up above — not a delta).
+        stats.refillNeed('hygiene', data.tuning.bladderFailure?.hygieneAfter ?? 0);
+        // ROADMAP_NEXT B3-3: the event has now fully completed (relief applied) — re-arm the latch
+        // so a second failure can fire once bladder decays back to 0 again.
+        rearmBladderFailure(bladderFailureState);
       }
     }
     // ROADMAP_NEXT B2-5: panic's own tiny timer — same isDurationComplete helper, same sim time.

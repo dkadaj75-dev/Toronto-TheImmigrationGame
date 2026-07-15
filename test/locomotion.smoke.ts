@@ -96,5 +96,38 @@ for (let i = 0; i < 300 && !agent5.current; i++) agent5.update(1 / 30);
 const ok5 = !!agent5.current && !(Math.abs(obj5.position.x - 2) < 1e-6 && Math.abs(obj5.position.z - 3) < 1e-6);
 console.log(ok5 ? '  ok  stand action with no usePose.use keeps the approach spot, not the footprint center' : `FAIL pos=${obj5.position.x},${obj5.position.y},${obj5.position.z} current=${!!agent5.current}`);
 
-if (!ok1 || !ok2 || !ok3 || !ok4 || !ok5) process.exit(1);
+// ROADMAP_NEXT B3-4: stopAction's `completed` flag threads through to onActionStop exactly as
+// passed — default (no arg / cancel paths like goTo/orderAction-override/teleportTo) is `false`;
+// an explicit `stopAction(true)` (main.ts's two natural-finish call sites) is reported as `true`.
+const obj6 = new THREE.Group();
+obj6.position.set(1, 0, 1);
+const target6 = new THREE.Group(); target6.position.set(2, 0, 2);
+const agent6 = new SimAgent(obj6, grid, tuning);
+const stops: boolean[] = [];
+agent6.onActionStop = (_a, completed) => stops.push(completed);
+agent6.orderAction({ id: 'sit', name: 'Sit', needGains: {}, skillGains: {}, animation: 'sit', autonomyEligible: false, primaryNeed: null }, target6, target6);
+for (let i = 0; i < 300 && !agent6.current; i++) agent6.update(1 / 30);
+agent6.stopAction(); // default — a cancel
+agent6.orderAction({ id: 'sit', name: 'Sit', needGains: {}, skillGains: {}, animation: 'sit', autonomyEligible: false, primaryNeed: null }, target6, target6);
+for (let i = 0; i < 300 && !agent6.current; i++) agent6.update(1 / 30);
+agent6.stopAction(true); // explicit completion
+const ok6 = stops.length === 2 && stops[0] === false && stops[1] === true;
+console.log(ok6 ? '  ok  stopAction threads completed=false (default/cancel) and completed=true (explicit) to onActionStop' : `FAIL stops=${JSON.stringify(stops)}`);
+
+// goTo/orderAction's own internal stopAction() (overriding an in-progress action) is also a
+// cancel — never reported as completed, even though it's stopping a DIFFERENT action than the one
+// being newly ordered.
+const obj7 = new THREE.Group();
+obj7.position.set(1, 0, 1);
+const target7 = new THREE.Group(); target7.position.set(2, 0, 2);
+const agent7 = new SimAgent(obj7, grid, tuning);
+const stops7: boolean[] = [];
+agent7.onActionStop = (_a, completed) => stops7.push(completed);
+agent7.orderAction({ id: 'sit', name: 'Sit', needGains: {}, skillGains: {}, animation: 'sit', autonomyEligible: false, primaryNeed: null }, target7, target7);
+for (let i = 0; i < 300 && !agent7.current; i++) agent7.update(1 / 30);
+agent7.goTo(1, 1); // interrupts the in-progress sit — a cancel, not a completion
+const ok7 = stops7.length === 1 && stops7[0] === false;
+console.log(ok7 ? '  ok  goTo interrupting an in-progress action reports completed=false' : `FAIL stops7=${JSON.stringify(stops7)}`);
+
+if (!ok1 || !ok2 || !ok3 || !ok4 || !ok5 || !ok6 || !ok7) process.exit(1);
 console.log('locomotion smoke passed');

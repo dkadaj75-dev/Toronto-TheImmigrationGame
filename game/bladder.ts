@@ -7,11 +7,18 @@
 // tick (game/stats.ts's decayTick, clamped 0..100) so it can sit AT 0 for many consecutive ticks
 // once it hits bottom — without a latch, the event would refire every single tick while low.
 // `armed` starts true; the moment bladder reaches 0 while armed, the event fires and the latch
-// disarms (won't fire again). It only re-arms once bladder climbs back ABOVE the failure's own
-// `reliefAmount` (not just "above 0") — per the brief, "not again until bladder > relief": the
-// relief refill itself lands exactly AT reliefAmount, so a normal decay back down to 0 from there
-// (with no bathroom visit in between) must NOT retrigger; only a real need-satisfying top-up
-// (autonomy/player using the toilet) that pushes bladder past reliefAmount re-arms it.
+// disarms (won't fire again).
+//
+// ROADMAP_NEXT B3-3 (bugfix): the original design re-armed only once bladder climbed STRICTLY
+// ABOVE `reliefAmount` via a later `checkBladderFailure` call — but decay only ever moves bladder
+// DOWN, and the failure's own relief top-up lands it exactly AT reliefAmount (by design, so a
+// normal re-decay from there doesn't immediately retrigger). With no other bladder-raising event
+// wired up (no toilet action refills bladder past reliefAmount in this build), the latch could
+// only ever re-arm once, ever — a designer-reported bug ("second failure never fires"). Fixed:
+// `rearmBladderFailure` is called EXPLICITLY once the failure event itself completes (i.e. right
+// after main.ts applies the relief refill) rather than being inferred from a later bladder
+// reading — "the event completing" is itself sufficient justification to re-arm, independent of
+// whether anything else ever pushes bladder back up.
 export interface BladderFailureState {
   armed: boolean;
 }
@@ -23,11 +30,18 @@ export function initBladderFailureState(): BladderFailureState {
 /** Call once per needs-decay tick with the freshly-decayed bladder value. Returns true exactly
  *  on the tick the failure should fire (mutates `state` in place, same convention as the rest of
  *  this codebase's small stateful trackers, e.g. main.ts's durationState). */
-export function checkBladderFailure(state: BladderFailureState, bladderValue: number, reliefAmount: number): boolean {
+export function checkBladderFailure(state: BladderFailureState, bladderValue: number): boolean {
   if (state.armed && bladderValue <= 0) {
     state.armed = false;
     return true;
   }
-  if (bladderValue > reliefAmount) state.armed = true;
   return false;
+}
+
+/** ROADMAP_NEXT B3-3: call once the failure event itself completes (main.ts's peeState timer
+ *  finishing, right after the relief refill is applied) — re-arms the latch so a SECOND failure
+ *  can fire once bladder decays back to 0 again, with no dependency on any other event ever
+ *  raising bladder past reliefAmount. */
+export function rearmBladderFailure(state: BladderFailureState): void {
+  state.armed = true;
 }

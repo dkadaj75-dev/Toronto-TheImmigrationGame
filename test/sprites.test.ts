@@ -6,7 +6,7 @@
 // Run: npx tsx test/sprites.test.ts
 import {
   extensionOf, classifyMeshPath, isGifPath, resolveSpriteConfig,
-  frameDurationsMs, frameIndexAtTime, spritePlaneSize,
+  frameDurationsMs, frameIndexAtTime, spritePlaneSize, preloadGif,
 } from '../game/sprites';
 
 let failures = 0;
@@ -92,4 +92,19 @@ console.log('sprites.test — spritePlaneSize (footprint × meshFit.scale)');
 }
 
 if (failures > 0) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }
+console.log('sprites.test — preloadGif (ROADMAP_NEXT B3-1b: eager GIF-decode cache warm-up)');
+{
+  // Under plain `npx tsx` (Node, no browser globals) there's neither a `document` nor an
+  // `ImageDecoder`, so preloadGif's real decode path can never run here — this only exercises its
+  // guard clauses, which is exactly the point: it must be a no-op (never throw) for every input
+  // this environment can hand it, mirroring createSpriteInstance's own `canTryGifDecode` gate.
+  let threw = false;
+  try {
+    preloadGif('models/fire.png'); // not a .gif — should no-op before ever touching ImageDecoder
+    preloadGif('sounds/fire.gif'); // IS a .gif, but ImageDecoder is undefined in this environment
+    preloadGif('models/fire.gif?v=2'); // query-string variant, same no-op path
+  } catch { threw = true; }
+  check('preloadGif never throws when ImageDecoder is unavailable / path is not a gif', !threw);
+}
+
 console.log('\nALL SPRITES TESTS PASSED');

@@ -72,8 +72,15 @@ export class SimAgent {
   current: ActiveAction | null = null;
   /** fired when a queued action starts (arrival at the object) */
   onActionStart: ((a: ActiveAction) => void) | null = null;
-  /** fired when the current action stops for any reason */
-  onActionStop: ((a: ActiveAction) => void) | null = null;
+  /** fired when the current action stops for any reason. `completed` (ROADMAP_NEXT B3-4)
+   *  distinguishes a NATURAL finish (primaryNeed threshold reached, or a `duration` timer running
+   *  out — see stopAction's doc comment) from a CANCEL (player override, a fresh order replacing
+   *  this one, a hot-reload teleport, an interrupt like bladder-failure/panic) — `false` unless the
+   *  caller explicitly passes `true`. Consumers that should only fire on genuine completion
+   *  (accident clearedBy despawn, waste production, garbage-can deposits/empties — anything that
+   *  represents "the sim actually finished doing this") must check this flag rather than assuming
+   *  every stop means done. */
+  onActionStop: ((a: ActiveAction, completed: boolean) => void) | null = null;
   /** fired when walking starts/stops — drives idle↔walk animation without per-frame polling */
   onLocomotionChange: ((moving: boolean) => void) | null = null;
   /** true once the rigged GLB is attached: real clips replace the transform-pose hacks */
@@ -154,13 +161,18 @@ export class SimAgent {
     return false;
   }
 
-  /** Stop the current action (auto-stop, player override, hot-reload). */
-  stopAction() {
+  /** Stop the current action (auto-stop, player override, hot-reload, an interrupt like bladder
+   *  failure/panic). `completed` (ROADMAP_NEXT B3-4, default false) should be passed `true` ONLY
+   *  by the two call sites that represent the sim genuinely finishing the action on its own terms:
+   *  main.ts's primaryNeed-threshold auto-stop, and its `duration` timer running out. Every other
+   *  caller (goTo, orderAction's own override-stop, teleportTo, hud.onCancelAction, the bladder-
+   *  failure/panic interrupts) leaves it at the default `false` — a cancel, not a completion. */
+  stopAction(completed = false) {
     if (this.current) {
       const a = this.current;
       this.current = null;
       this.restorePose();
-      this.onActionStop?.(a);
+      this.onActionStop?.(a, completed);
     }
   }
 

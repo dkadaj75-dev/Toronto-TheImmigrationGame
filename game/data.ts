@@ -341,8 +341,11 @@ export interface TuningData {
    *  plays the 'pee' animation before control returns to autonomy; reliefAmount (0..100) = the
    *  bladder need's value immediately after the accident (a minimal top-up, not a full refill —
    *  the sim likely still wants a real bathroom trip). game/bladder.ts falls back to `{4, 30}`
-   *  when this whole block (or an individual field) is absent. */
-  bladderFailure?: { durationSeconds?: number; reliefAmount?: number };
+   *  when this whole block (or an individual field) is absent. ROADMAP_NEXT B3-2: hygieneAfter
+   *  (0..100) is the hygiene need's value set (absolute, like reliefAmount is for bladder — not a
+   *  delta) immediately after the accident too — "pees itself" should also make the sim dirty.
+   *  Defaults to 0 (fully soiled) when absent. */
+  bladderFailure?: { durationSeconds?: number; reliefAmount?: number; hygieneAfter?: number };
 }
 
 export interface GameData {
