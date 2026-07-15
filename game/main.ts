@@ -19,6 +19,7 @@ import { AccidentsController, resolveTapAssetId } from './accidents';
 import { GarbageController } from './garbage';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials } from './buymode';
 import { createMarkerInstance, type MarkerInstance } from './marker';
+import { createCensorInstance, type CensorInstance } from './censor';
 import { computeDurationSeconds, isDurationComplete } from './duration';
 import { AudioManager, loopSoundFor } from './audio';
 import { initBladderFailureState, checkBladderFailure } from './bladder';
@@ -144,6 +145,11 @@ async function start() {
   // No character block → no marker, same precedent as the rig itself (`loadCharacter` no-ops
   // without `meshPath`).
   let marker: MarkerInstance | null = data.tuning.character ? createMarkerInstance(scene, sim, data.tuning.character) : null;
+
+  // --- censor pixelation (ROADMAP_NEXT B2-3): always created (no character-block gate — it's a
+  // pure overlay quad, not part of the rig), visibility polled from agent.current every render
+  // frame below rather than event-driven — see game/censor.ts's module doc comment.
+  const censor: CensorInstance = createCensorInstance(scene);
 
   agent.onLocomotionChange = (moving) => {
     if (!anim) return;
@@ -690,6 +696,10 @@ async function start() {
     anim?.update(sdt); // sim time: pause freezes the character, 2×/3× speed it up
     if (marker && data.tuning.character) marker.update(sdt, data.tuning.character); // §7.7: same sim time as the mixer/doors/sprites
     cue.update(dt); // UI feedback stays real-time
+    // ROADMAP_NEXT B2-3: censor quad — real-time dt (see game/censor.ts's module doc comment),
+    // active purely from the current action's own `censor` flag (covers autonomy-driven AND
+    // player-tapped shower/WC use identically, no extra plumbing at either call site).
+    censor.update(dt, sim, !!agent.current?.action.censor, data.tuning.character?.heightMeters ?? 1.55);
     autonomy.update(sdt);
     simTick(sdt);
     hudAcc += dt;

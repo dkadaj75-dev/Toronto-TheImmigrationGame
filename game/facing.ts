@@ -80,30 +80,40 @@ function rotateLocalOffset(offset: [number, number], rotDeg: number): [number, n
 }
 
 /**
- * Sit/lie perch transform for `pose` on an asset instance (PROJECT_CONTEXT.md §7.8, roadmap
- * item 1 fix). Designer override via `def.usePose?.[pose]` (sparse — see AssetDef's doc comment
- * in game/data.ts for the field semantics). With NO usePose set at all, the defaults are:
+ * Sit/lie/use perch transform for `pose` on an asset instance (PROJECT_CONTEXT.md §7.8, roadmap
+ * item 1 fix; `use` added for ROADMAP_NEXT B2-3). Designer override via `def.usePose?.[pose]`
+ * (sparse — see AssetDef's doc comment in game/data.ts for the field semantics). With NO usePose
+ * entry set for `pose`, the defaults are:
  *   - position: the footprint CENTER (instance.pos, offset [0,0]) — the sim perches ON the
  *     asset instead of at its walk-up approach point (useSpotFor), which is the root cause fix
  *     for "sits/lies completely outside the furniture" (roadmap item 1).
- *   - height: tuning.character.sitHeight/lieHeight (unchanged fallback constants from before
- *     this field existed: 0.25/0.55).
+ *   - height: tuning.character.sitHeight/lieHeight for sit/lie (unchanged fallback constants
+ *     from before this field existed: 0.25/0.55); 0 (standing ground level) for `use`.
  *   - facing: worldFacingDeg(instance, def) — for a bed this is the SAME direction as its long
  *     axis (footprint depth is local Z, the axis facingVector treats as "forward"), so a sim
  *     lying down with no override aligns with the bed's long axis by construction.
- * Callers (game/sim.ts's applyPose) still let a seat-aware action's subsequent "face the target"
- * step (e.g. facing the TV) override the returned facingDeg — this function only supplies the
- * PERCH's own default/overridden facing, not the final in-scene rotation.
+ * This function computes the transform for WHATEVER `pose` it's called with — it has no opinion
+ * on whether calling it was appropriate. For `use`, that decision (only snap when the asset
+ * explicitly defines `usePose.use` — no computed default, unlike sit/lie) is the CALLER's job:
+ * game/sim.ts's applyPose only invokes this with `pose: 'use'` when `def.usePose?.use` exists,
+ * so a generic standing action (no `use` entry) never reaches here and keeps its approach spot.
+ * Callers also still let a seat-aware action's subsequent "face the target" step (e.g. facing
+ * the TV) override the returned facingDeg — this function only supplies the PERCH's own
+ * default/overridden facing, not the final in-scene rotation.
  */
 export function usePoseFor(
-  pose: 'sit' | 'lie',
+  pose: 'sit' | 'lie' | 'use',
   instance: FacingInstance,
   def: AssetDef,
   tuning: TuningData,
 ): { pos: [number, number]; y: number; facingDeg: number } {
   const entry = def.usePose?.[pose];
   const [ox, oz] = rotateLocalOffset(entry?.offset ?? [0, 0], instance.rotDeg);
-  const y = entry?.y ?? (pose === 'sit' ? tuning.character?.sitHeight ?? 0.25 : tuning.character?.lieHeight ?? 0.55);
+  const y = entry?.y ?? (
+    pose === 'sit' ? tuning.character?.sitHeight ?? 0.25
+      : pose === 'lie' ? tuning.character?.lieHeight ?? 0.55
+      : 0 // 'use': standing ground level, no tuning constant exists (or is needed) for it
+  );
   const facingDeg = entry?.facingDeg !== undefined
     ? (((instance.rotDeg + entry.facingDeg) % 360) + 360) % 360
     : worldFacingDeg(instance, def);

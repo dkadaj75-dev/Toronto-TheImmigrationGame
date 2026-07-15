@@ -114,6 +114,13 @@ assert(seatCb.checked, 'watch_tv starts seat-aware');
 seatCb.checked = false;
 seatCb.dispatchEvent(new window.Event('change', { bubbles: true }));
 
+// --- censor checkbox (ROADMAP_NEXT B2-3): sparse, absent = false, watch_tv starts unchecked
+const censorCb = doc.querySelector('input[data-path="censor"]');
+assert(censorCb, 'censor checkbox rendered');
+assert(censorCb.checked === false, 'watch_tv starts uncensored');
+censorCb.checked = true;
+censorCb.dispatchEvent(new window.Event('change', { bubbles: true }));
+
 // --- primary need dropdown fed from stats.json, no free-typed ids
 const needSel = doc.querySelector('select[data-path="primaryNeed"]');
 const needOptValues = [...needSel.options].map((o) => o.value);
@@ -172,6 +179,7 @@ assert(savedTv.name === 'Watch Television', 'PUT carries edited name');
 assert(savedTv.animation === 'sit_watch', 'PUT carries edited animation');
 assert(savedTv.autonomyEligible === true, 'PUT carries autonomyEligible round-trip (toggled off then back on)');
 assert(savedTv.seatAware === undefined, 'PUT reflects seatAware turned off (sparse key removed)');
+assert(savedTv.censor === true, 'PUT carries censor turned on (B2-3)');
 assert(savedTv.primaryNeed === 'hunger', 'PUT carries edited primaryNeed');
 assert(!('fun' in savedTv.needGains), 'PUT removed blanked need gain key');
 assert(savedTv.needGains.hunger === 1.5, 'PUT added new need gain key');

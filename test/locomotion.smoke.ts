@@ -60,5 +60,41 @@ const ok3 = !!agent3.current
   && Math.abs(obj.position.x - 3) < 1e-6 && Math.abs(obj.position.z - 3) < 1e-6 && Math.abs(obj.position.y - 0.56) < 1e-6;
 console.log(ok3 ? '  ok  lie perch snaps onto the bed via usePoseFor (roadmap item 1)' : `FAIL pos=${obj.position.x},${obj.position.y},${obj.position.z} current=${!!agent3.current}`);
 
-if (!ok1 || !ok2 || !ok3) process.exit(1);
+// ROADMAP_NEXT B2-3: a STANDING action ("stand_use") on an asset with an explicit usePose.use
+// snaps INSIDE the asset (shower) instead of staying at the walk-up approach spot. Fresh sim
+// object (not reusing `obj`'s end-of-test position) to keep this case independent of ordering.
+const obj4 = new THREE.Group();
+obj4.position.set(1, 0, 1);
+const shower = new THREE.Group();
+shower.position.set(3, 0, 2);
+shower.rotation.y = 0;
+shower.userData.assetId = 'shower';
+const assetsById2 = new Map<string, import('../game/data').AssetDef>([
+  ['shower', { id: 'shower', name: 'Shower', category: 'plumbing', mesh: '', buyPrice: 0, sellPrice: 0, environmentScore: 0, footprint: [1, 1], interactions: ['shower'], usePose: { use: { offset: [0, 0] } } }],
+]);
+const agent4 = new SimAgent(obj4, grid, tuning, assetsById2);
+agent4.orderAction({ id: 'shower', name: 'Shower', needGains: {}, skillGains: {}, animation: 'stand_use', autonomyEligible: false, primaryNeed: null }, shower);
+for (let i = 0; i < 300 && !agent4.current; i++) agent4.update(1 / 30);
+const ok4 = !!agent4.current
+  && Math.abs(obj4.position.x - 3) < 1e-6 && Math.abs(obj4.position.z - 2) < 1e-6 && Math.abs(obj4.position.y - 0) < 1e-6;
+console.log(ok4 ? '  ok  stand-use perch snaps inside the shower via usePoseFor (B2-3)' : `FAIL pos=${obj4.position.x},${obj4.position.y},${obj4.position.z} current=${!!agent4.current}`);
+
+// a generic standing action with NO usePose.use on its asset keeps the approach spot (outside
+// the footprint edge, per useSpotFor) instead of snapping to the footprint center.
+const obj5 = new THREE.Group();
+obj5.position.set(1, 0, 1);
+const stove = new THREE.Group();
+stove.position.set(2, 0, 3);
+stove.rotation.y = 0;
+stove.userData.assetId = 'stove';
+const assetsById3 = new Map<string, import('../game/data').AssetDef>([
+  ['stove', { id: 'stove', name: 'Stove', category: 'appliances', mesh: '', buyPrice: 0, sellPrice: 0, environmentScore: 0, footprint: [1, 1], interactions: ['cook'] }],
+]);
+const agent5 = new SimAgent(obj5, grid, tuning, assetsById3);
+agent5.orderAction({ id: 'cook', name: 'Cook', needGains: {}, skillGains: {}, animation: 'stand_use', autonomyEligible: false, primaryNeed: null }, stove, null, assetsById3.get('stove'));
+for (let i = 0; i < 300 && !agent5.current; i++) agent5.update(1 / 30);
+const ok5 = !!agent5.current && !(Math.abs(obj5.position.x - 2) < 1e-6 && Math.abs(obj5.position.z - 3) < 1e-6);
+console.log(ok5 ? '  ok  stand action with no usePose.use keeps the approach spot, not the footprint center' : `FAIL pos=${obj5.position.x},${obj5.position.y},${obj5.position.z} current=${!!agent5.current}`);
+
+if (!ok1 || !ok2 || !ok3 || !ok4 || !ok5) process.exit(1);
 console.log('locomotion smoke passed');

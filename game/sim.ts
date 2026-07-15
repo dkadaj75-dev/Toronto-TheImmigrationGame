@@ -186,8 +186,13 @@ export class SimAgent {
    * standing at its walk-up approach point, useSpotFor's point OUTSIDE the footprint edge).
    * `perch` also now defaults to `a.target` (not just seat-aware actions' resolved seat) — a
    * plain "Sit" on an armchair has no separate seat object, the armchair itself IS the seat.
-   * Stand actions (prefix neither "sit" nor "lie", e.g. "stand_use") are left alone: the sim
-   * stays at its walked-to spot, which is already a sensible "stand in front of it" position.
+   * Stand actions (prefix neither "sit" nor "lie", e.g. "stand_use") are left alone UNLESS the
+   * asset explicitly defines `usePose.use` (ROADMAP_NEXT B2-3, e.g. the shower — "stand INSIDE
+   * it" instead of at the walk-up approach spot just outside its footprint): see the `use` branch
+   * below. No `usePose.use` on the asset = the sim stays at its walked-to spot, which is already
+   * a sensible "stand in front of it" position for a generic standing action (stove, sink…) — no
+   * computed default for `use`, unlike sit/lie (see game/data.ts's AssetDef.usePose doc comment
+   * for why: most standing actions want the approach spot, not the footprint center).
    */
   private applyPose(a: ActiveAction) {
     if (a.groundSit) {
@@ -201,12 +206,25 @@ export class SimAgent {
     }
     const anim = a.action.animation;
     const pose: 'sit' | 'lie' | null = anim.startsWith('lie') ? 'lie' : anim.startsWith('sit') ? 'sit' : null;
-    if (!pose) return;
     const perch = a.seat ?? a.target;
+    const def = this.assetsById.get(perch.userData?.assetId as string);
+
+    if (!pose) {
+      // Standing action: only snap onto the asset's own explicit `use` perch (B2-3) — no
+      // AssetDef, or an AssetDef with no `usePose.use`, means "keep the approach spot" (return,
+      // nothing to do — the sim is already standing where it walked to).
+      if (!def?.usePose?.use) return;
+      this.savedPose = { pos: this.object.position.clone(), rotX: this.object.rotation.x };
+      const { pos, y, facingDeg } = usePoseFor('use', facingInstanceOf(perch), def, this.tuning);
+      this.object.position.x = pos[0];
+      this.object.position.z = pos[1];
+      this.object.position.y = y;
+      this.object.rotation.y = THREE.MathUtils.degToRad(facingDeg); // may be overridden right after by "face the target" (update())
+      return;
+    }
 
     this.savedPose = { pos: this.object.position.clone(), rotX: this.object.rotation.x };
 
-    const def = this.assetsById.get(perch.userData?.assetId as string);
     if (def) {
       const { pos, y, facingDeg } = usePoseFor(pose, facingInstanceOf(perch), def, this.tuning);
       this.object.position.x = pos[0];

@@ -51,6 +51,13 @@ export interface ActionDef {
    *  immediately. Ships on `leave_for_work`: `{ all: [{ var: "vars.job", neq: null }] }` — hidden
    *  until a future job system sets `vars.job` away from its `simstate.json` default of `null`. */
   conditions?: Condition;
+  /** ROADMAP_NEXT B2-3: Sims-style censor pixelation over the sim while this action is the
+   *  active one — game/censor.ts's live camera-facing quad, shown/hidden purely by polling
+   *  `agent.current?.action.censor` each render frame (no onActionStart/Stop event needed; that
+   *  also means EVERY stop path — natural, cancel, override — hides it uniformly for free, same
+   *  precedent as accidents.ts's "onActionStop fires for every stop reason" doc comment). Sparse,
+   *  absent = false = never censored. Ships true on `shower`/`use_toilet` only. */
+  censor?: boolean;
 }
 export interface InteractionsData { actions: ActionDef[]; }
 
@@ -115,8 +122,17 @@ export interface AssetDef {
    *  lieHeight, same constants used before this field existed). `facingDeg` is model-local like
    *  AssetDef.facingDeg (world facing = instance.rotDeg + this) and overrides the default facing
    *  (worldFacingDeg(instance, def) — for a bed this already points along its long axis, since
-   *  footprint depth is local Z, the same axis facingVector treats as "forward"). */
-  usePose?: { sit?: UsePoseEntry; lie?: UsePoseEntry };
+   *  footprint depth is local Z, the same axis facingVector treats as "forward").
+   *
+   *  `use` (ROADMAP_NEXT B2-3, "stand INSIDE the shower"): same UsePoseEntry shape, for STANDING
+   *  actions (animation prefix neither "sit" nor "lie", e.g. "stand_use") on this asset. Unlike
+   *  sit/lie, there is NO computed default when `use` is absent — a generic standing action
+   *  (cooking at a stove, using a sink) keeps its existing walk-up-and-face-it approach spot
+   *  (useSpotFor, just outside the footprint edge), which already makes sense for furniture the
+   *  sim stands IN FRONT OF. Only assets that explicitly define `usePose.use` (the shower, so the
+   *  sim stands INSIDE its footprint instead of in front of it) opt into the snap — see
+   *  game/sim.ts's applyPose and game/facing.ts's usePoseFor. */
+  usePose?: { sit?: UsePoseEntry; lie?: UsePoseEntry; use?: UsePoseEntry };
   /** ROADMAP_NEXT item 6 (fire spreading): sparse, normal assets only. `chancePercent` is rolled
    *  ONCE per (fire instance, this object) pair, `delaySeconds` after the fire's own spawn time,
    *  provided this object is within `tuning.fire.spreadRadius` of it — see game/accidents.ts's

@@ -120,6 +120,11 @@ const sitFacing = doc.querySelector('input[data-path="usePose.sit.facingDeg"]');
 sitFacing.value = '180';
 sitFacing.dispatchEvent(new window.Event('input', { bubbles: true }));
 
+// --- usePose.use (ROADMAP_NEXT B2-3): same sparse convention, third pose card, never touched
+// here on the couch — should stay absent through save (verified below).
+assert(doc.querySelector('input[data-path="usePose.use.offsetX"]'), 'usePose.use offset fields rendered too (three pose cards: sit/lie/use)');
+assert(doc.querySelector('input[data-path="usePose.use.y"]').value === '', 'usePose.use.y blank when absent');
+
 // --- meshFit: sparse uniform scale, yawOffsetDeg, yOffset
 const scaleInput = doc.querySelector('input[data-path="meshFit.scale"]');
 assert(scaleInput.value === '', 'meshFit.scale blank when absent');
@@ -213,6 +218,15 @@ assert(exteriorCb.checked === true, 'exterior checkbox togglable');
 // --- accidents (§7.3): normal (non-accident) asset gets the risk-config section
 doc.querySelector('[data-asset-id="stove"]').click();
 assert(doc.querySelector('.card h2')?.textContent !== undefined, 'stove editor rendered');
+
+// --- usePose.use round-trip on the stove (ROADMAP_NEXT B2-3): positive case, unlike couch above
+// which only proved the sparse "never touched" absence.
+const useOffsetZ = doc.querySelector('input[data-path="usePose.use.offsetZ"]');
+useOffsetZ.value = '0';
+useOffsetZ.dispatchEvent(new window.Event('input', { bubbles: true }));
+const useY = doc.querySelector('input[data-path="usePose.use.y"]');
+useY.value = '0.05';
+useY.dispatchEvent(new window.Event('input', { bubbles: true }));
 assert(doc.querySelector('select[data-path^="accidents."]') === null, 'no risk rows yet — stove has no accidents[] to start');
 assert(doc.querySelector('input[data-path^="clearedBy:"]') === null, 'normal asset never shows the Cleanup clearedBy checklist');
 
@@ -326,6 +340,11 @@ assert(savedCouch.usePose.sit.offset[0] === 0.3 && savedCouch.usePose.sit.offset
 assert(savedCouch.usePose.sit.y === 0.42, 'PUT carries usePose.sit.y');
 assert(savedCouch.usePose.sit.facingDeg === 180, 'PUT carries usePose.sit.facingDeg');
 assert(!('lie' in savedCouch.usePose), 'untouched usePose.lie stays absent (sparse, per-pose)');
+assert(!('use' in savedCouch.usePose), 'untouched usePose.use stays absent (sparse, per-pose, B2-3)');
+const savedStoveUsePose = saved.assets.find((a) => a.id === 'stove');
+assert(savedStoveUsePose.usePose.use.offset[0] === 0 && savedStoveUsePose.usePose.use.offset[1] === 0, 'PUT carries usePose.use.offset (B2-3)');
+assert(savedStoveUsePose.usePose.use.y === 0.05, 'PUT carries usePose.use.y (B2-3)');
+assert(!('sit' in savedStoveUsePose.usePose), 'stove usePose.use set without ever touching sit (sparse, per-pose)');
 assert(savedCouch.requiresQuestUnlock === true, 'PUT carries checked requiresQuestUnlock');
 assert(savedCouch.icon === '/models/icons/sofa.png', 'PUT carries edited icon path');
 assert(savedCouch.sound === '/sounds/couch_creak.wav', 'PUT carries edited sound path');

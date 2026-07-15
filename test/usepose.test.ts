@@ -109,5 +109,31 @@ console.log('usepose.test — B2-2: negative-offset regression, all 4 instance r
   }
 }
 
+console.log('usepose.test — B2-3: use pose (standing, e.g. the shower)');
+{
+  // usePoseFor itself has no opinion on WHETHER to snap for 'use' (that's sim.ts's applyPose's
+  // job — see game/data.ts's AssetDef.usePose doc comment); it just computes the transform for
+  // whatever pose it's asked for. Height default for 'use' is 0 (standing ground level), unlike
+  // sit/lie's tuning-driven heights.
+  const shower = asset({ footprint: [1, 1], usePose: { use: { offset: [0, 0] } } });
+  const inst: FacingInstance = { pos: [4, 6], rotDeg: 0 };
+  const r = usePoseFor('use', inst, shower, tuning);
+  check('use position defaults to the footprint center (offset [0,0] = inside)', approx(r.pos[0], 4) && approx(r.pos[1], 6), JSON.stringify(r.pos));
+  check('use height defaults to 0 (standing ground level, not sitHeight/lieHeight)', approx(r.y, 0));
+  check('use facing falls back to worldFacingDeg like sit/lie', approx(r.facingDeg, 0));
+
+  // explicit y override still composes normally
+  const showerWithY = asset({ footprint: [1, 1], usePose: { use: { y: 0.02 } } });
+  const rY = usePoseFor('use', inst, showerWithY, tuning);
+  check('use y override applied', approx(rY.y, 0.02));
+
+  // an asset with NO usePose.use at all: usePoseFor still computes something if called directly
+  // (footprint center, y=0, worldFacingDeg) — the "no default" guarantee lives in sim.ts's
+  // applyPose, which simply never calls usePoseFor('use', ...) when this field is absent.
+  const stove = asset({ footprint: [1, 1] });
+  const rNone = usePoseFor('use', inst, stove, tuning);
+  check('use with no usePose.use entry still resolves to footprint-center/0/worldFacingDeg (caller decides whether to invoke this)', approx(rNone.pos[0], 4) && approx(rNone.pos[1], 6) && approx(rNone.y, 0));
+}
+
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }
 console.log('\nall usepose tests passed');

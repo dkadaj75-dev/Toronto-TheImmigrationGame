@@ -292,13 +292,14 @@
       },
       "sound": "sounds/actions/shower.mp3",
       "usePose": {
-        "lie": {
+        "use": {
           "offset": [
             0,
             0
           ]
         }
-      }
+      },
+      "_usePoseNote": "ROADMAP_NEXT B2-3: offset [0,0] = footprint center = inside the shower stall (the shower action's animation is 'stand_use', a standing pose — without this explicit usePose.use entry the sim would stay at its walk-up approach spot just outside the footprint, per usePoseFor's 'no default for use' rule)."
     },
     {
       "id": "sink",

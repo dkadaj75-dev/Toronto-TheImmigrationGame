@@ -58,7 +58,8 @@
       "skillGains": {},
       "animation": "sit_idle",
       "autonomyEligible": true,
-      "primaryNeed": "bladder"
+      "primaryNeed": "bladder",
+      "censor": true
     },
     {
       "id": "shower",
@@ -70,7 +71,8 @@
       "animation": "stand_use",
       "autonomyEligible": true,
       "primaryNeed": "hygiene",
-      "sound": "/sounds/actions/shower.mp3"
+      "sound": "/sounds/actions/shower.mp3",
+      "censor": true
     },
     {
       "id": "wash_hands",
