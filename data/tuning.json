@@ -47,6 +47,12 @@
     "spreadRadius": 2,
     "_source": "ROADMAP_NEXT item 6 (fire destruction + spreading, PROJECT_CONTEXT.md §7.3 follow-on). burnSeconds = how long an unextinguished 'fire' instance burns before destroying its base object (replaced by a 'pile of ash' transient — see assets.json's ash row); spreadRadius (meters, map gridSize=1) = how far a live fire scans each tick for AssetDef.combustibility-bearing neighbors to roll spread onto. Sim-time seconds, same clock as needs decay/gains/doors."
   },
+  "garbage": {
+    "autoTidyRadius": 4,
+    "cleanlinessThreshold": 5,
+    "cleanlinessVar": "cleanliness",
+    "_source": "ROADMAP_NEXT item 10 (garbage/tidying). autoTidyRadius (meters) = how close a non-full garbage can must be for the sim to deposit waste itself instead of dropping a transient; cleanlinessThreshold = the minimum value of the personality stat named by cleanlinessVar (stats.json's personality[] family) required to bother; see game/garbage.ts's decideWasteHandling."
+  },
   "doors": {
     "openSeconds": 0.25,
     "closeSeconds": 0.25,

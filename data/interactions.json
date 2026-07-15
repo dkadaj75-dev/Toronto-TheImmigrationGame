@@ -11,7 +11,9 @@
       "skillGains": {},
       "animation": "sit_eat",
       "autonomyEligible": true,
-      "primaryNeed": "hunger"
+      "primaryNeed": "hunger",
+      "producesWaste": "dirty_dishes",
+      "_wasteNote": "ROADMAP_NEXT item 10 — on stop, either auto-tidied into a nearby non-full garbage can (sim cleanliness personality stat permitting) or dropped as a 'dirty_dishes' transient. See game/garbage.ts."
     },
     {
       "id": "sleep",
@@ -216,6 +218,29 @@
       "autonomyEligible": false,
       "primaryNeed": null,
       "_note": "ROADMAP_NEXT item 9 — placeholder interaction on 'door_exterior' so the exterior door has something to show in its tap menu. Player-only by design; no real effect wired yet (a future slice ties this into funds/vars/quests, and item 10's garbage-emptying interaction shares this door)."
+    },
+    {
+      "id": "clean_up",
+      "name": "Clean up",
+      "needGains": {},
+      "skillGains": {},
+      "animation": "stand_use",
+      "autonomyEligible": false,
+      "primaryNeed": null,
+      "_note": "ROADMAP_NEXT item 10 — cleanup action for the 'dirty_dishes' transient's clearedBy (player-taps-it path). game/main.ts refuses to order this action at all (HUD toast) if every garbage can is full/none exist; on completion it deposits into the nearest non-full can (see game/garbage.ts's depositAtNearestCan)."
+    },
+    {
+      "id": "empty_garbage",
+      "name": "Empty garbage",
+      "needGains": {},
+      "skillGains": {},
+      "animation": "stand_use",
+      "autonomyEligible": false,
+      "primaryNeed": null,
+      "duration": {
+        "baseSeconds": 3
+      },
+      "_note": "ROADMAP_NEXT item 10 (item 4: emptying) — shipped on 'door_exterior'. Resets EVERY garbage can's fill to 0 (game/main.ts's onActionStop, action.id === 'empty_garbage' -> garbage.emptyAll()). Ships a short fixed `duration` purely so it auto-completes via the existing §7.11 timer instead of needing new instant-action plumbing — documented simplification, no carrying-garbage-out animation (same precedent as §7.14's exterior door itself)."
     }
   ]
 }

@@ -3,17 +3,24 @@
 // all gain values come from interactions.json; tick lengths from tuning.json.
 // Nothing here is a constant — design pillar #2.
 
-import type { StatsData, ActionDef, NeedDef, SkillDef } from './data';
+import type { StatsData, ActionDef, NeedDef, SkillDef, PersonalityDef } from './data';
 
 export class SimStats {
   needs = new Map<string, number>();
   skills = new Map<string, number>();
+  /** ROADMAP_NEXT item 10: personality traits are STATIC — seeded from their `default` and never
+   *  touched by decayTick/applyGains (no decay field, no gain source anywhere in interactions.json).
+   *  No HUD bars exist for this family yet (traits don't change, so there's nothing to watch live —
+   *  the designer can request a HUD later); consumers (e.g. game/garbage.ts's waste-handling
+   *  decision) read this map directly by id. */
+  personality = new Map<string, number>();
   private defs: StatsData;
 
   constructor(defs: StatsData) {
     this.defs = defs;
     for (const n of defs.needs) this.needs.set(n.id, n.default);
     for (const s of defs.skills) if (s.enabled !== false) this.skills.set(s.id, s.default);
+    for (const p of defs.personality ?? []) this.personality.set(p.id, p.default);
   }
 
   /** Hot-reload: adopt new definitions, keep current values, add any new stats at their default. */
@@ -21,10 +28,12 @@ export class SimStats {
     this.defs = defs;
     for (const n of defs.needs) if (!this.needs.has(n.id)) this.needs.set(n.id, n.default);
     for (const s of defs.skills) if (s.enabled !== false && !this.skills.has(s.id)) this.skills.set(s.id, s.default);
+    for (const p of defs.personality ?? []) if (!this.personality.has(p.id)) this.personality.set(p.id, p.default);
   }
 
   get needDefs(): NeedDef[] { return this.defs.needs; }
   get skillDefs(): SkillDef[] { return this.defs.skills.filter((s) => s.enabled !== false); }
+  get personalityDefs(): PersonalityDef[] { return this.defs.personality ?? []; }
 
   /** One needs-decay tick. Computed needs (Environment) don't decay — they're set externally. */
   decayTick() {

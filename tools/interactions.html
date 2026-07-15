@@ -276,6 +276,28 @@ function renderEditor() {
   card2b.appendChild(frow('seconds at max skill (blank = ignore skill, fixed base)', atMaxInput));
   root.appendChild(card2b);
 
+  // --- waste (ROADMAP_NEXT item 10): sparse — a transient-asset dropdown fed from assets.json's
+  // transient-category assets (never free-typed, same rule as every other id-referencing dropdown
+  // in this tool), + "(none)". See game/garbage.ts's module doc comment for the full decision flow.
+  const cardWaste = document.createElement('div');
+  cardWaste.className = 'card';
+  cardWaste.innerHTML = '<h2>Waste <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#5f6f93">(optional — spawns this transient asset on stop, unless auto-tidied into a nearby garbage can)</span></h2>';
+  const wasteSel = document.createElement('select');
+  wasteSel.dataset.path = 'producesWaste';
+  const noWasteOpt = document.createElement('option'); noWasteOpt.value = ''; noWasteOpt.textContent = '(none)';
+  wasteSel.appendChild(noWasteOpt);
+  for (const asset of state.assets.assets.filter((x) => x.category === 'transient')) {
+    const o = document.createElement('option'); o.value = asset.id; o.textContent = asset.name;
+    wasteSel.appendChild(o);
+  }
+  wasteSel.value = a.producesWaste ?? '';
+  wasteSel.addEventListener('change', () => {
+    if (!wasteSel.value) delete a.producesWaste; else a.producesWaste = wasteSel.value;
+    markDirty('interactions.json');
+  });
+  cardWaste.appendChild(frow('produces waste (transient asset)', wasteSel));
+  root.appendChild(cardWaste);
+
   // --- need gains (fed from stats.json — no free-typed ids, one row per real need)
   const card3 = document.createElement('div');
   card3.className = 'card';

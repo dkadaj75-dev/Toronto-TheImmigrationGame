@@ -16,6 +16,7 @@ import { Hud } from './ui';
 import { Autonomy } from './autonomy';
 import { QuestRunner, type EvalContext } from './quests';
 import { AccidentsController, resolveTapAssetId } from './accidents';
+import { GarbageController } from './garbage';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials } from './buymode';
 import { createMarkerInstance, type MarkerInstance } from './marker';
 import { computeDurationSeconds, isDurationComplete } from './duration';
@@ -100,6 +101,12 @@ async function start() {
     const inst = buyMode.instanceForObject(obj);
     if (inst) { buyMode.destroyInstance(inst); rebakeNav(); }
   });
+
+  // --- garbage cans + autonomous tidying (ROADMAP_NEXT item 10): scans the live world for placed
+  // garbage-can instances (closures over the same `let world` as accidents, so a hot-reload
+  // rebuild is picked up automatically) and reuses `accidents.spawnTransient` for the "drop it on
+  // the ground" case (dirty_dishes is a transient asset) — see game/garbage.ts's module doc comment.
+  const garbage = new GarbageController(() => data, () => world);
 
   // --- rigged character: swap the capsule's contents for the GLB when it loads.
   // The `sim` group stays the agent's object, so position/rotation/pose logic is untouched.
@@ -247,6 +254,11 @@ async function start() {
     const def = assetId ? data.assets.assets.find((x) => x.id === assetId) : undefined;
     if (def?.category === 'transient') {
       accidents.maybeCleanup(a.target, a.action.id);
+      // ROADMAP_NEXT item 10: clean_up completing on a dirty_dishes transient deposits into the
+      // nearest non-full garbage can (the transient itself is already despawned by the ordinary
+      // clearedBy/maybeCleanup call above — see garbage.ts's depositAtNearestCan doc comment for
+      // why this doesn't need a real second walk-leg).
+      if (a.action.id === 'clean_up') garbage.depositAtNearestCan([sim.position.x, sim.position.z]);
     } else if (def) {
       const ctx: EvalContext = {
         needs: Object.fromEntries(stats.needs),
@@ -258,6 +270,18 @@ async function start() {
       };
       accidents.rollFor(a.target, def, ctx, simClockSeconds);
     }
+    // ROADMAP_NEXT item 10: waste production lives on the ACTION (not the asset) — independent of
+    // the def.category branch above so it applies no matter what the action's target turned out to
+    // be. Reads the sim's current cleanliness personality stat (undefined if that stat was deleted
+    // or predates this slice — garbage.ts's decideWasteHandling treats that as "not clean enough").
+    if (a.action.producesWaste) {
+      const cleanliness = stats.personality.get(garbage.cleanlinessVarId());
+      garbage.handleWaste(a.action.producesWaste, [sim.position.x, sim.position.z], cleanliness, accidents);
+    }
+    // ROADMAP_NEXT item 4/10: the exterior door's `empty_garbage` interaction resets every can —
+    // ships with a fixed `duration` (see interactions.json) so it auto-completes and lands here
+    // exactly like any other duration-timed action, no new instant-action plumbing needed.
+    if (a.action.id === 'empty_garbage') garbage.emptyAll();
   };
   hud.onCancelAction = () => { autonomy.notePlayerCommand(); agent.stopAction(); };
 
@@ -308,6 +332,14 @@ async function start() {
           const resolvedAsset = asset;
           setSelected(target);
           hud.showActionMenu(resolvedAsset, actions, (action) => {
+            // ROADMAP_NEXT item 10 (item 3's "if ALL cans full/none, action refuses with a HUD
+            // toast"): checked BEFORE ordering the walk so the sim never sets off toward a
+            // dirty_dishes pile it can't actually finish cleaning up. Reuses the quest toast
+            // surface per the brief ("reuse quest toast") rather than a new UI component.
+            if (action.id === 'clean_up' && !garbage.hasNonFullCan()) {
+              hud.showQuestToast('No empty garbage can available', 'started', 2500);
+              return;
+            }
             autonomy.notePlayerCommand();
             const seat = action.seatAware ? findSeatFor(world, data, target) : null;
             if (agent.orderAction(action, target, seat, resolvedAsset, action.seatAware)) cue.showAt(target.position.x, target.position.z);

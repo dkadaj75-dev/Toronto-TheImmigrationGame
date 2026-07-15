@@ -325,10 +325,10 @@ function clamp01(v: number): number { return clamp(v, 0, 1); }
 
 // ==================================================================== three.js layer
 
-const ACCIDENT_STANDIN_COLORS: Record<string, number> = { fire: 0xff6a3d, water_puddle: 0x4fa8e0, ash: 0x5a5450 };
-/** Flat (non-upright) stand-ins — puddles and ash both lie on the floor rather than standing up
- *  like a fire block. */
-const FLAT_ACCIDENT_IDS = new Set(['water_puddle', 'ash']);
+const ACCIDENT_STANDIN_COLORS: Record<string, number> = { fire: 0xff6a3d, water_puddle: 0x4fa8e0, ash: 0x5a5450, dirty_dishes: 0xcbb994 };
+/** Flat (non-upright) stand-ins — puddles, ash, and dropped dirty dishes (ROADMAP_NEXT item 10)
+ *  all lie on the floor rather than standing up like a fire block. */
+const FLAT_ACCIDENT_IDS = new Set(['water_puddle', 'ash', 'dirty_dishes']);
 
 /** Footprint-sized colored box, same "instant stand-in" philosophy as world.ts's makeStandIn —
  *  swapped for a GLB clone OR (§7.5) an image/GIF sprite if/when `def.mesh` loads, via world.ts's
@@ -416,6 +416,22 @@ export class AccidentsController {
       if (!rollAccident(chance, rng)) continue;
       this.spawn(risk, targetObj, baseKey, now, rng);
     }
+  }
+
+  /** ROADMAP_NEXT item 10 (garbage/tidying): spawn a transient instance directly, with no risk roll
+   *  and no triggering base object — e.g. game/garbage.ts's "drop a dirty_dishes pile near the sim"
+   *  fallback. Reuses the EXACT same registry + live-group machinery as an onUse-rolled accident
+   *  (hierarchy blocking, hot-reload reattach, clearedBy cleanup via onActionStop, serialize/restore
+   *  all apply identically — a transient spawned this way is otherwise indistinguishable from one
+   *  spawned via risk), per the brief's "reuse the accidents-registry spawn mechanics" instruction.
+   *  `baseKey` is null (no triggering asset instance), so the no-duplicate-stacking rule never
+   *  applies to it. Returns null (and warns) if `assetId` isn't a live transient-category asset. */
+  spawnTransient(assetId: string, pos: [number, number], rotDeg = 0, now?: number): AccidentInstanceRecord | null {
+    const def = this.getData().assets.assets.find((a) => a.id === assetId && a.category === 'transient');
+    if (!def) { console.warn(`spawnTransient: unknown transient asset "${assetId}"`); return null; }
+    const rec = this.registry.spawn({ accidentId: assetId, pos, rotDeg, footprint: def.footprint, placement: 'on', baseKey: null, bornAt: now });
+    this.buildGroup(rec, def);
+    return rec;
   }
 
   private spawn(risk: AccidentRisk, baseObj: THREE.Object3D, baseKey: string, now: number, rng: () => number) {

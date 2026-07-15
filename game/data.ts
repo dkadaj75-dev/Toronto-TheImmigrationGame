@@ -3,7 +3,15 @@
 
 export interface NeedDef { id: string; name: string; color: string; default: number; decayPerTick: number; autonomy: boolean; computed?: string; }
 export interface SkillDef { id: string; name: string; color: string; default: number; max: number; enabled?: boolean; }
-export interface StatsData { needs: NeedDef[]; skills: SkillDef[]; }
+/** ROADMAP_NEXT item 10: a new designer-editable stat family alongside needs/skills — static
+ *  personality TRAITS (no decay, no gains; §2c's Tuning Editor add/remove pattern extends to this
+ *  family the same way it already covers needs/skills). `color` is optional since the HUD has no
+ *  personality bars yet (traits are static, nothing to visualize live today — see stats.ts). */
+export interface PersonalityDef { id: string; name: string; color?: string; default: number; max: number; }
+/** `personality` is optional so pre-existing StatsData fixtures/tests (several construct a literal
+ *  `{needs, skills}` with no third family) stay valid — same precedent as `TuningData.interaction?`
+ *  etc. Absent = no personality traits defined; game code treats it as `[]`. */
+export interface StatsData { needs: NeedDef[]; skills: SkillDef[]; personality?: PersonalityDef[]; }
 
 export interface ActionDef {
   id: string; name: string;
@@ -28,6 +36,11 @@ export interface ActionDef {
    *  game/audio.ts's module doc comment for why this is a separate semantic from AssetDef.sound
    *  (asset sound wins if both are set on the same activity). Absent = no action-driven loop. */
   sound?: string;
+  /** ROADMAP_NEXT item 10 (garbage/tidying): a transient asset id (e.g. "dirty_dishes") spawned
+   *  when this action stops, UNLESS the waste-handling decision (game/garbage.ts's
+   *  decideWasteHandling) auto-tidies it into a nearby garbage can instead. Absent = this action
+   *  produces no waste. See game/garbage.ts's module doc comment for the full decision flow. */
+  producesWaste?: string;
 }
 export interface InteractionsData { actions: ActionDef[]; }
 
@@ -105,6 +118,12 @@ export interface AssetDef {
    *  loop. Wins over the target action's own `sound` if both are set (see game/audio.ts). Absent =
    *  no asset-driven loop. */
   sound?: string;
+  /** ROADMAP_NEXT item 10 (garbage/tidying): sparse, ships on the garbage-can asset only. Real
+   *  capacity — once `capacity` waste units have been deposited (game/garbage.ts's GarbageRegistry
+   *  fill count, keyed per placed instance), the can counts as full and is excluded from
+   *  findNearestNonFullCan until emptied (the exterior door's `empty_garbage` interaction resets
+   *  every can to 0 — see game/garbage.ts). */
+  garbage?: { capacity: number };
 }
 export interface UsePoseEntry { offset?: [number, number]; y?: number; facingDeg?: number; }
 export interface AssetsData { categories: string[]; assets: AssetDef[]; }
@@ -258,6 +277,14 @@ export interface TuningData {
    *  before destroying its base object; spreadRadius (meters) = how far a live fire scans for
    *  combustible neighbors each tick. game/accidents.ts falls back to `{30, 2}` when absent. */
   fire?: { burnSeconds: number; spreadRadius: number };
+  /** Optional so pre-existing tuning fixtures/tests stay valid (same precedent as `fire?` above).
+   *  ROADMAP_NEXT item 10 (garbage/tidying): autoTidyRadius (meters) = how close a non-full garbage
+   *  can must be to the sim for the sim to walk over and deposit waste itself rather than dropping
+   *  a transient; cleanlinessThreshold = the minimum value of the sim's `cleanlinessVar` personality
+   *  stat (default id "cleanliness", stats.json's `personality[]` family — see PersonalityDef)
+   *  required to bother auto-tidying at all. game/garbage.ts falls back to `{4, 5, "cleanliness"}`
+   *  when this whole block (or an individual field) is absent. */
+  garbage?: { autoTidyRadius?: number; cleanlinessThreshold?: number; cleanlinessVar?: string };
   /** which map the game plays: data/maps/<active>.json (set from the Map Editor's "Play this map") */
   map?: { active: string };
   /** optional so pre-rig data files & test fixtures stay valid; game falls back to the capsule */

@@ -507,6 +507,18 @@ function renderEditor() {
       'combustibility.delaySeconds',
     )));
     root.appendChild(cardCombust);
+
+    // --- garbage (ROADMAP_NEXT item 10): sparse, same ensure/prune convention as Combustibility
+    // above — a real can (e.g. "garbage_can") sets a capacity; every other asset leaves it blank.
+    const cardGarbage = document.createElement('div');
+    cardGarbage.className = 'card';
+    cardGarbage.innerHTML = '<h2>Garbage</h2><div class="hint">Set a capacity to make this a garbage can (game/garbage.ts tracks a live fill count per placed instance, up to this many waste units, until the exterior door\'s "Empty garbage" interaction resets it). Leave blank for "not a garbage can".</div>';
+    cardGarbage.appendChild(frow('capacity (waste units)', numInput(
+      () => a.garbage?.capacity,
+      (v) => { if (v === undefined) delete a.garbage; else a.garbage = { capacity: v }; },
+      'garbage.capacity',
+    )));
+    root.appendChild(cardGarbage);
   }
 
   // --- sound (ROADMAP_NEXT item 7): loops for as long as an action targets THIS placed instance

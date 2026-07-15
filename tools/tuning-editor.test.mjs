@@ -13,6 +13,10 @@ const tuning = {
   economy: { startingFunds: 1000, currencyName: 'condobucks' },
   movement: { walkSpeed: 2, arrivalRadius: 0.3 },
   camera: { minZoom: 4, maxZoom: 20, minPitchDeg: 30, maxPitchDeg: 70, panBoundsPadding: 2 },
+  // ROADMAP_NEXT item 10: cleanlinessVar names a personality trait id by a free-typed string
+  // (not a dropdown) — pre-set to "grit" so the personality delete tests below can exercise the
+  // referenced-by-tuning.json branch against the REAL loaded doc (not a stale local fixture var).
+  garbage: { autoTidyRadius: 4, cleanlinessThreshold: 5, cleanlinessVar: 'grit' },
 };
 const stats = {
   needs: [
@@ -184,6 +188,46 @@ doc.querySelector('[data-action="delete-skill"][data-skill-id="gardening"]').cli
 assert(confirmMsg.includes('Watch TV'), 'referenced-skill delete lists the referencing action');
 assert(!doc.querySelector('input[data-path="skill.gardening.default"]'), 'skill "gardening" removed');
 
+// ==================================================================
+// Personality (ROADMAP_NEXT item 10) — same add/remove pattern as needs/skills above, plus
+// referential integrity against tuning.json's garbage.cleanlinessVar (a free-typed string, not
+// interactions.json).
+// ==================================================================
+
+// --- add a trait ("grit" — matches the fixture's pre-set tuning.garbage.cleanlinessVar above):
+// prompt supplies a name, id derived, defaults are sane (no decay/autonomy fields)
+window.prompt = () => 'Grit';
+doc.querySelector('[data-action="add-personality"]').click();
+assert(doc.querySelector('input[data-path="personality.grit.default"]'), 'new personality trait "grit" rendered');
+assert(!doc.querySelector('input[data-path="personality.grit.decayPerTick"]'), 'personality traits have no decay field');
+assert(!doc.querySelector('input[data-path="personality.grit.autonomy"]'), 'personality traits have no autonomy checkbox');
+assert(doc.querySelector('section[data-file="stats.json"]').classList.contains('dirty'), 'adding a trait marks stats.json dirty');
+
+// --- second, unreferenced trait
+window.prompt = () => 'Neatness';
+doc.querySelector('[data-action="add-personality"]').click();
+assert(doc.querySelector('input[data-path="personality.neatness.default"]'), 'new personality trait "neatness" rendered');
+
+// --- delete the unreferenced trait: plain confirm message
+window.confirm = (msg) => { confirmMsg = msg; return true; };
+doc.querySelector('[data-action="delete-personality"][data-personality-id="neatness"]').click();
+assert(confirmMsg.includes('Nothing references it'), 'unreferenced trait gets a plain delete message');
+assert(!doc.querySelector('input[data-path="personality.neatness.default"]'), 'trait "neatness" removed');
+
+// --- cancel a referenced delete: nothing changes
+window.confirm = () => false;
+doc.querySelector('[data-action="delete-personality"][data-personality-id="grit"]').click();
+assert(doc.querySelector('input[data-path="personality.grit.default"]'), 'cancelled delete leaves the trait in place');
+assert(doc.querySelector('input[data-path="garbage.cleanlinessVar"]')?.value === 'grit', 'cancelled delete leaves cleanlinessVar untouched');
+
+// --- confirm a referenced delete: trait removed AND tuning.json's garbage.cleanlinessVar cleared
+window.confirm = (msg) => { confirmMsg = msg; return true; };
+doc.querySelector('[data-action="delete-personality"][data-personality-id="grit"]').click();
+assert(confirmMsg.includes('cleanlinessVar'), 'referenced-trait delete message names the cleanlinessVar reference');
+assert(!doc.querySelector('input[data-path="personality.grit.default"]'), 'trait "grit" removed');
+assert(doc.querySelector('section[data-file="stats.json"]').classList.contains('dirty'), 'deleting a trait marks stats.json dirty');
+assert(!doc.querySelector('input[data-path="garbage.cleanlinessVar"]'), 'referenced delete strips tuning.json\'s garbage.cleanlinessVar field');
+
 // --- save: PUT reflects the final add/remove state
 doc.getElementById('save').click();
 await new Promise((r) => setTimeout(r, 50));
@@ -196,6 +240,8 @@ const watchTv = savedInteractions.actions.find((a) => a.id === 'watch_tv');
 assert(!('fun' in watchTv.needGains), 'PUT interactions.json stripped the dangling needGains.fun key');
 assert(watchTv.primaryNeed === null, 'PUT interactions.json cleared the dangling primaryNeed');
 assert(!('gardening' in watchTv.skillGains), 'PUT interactions.json stripped the dangling skillGains.gardening key');
+assert(!savedStats.personality.some((p) => p.id === 'grit' || p.id === 'neatness'), 'PUT stats.json excludes both deleted personality traits');
+assert(!('cleanlinessVar' in (puts['tuning.json']?.garbage ?? {})), 'PUT tuning.json reflects the stripped cleanlinessVar');
 assert(doc.getElementById('save').disabled, 'save disabled again after saving the add/remove changes');
 
 console.log('ALL TUNING-EDITOR TESTS PASSED');

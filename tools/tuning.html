@@ -193,6 +193,7 @@ function render() {
   root.appendChild(renderTuning());
   root.appendChild(renderNeeds());
   root.appendChild(renderSkills());
+  root.appendChild(renderPersonality());
   root.appendChild(renderActions());
   applySearch();
 }
@@ -291,6 +292,101 @@ function renderSkills() {
     s.appendChild(g);
   }
   return s;
+}
+
+// ROADMAP_NEXT item 10: personality — a THIRD static stat family alongside needs/skills (no decay,
+// no gains — see game/stats.ts's doc comment). Mirrors §2c's needs/skills add/remove exactly:
+// same file (stats.json), same toolbar-button + per-entry-delete pattern, same slugify/uniqueId/
+// randomColor/avgOf helpers. No HUD consumes this family yet (traits are static, nothing to watch
+// live — documented, not an oversight); a future slice can add bars if the designer wants them.
+function renderPersonality() {
+  const file = 'stats.json';
+  const doc = state.docs[file];
+  doc.personality ??= []; // pre-existing stats.json fixtures/saves may predate this family
+  const s = makeSection('Personality', file);
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'toolbar';
+  const addBtn = document.createElement('button');
+  addBtn.textContent = '+ Add trait';
+  addBtn.dataset.action = 'add-personality';
+  addBtn.addEventListener('click', addPersonality);
+  toolbar.appendChild(addBtn);
+  s.appendChild(toolbar);
+
+  if (doc.personality.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'muted';
+    empty.textContent = 'No personality traits yet.';
+    s.appendChild(empty);
+  }
+
+  for (const trait of doc.personality) {
+    const g = document.createElement('div');
+    g.className = 'group';
+    g.innerHTML = `<h3>${trait.name} <span style="color:#5f6f93">(${trait.id})</span></h3>`;
+    g.appendChild(fieldRow('default', `personality.${trait.id}.default`, () => trait.default, (v) => { trait.default = v ?? 0; }, file));
+    g.appendChild(fieldRow('max', `personality.${trait.id}.max`, () => trait.max, (v) => { trait.max = v ?? 10; }, file));
+    g.appendChild(fieldRow('bar color (unused today — no HUD yet)', `personality.${trait.id}.color`, () => trait.color, (v) => { trait.color = v; }, file, 'color'));
+    const del = document.createElement('button');
+    del.className = 'row-delete';
+    del.textContent = 'Delete trait';
+    del.dataset.action = 'delete-personality';
+    del.dataset.personalityId = trait.id;
+    del.addEventListener('click', () => removePersonality(trait.id));
+    g.appendChild(del);
+    s.appendChild(g);
+  }
+  return s;
+}
+
+function addPersonality() {
+  const stats = state.docs['stats.json'];
+  stats.personality ??= [];
+  const name = window.prompt('New personality trait name (e.g. "Ambition"):', '');
+  if (!name || !name.trim()) return;
+  const id = uniqueId(slugify(name), stats.personality.map((p) => p.id));
+  stats.personality.push({
+    id,
+    name: name.trim(),
+    color: randomColor(),
+    default: Math.round(avgOf(stats.personality, 'default', 5)),
+    max: Math.round(avgOf(stats.personality, 'max', 10)),
+  });
+  render(); // rebuilds section DOM — must happen before markDirty (see the needs/skills precedent above)
+  markDirty('stats.json');
+}
+
+// Referential integrity, item 10-specific: tuning.json's tuning.garbage.cleanlinessVar names a
+// personality id by (free-typed, not dropdown-fed) string — deleting that trait would otherwise
+// leave it dangling. Same "warn with names, strip on confirm" policy as needs/skills, just against
+// tuning.json instead of interactions.json.
+function personalityUsages(id) {
+  const tuning = state.docs['tuning.json'];
+  const uses = [];
+  if (tuning.garbage && (tuning.garbage.cleanlinessVar ?? 'cleanliness') === id) uses.push('tuning.garbage.cleanlinessVar (waste auto-tidy gate)');
+  return uses;
+}
+
+function removePersonality(id) {
+  const stats = state.docs['stats.json'];
+  const trait = (stats.personality ?? []).find((p) => p.id === id);
+  if (!trait) return;
+  const uses = personalityUsages(id);
+  const msg = uses.length
+    ? `"${trait.name}" is referenced by: ${uses.join(', ')}.\n\nDeleting it will clear that reference (it falls back to the built-in default "cleanliness", which itself won't exist if you're deleting IT — the waste-tidy gate then always treats the sim as "not clean enough"). Continue?`
+    : `Delete "${trait.name}"? Nothing references it.`;
+  if (!window.confirm(msg)) return;
+  stats.personality = stats.personality.filter((p) => p.id !== id);
+  let alsoTuning = false;
+  if (uses.length) {
+    const tuning = state.docs['tuning.json'];
+    if (tuning.garbage) delete tuning.garbage.cleanlinessVar;
+    alsoTuning = true;
+  }
+  render(); // rebuilds section DOM — must happen before markDirty (see the needs/skills precedent above)
+  markDirty('stats.json');
+  if (alsoTuning) markDirty('tuning.json');
 }
 
 // ------------------------------------------------------------------ add/remove needs & skills

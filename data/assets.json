@@ -380,9 +380,10 @@
         1,
         0.12
       ],
-      "_note": "ROADMAP_NEXT item 9: does NOT open/close on path-crossing (game/doors.ts skips it in the tick, see door.exterior) — it's a tappable interactable instead. Interactions are placeholder for now; the designer will wire real ones later (e.g. 'go to work', tied into item 10's garbage-emptying interaction).",
+      "_note": "ROADMAP_NEXT item 9: does NOT open/close on path-crossing (game/doors.ts skips it in the tick, see door.exterior) — it's a tappable interactable instead. 'leave_for_work' remains a placeholder; 'empty_garbage' (ROADMAP_NEXT item 10) is wired — see game/garbage.ts.",
       "interactions": [
-        "leave_for_work"
+        "leave_for_work",
+        "empty_garbage"
       ],
       "buyable": false,
       "door": {
@@ -458,6 +459,45 @@
       ],
       "buyable": false,
       "_note": "Accidents slice (PROJECT_CONTEXT.md §7.3). Risk-configured on 'shower' (see its accidents[] entry). No real mesh yet — flat box stand-in until models/water_puddle.glb is imported."
+    },
+    {
+      "id": "garbage_can",
+      "name": "Garbage can",
+      "category": "appliances",
+      "mesh": "models/garbage_can.glb",
+      "buyPrice": 90,
+      "sellPrice": 65,
+      "environmentScore": -1,
+      "footprint": [
+        0.6,
+        0.6
+      ],
+      "interactions": [],
+      "garbage": {
+        "capacity": 10
+      },
+      "_note": "ROADMAP_NEXT item 10 — real capacity (game/garbage.ts's GarbageRegistry tracks a live fill count per placed instance, keyed by its THREE.Object3D.uuid). No real mesh yet — box stand-in until models/garbage_can.glb is imported. Buyable (unlike the transient assets below)."
+    },
+    {
+      "id": "dirty_dishes",
+      "name": "Dirty dishes",
+      "category": "transient",
+      "mesh": "models/dirty_dishes.glb",
+      "buyPrice": 0,
+      "sellPrice": 0,
+      "environmentScore": -2,
+      "footprint": [
+        0.5,
+        0.5
+      ],
+      "interactions": [
+        "clean_up"
+      ],
+      "clearedBy": [
+        "clean_up"
+      ],
+      "buyable": false,
+      "_note": "ROADMAP_NEXT item 10 — spawned by game/garbage.ts (via game/accidents.ts's spawnTransient) when 'eat' finishes and no non-full garbage can is close enough / the sim isn't clean enough to bother auto-tidying. Player taps it -> 'clean_up' -> despawns + deposits into the nearest non-full can. No real mesh yet — flat box stand-in until models/dirty_dishes.glb is imported."
     },
     {
       "id": "ash",
