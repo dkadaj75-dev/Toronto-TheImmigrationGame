@@ -64,23 +64,41 @@ check('save disabled while clean', doc.getElementById('save').disabled);
 // ------------------------------------------------------------------ slice 1: objects
 console.log('map-editor.test — objects: hit test / snap / drag / rotate / delete');
 {
-  // sofa at [2,0.5] (condo.json), footprint 3×1, rot 0 → hit at x∈[0.5,3.5], z∈[0,1]
-  check('hit inside footprint', ME.hitTest(2.7, 0.7)?.kind === 'object' && st.doc.placedObjects[ME.hitTest(2.7, 0.7).index].asset === 'sofa');
-  check('miss outside footprint', ME.hitTest(3, 2.2) === null || st.doc.placedObjects[ME.hitTest(3, 2.2).index].asset !== 'sofa');
-  // rotation-aware: bed at [1.5,8] footprint [2,3] rot 90 → spans x∈[0,3], z∈[7,9]
-  const bedHit = ME.hitTest(2.3, 7.2);
+  // Derive expected footprints from whatever the designer currently has placed,
+  // instead of hardcoding coordinates — condo.json's object positions/rotations
+  // have drifted under the test more than once (fixture drift).
+  const footprintOf = (assetId) => assets.assets.find((a) => a.id === assetId).footprint;
+  const spanOf = (p) => {
+    const rot = ((p.rotDeg % 360) + 360) % 360;
+    let [w, d] = footprintOf(p.asset);
+    if (rot === 90 || rot === 270) [w, d] = [d, w];
+    return { xmin: p.pos[0] - w / 2, xmax: p.pos[0] + w / 2, zmin: p.pos[1] - d / 2, zmax: p.pos[1] + d / 2 };
+  };
+  const sofaObj = st.doc.placedObjects.find((p) => p.asset === 'sofa');
+  const sofaSpan = spanOf(sofaObj);
+  const insideSofa = [(sofaSpan.xmin + sofaSpan.xmax) / 2, (sofaSpan.zmin + sofaSpan.zmax) / 2];
+  check('hit inside footprint', ME.hitTest(...insideSofa)?.kind === 'object' && st.doc.placedObjects[ME.hitTest(...insideSofa).index].asset === 'sofa');
+  // a point well outside every placed object's footprint (bounds start at 0,0; go negative)
+  check('miss outside footprint', ME.hitTest(-5, -5) === null);
+  // rotation-aware: bed's footprint swaps axes when rotDeg is 90/270
+  const bedObj = st.doc.placedObjects.find((p) => p.asset === 'bed');
+  const bedSpan = spanOf(bedObj);
+  const insideBed = [(bedSpan.xmin + bedSpan.xmax) / 2, (bedSpan.zmin + bedSpan.zmax) / 2];
+  const bedHit = ME.hitTest(...insideBed);
   check('rotation-aware hit (bed rot 90 swaps axes)', bedHit && st.doc.placedObjects[bedHit.index].asset === 'bed');
   check('snap math (half cell)', ME.snapPoint(1.26, 3.74).join(',') === '1.5,3.5');
   check('rot normalization 450→90', ME.normRot(450) === 90);
   check('rot normalization -90→270', ME.normRot(-90) === 270);
 
   // drag the sofa (pointerdown exactly on its actual pos so the drag anchor offset is 0)
-  pointer('pointerdown', 2, 0.5);
+  pointer('pointerdown', sofaObj.pos[0], sofaObj.pos[1]);
   check('pointerdown selects', st.sel?.kind === 'object' && st.doc.placedObjects[st.sel.index].asset === 'sofa');
-  pointer('pointermove', 4.13, 2.86);
-  pointer('pointerup', 4.13, 2.86);
+  const dragTarget = [sofaObj.pos[0] + 1.63, sofaObj.pos[1] + 2.36];
+  pointer('pointermove', ...dragTarget);
+  pointer('pointerup', ...dragTarget);
+  const expectedSnap = ME.snapPoint(...dragTarget).join(',');
   const sofa = st.doc.placedObjects.find((p) => p.asset === 'sofa');
-  check('drag moves with snap', sofa.pos.join(',') === '4,3', sofa.pos.join(','));
+  check(`drag moves with snap ${expectedSnap}`, sofa.pos.join(',') === expectedSnap, sofa.pos.join(','));
   check('drag marks dirty', st.dirty === true);
 
   // inspector round-trip incl. rot normalization
@@ -142,9 +160,13 @@ console.log('map-editor.test — floors: draw rect / material / edit / delete');
   mat.value = 'carpet';
   mat.dispatchEvent(new window.Event('change', { bubbles: true }));
   check('material editable', st.doc.floors[st.sel.index].material === 'carpet');
-  // click-select an existing floor
-  pointer('pointerdown', 2, 2);
-  check('click selects existing floor', st.sel?.kind === 'floor' && st.doc.floors[st.sel.index].id === 'living');
+  // click-select an existing floor — use the first original floor's own centroid
+  // and its actual id, rather than a hardcoded point/id (floor ids/layout drift).
+  const firstFloor = st.doc.floors[0];
+  const cx = firstFloor.polygon.reduce((s, [x]) => s + x, 0) / firstFloor.polygon.length;
+  const cz = firstFloor.polygon.reduce((s, [, z]) => s + z, 0) / firstFloor.polygon.length;
+  pointer('pointerdown', cx, cz);
+  check('click selects existing floor', st.sel?.kind === 'floor' && st.doc.floors[st.sel.index].id === firstFloor.id);
 }
 
 // ------------------------------------------------------------------ slice 2: walls
