@@ -42,5 +42,23 @@ for (let i = 0; i < 300 && !agent2.current; i++) agent2.update(1 / 30);
 const ok2 = !!agent2.current && Math.abs(obj.position.y - 0.4) < 1e-6;
 console.log(ok2 ? '  ok  sit height from tuning.character (0.4)' : `FAIL y=${obj.position.y} current=${!!agent2.current}`);
 
-if (!ok1 || !ok2) process.exit(1);
+// usePoseFor path: a target WITH an AssetDef on record (roadmap item 1 fix) perches at the
+// asset's footprint center + usePose override, not just the raw tuning height — and a plain
+// "sit" on a non-seat-aware target (no explicit seat passed) now perches too, since applyPose
+// defaults `perch` to `a.target` (previously it silently no-op'd for this exact case).
+const bed = new THREE.Group();
+bed.position.set(3, 0, 3);
+bed.rotation.y = 0;
+bed.userData.assetId = 'bed';
+const assetsById = new Map<string, import('../game/data').AssetDef>([
+  ['bed', { id: 'bed', name: 'Bed', category: 'beds', mesh: '', buyPrice: 0, sellPrice: 0, environmentScore: 0, footprint: [2, 3], interactions: ['sleep'], usePose: { lie: { y: 0.56 } } }],
+]);
+const agent3 = new SimAgent(obj, grid, tuning, assetsById);
+agent3.orderAction({ id: 'sleep', name: 'Sleep', needGains: {}, skillGains: {}, animation: 'lie_sleep', autonomyEligible: false, primaryNeed: null }, bed);
+for (let i = 0; i < 300 && !agent3.current; i++) agent3.update(1 / 30);
+const ok3 = !!agent3.current
+  && Math.abs(obj.position.x - 3) < 1e-6 && Math.abs(obj.position.z - 3) < 1e-6 && Math.abs(obj.position.y - 0.56) < 1e-6;
+console.log(ok3 ? '  ok  lie perch snaps onto the bed via usePoseFor (roadmap item 1)' : `FAIL pos=${obj.position.x},${obj.position.y},${obj.position.z} current=${!!agent3.current}`);
+
+if (!ok1 || !ok2 || !ok3) process.exit(1);
 console.log('locomotion smoke passed');

@@ -388,6 +388,52 @@ function renderEditor() {
   card2.insertAdjacentHTML('beforeend', '<div class="hint">direction the object faces, degrees — world facing = the map instance\'s rot° + this. 0 means the model\'s local +Z (its "front") already points the way rot° faces; only set this if the mesh itself is authored facing a different local axis.</div>');
   root.appendChild(card2);
 
+  // --- sit/lie perch override (§7.8, roadmap item 1): sparse per-pose fields, same
+  // ensure/prune convention as meshFit/door/sprite below. Defaults with nothing set: perch ON
+  // the footprint center at tuning.character.sitHeight/lieHeight, facing worldFacingDeg — see
+  // game/facing.ts's usePoseFor doc comment.
+  const cardPose = document.createElement('div');
+  cardPose.className = 'card';
+  cardPose.innerHTML = '<h2>Sit / lie pose</h2><div class="hint">Where the sim ends up for a sit/lie action on this asset (an "eat"/"sit" action perches "sit"; "sleep"/"nap" perches "lie"). Leave everything blank to use the default: centered on the footprint, tuning\'s sitHeight/lieHeight, facing this asset\'s own facing°. offset is model-local meters from the footprint center (rotates with the instance\'s placement, like a nudge — not a direction); facing° is model-local like the facing° field above (world = instance rot° + this).</div>';
+  const ensurePose = (key) => ((a.usePose ??= {}), (a.usePose[key] ??= {}));
+  const prunePose = (key) => {
+    if (a.usePose?.[key] && Object.keys(a.usePose[key]).length === 0) delete a.usePose[key];
+    if (a.usePose && Object.keys(a.usePose).length === 0) delete a.usePose;
+  };
+  for (const key of ['sit', 'lie']) {
+    const box = document.createElement('div');
+    box.className = 'card';
+    box.style.background = '#141c2e';
+    box.style.margin = '10px 0 0';
+    box.insertAdjacentHTML('afterbegin', `<div class="hint" style="margin:0 0 6px;text-transform:uppercase;letter-spacing:.06em;">${key}</div>`);
+    const offPair = document.createElement('div');
+    offPair.className = 'pair';
+    const offAt = (i) => a.usePose?.[key]?.offset?.[i];
+    const setOff = (i) => (v) => {
+      const cur = Array.isArray(a.usePose?.[key]?.offset) ? [...a.usePose[key].offset] : [0, 0];
+      cur[i] = v ?? 0;
+      ensurePose(key).offset = cur;
+      prunePose(key);
+    };
+    offPair.append(
+      numInput(() => offAt(0), setOff(0), `usePose.${key}.offsetX`),
+      numInput(() => offAt(1), setOff(1), `usePose.${key}.offsetZ`),
+    );
+    box.appendChild(frow('offset x / z (model-local meters, blank = footprint center)', offPair));
+    box.appendChild(frow('height y (meters, blank = tuning default)', numInput(
+      () => a.usePose?.[key]?.y,
+      (v) => { if (v === undefined) { if (a.usePose?.[key]) delete a.usePose[key].y; } else ensurePose(key).y = v; prunePose(key); },
+      `usePose.${key}.y`,
+    )));
+    box.appendChild(frow('facing ° (blank = this asset\'s own facing°)', numInput(
+      () => a.usePose?.[key]?.facingDeg,
+      (v) => { if (v === undefined) { if (a.usePose?.[key]) delete a.usePose[key].facingDeg; } else ensurePose(key).facingDeg = v; prunePose(key); },
+      `usePose.${key}.facingDeg`,
+    )));
+    cardPose.appendChild(box);
+  }
+  root.appendChild(cardPose);
+
   // --- interactions
   const card3 = document.createElement('div');
   card3.className = 'card';

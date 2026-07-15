@@ -98,6 +98,21 @@ assert(doc.getElementById('icon-thumb'), 'icon thumbnail <img> element rendered'
 iconInput.value = '/models/icons/sofa.png';
 iconInput.dispatchEvent(new window.Event('input', { bubbles: true }));
 
+// --- usePose (§7.8, roadmap item 1): sparse per-pose sit/lie override, offset/y/facingDeg
+const sitOffsetX = doc.querySelector('input[data-path="usePose.sit.offsetX"]');
+assert(sitOffsetX, 'usePose.sit offset fields rendered');
+assert(sitOffsetX.value === '', 'usePose.sit.offsetX blank when absent');
+assert(doc.querySelector('input[data-path="usePose.sit.y"]').value === '', 'usePose.sit.y blank when absent');
+assert(doc.querySelector('input[data-path="usePose.lie.y"]').value === '', 'usePose.lie fields rendered too (both poses always shown)');
+sitOffsetX.value = '0.3';
+sitOffsetX.dispatchEvent(new window.Event('input', { bubbles: true }));
+const sitY = doc.querySelector('input[data-path="usePose.sit.y"]');
+sitY.value = '0.42';
+sitY.dispatchEvent(new window.Event('input', { bubbles: true }));
+const sitFacing = doc.querySelector('input[data-path="usePose.sit.facingDeg"]');
+sitFacing.value = '180';
+sitFacing.dispatchEvent(new window.Event('input', { bubbles: true }));
+
 // --- meshFit: sparse uniform scale, yawOffsetDeg, yOffset
 const scaleInput = doc.querySelector('input[data-path="meshFit.scale"]');
 assert(scaleInput.value === '', 'meshFit.scale blank when absent');
@@ -272,12 +287,17 @@ assert(savedCouch.facingDeg === 90, 'PUT carries edited facingDeg');
 assert(savedCouch.meshFit.scale === 1.2, 'PUT carries sparse meshFit.scale');
 assert(savedCouch.meshFit.yawOffsetDeg === 45, 'PUT carries sparse meshFit.yawOffsetDeg');
 assert(!('yOffset' in savedCouch.meshFit), 'untouched meshFit.yOffset stays absent (sparse)');
+assert(savedCouch.usePose.sit.offset[0] === 0.3 && savedCouch.usePose.sit.offset[1] === 0, 'PUT carries usePose.sit.offset');
+assert(savedCouch.usePose.sit.y === 0.42, 'PUT carries usePose.sit.y');
+assert(savedCouch.usePose.sit.facingDeg === 180, 'PUT carries usePose.sit.facingDeg');
+assert(!('lie' in savedCouch.usePose), 'untouched usePose.lie stays absent (sparse, per-pose)');
 assert(savedCouch.requiresQuestUnlock === true, 'PUT carries checked requiresQuestUnlock');
 assert(savedCouch.icon === '/models/icons/sofa.png', 'PUT carries edited icon path');
 const savedLamp = saved.assets.find((a) => a.id === 'lamp');
 assert(!('buyable' in savedLamp), 'new asset has no buyable key (defaults true)');
 assert(!('facingDeg' in savedLamp), 'new asset has no facingDeg key (defaults 0)');
 assert(!('meshFit' in savedLamp), 'new asset has no meshFit key (nothing set)');
+assert(!('usePose' in savedLamp), 'new asset has no usePose key (nothing set)');
 assert(!('requiresQuestUnlock' in savedLamp), 'new asset has no requiresQuestUnlock key (defaults unlocked)');
 assert(!('icon' in savedLamp), 'new asset has no icon key (falls back to initials tile)');
 assert(savedLamp.category === 'door', 'PUT carries lamp\'s category change to door');

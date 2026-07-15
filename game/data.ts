@@ -61,7 +61,19 @@ export interface AssetDef {
    *  "flat" (lies on the floor — puddles, debris, scorch marks). fps overrides an animated GIF's
    *  own per-frame delays if set. See game/sprites.ts. */
   sprite?: { orientation?: 'billboard' | 'flat'; fps?: number };
+  /** Designer-editable sit/lie perch override (§7.8, roadmap item 1 fix). Sparse per-pose: any
+   *  field left unset falls back to the computed default (see game/facing.ts's usePoseFor).
+   *  `offset` is MODEL-LOCAL [x,z] meters from the footprint center, rotated by the placed
+   *  instance's rotDeg (the same "rotation.y=0 → local +Z is forward" convention facingDeg
+   *  uses elsewhere in this file) — NOT worldFacingDeg, since an offset is a placement nudge,
+   *  not a direction. `y` overrides the perch height (absent = tuning.character.sitHeight/
+   *  lieHeight, same constants used before this field existed). `facingDeg` is model-local like
+   *  AssetDef.facingDeg (world facing = instance.rotDeg + this) and overrides the default facing
+   *  (worldFacingDeg(instance, def) — for a bed this already points along its long axis, since
+   *  footprint depth is local Z, the same axis facingVector treats as "forward"). */
+  usePose?: { sit?: UsePoseEntry; lie?: UsePoseEntry };
 }
+export interface UsePoseEntry { offset?: [number, number]; y?: number; facingDeg?: number; }
 export interface AssetsData { categories: string[]; assets: AssetDef[]; }
 
 /** One risk modifier: linear interpolation of a percentage-point contribution from `pctAt0`

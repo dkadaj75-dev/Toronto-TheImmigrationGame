@@ -5,7 +5,8 @@
       "id": "eat",
       "name": "Eat",
       "needGains": {
-        "hunger": 4
+        "hunger": 4,
+        "bladder": -2
       },
       "skillGains": {},
       "animation": "sit_eat",

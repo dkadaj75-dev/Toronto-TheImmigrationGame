@@ -67,6 +67,49 @@ export function isInFrontHalfSpace(point: [number, number], instance: FacingInst
   return (point[0] - instance.pos[0]) * dx + (point[1] - instance.pos[1]) * dz > 0;
 }
 
+/** Rotate a model-local 2D offset [x,z] by an instance's placement rotation (rotDeg), using the
+ *  SAME "rotation.y=0 → local +Z is forward" convention as facingVector/world.ts (a rotation.y
+ *  of θ sends local (lx,lz) to world (lx·cosθ + lz·sinθ, −lx·sinθ + lz·cosθ) — check lx=0,lz=1:
+ *  (sinθ,cosθ), matching facingVector(θ)). Used by usePoseFor for AssetDef.usePose's offset,
+ *  which is a placement nudge (rotates with the instance), not a direction (which would compose
+ *  with facingDeg like worldFacingDeg does). */
+function rotateLocalOffset(offset: [number, number], rotDeg: number): [number, number] {
+  const rad = (rotDeg * Math.PI) / 180;
+  const [lx, lz] = offset;
+  return [lx * Math.cos(rad) + lz * Math.sin(rad), -lx * Math.sin(rad) + lz * Math.cos(rad)];
+}
+
+/**
+ * Sit/lie perch transform for `pose` on an asset instance (PROJECT_CONTEXT.md §7.8, roadmap
+ * item 1 fix). Designer override via `def.usePose?.[pose]` (sparse — see AssetDef's doc comment
+ * in game/data.ts for the field semantics). With NO usePose set at all, the defaults are:
+ *   - position: the footprint CENTER (instance.pos, offset [0,0]) — the sim perches ON the
+ *     asset instead of at its walk-up approach point (useSpotFor), which is the root cause fix
+ *     for "sits/lies completely outside the furniture" (roadmap item 1).
+ *   - height: tuning.character.sitHeight/lieHeight (unchanged fallback constants from before
+ *     this field existed: 0.25/0.55).
+ *   - facing: worldFacingDeg(instance, def) — for a bed this is the SAME direction as its long
+ *     axis (footprint depth is local Z, the axis facingVector treats as "forward"), so a sim
+ *     lying down with no override aligns with the bed's long axis by construction.
+ * Callers (game/sim.ts's applyPose) still let a seat-aware action's subsequent "face the target"
+ * step (e.g. facing the TV) override the returned facingDeg — this function only supplies the
+ * PERCH's own default/overridden facing, not the final in-scene rotation.
+ */
+export function usePoseFor(
+  pose: 'sit' | 'lie',
+  instance: FacingInstance,
+  def: AssetDef,
+  tuning: TuningData,
+): { pos: [number, number]; y: number; facingDeg: number } {
+  const entry = def.usePose?.[pose];
+  const [ox, oz] = rotateLocalOffset(entry?.offset ?? [0, 0], instance.rotDeg);
+  const y = entry?.y ?? (pose === 'sit' ? tuning.character?.sitHeight ?? 0.25 : tuning.character?.lieHeight ?? 0.55);
+  const facingDeg = entry?.facingDeg !== undefined
+    ? (((instance.rotDeg + entry.facingDeg) % 360) + 360) % 360
+    : worldFacingDeg(instance, def);
+  return { pos: [instance.pos[0] + ox, instance.pos[1] + oz], y, facingDeg };
+}
+
 /** The point a seat-aware target (e.g. a TV) is "viewed from" — its position projected
  *  forward along its own facing by tuning.interaction.seatViewDistance. Candidate seats are
  *  ranked by distance to this point (nearest wins), mirroring the Unreal prototype's

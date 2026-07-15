@@ -5,8 +5,8 @@
       "id": "hunger",
       "name": "Hunger",
       "color": "#e74c3c",
-      "default": 70,
-      "decayPerTick": 0.1,
+      "default": 60,
+      "decayPerTick": 0.3,
       "autonomy": true,
       "_decaySource": "PLACEHOLDER — verify vs CLAUDE.md"
     },
@@ -24,7 +24,7 @@
       "name": "Bladder",
       "color": "#f1c40f",
       "default": 70,
-      "decayPerTick": 0.08,
+      "decayPerTick": 0.12,
       "autonomy": true,
       "_decaySource": "PLACEHOLDER — verify vs CLAUDE.md"
     },
@@ -33,7 +33,7 @@
       "name": "Energy",
       "color": "#2ecc71",
       "default": 70,
-      "decayPerTick": 0.05,
+      "decayPerTick": 0.08,
       "autonomy": true,
       "_decaySource": "PLACEHOLDER — verify vs CLAUDE.md"
     },
@@ -60,7 +60,7 @@
       "name": "Hygiene",
       "color": "#1abc9c",
       "default": 70,
-      "decayPerTick": 0.05,
+      "decayPerTick": 0.07,
       "autonomy": true,
       "_decaySource": "PLACEHOLDER — verify vs CLAUDE.md"
     },

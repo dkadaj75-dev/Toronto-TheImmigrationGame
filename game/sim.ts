@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import type { TuningData, ActionDef, GameData, AssetDef } from './data';
 import { findPath, nearestWalkable, worldToCell, cellCenter, type NavGrid } from './nav';
-import { useSpotFor, isInFrontHalfSpace, viewingPointFor, type FacingInstance } from './facing';
+import { useSpotFor, isInFrontHalfSpace, viewingPointFor, usePoseFor, type FacingInstance } from './facing';
 
 /** THREE.Object3D → the {pos, rotDeg} shape facing.ts's pure math works with. Objects are
  *  placed with `obj.rotation.y = degToRad(placed.rotDeg)` and nothing else touches that outer
@@ -75,12 +75,17 @@ export class SimAgent {
     public readonly object: THREE.Group,
     private grid: NavGrid,
     private tuning: TuningData,
+    /** id → AssetDef lookup for perch (sit/lie) pose resolution (usePoseFor) — a plain test
+     *  double with no userData.assetId simply misses this map and gets the pre-usePose
+     *  fallback (see applyPose), so omitting this param is still safe. */
+    private assetsById: Map<string, AssetDef> = new Map(),
   ) {}
 
-  /** Called on data hot-reload so speed/radius tweaks apply live. */
-  retune(tuning: TuningData, grid: NavGrid) {
+  /** Called on data hot-reload so speed/radius/asset-def tweaks apply live. */
+  retune(tuning: TuningData, grid: NavGrid, assetsById?: Map<string, AssetDef>) {
     this.tuning = tuning;
     this.grid = grid;
+    if (assetsById) this.assetsById = assetsById;
   }
 
   /** Route to a world position. Cancels any action. Returns false if no path exists. */
@@ -154,23 +159,43 @@ export class SimAgent {
   // --- stand-in poses (replaced by real animation clips when the rigged GLB lands) ---
   private savedPose: { pos: THREE.Vector3; rotX: number } | null = null;
 
+  /**
+   * Snap onto the seat/target for sit/lie actions (roadmap item 1 fix, PROJECT_CONTEXT.md §7.8):
+   * category is derived from `action.animation`'s "sit_"/"lie_" prefix (interactions.json's
+   * actual values — "sit_idle", "sit_eat", "lie_sleep" — never matched the old EXACT 'sit'/'lie'
+   * comparison, so this never fired for any shipped action; that silent no-op, not pivot math,
+   * was the actual root cause of "sits/lies completely outside the furniture": the sim was left
+   * standing at its walk-up approach point, useSpotFor's point OUTSIDE the footprint edge).
+   * `perch` also now defaults to `a.target` (not just seat-aware actions' resolved seat) — a
+   * plain "Sit" on an armchair has no separate seat object, the armchair itself IS the seat.
+   * Stand actions (prefix neither "sit" nor "lie", e.g. "stand_use") are left alone: the sim
+   * stays at its walked-to spot, which is already a sensible "stand in front of it" position.
+   */
   private applyPose(a: ActiveAction) {
     const anim = a.action.animation;
-    const perch = a.seat ?? (anim === 'lie' ? a.target : null); // sleep lies on the bed itself
-    if (!perch || (anim !== 'sit' && anim !== 'lie')) return;
+    const pose: 'sit' | 'lie' | null = anim.startsWith('lie') ? 'lie' : anim.startsWith('sit') ? 'sit' : null;
+    if (!pose) return;
+    const perch = a.seat ?? a.target;
 
     this.savedPose = { pos: this.object.position.clone(), rotX: this.object.rotation.x };
-    this.object.position.x = perch.position.x;
-    this.object.position.z = perch.position.z;
-    // perch heights come from tuning.character (fallbacks preserve pre-rig behavior)
-    const c = this.tuning.character;
-    if (anim === 'sit') {
-      this.object.position.y = c?.sitHeight ?? 0.25; // perched on the seat
+
+    const def = this.assetsById.get(perch.userData?.assetId as string);
+    if (def) {
+      const { pos, y, facingDeg } = usePoseFor(pose, facingInstanceOf(perch), def, this.tuning);
+      this.object.position.x = pos[0];
+      this.object.position.z = pos[1];
+      this.object.position.y = y;
+      this.object.rotation.y = THREE.MathUtils.degToRad(facingDeg); // may be overridden right after by "face the target" (update())
     } else {
-      this.object.position.y = c?.lieHeight ?? 0.55; // lying on top of the bed
-      // capsule stand-in tips over to "lie"; a rigged lie clip is already horizontal
-      if (!this.hasRig) this.object.rotation.x = -Math.PI / 2;
+      // no AssetDef on record (e.g. a bare test double) — old fallback: snap onto the perch's
+      // raw position at the tuning height, no rotation override.
+      const c = this.tuning.character;
+      this.object.position.x = perch.position.x;
+      this.object.position.z = perch.position.z;
+      this.object.position.y = pose === 'sit' ? (c?.sitHeight ?? 0.25) : (c?.lieHeight ?? 0.55);
     }
+    // capsule stand-in tips over to "lie"; a rigged lie clip is already horizontal
+    if (pose === 'lie' && !this.hasRig) this.object.rotation.x = -Math.PI / 2;
   }
 
   private restorePose() {

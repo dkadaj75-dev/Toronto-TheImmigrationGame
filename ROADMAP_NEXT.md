@@ -2,8 +2,10 @@
 
 Fixes/features requested by the designer, in their priority order ("things to fix before going forward with the roadmap"). Each item = one future slice; lock design details into PROJECT_CONTEXT.md §7-style sections as each is picked up. Conventions: PROJECT_CONTEXT.md §5 (agents read that + this).
 
-## 1. Sit/lie alignment on furniture (BUG, screenshots on record)
+## 1. Sit/lie alignment on furniture (BUG, screenshots on record) — ✅ DONE 2026-07-15, see PROJECT_CONTEXT.md §7.8 as-built
 Character lies/sits completely OUTSIDE the asset (bed: lies across/beyond it; sofa/chair: sits on the floor beside it). Fix via designer-editable **per-asset use-position offset** in the Asset Editor (e.g. `AssetDef.usePose: { offset: [x,z], yOffset?, facingDeg? }` per pose or per interaction) — designer wants to set position/location in the Asset Editor. Likely root cause: sit/lie perch uses instance pivot + tuning perch heights, ignores real mesh geometry of new Fab-style GLBs. Marker sit/lie height limit (§7.7) relates.
+
+Actual root cause turned out to be simpler than the pivot-math guess above: `sim.ts`'s `applyPose` compared `action.animation` against the exact strings `'sit'`/`'lie'`, but shipped actions use clip names like `"sit_idle"`/`"lie_sleep"` — the comparison never matched, so the perch-snap silently never ran and the sim was left standing at its walk-up approach point (outside the footprint). Fixed via prefix matching + `perch` defaulting to the target itself (not just seat-aware resolved seats), plus the requested `AssetDef.usePose?: { sit?, lie? }` schema (sparse offset/y/facingDeg) with sensible footprint-center + tuning-height + long-axis-facing defaults when absent. Shipped `y` overrides for sofa/armchair/dining_chair/bed. See PROJECT_CONTEXT.md §7.8 for full details.
 
 ## 2. Sit-on-ground fallback for Watch TV
 No seat within N meters of the TV (tunable, ~5m default, `tuning.interaction.seatSearchRadius` or similar) → sim sits on the ground where it stands (needs a dedicated `sit_ground` animation state; designer will map a clip in the Animation Mapper).

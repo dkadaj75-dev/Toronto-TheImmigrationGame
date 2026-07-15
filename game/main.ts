@@ -59,8 +59,11 @@ async function start() {
   cam.attach(renderer.domElement);
 
   // --- Phase 1: tap-to-go + needs/skills simulation + actions ---
+  // id → AssetDef lookup for SimAgent's sit/lie perch resolution (usePoseFor, §7.8) — rebuilt
+  // wherever `data` is reassigned (rebakeNav, below) so an Asset Editor usePose edit applies live.
+  const assetsById = (d: GameData) => new Map(d.assets.assets.map((a) => [a.id, a]));
   let grid = bakeNavGrid(data.map, data.assets);
-  const agent = new SimAgent(sim, grid, data.tuning);
+  const agent = new SimAgent(sim, grid, data.tuning, assetsById(data));
   const cue = new ClickCue();
   scene.add(cue.object);
 
@@ -77,7 +80,7 @@ async function start() {
   const buyMode = new BuyModeController(() => data, () => world);
   const rebakeNav = () => {
     grid = bakeNavGrid({ ...data.map, placedObjects: buyMode.effectivePlacedObjectsList() }, data.assets);
-    agent.retune(data.tuning, grid);
+    agent.retune(data.tuning, grid, assetsById(data));
   };
 
   // --- rigged character: swap the capsule's contents for the GLB when it loads.

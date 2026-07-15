@@ -29,7 +29,11 @@
         "sit",
         "nap"
       ],
-      "seatTarget": true
+      "seatTarget": true,
+      "usePose": {
+        "sit": { "y": 0.42 },
+        "lie": { "y": 0.42 }
+      }
     },
     {
       "id": "armchair",
@@ -47,7 +51,10 @@
       "interactions": [
         "sit"
       ],
-      "seatTarget": true
+      "seatTarget": true,
+      "usePose": {
+        "sit": { "y": 0.44 }
+      }
     },
     {
       "id": "dining_chair",
@@ -66,7 +73,10 @@
         "sit",
         "eat"
       ],
-      "seatTarget": true
+      "seatTarget": true,
+      "usePose": {
+        "sit": { "y": 0.46 }
+      }
     },
     {
       "id": "bed",
@@ -86,6 +96,9 @@
       ],
       "meshFit": {
         "yawOffsetDeg": -90
+      },
+      "usePose": {
+        "lie": { "y": 0.56 }
       }
     },
     {

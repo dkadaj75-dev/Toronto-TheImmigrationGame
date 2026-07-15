@@ -267,7 +267,7 @@
       "asset": "tv",
       "pos": [
         1.5,
-        3
+        4.5
       ],
       "rotDeg": 180
     },
@@ -278,14 +278,6 @@
         1.5
       ],
       "rotDeg": 0
-    },
-    {
-      "asset": "bookshelf",
-      "pos": [
-        0.1,
-        5
-      ],
-      "rotDeg": 90
     },
     {
       "asset": "phone",

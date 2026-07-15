@@ -12,7 +12,7 @@
     "_source": "seek/stop from roadmap §2; cooldown PLACEHOLDER — verify vs CLAUDE.md"
   },
   "time": {
-    "secondsPerGameDay": 60,
+    "secondsPerGameDay": 180,
     "nightStartHour": 22,
     "nightEndHour": 6,
     "_source": "60 s/day is the Unreal DEBUG speed — open decision #2, retune in Phase 1"
@@ -23,7 +23,7 @@
   },
   "economy": {
     "startingFunds": 20000,
-    "currencyName": "§",
+    "currencyName": "$",
     "_source": "PLACEHOLDER — open decision #1 (Phase 3)"
   },
   "quests": {
@@ -42,10 +42,10 @@
     "_source": "Asset facing slice (PROJECT_CONTEXT.md §7.2). useSpotClearance = gap beyond an asset's footprint edge for a front-approach stand point; seatViewDistance = how far in front of a seat-aware target (e.g. the TV) the viewing point sits when ranking candidate seats — ports the Unreal prototype's RightVector*400 (~4m) at a web-appropriate scale."
   },
   "doors": {
-    "openSeconds": 0.5,
-    "closeSeconds": 0.5,
+    "openSeconds": 0.25,
+    "closeSeconds": 0.25,
     "openAngleDeg": 90,
-    "triggerDistance": 1.5,
+    "triggerDistance": 1.75,
     "_source": "Doors-as-assets slice (PROJECT_CONTEXT.md §7.1). Defaults for AssetDef.door fields a door instance doesn't override. 0.5s open/close is the designer's requested default; triggerDistance is meters (map gridSize=1 → 1 grid unit = 1m), sized so the door swings open a beat before the sim (walkSpeed 2 m/s) reaches it."
   },
   "character": {
@@ -57,19 +57,16 @@
     "sitHeight": 0.25,
     "lieHeight": 0.55,
     "clipMap": {
-      "idle": "IDLE.001",
       "walk": "Walking",
       "sit": "Sitting",
-      "lie": "mixamo.com",
-      "lie_sleep": "mixamo.com",
-      "sit_eat": "mixamo.com",
-      "sit_idle": "mixamo.com",
-      "stand_use": "mixamo.com"
+      "lie": "Sleeping",
+      "lie_sleep": "Sleeping",
+      "sit_eat": "Sitting",
+      "sit_idle": "Sitting",
+      "stand_use": "Idle",
+      "idle": "Idle"
     },
-    "animationPaths": [
-      "/models/anims/Walking.fbx",
-      "/models/anims/Talking.fbx"
-    ],
+    "animationPaths": [],
     "marker": {
       "mesh": "",
       "yOffset": 0.35,
