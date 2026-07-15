@@ -20,8 +20,10 @@ Implemented in `game/camera.ts`: right-mouse drag (button 2) rotates yaw (`rotat
 ## 4. Rename "accident" category → "transient" assets — ✅ DONE 2026-07-15, see PROJECT_CONTEXT.md §7.3 as-built
 Broaden concept: accidents, food, plates, carried objects the sim puts down anywhere. Rename category + all references (assets.json, buymode exclusion, accidents.ts docs, Asset Editor). Transient = runtime-spawned, not designer-placed, not buyable. Sim carrying/transporting objects is part of this vision (carry system = its own future slice).
 
-## 5. Cooking duration by skill
+## 5. Cooking duration by skill — ✅ DONE 2026-07-15, see PROJECT_CONTEXT.md §7.11 as-built
 Actions can have a **duration** driven by skill (tunable per interaction — e.g. what dish is cooked): `ActionDef.duration?: { base, skillVar, atSkillMax }`-style. Cooking finishes after that time (currently actions run until needs full/cancel). Interaction Editor fields.
+
+Implemented as `ActionDef.duration?: { baseSeconds, skillVar?, atMaxSeconds? }` (new pure `game/duration.ts`, wired into `game/main.ts`'s `onActionStart`/render-loop/`onActionStop`, tracked outside `SimAgent` so sim.ts stays skill-agnostic). Shipped on `cook`: base 60s → 20s at max cooking skill, sim-time seconds (same clock as needs decay/gain, decoupled from the day/night clock) — also gives `cook` (whose `primaryNeed` is `null`) its first natural auto-stop. Interaction Editor gained a sparse Duration card (base/skill-dropdown/at-max). See §7.11 for full details.
 
 ## 6. Fire spreading + destruction
 Unextinguished fire after T seconds (tunable) DESTROYS the burning object → leaves "pile of ash" (transient asset). Nearby objects within radius: per-asset **combustibility** setting = % chance to catch fire when in radius + time for fire to spread to it. Fields on AssetDef (combustibility %, ignition delay), fire behavior in accidents/transients module, ash asset shipped.

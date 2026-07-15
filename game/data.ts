@@ -13,6 +13,16 @@ export interface ActionDef {
   autonomyEligible: boolean;
   primaryNeed: string | null;
   seatAware?: boolean;
+  /** ROADMAP_NEXT item 5: optional completion timer, sim-time seconds (same clock as
+   *  needsDecayTickSeconds/activityGainTickSeconds — pause/2x/3x affect it identically, see
+   *  game/main.ts's `sdt`). Absent = current behavior (runs until primaryNeed satisfied or
+   *  cancelled). When present, the action ALSO auto-completes after this many seconds even if
+   *  primaryNeed never fills (e.g. "cook", whose primaryNeed is null and therefore never
+   *  auto-stopped on its own before this field existed). `skillVar` ("skills.<id>", the same
+   *  namespace as game/quests.ts's resolveVar) + `atMaxSeconds` together lerp the duration from
+   *  `baseSeconds` (skill at 0) to `atMaxSeconds` (skill at its own `max`) via the skill's current
+   *  value; either one absent falls back to a fixed `baseSeconds`. See game/duration.ts. */
+  duration?: { baseSeconds: number; skillVar?: string; atMaxSeconds?: number };
 }
 export interface InteractionsData { actions: ActionDef[]; }
 

@@ -15,7 +15,7 @@ const html = readFileSync(join(here, '../tools/interactions.html'), 'utf8');
 const interactions = {
   actions: [
     { id: 'watch_tv', name: 'Watch TV', needGains: { fun: 2.5 }, skillGains: { english: 0.02 }, animation: 'sit_idle', autonomyEligible: true, primaryNeed: 'fun', seatAware: true },
-    { id: 'cook', name: 'Cook', needGains: {}, skillGains: { cooking: 0.05 }, animation: 'stand_use', autonomyEligible: false, primaryNeed: null },
+    { id: 'cook', name: 'Cook', needGains: {}, skillGains: { cooking: 0.05 }, animation: 'stand_use', autonomyEligible: false, primaryNeed: null, duration: { baseSeconds: 60, skillVar: 'skills.cooking', atMaxSeconds: 20 } },
   ],
 };
 const assets = {
@@ -126,6 +126,26 @@ assert(englishGain.value === '0.02', 'existing skill gain rendered');
 const cookingGainOnTv = doc.querySelector('input[data-path="gain.skill.cooking"]');
 assert(cookingGainOnTv.value === '', 'unrelated skill gain renders blank on watch_tv');
 
+// --- duration fields (ROADMAP_NEXT item 5, §7.11): watch_tv has none, cook ships the worked example
+assert(doc.querySelector('input[data-path="duration.baseSeconds"]').value === '', 'watch_tv has no duration.baseSeconds (blank)');
+assert(doc.querySelector('select[data-path="duration.skillVar"]').value === '', 'watch_tv duration skillVar defaults to none');
+assert(doc.querySelector('input[data-path="duration.atMaxSeconds"]').value === '', 'watch_tv has no duration.atMaxSeconds (blank)');
+
+doc.querySelector('[data-action-id="cook"]').click();
+assert(doc.querySelector('input[data-path="duration.baseSeconds"]').value === '60', 'cook duration.baseSeconds rendered from data');
+const skillVarSel = doc.querySelector('select[data-path="duration.skillVar"]');
+assert(skillVarSel.value === 'skills.cooking', 'cook duration.skillVar rendered from data, options fed from stats.json skills');
+assert([...skillVarSel.options].map((o) => o.value).includes('skills.english'), 'duration skillVar dropdown offers every stats.json skill');
+assert(doc.querySelector('input[data-path="duration.atMaxSeconds"]').value === '20', 'cook duration.atMaxSeconds rendered from data');
+
+// edit base + clear skillVar (prunes only the skillVar key — baseSeconds/atMaxSeconds remain, since
+// the object itself is only pruned when baseSeconds is cleared)
+const durBaseCook = doc.querySelector('input[data-path="duration.baseSeconds"]');
+durBaseCook.value = '50';
+durBaseCook.dispatchEvent(new window.Event('input', { bubbles: true }));
+skillVarSel.value = '';
+skillVarSel.dispatchEvent(new window.Event('change', { bubbles: true }));
+
 // --- save: PUT carries all edits on interactions.json
 doc.getElementById('save').click();
 await new Promise((r) => setTimeout(r, 50));
@@ -140,6 +160,11 @@ assert(savedTv.primaryNeed === 'hunger', 'PUT carries edited primaryNeed');
 assert(!('fun' in savedTv.needGains), 'PUT removed blanked need gain key');
 assert(savedTv.needGains.hunger === 1.5, 'PUT added new need gain key');
 assert(savedTv.skillGains.english === 0.02, 'untouched skill gain preserved');
+assert(savedTv.duration === undefined, 'PUT: watch_tv still has no duration key (never touched)');
+let savedCook = saved.actions.find((a) => a.id === 'cook');
+assert(savedCook.duration.baseSeconds === 50, 'PUT carries edited cook duration.baseSeconds');
+assert(savedCook.duration.skillVar === undefined, 'PUT: clearing skillVar prunes only that key');
+assert(savedCook.duration.atMaxSeconds === 20, 'PUT: untouched atMaxSeconds preserved after skillVar was cleared');
 assert(doc.getElementById('save').disabled, 'save disabled after saving');
 
 // --- add action: prompted name, slugified+uniquified id, sane defaults
@@ -151,6 +176,15 @@ assert(doc.querySelector('input[data-path="name"]').value === 'Do Yoga', 'new ac
 assert(doc.querySelector('input[data-path="animation"]').value === '', 'new action defaults to blank animation');
 assert(doc.querySelector('input[data-path="autonomyEligible"]').checked, 'new action defaults autonomy-eligible');
 assert(doc.querySelector('select[data-path="primaryNeed"]').value === '', 'new action defaults to no primary need');
+assert(doc.querySelector('input[data-path="duration.baseSeconds"]').value === '', 'new action defaults to no duration');
+
+// duration full sparse round trip on the new action: set baseSeconds only, then clear it back —
+// the whole `duration` object should be pruned, not left as an empty {}
+const yogaBase = doc.querySelector('input[data-path="duration.baseSeconds"]');
+yogaBase.value = '15';
+yogaBase.dispatchEvent(new window.Event('input', { bubbles: true }));
+yogaBase.value = '';
+yogaBase.dispatchEvent(new window.Event('input', { bubbles: true }));
 
 // duplicate name → uniquified id, not a collision
 window.prompt = () => 'Do Yoga';
@@ -192,6 +226,7 @@ saved = puts['interactions.json'];
 const savedAssets = puts['assets.json'];
 assert(saved.actions.some((a) => a.id === 'do_yoga'), 'PUT interactions.json includes the surviving new action');
 assert(!saved.actions.some((a) => a.id === 'do_yoga_2' || a.id === 'cook'), 'PUT interactions.json excludes deleted actions');
+assert(saved.actions.find((a) => a.id === 'do_yoga').duration === undefined, 'PUT: do_yoga duration fully pruned after set-then-clear (no stray empty object)');
 assert(savedAssets, 'PUT sent to assets.json (referential integrity strip)');
 const savedStove = savedAssets.assets.find((x) => x.id === 'stove');
 assert(!savedStove.interactions.includes('cook'), 'PUT assets.json stripped the dangling "cook" interaction id from Stove');

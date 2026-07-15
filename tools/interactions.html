@@ -219,6 +219,52 @@ function renderEditor() {
   card2.appendChild(frow('primary need (auto-stop threshold target)', needSel));
   root.appendChild(card2);
 
+  // --- duration (ROADMAP_NEXT item 5, §7.11): sparse, mirrors the seatAware/usePose convention —
+  // the whole `duration` object is absent when no field has been touched, and skillVar/atMaxSeconds
+  // only mean anything together (a base-only duration is a fixed timer with no skill influence).
+  const card2b = document.createElement('div');
+  card2b.className = 'card';
+  card2b.innerHTML = '<h2>Duration <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#5f6f93">(optional — auto-completes after this many sim-time seconds, in addition to primary-need/cancel)</span></h2>';
+  const ensureDuration = () => { if (!a.duration) a.duration = { baseSeconds: 30 }; return a.duration; };
+  const pruneDurationIfEmpty = () => { if (a.duration && a.duration.baseSeconds === undefined) delete a.duration; };
+
+  const baseInput = numInput(
+    () => a.duration?.baseSeconds,
+    (v) => {
+      if (v === undefined) { if (a.duration) delete a.duration.baseSeconds; pruneDurationIfEmpty(); }
+      else ensureDuration().baseSeconds = v;
+    },
+    'duration.baseSeconds',
+  );
+  card2b.appendChild(frow('base seconds (skill at 0, or fixed if no skill below)', baseInput));
+
+  const skillSel = document.createElement('select');
+  skillSel.dataset.path = 'duration.skillVar';
+  const noSkillOpt = document.createElement('option'); noSkillOpt.value = ''; noSkillOpt.textContent = '(none — fixed duration)';
+  skillSel.appendChild(noSkillOpt);
+  for (const skill of state.stats.skills) {
+    const o = document.createElement('option'); o.value = 'skills.' + skill.id; o.textContent = skill.name;
+    skillSel.appendChild(o);
+  }
+  skillSel.value = a.duration?.skillVar ?? '';
+  skillSel.addEventListener('change', () => {
+    if (!skillSel.value) { if (a.duration) delete a.duration.skillVar; pruneDurationIfEmpty(); }
+    else ensureDuration().skillVar = skillSel.value;
+    markDirty('interactions.json');
+  });
+  card2b.appendChild(frow('driven by skill', skillSel));
+
+  const atMaxInput = numInput(
+    () => a.duration?.atMaxSeconds,
+    (v) => {
+      if (v === undefined) { if (a.duration) delete a.duration.atMaxSeconds; pruneDurationIfEmpty(); }
+      else ensureDuration().atMaxSeconds = v;
+    },
+    'duration.atMaxSeconds',
+  );
+  card2b.appendChild(frow('seconds at max skill (blank = ignore skill, fixed base)', atMaxInput));
+  root.appendChild(card2b);
+
   // --- need gains (fed from stats.json — no free-typed ids, one row per real need)
   const card3 = document.createElement('div');
   card3.className = 'card';

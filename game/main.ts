@@ -18,6 +18,7 @@ import { QuestRunner, type EvalContext } from './quests';
 import { AccidentsController, resolveTapAssetId } from './accidents';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials } from './buymode';
 import { createMarkerInstance, type MarkerInstance } from './marker';
+import { computeDurationSeconds, isDurationComplete } from './duration';
 
 /** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
  *  a seat-aware action with no eligible seat in range) plays the dedicated 'sit_ground' state
@@ -193,13 +194,24 @@ async function start() {
   };
   hud.onMenuHidden = () => setSelected(null);
 
+  // --- ROADMAP_NEXT item 5: per-action duration timer (§7.11) ---------------------------------
+  // Computed once when an action starts (skill snapshot at that moment — matches "how long THIS
+  // attempt takes", not a moving target as the skill grows mid-action). Ticked every render frame
+  // on the same sim-time `sdt` as agent.update/doors/anim (pause freezes it, 2x/3x speeds it up).
+  // `action` identity (not just id) is the guard against a stale timer surviving a stop+restart of
+  // the very same action.
+  let durationState: { action: ActiveAction; totalSeconds: number; elapsed: number } | null = null;
+
   agent.onActionStart = (a) => {
     hud.showActivity(a.action.name);
     anim?.play(animStateFor(a)); // unmapped states fall back to idle inside AnimController
+    const totalSeconds = computeDurationSeconds(a.action.duration, Object.fromEntries(stats.skills), data.stats.skills);
+    durationState = totalSeconds !== null ? { action: a, totalSeconds, elapsed: 0 } : null;
   };
   agent.onActionStop = (a) => {
     hud.hideActivity();
     anim?.play('idle');
+    durationState = null;
     // §7.3: roll for a new accident (normal asset finishing a use) or despawn one (a cleanup
     // action just completed on an accident instance) — onActionStop fires for every stop
     // reason (natural auto-stop, player cancel, override), which is deliberate: see
@@ -518,6 +530,13 @@ async function start() {
     applyDayNight(lights, scene, gameSeconds / 3600, data.tuning.time.nightStartHour, data.tuning.time.nightEndHour);
 
     agent.update(sdt);
+    // ROADMAP_NEXT item 5 (§7.11): duration-timed actions auto-complete on the same sim time as
+    // everything else here — a normal stop (triggers onActionStop → accident roll, animation
+    // reset, etc.), just driven by elapsed time instead of a filled primaryNeed.
+    if (durationState && agent.current === durationState.action) {
+      durationState.elapsed += sdt;
+      if (isDurationComplete(durationState.elapsed, durationState.totalSeconds)) agent.stopAction();
+    }
     // doors advance on the same sim time as the animation mixer (pause freezes them mid-swing,
     // 2×/3× speeds them up) — reuses this per-frame loop, no dedicated door timer (§7.1).
     const simPos: [number, number] = [sim.position.x, sim.position.z];
