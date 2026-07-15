@@ -50,3 +50,27 @@ Implemented: new static `personality` stat family (`stats.json`, ships `cleanlin
 - Item 4 (rename) should land BEFORE 6/10 (they build on transients).
 - Item 1 is the top user-facing bug; 8 is quick.
 - Personality parameters (item 10) = new designer-editable stat family → Tuning Editor extension like needs/skills.
+
+---
+
+# Batch 2 — designer requests 2026-07-15 (evening)
+
+## B2-1. Interaction conditions
+Actions get availability CONDITIONS (reuse quest condition evaluator/namespace from game/quests.ts — vars.job etc.): `ActionDef.conditions?: Condition`. Unmet → hidden from tap menu + skipped by autonomy. Ship: `leave_for_work` requires `vars.job neq null` (job system later). Interaction Editor: condition builder (reuse Quest Editor's dropdown-driven builder pattern).
+
+## B2-2. BUG: negative usePose offset rotates wrong
+Negative z offset in Asset Editor sit/lie pose rotates/offsets the wrong direction — investigate usePoseFor's model-local offset rotation math (sign convention for negative values vs instance rot).
+
+## B2-3. Shower positioning + censor blur
+Sim must stand INSIDE the shower (usePose needs a stand/use entry, not just sit/lie). Plus Sims-style censor blur/pixelation over the sim while showering / using WC (flag per action, e.g. `censor: true` on shower/use_toilet).
+
+## B2-4. Bladder failure (pee self)
+Bladder hits 0 → sim pees itself: plays animation (new state, e.g. `pee`), spawns puddle transient at exact sim location, bladder relief minimal + tunable (default 30/100, tuning).
+
+## B2-5. Panic + timed extinguish/clean with progress bar
+- Fire spawns → sims plays `panic` animation state (mappable in Animation Mapper).
+- Extinguish = timed action: baseline 10s (tunable), FASTER with intelligence skill (designer will add the skill), SLOWER with low energy → duration system needs multi-variable modifiers (extend §7.11 duration schema). Progress bar ABOVE the sim (world-anchored, like marker) showing extinguish progress; flame disappears on completion; `extinguishing_fire` animation state.
+- Cleaning/tidying (clean_up, sweep, mop): same treatment — progress bar, timed, auto-stop + transient removal on completion, `cleaning` animation state.
+
+## B2-6. Every action has an animation
+Audit all shipped actions have an `animation` state; Interaction Editor warns when blank; Animation Mapper already lists action states (verify coverage).
