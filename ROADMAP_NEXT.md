@@ -13,7 +13,7 @@ No seat within N meters of the TV (tunable, ~5m default, `tuning.interaction.sea
 ## 3. Camera rotation
 Orbit/rotate camera — desktop (mouse, e.g. right-drag or modifier+drag) AND mobile (two-finger twist). Extends game/camera.ts TouchCamera (currently pan+pinch only).
 
-## 4. Rename "accident" category → "transient" assets
+## 4. Rename "accident" category → "transient" assets — ✅ DONE 2026-07-15, see PROJECT_CONTEXT.md §7.3 as-built
 Broaden concept: accidents, food, plates, carried objects the sim puts down anywhere. Rename category + all references (assets.json, buymode exclusion, accidents.ts docs, Asset Editor). Transient = runtime-spawned, not designer-placed, not buyable. Sim carrying/transporting objects is part of this vision (carry system = its own future slice).
 
 ## 5. Cooking duration by skill

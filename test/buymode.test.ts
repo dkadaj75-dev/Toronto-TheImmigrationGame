@@ -32,7 +32,7 @@ console.log('buymode.test — catalog: isPurchasable / isAffordable');
 {
   check('plain asset (no flags) is purchasable', isPurchasable(asset(), noUnlocks) === true);
   check('buyable:false is never purchasable', isPurchasable(asset({ buyable: false }), allUnlocked) === false);
-  check('category "accident" is never purchasable, even if buyable is absent', isPurchasable(asset({ category: 'accident' }), allUnlocked) === false);
+  check('category "accident" is never purchasable, even if buyable is absent', isPurchasable(asset({ category: 'transient' }), allUnlocked) === false);
   check('category "door" is purchasable unless buyable:false is also set (no special-casing)', isPurchasable(asset({ category: 'door' }), noUnlocks) === true);
   check('door_basic-style buyable:false door is excluded', isPurchasable(asset({ category: 'door', buyable: false }), allUnlocked) === false);
 
@@ -52,11 +52,11 @@ console.log('buymode.test — catalog: purchasableCatalog / catalogCategories / 
     asset({ id: 'sofa', name: 'Sofa', category: 'seating', buyPrice: 450 }),
     asset({ id: 'armchair', name: 'Armchair', category: 'seating', buyPrice: 180 }),
     asset({ id: 'tv', name: 'TV', category: 'electronics', buyPrice: 800 }),
-    asset({ id: 'fire', name: 'Fire', category: 'accident', buyPrice: 0, buyable: false }),
+    asset({ id: 'fire', name: 'Fire', category: 'transient', buyPrice: 0, buyable: false }),
     asset({ id: 'door_basic', name: 'Basic door', category: 'door', buyPrice: 150, buyable: false }),
     asset({ id: 'safe', name: 'Safe', category: 'surfaces', buyPrice: 1000, requiresQuestUnlock: true }),
   ];
-  const data: AssetsData = { categories: ['seating', 'electronics', 'door', 'surfaces', 'accident'], assets };
+  const data: AssetsData = { categories: ['seating', 'electronics', 'door', 'surfaces', 'transient'], assets };
 
   const cat = purchasableCatalog(assets, noUnlocks);
   check('purchasableCatalog excludes accident + door(buyable:false) + locked quest-gated', cat.length === 3 && cat.every((a) => ['sofa', 'armchair', 'tv'].includes(a.id)), JSON.stringify(cat.map((a) => a.id)));
@@ -195,7 +195,7 @@ console.log('buymode.test — BuyOverlay / effectiveInstances / effectivePlacedO
 
   // --- selectability
   check('seating/electronics/beds/decor are selectable for sell', isSelectableForSell(asset({ category: 'seating' })) && isSelectableForSell(asset({ category: 'decor' })));
-  check('accident category is never selectable for sell', isSelectableForSell(asset({ category: 'accident' })) === false);
+  check('accident category is never selectable for sell', isSelectableForSell(asset({ category: 'transient' })) === false);
   check('door category is never selectable for sell', isSelectableForSell(asset({ category: 'door' })) === false);
 
   // --- serialize/restore round-trip
@@ -225,7 +225,7 @@ console.log('buymode.test — attemptBuy / attemptSell / attemptMove (funds + ov
   const bought = attemptBuy(overlay, lamp, [2, 2], 0, 1000, true);
   check('valid buy with enough funds → ok, records an addition', bought.ok === true && overlay.allAdditions.length === 1 && bought.addition?.asset === 'lamp');
 
-  const accident = asset({ id: 'fire', category: 'accident', buyPrice: 0 });
+  const accident = asset({ id: 'fire', category: 'transient', buyPrice: 0 });
   const boughtAccident = attemptBuy(overlay, accident, [3, 3], 0, 1000, true);
   check('accident-category asset can never be bought even if somehow called with valid=true', boughtAccident.ok === false);
 

@@ -198,7 +198,7 @@ async function start() {
     // accidents.ts's module doc comment for why "finishes" can't mean "auto-stopped only".
     const assetId = a.target.userData?.assetId as string | undefined;
     const def = assetId ? data.assets.assets.find((x) => x.id === assetId) : undefined;
-    if (def?.category === 'accident') {
+    if (def?.category === 'transient') {
       accidents.maybeCleanup(a.target, a.action.id);
     } else if (def) {
       const ctx: EvalContext = {
@@ -244,7 +244,7 @@ async function start() {
       // §7.3 hierarchy: tapping a base asset that's currently blocked by an overlapping
       // accident redirects the whole interaction (menu + walk/action target) onto the
       // accident instance itself — "impossible to cook while the kitchen is on fire".
-      if (asset && asset.category !== 'accident') {
+      if (asset && asset.category !== 'transient') {
         const blocking = accidents.blockingFor(hit.object, asset);
         const effectiveId = resolveTapAssetId(asset.id, blocking);
         if (blocking && effectiveId === blocking.accidentId) {

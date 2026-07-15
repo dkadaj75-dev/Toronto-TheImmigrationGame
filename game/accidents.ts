@@ -300,7 +300,7 @@ export class AccidentsController {
   /** §7.3 hierarchy: which accident (if any) currently blocks this base-asset Object3D. Accident
    *  instances never block each other (or themselves). */
   blockingFor(obj: THREE.Object3D, def: AssetDef): AccidentInstanceRecord | null {
-    if (def.category === 'accident') return null;
+    if (def.category === 'transient') return null;
     const pos: [number, number] = [obj.position.x, obj.position.z];
     const rotDeg = THREE.MathUtils.radToDeg(obj.rotation.y);
     return this.registry.findBlocking(pos, rotDeg, def.footprint);
@@ -317,7 +317,7 @@ export class AccidentsController {
    * quests.ts's resolveVar (§7.3: "reuse game/quests.ts's path resolution, don't reinvent").
    */
   rollFor(targetObj: THREE.Object3D, def: AssetDef, ctx: EvalContext, rng: () => number = Math.random) {
-    if (def.category === 'accident' || !def.accidents?.length) return;
+    if (def.category === 'transient' || !def.accidents?.length) return;
     const baseKey = targetObj.uuid;
     const stats = this.getData().stats;
     for (const risk of def.accidents) {
@@ -331,7 +331,7 @@ export class AccidentsController {
 
   private spawn(risk: AccidentRisk, baseObj: THREE.Object3D, baseKey: string, rng: () => number) {
     const data = this.getData();
-    const accidentDef = data.assets.assets.find((a) => a.id === risk.accidentId && a.category === 'accident');
+    const accidentDef = data.assets.assets.find((a) => a.id === risk.accidentId && a.category === 'transient');
     if (!accidentDef) { console.warn(`accident risk references unknown accident asset "${risk.accidentId}"`); return; }
     const grid = this.getGrid();
     const basePos: [number, number] = [baseObj.position.x, baseObj.position.z];

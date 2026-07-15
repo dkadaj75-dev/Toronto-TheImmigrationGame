@@ -206,14 +206,14 @@ function accidentVarOptions() {
   ];
 }
 
-// --- accidents risk section (§7.3), normal (non-accident) assets only.
+// --- accidents risk section (§7.3), normal (non-transient) assets only.
 function accidentAssetOptions() {
-  return state.assets.assets.filter((x) => x.category === 'accident').map((x) => ({ value: x.id, label: x.name }));
+  return state.assets.assets.filter((x) => x.category === 'transient').map((x) => ({ value: x.id, label: x.name }));
 }
 function renderAccidentsCard(a) {
   const card = document.createElement('div');
   card.className = 'card';
-  card.innerHTML = '<h2>Accidents</h2><div class="hint">What can go wrong while this asset is used, and how likely — accidentId options are accident-category assets only.</div>';
+  card.innerHTML = '<h2>Accidents</h2><div class="hint">What can go wrong while this asset is used, and how likely — accidentId options are transient-category assets only.</div>';
   const accOpts = accidentAssetOptions();
   const risks = a.accidents ?? [];
 
@@ -224,7 +224,7 @@ function renderAccidentsCard(a) {
     box.style.margin = '10px 0 0';
 
     box.appendChild(frow('accident', selectInput(
-      accOpts.length ? accOpts : [{ value: risk.accidentId ?? '', label: '(no accident-category assets yet)' }],
+      accOpts.length ? accOpts : [{ value: risk.accidentId ?? '', label: '(no transient-category assets yet)' }],
       () => risk.accidentId, (v) => { risk.accidentId = v; }, `accidents.${i}.accidentId`,
     )));
     box.appendChild(frow('trigger', selectInput([{ value: 'onUse', label: 'onUse' }], () => 'onUse', () => { risk.trigger = 'onUse'; }, `accidents.${i}.trigger`)));
@@ -457,10 +457,10 @@ function renderEditor() {
   card3.appendChild(checks);
   root.appendChild(card3);
 
-  // --- accidents (§7.3): accident-category assets get ONLY the clearedBy multi-select
+  // --- accidents (§7.3): transient-category assets get ONLY the clearedBy multi-select
   // ("nothing special... beyond the clearedBy action multi-select" — spec verbatim); every
   // other asset gets the risk-config section instead. Never both on the same asset.
-  if (a.category === 'accident') {
+  if (a.category === 'transient') {
     const cardCleared = document.createElement('div');
     cardCleared.className = 'card';
     cardCleared.innerHTML = '<h2>Cleanup</h2><div class="hint">Which of this accident\'s own interactions (above), once completed on it, despawn it.</div>';

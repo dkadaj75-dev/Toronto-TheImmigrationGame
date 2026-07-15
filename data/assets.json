@@ -9,7 +9,7 @@
     "surfaces",
     "decor",
     "door",
-    "accident"
+    "transient"
   ],
   "assets": [
     {
@@ -338,7 +338,7 @@
     {
       "id": "fire",
       "name": "Fire",
-      "category": "accident",
+      "category": "transient",
       "mesh": "models/fire.gif",
       "buyPrice": 0,
       "sellPrice": 0,
@@ -359,7 +359,7 @@
     {
       "id": "water_puddle",
       "name": "Water puddle",
-      "category": "accident",
+      "category": "transient",
       "mesh": "models/water_puddle.glb",
       "buyPrice": 0,
       "sellPrice": 0,

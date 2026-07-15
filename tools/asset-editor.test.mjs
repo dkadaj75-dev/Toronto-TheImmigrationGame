@@ -8,13 +8,13 @@ import { JSDOM } from 'jsdom';
 const html = readFileSync(new URL('../tools/assets.html', import.meta.url), 'utf8');
 
 const assets = {
-  categories: ['seating', 'electronics', 'door', 'appliances', 'accident'],
+  categories: ['seating', 'electronics', 'door', 'appliances', 'transient'],
   assets: [
     { id: 'couch', name: 'Couch', category: 'seating', mesh: '/models/couch.glb', buyPrice: 500, sellPrice: 375, environmentScore: 5, footprint: [2, 1], seats: 3, seatTarget: true, interactions: [] },
     { id: 'tv', name: 'TV', category: 'electronics', mesh: '/models/tv.glb', buyPrice: 800, sellPrice: 600, environmentScore: 8, footprint: [1, 1], interactions: ['watch_tv'] },
     { id: 'stove', name: 'Stove', category: 'appliances', mesh: '/models/stove.glb', buyPrice: 400, sellPrice: 300, environmentScore: 1, footprint: [1, 1], interactions: ['cook'] },
-    { id: 'fire', name: 'Fire', category: 'accident', mesh: '/models/fire.glb', buyPrice: 0, sellPrice: 0, environmentScore: -10, footprint: [1, 1], interactions: ['extinguish'], clearedBy: ['extinguish'], buyable: false },
-    { id: 'water_puddle', name: 'Water puddle', category: 'accident', mesh: '/models/water_puddle.glb', buyPrice: 0, sellPrice: 0, environmentScore: -5, footprint: [1, 1], interactions: [], buyable: false },
+    { id: 'fire', name: 'Fire', category: 'transient', mesh: '/models/fire.glb', buyPrice: 0, sellPrice: 0, environmentScore: -10, footprint: [1, 1], interactions: ['extinguish'], clearedBy: ['extinguish'], buyable: false },
+    { id: 'water_puddle', name: 'Water puddle', category: 'transient', mesh: '/models/water_puddle.glb', buyPrice: 0, sellPrice: 0, environmentScore: -5, footprint: [1, 1], interactions: [], buyable: false },
   ],
 };
 const interactions = { actions: [

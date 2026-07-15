@@ -38,12 +38,12 @@ import { attachMesh, makeStandIn } from './world';
 
 // ==================================================================== catalog (pure)
 
-/** §7.6 catalog rule, verbatim: purchasable iff not explicitly unbuyable, not an accident
- *  (belt-and-braces — accidents already ship buyable:false, but never rely on that alone), and
+/** §7.6 catalog rule, verbatim: purchasable iff not explicitly unbuyable, not transient
+ *  (belt-and-braces — transient assets already ship buyable:false, but never rely on that alone), and
  *  either not quest-gated or already unlocked. Doors are excluded purely because door_basic ships
  *  `buyable:false` — no category special-case, per spec ("no special-casing"). */
 export function isPurchasable(def: AssetDef, isUnlocked: (assetId: string) => boolean): boolean {
-  if (def.category === 'accident') return false;
+  if (def.category === 'transient') return false;
   if (def.buyable === false) return false;
   if (def.requiresQuestUnlock && !isUnlocked(def.id)) return false;
   return true;
@@ -311,13 +311,13 @@ export function effectivePlacedObjects(instances: EffectiveInstance[]): PlacedLi
   return instances.map((i) => ({ asset: i.asset, pos: i.pos, rotDeg: i.rotDeg }));
 }
 
-/** §7.6: "Accident instances and door-category assets are not selectable/sellable in buy mode."
- *  Accident instances never appear in `effectiveInstances` at all (they're never in
- *  map.placedObjects, only AccidentRegistry's own separate runtime list) — this covers the
+/** §7.6: "Transient-category instances (accidents, etc.) and door-category assets are not
+ *  selectable/sellable in buy mode." Transient instances never appear in `effectiveInstances` at
+ *  all (they're never in map.placedObjects, only AccidentRegistry's own separate runtime list) — this covers the
  *  door-category half of the rule, belt-and-braces against a future designer placing one via
  *  placedObjects instead of map.doors[]. */
 export function isSelectableForSell(def: AssetDef): boolean {
-  return def.category !== 'accident' && def.category !== 'door';
+  return def.category !== 'transient' && def.category !== 'door';
 }
 
 // ==================================================================== buy/sell/move flows (pure)
@@ -331,8 +331,8 @@ export interface BuyResult { ok: boolean; reason?: BuyFailReason; addition?: Ove
  *  so a failed attempt never touches the balance. */
 export function attemptBuy(overlay: BuyOverlay, def: AssetDef, pos: [number, number], rotDeg: number, funds: number, valid: boolean): BuyResult {
   // defensive: shouldn't be reachable from the catalog UI (which already filters via isPurchasable),
-  // but never let a stale reference to an unbuyable/accident asset slip a purchase through.
-  if (def.buyable === false || def.category === 'accident') return { ok: false, reason: 'invalid_placement' };
+  // but never let a stale reference to an unbuyable/transient-category asset slip a purchase through.
+  if (def.buyable === false || def.category === 'transient') return { ok: false, reason: 'invalid_placement' };
   if (funds < def.buyPrice) return { ok: false, reason: 'insufficient_funds' };
   if (!valid) return { ok: false, reason: 'invalid_placement' };
   const addition = overlay.addPurchase(def.id, pos, rotDeg);
