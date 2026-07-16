@@ -287,6 +287,10 @@ export function buildWorld(data: GameData, trackInitialLoad?: TrackInitialLoad):
 
   // --- walls (with door gaps already encoded as separate segments in the data) ---
   const wallMat = new THREE.MeshLambertMaterial({ color: 0xf0ead9 });
+  // Designer request (B9-1 follow-up): every wall's TOP face renders flat black — no texture, no
+  // lighting shading — for an "architecture plan" look in the wall-cut view. MeshBasicMaterial is
+  // unlit so it can't be shaded; one shared instance across all walls (never mutated per-wall).
+  const wallTopMat = new THREE.MeshBasicMaterial({ color: data.tuning.view?.wallTopColor ?? '#000000' });
   const WALL_H = 2.5, WALL_T = 0.12;
   for (const wall of map.walls) {
     const [x1, z1] = wall.from, [x2, z2] = wall.to;
@@ -294,17 +298,26 @@ export function buildWorld(data: GameData, trackInitialLoad?: TrackInitialLoad):
     const dx = x2 - x1, dz = z2 - z1;
     const geo = new THREE.BoxGeometry(len, WALL_H, WALL_T);
     // A textured wall gets its own material so the swap doesn't hit the shared color wallMat.
-    // A two-sided wall (textureB) needs a 6-entry material array — BoxGeometry's default face
-    // groups are [+x,-x,+y,-y,+z,-z] (indices 0..5); the wall's two BIG faces are the local
-    // +z/-z ones (index 4/5), since the box is long in x (length) and thin in z (WALL_T).
-    let mat: THREE.Material | THREE.Material[];
+    // Every wall always gets a 6-entry material array — BoxGeometry's default face groups are
+    // [+x,-x,+y,-y,+z,-z] (indices 0..5); the wall's two BIG faces are the local +z/-z ones
+    // (index 4/5), since the box is long in x (length) and thin in z (WALL_T). Index 2 (+y, top)
+    // is always the shared flat-black wallTopMat regardless of texture/textureB; index 3 (-y,
+    // bottom) stays side A, same as the edge faces.
     let matA: THREE.MeshLambertMaterial | undefined;
     let matB: THREE.MeshLambertMaterial | undefined;
+    let sideA: THREE.Material;
     // textureB semantics: undefined = same as side A (single material); a path = that texture on
     // side B; null = side B stays PLAIN COLOR even though side A is textured ("(none)" in the tool).
     if (wall.textureB !== undefined) {
       matA = new THREE.MeshLambertMaterial({ color: 0xf0ead9 });
       matB = new THREE.MeshLambertMaterial({ color: 0xf0ead9 });
+      sideA = matA;
+    } else {
+      sideA = wall.texture ? new THREE.MeshLambertMaterial({ color: 0xf0ead9 }) : wallMat;
+      if (wall.texture) matA = sideA as THREE.MeshLambertMaterial;
+    }
+    const materials: THREE.Material[] = [sideA, sideA, wallTopMat, sideA, sideA, sideA];
+    if (matB) {
       // Which local face (+z or -z) is "side A" depends on the wall's actual placement, not on
       // from/to point order: local +z's world-space outward normal, after mesh.rotation.y below,
       // is (-dz/len, dx/len) in the world XZ plane (see game/data.ts walls doc for the A/B
@@ -313,14 +326,10 @@ export function buildWorld(data: GameData, trackInitialLoad?: TrackInitialLoad):
       // along X, A = the face pointing world +X ("east").
       const horizontal = Math.abs(dx) >= Math.abs(dz);
       const localPlusZFacesA = horizontal ? (dx / len) > 0 : (-dz / len) > 0;
-      const materials: THREE.Material[] = [matA, matA, matA, matA, matA, matA]; // edges reuse side A
-      materials[4] = localPlusZFacesA ? matA : matB; // local +z
-      materials[5] = localPlusZFacesA ? matB : matA; // local -z
-      mat = materials;
-    } else {
-      mat = wall.texture ? new THREE.MeshLambertMaterial({ color: 0xf0ead9 }) : wallMat;
-      if (wall.texture) matA = mat as THREE.MeshLambertMaterial;
+      materials[4] = localPlusZFacesA ? matA! : matB; // local +z
+      materials[5] = localPlusZFacesA ? matB : matA!; // local -z
     }
+    const mat = materials;
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set((x1 + x2) / 2, WALL_H / 2, (z1 + z2) / 2);
     mesh.rotation.y = -Math.atan2(z2 - z1, x2 - x1);

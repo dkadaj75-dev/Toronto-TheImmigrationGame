@@ -112,7 +112,8 @@
   },
   "view": {
     "wallCutHeight": 1,
-    "_source": "ROADMAP_NEXT B6-9. Height in meters used by the player's in-page wall-cut toggle; view-only and never serialized."
+    "wallTopColor": "#000000",
+    "_source": "ROADMAP_NEXT B6-9. Height in meters used by the player's in-page wall-cut toggle; view-only and never serialized. wallTopColor (B9-1 follow-up): flat unlit color for every wall's top face, giving the wall-cut view an architecture-plan look regardless of per-wall textures."
   },
   "character": {
     "meshPath": "/models/character.glb",
