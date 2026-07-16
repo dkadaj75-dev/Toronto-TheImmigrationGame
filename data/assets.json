@@ -183,7 +183,7 @@
         {
           "accidentId": "fire",
           "trigger": "onUse",
-          "baseChancePercent": 100,
+          "baseChancePercent": 4,
           "placement": "on",
           "modifiers": [
             {
@@ -195,7 +195,11 @@
           "_note": "PROJECT_CONTEXT.md §7.3 example, verbatim: novice cook (skills.cooking=0) risks 2+15=17%, master (=max) 2-2=0%."
         }
       ],
-      "sound": "/sounds/actions/stove.mp3"
+      "sound": "/sounds/actions/stove.mp3",
+      "combustibility": {
+        "chancePercent": 25,
+        "delaySeconds": 10
+      }
     },
     {
       "id": "counter",
@@ -540,7 +544,7 @@
       "id": "garbage_can",
       "name": "Garbage can",
       "category": "appliances",
-      "mesh": "models/garbage_can.glb",
+      "mesh": "models/trashcan.glb",
       "buyPrice": 90,
       "sellPrice": 65,
       "environmentScore": -1,
@@ -552,7 +556,11 @@
       "garbage": {
         "capacity": 10
       },
-      "_note": "ROADMAP_NEXT item 10 — real capacity (game/garbage.ts's GarbageRegistry tracks a live fill count per placed instance, keyed by its THREE.Object3D.uuid). No real mesh yet — box stand-in until models/garbage_can.glb is imported. Buyable (unlike the transient assets below)."
+      "_note": "ROADMAP_NEXT item 10 — real capacity (game/garbage.ts's GarbageRegistry tracks a live fill count per placed instance, keyed by its THREE.Object3D.uuid). No real mesh yet — box stand-in until models/garbage_can.glb is imported. Buyable (unlike the transient assets below).",
+      "combustibility": {
+        "chancePercent": 90,
+        "delaySeconds": 5
+      }
     },
     {
       "id": "dirty_dishes",

@@ -4,7 +4,7 @@
     {
       "id": "visitor",
       "name": "Visitor",
-      "durationDays": 15,
+      "durationDays": 3,
       "losable": false
     },
     {
@@ -32,8 +32,14 @@
       "applicationDays": 30,
       "requirements": {
         "all": [
-          { "var": "skills.english", "gte": 8 },
-          { "var": "funds", "gte": 1000 }
+          {
+            "var": "skills.english",
+            "gte": 8
+          },
+          {
+            "var": "funds",
+            "gte": 1000
+          }
         ]
       }
     },
