@@ -1,0 +1,81 @@
+{
+  "project": "Condo Life — Web Edition",
+  "generated": "2026-07-16",
+  "purpose": "Machine-readable handoff so any agent (Codex, Claude, other) can take over cold. Read the referenced md files for full detail — this file is the index.",
+  "repo": {
+    "path": "D:\\WebCreation\\condo-life-web",
+    "vcs": "git, branch master, remote origin=https://github.com/dkadaj75-dev/condo-life-web.git (NEVER pushed — local only; push only if the designer asks)",
+    "run": "npm run dev (node server.js, port 5173; serves game + tools + GET/PUT /api/data/<path>; game hot-reload-polls /data/*.json every 2s)"
+  },
+  "authoritative_docs": {
+    "AGENTS.md": "Agent handover: conventions, verification gates, commit rules, pitfalls, HOW TO INVOKE CODEX (codex exec --sandbox workspace-write \"...\" < /dev/null; --full-auto is deprecated and hangs on stdin). Codex reads this automatically.",
+    "PROJECT_CONTEXT.md": "Canonical living design + as-built doc. WINS over everything else. §5 conventions; §7.x = every shipped system as-built. Update it with every behavior/schema change.",
+    "ROADMAP_NEXT.md": "Designer request batches 1-6, each item marked DONE with pointers. Append new designer requests here verbatim before building.",
+    "WEB_GAME_ROADMAP.md": "Original phase plan (historical; superseded where PROJECT_CONTEXT disagrees)."
+  },
+  "designer": {
+    "who": "Septentrion — NOT a programmer; drives everything through the browser tools and plain-language batches",
+    "workflow_rules": [
+      "Designer playtests constantly: uncommitted data/*.json / public asset changes in the tree are THEIRS — commit separately as 'Designer data edits via tools', NEVER revert, never mix into code commits",
+      "One commit per slice, imperative subject; verify (tests+tsc+boot) BEFORE committing",
+      "Designer pastes Windows file paths into tools — normalize to URLs under public/",
+      "Token-frugal, caveman-concise replies preferred"
+    ]
+  },
+  "architecture": {
+    "stack": "Vite + three.js + TypeScript, PWA (manifest+SW: network-only /data+/api, never cache them)",
+    "principle": "Everything data-driven: if the designer might change it, it is a JSON field with a tool UI, not code. No magic numbers — tunables in data/tuning.json.",
+    "game_modules_pattern": "game/*.ts = pure headless-testable logic + thin three.js/UI layer. Precedents: doors, accidents, sprites, marker, quests, visas, work, phone, garbage, buymode, bills, food, happiness, censor, progressbar, bladder, duration, wallview, windows, camera, facing, nav, audio, fbxclips, sprites, contextmenu (in ui), work.",
+    "tools_pattern": "tools/*.html: plain inline script exposed as window.<Tool> (jsdom-testable) + separate type=module script only when three.js/game imports needed; tools import game logic, never reimplement; PUT whole files JSON.stringify(data,null,2); shared tools/nav.js tab strip (add new tools to its TOOLS list)",
+    "sim_time_rule": "All gameplay animation/timers run on sim-time sdt (pause/buy-mode/game-over freeze, 2x/3x scale); real-time only for cosmetics",
+    "side_effect_rule": "Action side effects (cleanup, waste, accident rolls, food spawn-at-arrival, promotion rolls) fire ONLY on completed actions (stopAction(completed=true)) — never on cancels/interrupts"
+  },
+  "data_files": {
+    "data/assets.json": "AssetDef: category (incl. transient/door/window), mesh (GLB or image/GIF sprite), icon, buyable, requiresQuestUnlock, footprint, facingDeg, meshFit, usePose{sit,lie,use}, seats/seatTarget, interactions[], environmentScore, sound, accidents[] risk, combustibility, clearedBy, garbage{capacity}, food{hungerGain,perishHours}, survivalImportance, light{color,intensity,distance,yOffset,defaultOn}, wallMounted{heightY}, door{...exterior}, sprite{orientation,fps}",
+    "data/interactions.json": "ActionDef: animation, autonomyEligible, seatAware, censor, primaryNeed, needGains/skillGains, conditions (quest Condition tree), duration{baseSeconds,skillVar,atMaxSeconds,modifiers[{var,atMin,atMax}]}, cost, sound, producesWaste",
+    "data/stats.json": "needs / skills (growth curve tuning.skills.growthCurveExp makes high levels slower) / personality (static traits, e.g. cleanliness)",
+    "data/tuning.json": "All tunables: character(+marker), camera(+rotate/twist), doors, fire(+panicSeconds), interaction, audio(+UI/feedback sounds), phone(+icon,jobListSize), work(+autoSpeed,promotionHappinessFactor), bills(intervalDays), bladderFailure, starvation, energyCollapse, feedback, waste, garbage, credit, visa(startStatus), view(wallCutHeight), skills(growthCurveExp), quests, economy",
+    "data/maps/*.json": "floors/walls/doors(assetId,exterior)/windows/spawn/placedObjects/music/propertyType; gridSize 0.5, snap 0.25; tuning.map.active selects map",
+    "data/quests.json + simstate.json": "Quests (trigger/completion Condition trees, rewards funds/setVar/unlockAsset/grantVisa) + designer variables (visaStatus, job, income)",
+    "data/visas.json": "Visa state machine defs (visitor 15d start, lmia, temp_worker, permanent_resident, citizen; durations/grace/applications)",
+    "data/jobs.json": "Jobs: requirements(Condition), grantsVisa, hours, payPerShift, maxSkips, minCreditScore, needsCost, levels[{suffix,payPerShift,promoteChancePercent}]",
+    "data/finance.json": "Formula bills/rent (base+perAssetValue*assetTotal; rent by propertyType+floor tiles), overdueDays/tooLateDays/negativeGraceDays",
+    "data/bills.json": "Bill id/name list (amounts computed via finance.json)",
+    "data/happiness.json": "Weighted happiness formula components (var, weight, min/max)"
+  },
+  "tools": [
+    "tools/assets.html (Asset Editor: everything on AssetDef + 3D preview w/ map-matched grid + sprite/GIF preview)",
+    "tools/interactions.html (Interaction Editor: all ActionDef fields incl. conditions builder, duration+modifiers, cost, waste, censor; warns on blank animation)",
+    "tools/tuning.html (Tuning Editor: generic tuning groups + needs/skills/personality add-remove)",
+    "tools/map.html (Map Editor: objects/floors/walls/doors/windows/spawn, multi-map, undo, nav overlay, music)",
+    "tools/animations.html (Animation Mapper: clipMap incl. FBX sources w/ mixamorig retargeting, marker, core states incl. sit_ground/pee/panic/collapse/starve)",
+    "tools/quests.html (Quest Editor: condition builder, rewards incl. grantVisa)",
+    "tools/career.html (Career Editor: visas + jobs CRUD incl. levels, minCreditScore)",
+    "tools/finance.html (Finance Editor: bill/rent formulas, thresholds, live preview, happiness formula card)"
+  ],
+  "verification_gates": {
+    "typescript": "npx tsc --noEmit --strict --target es2020 --moduleResolution bundler --module esnext --skipLibCheck game/*.ts",
+    "pure_suites": "npx tsx test/<name>.test.ts (ONE at a time). Suites: quests, visas, work, phone, bills, food, garbage, accidents, doors, windows, wallview, facing, usepose, seatground, bladder, duration, marker, camera, sprites, fbxclips, stats, happiness, promotion, contextmenu, buymode, nav, anim, charfit, interaction-conditions, audio, progressbar, locomotion.smoke, meshfit(tsx only)",
+    "jsdom_suites": "node test/*.test.mjs + node tools/*.test.mjs (asset/tuning/interaction/quest/career/finance editors, map-editor(SELF-DERIVING fixtures — keep it that way), animation-editor, toolnav, sw-routing, bills/hud smoke)",
+    "boot": "GET http://localhost:5173 must boot (#boot gets class 'done'), zero new console errors"
+  },
+  "state_summary": {
+    "shipped": "Full sim loop (needs/skills/personality/autonomy/poses), quests, doors/windows/exterior door, wall-cut view, accidents+fire spread/destruction, transients, garbage/tidying+carry, carried food+perish+action costs, buy/sell mode (floor-only, wall-mount rules), PWA/mobile, audio (actions/assets/music/UI+feedback sounds), camera pan/pinch/rotate, sprites/GIF visuals, overhead marker, censor, progress bars (aligned), duration system w/ multi-var modifiers, interaction conditions, contextual radial action menu, asset lights+ON/OFF state, wall-mounted assets, VISA system (game over), phone (HUD icon, jobs, applications, bills, credit), going to work (hide+5x+pay+needsCost+skips), job levels+happiness-scaled promotions, finance (formula bills/rent, debt, repo man, credit score), bladder/energy/hunger failure events, skill/money floating feedback, 0.5m grid/0.25 snap.",
+    "all_roadmap_batches": "1-6 complete (see ROADMAP_NEXT.md)",
+    "commit_head_note": "~60 commits on local master; check git log"
+  },
+  "next_steps": [
+    "SAVE SYSTEM (biggest gap): every runtime system exposes serialize()/restore() (QuestRunner, AccidentRegistry, BuyOverlay, VisaState, FinanceState, work/skips/levels, garbage fill, asset ON/OFF, food/waste) — needs a save/load surface (localStorage or data/save/ via API, gitignored) + boot-time restore wiring + autosave cadence",
+    "Balance Dashboard (nice-to-have, PROJECT_CONTEXT §1 table)",
+    "Designer to delete the legacy placed 'phone' asset (smartphone HUD icon replaced it)",
+    "Non-payment-of-bills consequences beyond repo (recorded in ROADMAP B4-1 as deferred)",
+    "Designer authoring passes: quests granting upgrade visas, Animation Mapper clips for sit_ground/pee/panic/collapse/starve/extinguishing_fire/cleaning, real sounds replacing placeholder WAVs, real meshes for remaining stand-ins",
+    "Playtest-only verifications outstanding: radial menu on real touch, camera twist on device, lights/wall-mounts visuals, repo-man flow end-to-end"
+  ],
+  "known_quirks": [
+    "test/meshfit.test.mjs passes only under npx tsx, never plain node (documented, ignore)",
+    "Sandboxed browser panes can't run WebGL/rAF — verify boot via #boot.done + console, not screenshots",
+    "Stove fire baseChancePercent may be a testing value (designer toggles it)",
+    "Windows CRLF warnings on git are noise"
+  ]
+}
