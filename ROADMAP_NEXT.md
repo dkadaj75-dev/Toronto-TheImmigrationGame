@@ -215,3 +215,15 @@ Designer-editable UI: fonts, colors, shapes (radius/outline/shadow) of notificat
 **Follow-up DONE (2026-07-16, see PROJECT_CONTEXT §7.32):** per-surface `textureScale?: number` on `floors[]`/`walls[]` (default 1, multiplies `metersPerTile` via `effectiveMetersPerTile`) threaded through `world.ts`'s floor/wall texture application; Map Editor's `textureRow` gained a sparse scale number input next to the dropdown (visible only with a texture selected); tests extended in `test/textures.test.ts` + `test/map-editor.test.mjs`.
 
 **Follow-up DONE (2026-07-16, per-side wall textures, see PROJECT_CONTEXT §7.32):** `walls[].textureB?: string` (sparse, absent = both faces use `texture`); A/B is geometric not from/to-order-dependent — side A faces world +Z ("south") on a horizontal wall or +X ("east") on a vertical wall, side B is the opposite face (documented in `game/data.ts` + `world.ts` buildWorld()'s wall loop, which now builds a 6-entry BoxGeometry material array — faces 4/5 = local ±z = the two big faces — only when `textureB` is set). Map Editor Walls inspector: existing dropdown relabeled "Texture (side A / both)" + new sparse "Texture side B (optional)" dropdown/swatch with an orientation hint in its title. Tests: `test/map-editor.test.mjs` side-B round-trip; no new pure-math helper needed (material wiring only).
+
+---
+
+# Batch 10 — 2026-07-16
+
+## B10-1. Wall TOPS always flat black — even when walls are visually cut, even with custom face textures — for an "architecture plan" vibe.
+
+**DONE (2026-07-16, see PROJECT_CONTEXT §7.32):** every wall's top face (+y) now renders a shared unlit `THREE.MeshBasicMaterial` — no texture, no lighting shading — independent of `texture`/`textureB`. Color is the new tunable `tuning.view.wallTopColor` (default `#000000`, appears automatically in the Tuning Editor's view group). The wall-cut view only scales geometry, so the black top survives cutting with no extra work.
+
+## B10-2. Easier sit/lie/use setup on assets: see the character posed on the asset, with the proper animation, directly in the Asset Editor's 3D preview (checkbox, off by default).
+
+**DONE (2026-07-16, see PROJECT_CONTEXT §7.33):** Asset Editor preview card gained a view-only "Show character" checkbox (unchecked on every load) + pose selector (sit/lie always; use only when `usePose.use` exists). The rigged character loads through the game's own `loadRiggedCharacter`, is positioned by the real `usePoseFor` (virtual origin instance), and plays the clip resolved through the asset's interactions + `tuning.character.clipMap` via the real `AnimController` — editing usePose offset/y/facing updates the character live. Missing tuning.character disables the checkbox with an explanation; unmapped clips fall back to idle with a message.
