@@ -206,12 +206,14 @@ export function createDoorInstance(door: DoorEntry, def: AssetDef, tuning: Tunin
   const pivot = new THREE.Group();
   pivot.name = `door-hinge:${def.id}`;
   pivot.position.set(hx, 0, hz);
+  pivot.userData.wallCutVisual = 'animated-door';
+  pivot.userData.wallCutFullHeight = DOOR_HEIGHT;
   // ROADMAP_NEXT item 9: exterior doors are tappable interactables (their own AssetDef.interactions
   // surface in the tap menu, e.g. a future "go to work") — same userData.assetId convention
   // world.ts uses for furniture, so input.ts's existing raycast-and-climb-to-userData.assetId tap
   // resolution picks this up with zero changes elsewhere. Interior doors get no userData at all,
   // exactly as before this field existed — they stay non-tappable.
-  if (config.exterior) pivot.userData = { assetId: def.id, interactions: def.interactions };
+  if (config.exterior) Object.assign(pivot.userData, { assetId: def.id, interactions: def.interactions });
 
   const panel = new THREE.Group();
   panel.position.set(px, 0, pz);

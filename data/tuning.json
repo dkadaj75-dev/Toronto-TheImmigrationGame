@@ -96,6 +96,10 @@
     "triggerDistance": 1.75,
     "_source": "Doors-as-assets slice (PROJECT_CONTEXT.md §7.1). Defaults for AssetDef.door fields a door instance doesn't override. 0.5s open/close is the designer's requested default; triggerDistance is meters, independent from map gridSize, sized so the door swings open a beat before the sim (walkSpeed 2 m/s) reaches it."
   },
+  "view": {
+    "wallCutHeight": 1,
+    "_source": "ROADMAP_NEXT B6-9. Height in meters used by the player's in-page wall-cut toggle; view-only and never serialized."
+  },
   "character": {
     "meshPath": "/models/character.glb",
     "heightMeters": 1.55,

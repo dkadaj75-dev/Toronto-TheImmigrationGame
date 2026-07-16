@@ -8,7 +8,8 @@ import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import type { GameData, AssetDef, CharacterTuning } from './data';
 import { classifyMeshPath, createSpriteInstance, preloadGif } from './sprites';
 import { retargetTrackName, stripPositionTracks, resolveClipName, fileStem } from './fbxclips';
-import { resolveWindowConfig, windowPaneRect } from './windows';
+import { resolveWindowConfig, windowFacePositions, windowPaneRect } from './windows';
+import { wallCutShownHeight } from './wallview';
 
 // ------------------------------------------------------------------ GLB furniture
 // Templates are cached per URL and cloned per placement; clones share geometry/materials
@@ -191,6 +192,8 @@ export function buildWorld(data: GameData): THREE.Group {
     const mesh = new THREE.Mesh(geo, wallMat);
     mesh.position.set((x1 + x2) / 2, WALL_H / 2, (z1 + z2) / 2);
     mesh.rotation.y = -Math.atan2(z2 - z1, x2 - x1);
+    mesh.userData.wallCutVisual = 'wall';
+    mesh.userData.wallCutFullHeight = WALL_H;
     mesh.castShadow = true;
     root.add(mesh);
   }
@@ -209,6 +212,8 @@ export function buildWorld(data: GameData): THREE.Group {
       : new THREE.BoxGeometry(1.0, 2.1, 0.14);
     const mesh = new THREE.Mesh(geo, doorMat);
     mesh.position.set(door.at[0], 1.05, door.at[1]);
+    mesh.userData.wallCutVisual = 'door-marker';
+    mesh.userData.wallCutFullHeight = 2.1;
     root.add(mesh);
   }
 
@@ -218,20 +223,40 @@ export function buildWorld(data: GameData): THREE.Group {
   // for a future real-mesh consumer but isn't read here — same "data now, consumer later"
   // precedent as several other sparse fields in this codebase (e.g. AssetDef.combustibility
   // before ROADMAP item 6 landed).
-  const windowPaneMat = new THREE.MeshPhysicalMaterial({ color: 0xbfe6f4, transparent: true, opacity: 0.4, roughness: 0.05, metalness: 0.1 });
+  const windowPaneMat = new THREE.MeshPhysicalMaterial({ color: 0x9edff4, transparent: true, opacity: 0.58, roughness: 0.05, metalness: 0.05, side: THREE.DoubleSide, depthWrite: false });
   const windowFrameMat = new THREE.MeshLambertMaterial({ color: 0xe8e2d0 });
   for (const win of map.windows ?? []) {
     const config = resolveWindowConfig(win, data.tuning);
     const rect = windowPaneRect(win, config);
     const yaw = THREE.MathUtils.degToRad(rect.yawDeg);
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(rect.size[0] + 0.08, rect.size[1] + 0.08, rect.size[2] + 0.02), windowFrameMat);
-    frame.position.set(rect.position[0], rect.position[1], rect.position[2]);
-    frame.rotation.y = yaw;
-    root.add(frame);
-    const pane = new THREE.Mesh(new THREE.BoxGeometry(rect.size[0], rect.size[1], rect.size[2]), windowPaneMat);
-    pane.position.set(rect.position[0], rect.position[1], rect.position[2]);
-    pane.rotation.y = yaw;
-    root.add(pane);
+    const windowGroup = new THREE.Group();
+    windowGroup.name = 'window-visual';
+    windowGroup.userData.wallCutVisual = 'window';
+    for (const position of windowFacePositions(win, config, WALL_T)) {
+      const face = new THREE.Group();
+      face.position.set(...position);
+      face.rotation.y = yaw;
+
+      const pane = new THREE.Mesh(new THREE.BoxGeometry(rect.size[0], rect.size[1], 0.02), windowPaneMat);
+      pane.renderOrder = 1;
+      face.add(pane);
+
+      // Four rails leave the pane visible. The previous solid frame box filled the rectangle.
+      const rail = 0.07;
+      const frameDepth = 0.035;
+      for (const y of [-rect.size[1] / 2, rect.size[1] / 2]) {
+        const horizontal = new THREE.Mesh(new THREE.BoxGeometry(rect.size[0] + rail * 2, rail, frameDepth), windowFrameMat);
+        horizontal.position.y = y;
+        face.add(horizontal);
+      }
+      for (const x of [-rect.size[0] / 2, rect.size[0] / 2]) {
+        const vertical = new THREE.Mesh(new THREE.BoxGeometry(rail, rect.size[1], frameDepth), windowFrameMat);
+        vertical.position.x = x;
+        face.add(vertical);
+      }
+      windowGroup.add(face);
+    }
+    root.add(windowGroup);
   }
 
   // --- placed objects: instant stand-in, async GLB swap when asset.mesh is set ---
@@ -251,6 +276,27 @@ export function buildWorld(data: GameData): THREE.Group {
   });
 
   return root;
+}
+
+/** Apply the Sims-style wall-cut presentation without rebuilding nav or changing map data.
+ * Walls and door visuals shrink from ground level; windows hide because their authored pane is
+ * above the cut. Furniture, sim, collision, paths, and interactions remain unchanged. */
+export function applyWallCutView(root: THREE.Group, active: boolean, requestedHeight: number) {
+  root.traverse((object) => {
+    const kind = object.userData.wallCutVisual as string | undefined;
+    if (kind === 'window') {
+      object.visible = !active;
+      return;
+    }
+    const fullHeight = object.userData.wallCutFullHeight as number | undefined;
+    if ((kind === 'wall' || kind === 'door-marker') && fullHeight) {
+      const shownHeight = wallCutShownHeight(active, requestedHeight, fullHeight);
+      object.scale.y = shownHeight / fullHeight;
+      object.position.y = shownHeight / 2;
+    } else if (kind === 'animated-door' && fullHeight) {
+      object.scale.y = wallCutShownHeight(active, requestedHeight, fullHeight) / fullHeight;
+    }
+  });
 }
 
 /** Footprint-sized colored box + tiny label plate. Replaced by GLBs when the pack lands.

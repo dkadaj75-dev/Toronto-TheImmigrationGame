@@ -387,6 +387,8 @@ export interface TuningData {
    *  `interaction?`/`doors?` above). See game/windows.ts's resolveWindowConfig for the hardcoded
    *  fallbacks applied when this whole block is absent. */
   windows?: { width?: number; height?: number; sillHeight?: number };
+  /** B6-9 player wall-cut view. Height is meters above the floor; optional for old fixtures. */
+  view?: { wallCutHeight?: number };
   /** rotate* fields optional so pre-existing tuning fixtures/tests stay valid (same precedent as
    *  `interaction?`/`doors?` above) — camera.ts falls back to sane defaults when absent.
    *  rotateSpeedDegPerPx: desktop right-drag mouse sensitivity (yaw degrees per pixel of drag).

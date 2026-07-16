@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { loadAll, watchData, type GameData } from './data';
 import { TouchCamera } from './camera';
-import { buildWorld, makeSimStandIn, makeLights, applyDayNight, loadRiggedCharacter, normalizeMeshUrl } from './world';
+import { applyWallCutView, buildWorld, makeSimStandIn, makeLights, applyDayNight, loadRiggedCharacter, normalizeMeshUrl } from './world';
 import { buildDoors } from './doors';
 import { AnimController } from './anim';
 import { bakeNavGrid } from './nav';
@@ -68,9 +68,11 @@ async function start() {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x2a3346);
 
+  let wallCutActive = false; // in-page preference only; deliberately not serialized
   let world = buildWorld(data);
   let doors = buildDoors(data);
   world.add(doors.group);
+  applyWallCutView(world, wallCutActive, data.tuning.view?.wallCutHeight ?? 1);
   const lights = makeLights();
   scene.add(world, lights);
 
@@ -202,6 +204,11 @@ async function start() {
   const stats = new SimStats(data.stats, data.tuning.skills?.growthCurveExp ?? 1.5);
   const hud = new Hud(stats);
   hud.setPhoneIcon(data.tuning.phone?.icon ?? '/icons/Smartphone.png');
+  hud.onWallCutToggle = () => {
+    wallCutActive = !wallCutActive;
+    applyWallCutView(world, wallCutActive, data.tuning.view?.wallCutHeight ?? 1);
+    hud.setWallCutActive(wallCutActive);
+  };
 
   // Environment need (Sims "Room" score) = Σ environment scores of placed objects + any
   // currently-live accident instances (§7.3: fire/puddles ship negative environmentScore and
@@ -996,6 +1003,7 @@ async function start() {
     world = buildWorld(data);
     doors = buildDoors(data);
     world.add(doors.group);
+    applyWallCutView(world, wallCutActive, data.tuning.view?.wallCutHeight ?? 1);
     scene.add(world);
     // §7.3: buildWorld() has no notion of runtime accident instances (never in map data) —
     // re-parent every LIVE fire/puddle into the freshly-built world so hot-reload never wipes them.

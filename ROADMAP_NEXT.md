@@ -150,8 +150,10 @@ F2 done: negative bill payments + serializable overdue/debt timing, pure importa
 Shipped `map.snapStep` as a placement-only field (0.25 fallback), changed the condo/new-map tile size to 0.5 without rescaling any meter-space geometry, and kept nav/floor validation on `gridSize`; tests cover snap independence, all existing footprints, and real-condo bake timing.
 ## B6-7. Asset Editor 3D preview grid must match the map grid — ✅ DONE 2026-07-16
 The preview GridHelper now derives exact square size from the fetched map's `gridSize` (0.5 fallback), so one preview square equals one map tile.
-## B6-8. BUG: windows don't show in-game
-## B6-9. Wall-cut view option (cut walls at ~1m, Sims-style, player toggle, view-only)
+## B6-8. BUG: windows don't show in-game — ✅ DONE 2026-07-16
+Restored the three shipped condo window entries lost from `condo.json`; procedural panes now use visible frame rails and render on both wall faces instead of inside opaque wall depth.
+## B6-9. Wall-cut view option (cut walls at ~1m, Sims-style, player toggle, view-only) — ✅ DONE 2026-07-16
+HUD `⌂ Cut` toggles ground-up wall/door visual scaling at auto-exposed `tuning.view.wallCutHeight` (1m default); windows hide in cut view, with nav/game state untouched and choice kept only in-page.
 ## B6-10. UI sound placeholders: click/move-order/action-select; quest events (new/done); notifications in general
 ## B6-11. Contextual action menu around click location (Sims-style radial, screen-space so walls/assets never hide it; replaces bottom menu; screenshot ref on record)
 ## B6-12. Asset light emission + ON/OFF state: assets can generate light; Turn ON/OFF actions flip asset state driving light and/or sound (e.g. TV)

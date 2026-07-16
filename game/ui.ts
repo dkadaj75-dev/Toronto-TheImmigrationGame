@@ -114,7 +114,12 @@ const CSS = `
   bottom: calc(84px + env(safe-area-inset-bottom, 0px)); border: 0; border-radius: 999px;
   padding: 10px 16px; font-size: 13px; background: rgba(90,120,190,.55); color: #eaf0fb;
   cursor: pointer; pointer-events: auto; touch-action: manipulation; }
-#funds-chip.hidden, #buy-button.hidden, #buy-button.work-hidden { display: none; }
+#wall-cut-button { position: absolute; right: calc(92px + env(safe-area-inset-right, 0px));
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px)); border: 1px solid rgba(130,158,210,.45);
+  border-radius: 999px; padding: 9px 12px; font-size: 13px; background: rgba(20,26,40,.88);
+  color: #b8c4da; cursor: pointer; pointer-events: auto; touch-action: manipulation; }
+#wall-cut-button.active { background: rgba(90,120,190,.7); color: #fff; }
+#funds-chip.hidden, #buy-button.hidden, #buy-button.work-hidden, #wall-cut-button.hidden { display: none; }
 .hud-panel.buy-mode-hidden { display: none; }
 
 /* --- Visa chip + game-over overlay (PROJECT_CONTEXT.md §7.20 B3-6) ---------------------------
@@ -289,6 +294,7 @@ export class Hud {
   // --- Buy/Sell mode (§7.6) ---
   private fundsChip: HTMLElement;
   private buyButton: HTMLElement;
+  private wallCutButton: HTMLButtonElement;
   private buyBar: HTMLElement;
   private buyFundsEl: HTMLElement;
   private buySearchEl: HTMLInputElement;
@@ -301,6 +307,8 @@ export class Hud {
 
   /** fires when the player taps the Buy button (game HUD, not the tool) */
   onBuyOpen: (() => void) | null = null;
+  /** fires when the player toggles the in-page Sims-style wall cut */
+  onWallCutToggle: (() => void) | null = null;
   /** fires when the player exits buy mode (the bar's own Exit button) */
   onBuyClose: (() => void) | null = null;
   onBuyCategoryPick: ((category: string) => void) | null = null;
@@ -360,6 +368,7 @@ export class Hud {
       <div id="visa-chip"></div>
       <div id="funds-chip">§ 0</div>
       <button id="buy-button">🛒 Buy</button>
+      <button id="wall-cut-button" aria-pressed="false" title="Cut walls down">⌂ Cut</button>
       <button id="phone-button" aria-label="Open smartphone" title="Smartphone"><img alt="" /><span class="phone-badge" aria-label="0 unpaid bills"></span></button>
       <div id="game-over">
         <h2>Game Over</h2>
@@ -459,6 +468,7 @@ export class Hud {
     // --- Buy/Sell mode wiring (§7.6) ---
     this.fundsChip = root.querySelector('#funds-chip')!;
     this.buyButton = root.querySelector('#buy-button')!;
+    this.wallCutButton = root.querySelector('#wall-cut-button')!;
     this.buyBar = root.querySelector('#buy-bar')!;
     this.buyFundsEl = root.querySelector('#buy-funds')!;
     this.buySearchEl = root.querySelector('#buy-search')!;
@@ -470,6 +480,7 @@ export class Hud {
     this.selSellPriceEl = root.querySelector('#buy-sell-price')!;
 
     this.buyButton.addEventListener('click', () => this.onBuyOpen?.());
+    this.wallCutButton.addEventListener('click', () => this.onWallCutToggle?.());
     root.querySelector('#buy-exit')!.addEventListener('click', () => this.onBuyClose?.());
     this.buySearchEl.addEventListener('input', () => this.onBuySearch?.(this.buySearchEl.value));
     root.querySelector('[data-gc="rotate"]')!.addEventListener('click', () => this.onGhostRotate?.());
@@ -555,6 +566,12 @@ export class Hud {
   }
 
   togglePause() { this.setSpeed(this.speed === 0 ? this.lastRunningSpeed : 0); }
+
+  setWallCutActive(active: boolean) {
+    this.wallCutButton.classList.toggle('active', active);
+    this.wallCutButton.setAttribute('aria-pressed', String(active));
+    this.wallCutButton.title = active ? 'Show full walls' : 'Cut walls down';
+  }
 
   setClock(hours: number, minutes: number) {
     this.clockEl.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
@@ -870,6 +887,7 @@ export class Hud {
     this.skillsPanel.classList.toggle('buy-mode-hidden', active);
     this.fundsChip.classList.toggle('hidden', active);
     this.buyButton.classList.toggle('hidden', active);
+    this.wallCutButton.classList.toggle('hidden', active);
     this.phoneButton.classList.toggle('hidden', active);
     this.buyBar.classList.toggle('open', active);
     if (active) {

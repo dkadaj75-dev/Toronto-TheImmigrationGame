@@ -70,3 +70,20 @@ export function windowPaneRect(entry: WindowEntry, config: WindowConfig): Window
     yawDeg: windowBaseYawDeg(entry.orientation),
   };
 }
+
+/** Centers for the two thin visible faces drawn just outside either side of the wall. The old
+ * rendering centered its pane inside the 0.12m wall, so the opaque wall depth-occluded it. Drawing
+ * both faces avoids needing to guess which side of an authored wall is the room interior. */
+export function windowFacePositions(
+  entry: WindowEntry,
+  config: WindowConfig,
+  wallThickness = 0.12,
+  faceThickness = 0.02,
+): [[number, number, number], [number, number, number]] {
+  const y = config.sillHeight + config.height / 2;
+  const offset = wallThickness / 2 + faceThickness / 2 + 0.002;
+  const [x, z] = entry.at;
+  return entry.orientation === 'vertical'
+    ? [[x - offset, y, z], [x + offset, y, z]]
+    : [[x, y, z - offset], [x, y, z + offset]];
+}

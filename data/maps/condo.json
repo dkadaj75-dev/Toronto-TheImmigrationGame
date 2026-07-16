@@ -258,7 +258,23 @@
       "assetId": "door_basic"
     }
   ],
-  "windows": [],
+  "windows": [
+    {
+      "at": [2, 0],
+      "orientation": "horizontal",
+      "assetId": "window_basic"
+    },
+    {
+      "at": [7.5, 0],
+      "orientation": "horizontal",
+      "assetId": "window_basic"
+    },
+    {
+      "at": [2, 9],
+      "orientation": "horizontal",
+      "assetId": "window_basic"
+    }
+  ],
   "spawn": {
     "pos": [
       1,

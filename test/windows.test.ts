@@ -1,6 +1,6 @@
 // windows.test.ts — game/windows.ts pure geometry math (ROADMAP_NEXT item 9).
 // Run: npx tsx test/windows.test.ts
-import { resolveWindowConfig, windowBaseYawDeg, windowPaneRect, type WindowEntry } from '../game/windows';
+import { resolveWindowConfig, windowBaseYawDeg, windowFacePositions, windowPaneRect, type WindowEntry } from '../game/windows';
 import type { TuningData } from '../game/data';
 
 let failures = 0;
@@ -66,6 +66,17 @@ console.log('windows.test — windowPaneRect (world-space box params)');
   const custom = { width: 2, height: 1.5, sillHeight: 1.0 };
   const rectCustom = windowPaneRect(horiz, custom);
   check('a custom config resizes/repositions the pane', approx(rectCustom.size[0], 2) && approx(rectCustom.position[1], 1.0 + 0.75));
+}
+
+console.log('windows.test - visible faces sit outside both wall surfaces');
+{
+  const cfg = { width: 1.2, height: 1.1, sillHeight: 0.9 };
+  const horizontal = windowFacePositions({ at: [2, 0], orientation: 'horizontal' }, cfg);
+  check('horizontal faces offset in opposite Z directions', horizontal[0][2] < 0 && horizontal[1][2] > 0);
+  check('horizontal faces retain authored X and vertical center', horizontal.every((p) => approx(p[0], 2) && approx(p[1], 1.45)));
+  const vertical = windowFacePositions({ at: [9, 3], orientation: 'vertical' }, cfg);
+  check('vertical faces offset in opposite X directions', vertical[0][0] < 9 && vertical[1][0] > 9);
+  check('vertical faces retain authored Z', vertical.every((p) => approx(p[2], 3)));
 }
 
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }
