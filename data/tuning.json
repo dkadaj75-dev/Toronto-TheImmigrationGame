@@ -81,7 +81,7 @@
     "burnSeconds": 30,
     "spreadRadius": 2,
     "panicSeconds": 3,
-    "_source": "ROADMAP_NEXT item 6 (fire destruction + spreading, PROJECT_CONTEXT.md §7.3 follow-on). burnSeconds = how long an unextinguished 'fire' instance burns before destroying its base object (replaced by a 'pile of ash' transient — see assets.json's ash row); spreadRadius (meters, map gridSize=1) = how far a live fire scans each tick for AssetDef.combustibility-bearing neighbors to roll spread onto. Sim-time seconds, same clock as needs decay/gains/doors. panicSeconds (ROADMAP_NEXT B2-5) = how long the sim plays the 'panic' animation state whenever ANY fire spawns (initial risk roll or spread) before autonomy resumes — see game/accidents.ts's onFireSpawned hook + game/main.ts's triggerPanic."
+    "_source": "ROADMAP_NEXT item 6 (fire destruction + spreading, PROJECT_CONTEXT.md §7.3 follow-on). burnSeconds = how long an unextinguished 'fire' instance burns before destroying its base object (replaced by a 'pile of ash' transient — see assets.json's ash row); spreadRadius is meters, independent from map gridSize, and controls how far a live fire scans each tick for AssetDef.combustibility-bearing neighbors to roll spread onto. Sim-time seconds, same clock as needs decay/gains/doors. panicSeconds (ROADMAP_NEXT B2-5) = how long the sim plays the 'panic' animation state whenever ANY fire spawns (initial risk roll or spread) before autonomy resumes — see game/accidents.ts's onFireSpawned hook + game/main.ts's triggerPanic."
   },
   "garbage": {
     "autoTidyRadius": 5,
@@ -94,7 +94,7 @@
     "closeSeconds": 0.25,
     "openAngleDeg": 90,
     "triggerDistance": 1.75,
-    "_source": "Doors-as-assets slice (PROJECT_CONTEXT.md §7.1). Defaults for AssetDef.door fields a door instance doesn't override. 0.5s open/close is the designer's requested default; triggerDistance is meters (map gridSize=1 → 1 grid unit = 1m), sized so the door swings open a beat before the sim (walkSpeed 2 m/s) reaches it."
+    "_source": "Doors-as-assets slice (PROJECT_CONTEXT.md §7.1). Defaults for AssetDef.door fields a door instance doesn't override. 0.5s open/close is the designer's requested default; triggerDistance is meters, independent from map gridSize, sized so the door swings open a beat before the sim (walkSpeed 2 m/s) reaches it."
   },
   "character": {
     "meshPath": "/models/character.glb",

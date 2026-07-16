@@ -2,12 +2,14 @@
 // Run: npx tsx test/buymode.test.ts
 import {
   isPurchasable, isAffordable, purchasableCatalog, catalogCategories, filterCatalog,
-  snapToHalfCell, snapPos, normalizeRotDeg, rotateStep, wallRect, isValidPlacement, footprintOnFloor,
+  snapToStep, snapPos, normalizeRotDeg, rotateStep, wallRect, isValidPlacement, footprintOnFloor,
   BuyOverlay, effectiveInstances, effectivePlacedObjects, isSelectableForSell,
   attemptBuy, attemptSell, attemptMove, attemptDestroy,
   iconFallbackColor, iconFallbackInitials,
   type OtherInstance, type PlacedLike, type EffectiveInstance, type FloorDef,
 } from '../game/buymode';
+import { footprintRect } from '../game/accidents';
+import { readFileSync } from 'node:fs';
 import type { AssetDef, AssetsData } from '../game/data';
 
 let failures = 0;
@@ -77,13 +79,12 @@ console.log('buymode.test — catalog: purchasableCatalog / catalogCategories / 
   check('filterCatalog with no filter returns the full purchasable set', filterCatalog(assets, noUnlocks, {}).length === 3);
 }
 
-console.log('buymode.test — placement math: snap / rotate');
+console.log('buymode.test — placement math: independent 0.25m snap / rotate');
 {
-  check('snapToHalfCell rounds to the nearest half-cell (gridSize=1 → 0.5 steps)', approx(snapToHalfCell(1.24, 1), 1.0) && approx(snapToHalfCell(1.26, 1), 1.5));
-  check('snapToHalfCell exact half-cell stays put', approx(snapToHalfCell(2.5, 1), 2.5));
-  check('snapToHalfCell scales with gridSize', approx(snapToHalfCell(1.24, 2), 1.0)); // step = 1.0
-  const p = snapPos([1.24, 3.9], 1);
-  check('snapPos snaps both axes', approx(p[0], 1.0) && approx(p[1], 4.0), JSON.stringify(p));
+  check('snapToStep defaults to 0.25m', approx(snapToStep(1.12), 1.0) && approx(snapToStep(1.13), 1.25));
+  check('explicit 0.25m step stays independent of 0.5m tiles', approx(snapToStep(2.25, 0.25), 2.25));
+  const p = snapPos([1.24, 3.9], 0.25);
+  check('snapPos snaps both axes to 0.25m', approx(p[0], 1.25) && approx(p[1], 4.0), JSON.stringify(p));
 
   check('normalizeRotDeg wraps negative angles into [0,360)', normalizeRotDeg(-90) === 270);
   check('normalizeRotDeg wraps >360', normalizeRotDeg(450) === 90);
@@ -145,6 +146,18 @@ console.log('buymode.test — placement math: footprintOnFloor / isValidPlacemen
     isValidPlacement({ pos: [5.5, 3], rotDeg: 90, footprint: [2, 1], bounds, walls: noWalls, others: noOthers, floors: partialFloor, gridSize }) === true);
   check('unrotated (0°) footprint at the same pos overhangs the floor edge → invalid',
     isValidPlacement({ pos: [5.5, 3], rotDeg: 0, footprint: [2, 1], bounds, walls: noWalls, others: noOthers, floors: partialFloor, gridSize }) === false);
+}
+
+console.log('buymode.test — B6-6 shipped placements remain valid at 0.5m floor-cell resolution');
+{
+  const condo = JSON.parse(readFileSync(new URL('../data/maps/condo.json', import.meta.url), 'utf8'));
+  const assetData = JSON.parse(readFileSync(new URL('../data/assets.json', import.meta.url), 'utf8'));
+  const byId = new Map(assetData.assets.map((asset: any) => [asset.id, asset]));
+  const invalid = condo.placedObjects.filter((placed: any) => {
+    const def: any = byId.get(placed.asset);
+    return !def || !footprintOnFloor(footprintRect(placed.pos, placed.rotDeg, def.footprint), condo.floors, condo.gridSize);
+  });
+  check('all existing meter-space footprints remain fully on floor', invalid.length === 0, invalid.map((p: any) => p.asset).join(','));
 }
 
 console.log('buymode.test — icon fallback');

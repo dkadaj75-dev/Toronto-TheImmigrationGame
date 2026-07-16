@@ -298,6 +298,9 @@ export interface CreditTuning {
 
 export interface MapData {
   id: string; name: string; gridSize: number;
+  /** Designer placement increment in meters. Independent from nav/tile cell size; absent maps
+   *  default to 0.25m so changing gridSize never silently changes object placement precision. */
+  snapStep?: number;
   /** Finance rent category; old/hand-authored maps without it are treated as condos. */
   propertyType?: PropertyType;
   bounds: { w: number; h: number };
@@ -376,7 +379,7 @@ export interface TuningData {
   interaction?: { useSpotClearance?: number; seatViewDistance?: number; seatSearchRadius?: number };
   /** Optional so pre-existing tuning fixtures/tests stay valid (same precedent as `interaction?`
    *  above). Defaults for AssetDef.door fields when a door instance doesn't override them (§7.1).
-   *  triggerDistance is in meters (map gridSize=1 → 1 grid unit = 1 meter). */
+   *  triggerDistance is in meters, independent from the map's nav tile size. */
   doors?: { openSeconds?: number; closeSeconds?: number; openAngleDeg?: number; triggerDistance?: number };
   /** ROADMAP_NEXT item 9: defaults for a window's glass-pane stand-in when a map.windows[] entry
    *  doesn't override `width` itself (a per-window sparse field, same convention as a door's

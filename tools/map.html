@@ -55,7 +55,7 @@
   <button id="map-del" class="danger">Delete</button>
   <button id="map-play" title="set as the map the game plays (tuning.map.active)">▶ Play this map</button>
   <span class="grow"></span>
-  <label class="chk"><input type="checkbox" id="snap" checked /> snap ½ cell</label>
+  <label class="chk"><input type="checkbox" id="snap" checked /> placement snap</label>
   <label class="chk"><input type="checkbox" id="show-nav" checked /> nav overlay</label>
   <button id="reload">Reload</button>
   <button id="save" class="primary" disabled>Save map</button>
@@ -172,7 +172,7 @@ async function newMap(idArg) {
   if (!/^[a-z0-9_-]+$/i.test(id)) { setStatus('invalid id — letters/numbers/-/_ only', 'err'); return false; }
   if (state.maps.includes(id)) { setStatus('a map with that id already exists', 'err'); return false; }
   const doc = {
-    id, name: id, propertyType: 'condo', gridSize: 1.0, bounds: { w: 14, h: 10 },
+    id, name: id, propertyType: 'condo', gridSize: 0.5, snapStep: 0.25, bounds: { w: 14, h: 10 },
     floors: [], walls: [], doors: [], windows: [],
     spawn: { pos: [2, 2], facingDeg: 0 },
     placedObjects: [],
@@ -237,7 +237,11 @@ async function playThisMap() {
 // ---------------------------------------------------------------- helpers
 const assetById = (id) => state.assets.assets.find((a) => a.id === id);
 const normRot = (deg) => ((Math.round(deg / 90) * 90) % 360 + 360) % 360;
-const snapStep = () => (state.doc?.gridSize ?? 1) / 2;
+// Placement precision is its own map property: tile/nav-cell refinement must not move objects.
+const snapStep = () => {
+  const step = Number(state.doc?.snapStep);
+  return Number.isFinite(step) && step > 0 ? step : 0.25;
+};
 const snapVal = (v) => (document.getElementById('snap').checked ? Math.round(v / snapStep()) * snapStep() : v);
 const snapPoint = (x, z) => [snapVal(x), snapVal(z)];
 
@@ -705,6 +709,7 @@ function renderInspector() {
     host.appendChild(field('name', doc.name, edit((v) => { doc.name = v; }), { text: true, data: 'map.name' }));
     host.appendChild(field('property type', doc.propertyType ?? 'condo', edit((v) => { doc.propertyType = v; }), { options: ['condo', 'basement', 'townhouse', 'house', 'penthouse'], data: 'map.propertyType' }));
     host.appendChild(field('grid size', doc.gridSize, edit((v) => { doc.gridSize = Math.max(0.25, v); }), { data: 'map.gridSize' }));
+    host.appendChild(field('placement snap', doc.snapStep ?? 0.25, edit((v) => { doc.snapStep = Math.max(0.01, v); }), { data: 'map.snapStep' }));
     host.appendChild(field('bounds w', doc.bounds.w, edit((v) => { doc.bounds.w = Math.max(2, v); fitView(); }), { data: 'map.bounds.w' }));
     host.appendChild(field('bounds h', doc.bounds.h, edit((v) => { doc.bounds.h = Math.max(2, v); fitView(); }), { data: 'map.bounds.h' }));
     // ROADMAP_NEXT item 7 (audio): comma-separated playlist this map's music context cycles

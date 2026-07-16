@@ -79,13 +79,16 @@ export function filterCatalog(assets: AssetDef[], isUnlocked: (assetId: string) 
 
 // ==================================================================== placement math (pure)
 
-export function snapToHalfCell(v: number, gridSize: number): number {
-  const step = gridSize / 2;
+export const DEFAULT_PLACEMENT_SNAP = 0.25;
+
+/** Placement snap is deliberately independent from map.gridSize (the nav/tile cell size). */
+export function snapToStep(v: number, snapStep = DEFAULT_PLACEMENT_SNAP): number {
+  const step = Number.isFinite(snapStep) && snapStep > 0 ? snapStep : DEFAULT_PLACEMENT_SNAP;
   return Math.round(v / step) * step;
 }
 
-export function snapPos(pos: [number, number], gridSize: number): [number, number] {
-  return [snapToHalfCell(pos[0], gridSize), snapToHalfCell(pos[1], gridSize)];
+export function snapPos(pos: [number, number], snapStep = DEFAULT_PLACEMENT_SNAP): [number, number] {
+  return [snapToStep(pos[0], snapStep), snapToStep(pos[1], snapStep)];
 }
 
 export function normalizeRotDeg(deg: number): number {
@@ -548,8 +551,8 @@ export class BuyModeController {
    *  required by any test here. */
   moveGhostTo(worldX: number, worldZ: number) {
     if (!this.selection || this.selection.kind === 'selected') return;
-    const gridSize = this.getData().map.gridSize;
-    const pos = snapPos([worldX, worldZ], gridSize);
+    const snapStep = this.getData().map.snapStep ?? DEFAULT_PLACEMENT_SNAP;
+    const pos = snapPos([worldX, worldZ], snapStep);
     const footprint = this.selection.def.footprint;
     const excludeKey = this.selection.kind === 'moving' ? this.selection.inst.key : undefined;
     const valid = this.checkValidity(pos, this.selection.rotDeg, footprint, excludeKey);

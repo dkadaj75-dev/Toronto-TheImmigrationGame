@@ -24,7 +24,7 @@ const interactions = { actions: [
   { id: 'extinguish', name: 'Extinguish', needGains: {}, skillGains: {}, animation: 'stand_use', autonomyEligible: false, primaryNeed: null },
   { id: 'mop', name: 'Mop up', needGains: {}, skillGains: {}, animation: 'stand_use', autonomyEligible: false, primaryNeed: null },
 ] };
-const condo = { placedObjects: [{ asset: 'couch', pos: [1, 1], rotDeg: 0 }, { asset: 'couch', pos: [3, 1], rotDeg: 0 }] };
+const condo = { gridSize: 0.5, placedObjects: [{ asset: 'couch', pos: [1, 1], rotDeg: 0 }, { asset: 'couch', pos: [3, 1], rotDeg: 0 }] };
 const stats = {
   needs: [{ id: 'hunger', name: 'Hunger', color: '#e74c3c', default: 70, decayPerTick: 0.1, autonomy: true }],
   skills: [{ id: 'cooking', name: 'Cooking', color: '#d35400', default: 0, max: 10 }],
@@ -54,6 +54,13 @@ const dom = new JSDOM(html, {
 const { window } = dom;
 const doc = window.document;
 await new Promise((r) => setTimeout(r, 50));
+
+assert(window.AssetEditor.previewGridSize() === 0.5, 'preview grid reads the map tile size');
+const previewGrid = window.AssetEditor.previewGridSpec();
+assert(previewGrid.size / previewGrid.divisions === condo.gridSize, 'one preview square equals one map tile');
+window.AssetEditor.state.map = null;
+assert(window.AssetEditor.previewGridSize() === 0.5, 'preview grid falls back to 0.5m when map data is unavailable');
+window.AssetEditor.state.map = condo;
 
 // --- sidebar rendered with usage badge
 const items = doc.querySelectorAll('.asset-item');

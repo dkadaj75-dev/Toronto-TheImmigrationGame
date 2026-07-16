@@ -67,6 +67,16 @@
 // ------------------------------------------------------------------ state
 const API = '/api/data/';
 const state = { assets: null, interactions: null, map: null, stats: null, selected: null, dirty: false };
+const previewGridSize = () => {
+  const size = Number(state.map?.gridSize);
+  return Number.isFinite(size) && size > 0 ? size : 0.5;
+};
+const previewGridSpec = () => {
+  const tileSize = previewGridSize();
+  const divisions = Math.max(1, Math.ceil(4 / tileSize));
+  return { tileSize, divisions, size: divisions * tileSize };
+};
+window.AssetEditor = { state, previewGridSize, previewGridSpec };
 
 async function load() {
   setStatus('loading…');
@@ -774,7 +784,8 @@ function ensure(canvas) {
   const sun = new THREE.DirectionalLight(0xffffff, 2);
   sun.position.set(3, 5, 2);
   scene.add(sun);
-  scene.add(new THREE.GridHelper(4, 8, 0x2c3a58, 0x212b44));
+  const grid = window.AssetEditor?.previewGridSpec?.() ?? { size: 4, divisions: 8 };
+  scene.add(new THREE.GridHelper(grid.size, grid.divisions, 0x2c3a58, 0x212b44));
   cancelAnimationFrame(raf);
   const loop = () => {
     raf = requestAnimationFrame(loop);

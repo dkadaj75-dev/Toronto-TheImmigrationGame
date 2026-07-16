@@ -141,13 +141,15 @@ F2 done: negative bill payments + serializable overdue/debt timing, pure importa
 
 # Batch 6 — 2026-07-16 (16 items)
 
-## B6-1. BUG: progress bar misaligned (fill vs background not visually aligned)
+## B6-1. BUG: progress bar misaligned (fill vs background not visually aligned) — ✅ DONE 2026-07-16 (game/progressbar.ts: symmetric fillMargin inset on both axes, was flush left/right while inset top/bottom)
 ## B6-2. Job UX: current job excluded from search (or apply blocked); switching prompts "You already work as X, switch to Y?"; job description visible in smartphone while employed
 ## B6-3. BUG: fridge eat — sim must walk ALL THE WAY to the fridge first, then carry food to seat
 ## B6-4. Transient spawn placement: dirty dishes/puddles must not spawn under assets; spawn AMOUNT correlated to need(s)/attribute(s) (tunable mapping)
 ## B6-5. Happiness gauge + job levels/promotions: happiness = complex tunable formula (needs, job, credit score, money, visa status — editable in tools); jobs get levels (Dishwasher I/II/III + % bonus chance); promotion chance scales with happiness
-## B6-6. Map grid 0.5×0.5 tiles with 0.25 snap (map editor, nav, buymode)
-## B6-7. Asset Editor 3D preview grid must match the map grid
+## B6-6. Map grid 0.5×0.5 tiles with 0.25 snap (map editor, nav, buymode) — ✅ DONE 2026-07-16
+Shipped `map.snapStep` as a placement-only field (0.25 fallback), changed the condo/new-map tile size to 0.5 without rescaling any meter-space geometry, and kept nav/floor validation on `gridSize`; tests cover snap independence, all existing footprints, and real-condo bake timing.
+## B6-7. Asset Editor 3D preview grid must match the map grid — ✅ DONE 2026-07-16
+The preview GridHelper now derives exact square size from the fetched map's `gridSize` (0.5 fallback), so one preview square equals one map tile.
 ## B6-8. BUG: windows don't show in-game
 ## B6-9. Wall-cut view option (cut walls at ~1m, Sims-style, player toggle, view-only)
 ## B6-10. UI sound placeholders: click/move-order/action-select; quest events (new/done); notifications in general

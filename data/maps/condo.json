@@ -1,9 +1,10 @@
 {
-  "_comment": "Starter condo map. LAYOUT IS PLACEHOLDER — to be redrawn against Unreal prototype screenshots for parity (Phase 1 reference). Units = grid cells (1 cell = 1 m). navGrid is derived at load in Phase 0; the Map Editor will bake it in Phase 2.",
+  "_comment": "Starter condo map. LAYOUT IS PLACEHOLDER — to be redrawn against Unreal prototype screenshots for parity (Phase 1 reference). All coordinates and asset footprints are meters; gridSize is the nav/map tile size and snapStep is placement precision. navGrid is derived at load.",
   "id": "condo",
   "name": "condo",
   "propertyType": "condo",
-  "gridSize": 1,
+  "gridSize": 0.5,
+  "snapStep": 0.25,
   "bounds": {
     "w": 9,
     "h": 9

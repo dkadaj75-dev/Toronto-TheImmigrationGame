@@ -2,6 +2,7 @@
 // The path from room A to room B must exist and must pass through the gap.
 import { bakeNavGrid, findPath, isWalkable, worldToCell } from '../game/nav';
 import type { MapData } from '../game/data';
+import { readFileSync } from 'node:fs';
 
 const map: MapData = {
   id: 'test', name: 'test', gridSize: 0.5,
@@ -88,3 +89,15 @@ function assert(cond: boolean, msg: string) {
 const p4 = findPath(grid, [1, 0.75], [9, 5.25]);
 assert(p4 !== null && p4.length >= 3, `offset route bends through the door (${p4?.length} waypoints)`);
 console.log('offset route:', JSON.stringify(p4!.map(p => p.map(v => +v.toFixed(2)))));
+
+// B6-6 performance/regression check against the shipped 0.5m condo: the finer grid is 18x18,
+// preserves meter-space map geometry, and remains comfortably cheap to bake.
+const condo = JSON.parse(readFileSync(new URL('../data/maps/condo.json', import.meta.url), 'utf8')) as MapData;
+const condoAssets = JSON.parse(readFileSync(new URL('../data/assets.json', import.meta.url), 'utf8'));
+const bakeStarted = performance.now();
+const condoGrid = bakeNavGrid(condo, condoAssets);
+const bakeMs = performance.now() - bakeStarted;
+assert(condo.gridSize === 0.5 && condo.snapStep === 0.25, 'shipped condo separates 0.5m tiles from 0.25m placement snap');
+assert(condoGrid.cols === 18 && condoGrid.rows === 18, 'shipped condo bakes the expected 0.5m nav cells without changing 9m bounds');
+assert(bakeMs < 1000, `shipped condo nav bake remains fast (${bakeMs.toFixed(2)}ms)`);
+console.log(`condo 0.5m nav bake: ${condoGrid.cols * condoGrid.rows} cells in ${bakeMs.toFixed(2)}ms`);

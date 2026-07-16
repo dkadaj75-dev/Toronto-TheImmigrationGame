@@ -86,7 +86,7 @@ console.log('map-editor.test — objects: hit test / snap / drag / rotate / dele
   const insideBed = [(bedSpan.xmin + bedSpan.xmax) / 2, (bedSpan.zmin + bedSpan.zmax) / 2];
   const bedHit = ME.hitTest(...insideBed);
   check('rotation-aware hit (bed rot 90 swaps axes)', bedHit && st.doc.placedObjects[bedHit.index].asset === 'bed');
-  check('snap math (half cell)', ME.snapPoint(1.26, 3.74).join(',') === '1.5,3.5');
+  check('placement snap is explicit 0.25m, independent of gridSize', ME.snapPoint(1.13, 3.87).join(',') === '1.25,3.75');
   check('rot normalization 450→90', ME.normRot(450) === 90);
   check('rot normalization -90→270', ME.normRot(-90) === 270);
 
@@ -151,7 +151,10 @@ console.log('map-editor.test — floors: draw rect / material / edit / delete');
   pointer('pointerup', 3.9, 12.6);
   check('drag creates a rect floor', st.doc.floors.length === before + 1);
   const f = st.doc.floors.at(-1);
-  check('floor polygon snapped rect', JSON.stringify(f.polygon) === JSON.stringify([[0, 10.5], [4, 10.5], [4, 12.5], [0, 12.5]]), JSON.stringify(f.polygon));
+  const floorStart = ME.snapPoint(0.2, 10.7);
+  const floorEnd = ME.snapPoint(3.9, 12.6);
+  const expectedFloor = [[floorStart[0], floorStart[1]], [floorEnd[0], floorStart[1]], [floorEnd[0], floorEnd[1]], [floorStart[0], floorEnd[1]]];
+  check('floor polygon uses the map placement snap', JSON.stringify(f.polygon) === JSON.stringify(expectedFloor), JSON.stringify(f.polygon));
   check('floor uses selected material', f.material === 'tile');
   check('unique floor id', st.doc.floors.filter((x) => x.id === f.id).length === 1);
   check('new floor selected', st.sel?.kind === 'floor');
@@ -204,7 +207,8 @@ console.log('map-editor.test — doors: place on wall / inferred orientation / m
   pointer('pointerup', 9.15, 1.32);
   check('click near wall places a door', st.doc.doors.length === before + 1);
   const d = st.doc.doors.at(-1);
-  check('door snapped onto the wall line', d.at[0] === 9 && d.at[1] === 1.5, d.at.join(','));
+  const doorStart = ME.snapPoint(9, 1.32);
+  check('door snapped onto the wall line', d.at[0] === 9 && d.at[1] === doorStart[1], d.at.join(','));
   check('orientation inferred from wall axis', d.orientation === 'vertical');
   // clicking far from any wall does nothing
   pointer('pointerdown', 2, 12);
@@ -212,10 +216,10 @@ console.log('map-editor.test — doors: place on wall / inferred orientation / m
   check('no door in open space', st.doc.doors.length === before + 1);
   // move an existing door by drag
   ME.setMode('doors');
-  pointer('pointerdown', 9, 1.5);
+  pointer('pointerdown', ...d.at);
   pointer('pointermove', 9.03, 2.04);
   pointer('pointerup', 9.03, 2.04);
-  check('door draggable with snap', st.doc.doors.at(-1).at[1] === 2, st.doc.doors.at(-1).at.join(','));
+  check('door draggable with snap', st.doc.doors.at(-1).at[1] === ME.snapPoint(9, 2.04)[1], st.doc.doors.at(-1).at.join(','));
   st.sel = { kind: 'door', index: st.doc.doors.length - 1 };
   ME.rotateSelected();
   check('R toggles orientation', st.doc.doors.at(-1).orientation === 'horizontal');
@@ -259,7 +263,8 @@ console.log('map-editor.test — windows: place on wall / inferred orientation /
   pointer('pointerup', 9.15, 1.32);
   check('click near wall places a window', st.doc.windows.length === before + 1);
   const w = st.doc.windows.at(-1);
-  check('window snapped onto the wall line', w.at[0] === 9 && w.at[1] === 1.5, w.at.join(','));
+  const windowStart = ME.snapPoint(9, 1.32);
+  check('window snapped onto the wall line', w.at[0] === 9 && w.at[1] === windowStart[1], w.at.join(','));
   check('orientation inferred from wall axis', w.orientation === 'vertical');
   // clicking far from any wall does nothing
   pointer('pointerdown', 2, 12);
@@ -267,10 +272,10 @@ console.log('map-editor.test — windows: place on wall / inferred orientation /
   check('no window in open space', st.doc.windows.length === before + 1);
   // move an existing window by drag
   ME.setMode('windows');
-  pointer('pointerdown', 9, 1.5);
+  pointer('pointerdown', ...w.at);
   pointer('pointermove', 9.03, 2.04);
   pointer('pointerup', 9.03, 2.04);
-  check('window draggable with snap', st.doc.windows.at(-1).at[1] === 2, st.doc.windows.at(-1).at.join(','));
+  check('window draggable with snap', st.doc.windows.at(-1).at[1] === ME.snapPoint(9, 2.04)[1], st.doc.windows.at(-1).at.join(','));
   st.sel = { kind: 'window', index: st.doc.windows.length - 1 };
   ME.rotateSelected();
   check('R flips orientation', st.doc.windows.at(-1).orientation === 'horizontal');
@@ -328,7 +333,7 @@ console.log('map-editor.test — spawn');
   ME.setMode('spawn');
   pointer('pointerdown', 5.24, 4.76);
   pointer('pointerup', 5.24, 4.76);
-  check('click places spawn (snapped)', st.doc.spawn.pos.join(',') === '5,5' || st.doc.spawn.pos.join(',') === '5.5,5', st.doc.spawn.pos.join(','));
+  check('click places spawn (snapped)', st.doc.spawn.pos.join(',') === ME.snapPoint(5.24, 4.76).join(','), st.doc.spawn.pos.join(','));
   const facing = doc.querySelector('input[data-field="spawn.facing"]');
   facing.value = '270';
   facing.dispatchEvent(new window.Event('change', { bubbles: true }));
