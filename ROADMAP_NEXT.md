@@ -104,3 +104,15 @@ Phone = UI overlay (modifiable icon) with actions incl. "Search a job": refreshe
 
 ## B3-8. Going to work — DONE 2026-07-15 (V3, see PROJECT_CONTEXT §7.20 V3 as-built)
 Leave via suite door during job hours → sim disappears, game speed auto-set (5x tunable) until return; each job has its own hours; pay on completion (funds). leave_for_work conditions already gate on vars.job.
+
+---
+
+# Batch 4 — 2026-07-16
+
+## B4-1. Bills
+Every N days (tunable, default 3): bills arrive (rent, phone, hydro — amounts tunable, data-driven list). Received + paid via the phone (new Bills tab/section). HUD notification when unpaid (toast + badge on the smartphone icon — placeholder badge, designer may supply an icon). Consequences of non-payment: later (record only).
+
+## B4-2. Food as carried transients + action costs
+- Eat from fridge: sim takes a snack (food transient) and carries it to a seat/table/wherever, eats there. Interrupt → food left at that spot, perishes after a few hours (tunable) → becomes garbage/vanishes.
+- Cook at stove: on cook completion, sim takes the cooked dish (more fulfilling food transient) and eats it same way.
+- Both eat/cook actions COST money (per-action cost field), shown in the action menu label before selecting (e.g. "Eat (§5)"); blocked with feedback if unaffordable.
