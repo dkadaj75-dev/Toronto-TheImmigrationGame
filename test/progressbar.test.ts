@@ -10,15 +10,15 @@
 // and reconstructs the on-screen rect from the real vertex-shader formula (three's
 // sprite.glsl.js: `alignedPosition = (position.xy - (center - vec2(0.5))) * scale`, then added to
 // the sprite's own translation) — instead of assuming the hand-derived left/right formulas match.
-// Result (see below): they do — bg (center 0.5,0.5) and fill (center 0,0.5) nest with an identical
-// margin on all four sides at progress 0/0.1/0.5/1, so B7-3's "fill detached below-left of the
-// track" is NOT reproducible from this module's math; if it's still seen live, suspect a stale
-// bundle/cache rather than progressbar.ts's formulas.
+// The B7-3 camera-projection block covers the live coordinate-space bug the earlier world-only
+// geometry check missed: child position offsets are world-aligned even though sprite quads are
+// camera-aligned.
 // Run: npx tsx test/progressbar.test.ts
 import * as THREE from 'three';
 import {
   PROGRESS_BAR_DEFAULTS, progressBarAnchorHeight, clampProgress01,
-  fillMargin, fillInnerWidth, fillInnerHeight, fillLeftEdge, fillScaleX,
+  fillMargin, fillInnerWidth, fillInnerHeight, fillLeftEdge, fillScaleX, fillCenterX,
+  createProgressBarInstance,
 } from '../game/progressbar';
 
 let failures = 0;
@@ -127,8 +127,7 @@ console.log('progressbar.test — THREE.Sprite real-geometry nesting (B7-3)');
   const bg = new THREE.Sprite(new THREE.SpriteMaterial({ color: PROGRESS_BAR_DEFAULTS.bgColor }));
   bg.scale.set(W, H, 1);
   const fill = new THREE.Sprite(new THREE.SpriteMaterial({ color: PROGRESS_BAR_DEFAULTS.fillColor }));
-  fill.center.set(0, 0.5);
-  fill.position.x = fillLeftEdge(W, H);
+  fill.center.set(0.5, 0.5);
   fill.scale.set(0, fillInnerHeight(H), 1);
   pivot.add(bg, fill);
   pivot.position.set(3.7, 5.2, -1.4); // arbitrary, non-origin — a real characterRoot position
@@ -136,6 +135,7 @@ console.log('progressbar.test — THREE.Sprite real-geometry nesting (B7-3)');
   const margin = fillMargin(H);
   for (const progress of [0, 0.1, 0.5, 1]) {
     fill.scale.x = fillScaleX(W, H, progress);
+    fill.center.x = fillCenterX(progress);
     const bgRect = spriteWorldRect(bg);
     const fillRect = spriteWorldRect(fill);
 
@@ -145,9 +145,11 @@ console.log('progressbar.test — THREE.Sprite real-geometry nesting (B7-3)');
     check(`p=${progress}: fill stays fully inside bg vertically`,
       fillRect.bottom >= bgRect.bottom - 1e-9 && fillRect.top <= bgRect.top + 1e-9,
       JSON.stringify({ bgRect, fillRect }));
-    check(`p=${progress}: left margin matches the designed fillMargin (no anchor-mismatch gap/overhang)`,
-      Math.abs((fillRect.left - bgRect.left) - margin) < 1e-9,
-      `leftMargin=${fillRect.left - bgRect.left} expected=${margin}`);
+    if (progress > 0) {
+      check(`p=${progress}: left margin matches the designed fillMargin (no anchor-mismatch gap/overhang)`,
+        Math.abs((fillRect.left - bgRect.left) - margin) < 1e-9,
+        `leftMargin=${fillRect.left - bgRect.left} expected=${margin}`);
+    }
     check(`p=${progress}: top/bottom margins match the designed fillMargin`,
       Math.abs((fillRect.top - bgRect.top) + margin) < 1e-9 && Math.abs((fillRect.bottom - bgRect.bottom) - margin) < 1e-9,
       `topGap=${bgRect.top - fillRect.top} bottomGap=${fillRect.bottom - bgRect.bottom} expected=${margin}`);
@@ -161,6 +163,42 @@ console.log('progressbar.test — THREE.Sprite real-geometry nesting (B7-3)');
       Math.abs((bgRect.right - fillRect.right) - margin) < 1e-9,
       `rightMargin=${bgRect.right - fillRect.right} expected=${margin}`);
   }
+}
+
+console.log('progressbar.test — isometric camera projection (B7-3 regression)');
+{
+  const scene = new THREE.Scene();
+  const character = new THREE.Group();
+  character.position.set(3.7, 0, -1.4);
+  const bar = createProgressBarInstance(scene);
+  bar.update(character, true, 0.5, 1.55);
+
+  const pivot = scene.getObjectByName('progress-bar') as THREE.Group;
+  const [bg, fill] = pivot.children as THREE.Sprite[];
+  check('fill and track share the exact local/world origin (no world-X anchor offset)',
+    fill.position.equals(bg.position), `bg=${bg.position.toArray()} fill=${fill.position.toArray()}`);
+
+  // A world-X child offset projects diagonally under the shipped isometric camera; sharing the
+  // origin leaves all relative placement to each Sprite's camera-facing shader coordinates.
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+  camera.position.set(7, 9, 7);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld(true);
+  const originNdc = pivot.getWorldPosition(new THREE.Vector3()).project(camera);
+  const legacyOffsetNdc = pivot.localToWorld(new THREE.Vector3(fillLeftEdge(
+    PROGRESS_BAR_DEFAULTS.widthMeters, PROGRESS_BAR_DEFAULTS.heightMeters,
+  ), 0, 0)).project(camera);
+  check('the old world-X anchor offset projects vertically as well as horizontally',
+    Math.abs(legacyOffsetNdc.y - originNdc.y) > 1e-6,
+    `origin=${originNdc.toArray()} legacy=${legacyOffsetNdc.toArray()}`);
+  check('fixed fill origin has no projected displacement from the track origin',
+    fill.getWorldPosition(new THREE.Vector3()).project(camera).distanceTo(originNdc) < 1e-9);
+  check('partial fill center keeps the designed fixed left edge in sprite/camera space',
+    Math.abs((-fill.center.x * fill.scale.x) - fillLeftEdge(
+      PROGRESS_BAR_DEFAULTS.widthMeters, PROGRESS_BAR_DEFAULTS.heightMeters,
+    )) < 1e-9,
+    `center=${fill.center.x} scale=${fill.scale.x}`);
+  bar.dispose();
 }
 
 if (failures > 0) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }

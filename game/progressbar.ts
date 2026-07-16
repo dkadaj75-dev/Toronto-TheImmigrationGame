@@ -21,9 +21,9 @@
 // RENDERING: two THREE.Sprite (full camera billboard, same mechanism as censor.ts's quad and
 // marker.ts's image kind — no manual look-at math), plain-color SpriteMaterials (no texture, no
 // asset/mesh pipeline needed for a procedural HUD-style bar). The background track is a fixed-size
-// sprite; the fill sprite is LEFT-anchored (`sprite.center.set(0, 0.5)`) with its x-scale set to
-// `progress * innerWidth`, so it grows rightward from a fixed left edge — the conventional
-// "progress bar" visual. `depthTest: false` + a high `renderOrder` (same convention as censor.ts)
+// sprite; the fill sprite shares the track's exact world position and uses a progress-dependent
+// `sprite.center.x` with its x-scale set to `progress * innerWidth`, so its camera-facing quad grows
+// rightward from a fixed left edge. `depthTest: false` + a high `renderOrder` (same convention as censor.ts)
 // so the bar reliably reads above nearby furniture it may be co-located with (e.g. extinguishing a
 // fire right next to the stove).
 //
@@ -36,6 +36,15 @@
 // internally consistent. Fix: derive a single `fillMargin` (15% of heightMeters) and apply it
 // symmetrically to BOTH axes via `fillInnerWidth`/`fillLeftEdge`/`fillScaleX` below, so the fill
 // keeps a matching margin on all four sides of the bg track at every progress value.
+//
+// ROADMAP_NEXT B7-3 root cause: the B6-1 code put the fill's fixed left edge in
+// `fill.position.x`. A Sprite's position is transformed in WORLD axes, but its quad/center/scale
+// are applied in CAMERA axes by three's billboard shader. With the shipped isometric camera,
+// world-X projects diagonally down-left, so the track stayed at the pivot while the fill floated
+// below-left. The earlier real-THREE test compared world rects without a camera and therefore
+// missed that coordinate-space mismatch. The live fix keeps both sprites at the identical world
+// origin and expresses the fixed left edge entirely through `fill.center.x`, which is evaluated in
+// the same camera-facing coordinate frame as the fill quad.
 
 import * as THREE from 'three';
 
@@ -102,6 +111,14 @@ export function fillScaleX(widthMeters: number, heightMeters: number, progress: 
   return fillInnerWidth(widthMeters, heightMeters) * clampProgress01(progress);
 }
 
+/** Sprite-center value that keeps the fill's left edge at `-innerWidth/2` while its width grows.
+ *  Sprite centers are not restricted to [0,1]; values above 1 for partial progress are valid and
+ *  let the whole anchor offset stay in the billboard shader's camera-facing coordinate frame. */
+export function fillCenterX(progress: number): number {
+  const p = clampProgress01(progress);
+  return p > 0 ? 1 / (2 * p) : 0.5;
+}
+
 export interface ProgressBarInstance {
   /** `active` = whether the current action has a duration in progress (game/main.ts's
    *  `durationState !== null`); when false the bar is hidden and position/scale aren't touched.
@@ -125,8 +142,7 @@ export function createProgressBarInstance(scene: THREE.Object3D, config: Progres
   const fillMat = new THREE.SpriteMaterial({ color: config.fillColor, depthTest: false });
   const fill = new THREE.Sprite(fillMat);
   fill.renderOrder = 999;
-  fill.center.set(0, 0.5); // left-anchored — grows rightward, see module doc comment's RENDERING note
-  fill.position.x = fillLeftEdge(config.widthMeters, config.heightMeters); // inset left edge (B6-1 fix)
+  fill.center.set(0.5, 0.5);
   fill.scale.set(0, fillInnerHeight(config.heightMeters), 1); // inset on all sides, symmetric with X; starts empty
 
   pivot.add(bg, fill);
@@ -138,6 +154,7 @@ export function createProgressBarInstance(scene: THREE.Object3D, config: Progres
       if (!active) return;
       pivot.position.set(characterRoot.position.x, progressBarAnchorHeight(heightMeters, config.yOffset), characterRoot.position.z);
       fill.scale.x = fillScaleX(config.widthMeters, config.heightMeters, progress);
+      fill.center.x = fillCenterX(progress); // camera-space left anchor; never offset in world X (B7-3)
     },
     dispose() {
       scene.remove(pivot);

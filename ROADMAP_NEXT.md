@@ -179,7 +179,7 @@ Projected crisp HTML text rises above the sim for integer skill-level crossings 
 
 ## B7-1. Asset tool viewer: grid at ground level + show IN-GAME size (footprint-fit + meshFit/scale/rotation applied), not raw GLB size
 ## B7-2. Cooked meal hunger fulfillment proportional to cooking skill
-## B7-3. BUG: loading bar still misaligned (screenshot: fill sprite floats detached below the track)
+## B7-3. BUG: loading bar still misaligned (screenshot: fill sprite floats detached below the track) — ✅ DONE 2026-07-16 (root cause: fill anchor used world-X while Sprite geometry billboards in camera space; shared origin + camera-space center fixes isometric down-left drift)
 ## B7-4. BUG: sim STILL does not walk all the way to the fridge before snacking
 ## B7-5. Work window: ~2h (tunable) after startHour to leave for work, else shift missed (skip) — ✅ DONE 2026-07-16
 `tuning.work.departureWindowHours` gates manual/door arrival, reminders name the deadline, and misses register exactly once when the window closes (including overnight shifts).
