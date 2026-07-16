@@ -48,6 +48,7 @@ const CSS = `
   font-size: 14px; background: #33406040; background: rgba(90,120,190,.28); color: #eaf0fb; cursor: pointer;
   touch-action: manipulation; }
 #action-menu button:active { background: rgba(90,120,190,.55); }
+#action-menu button:disabled { opacity: .42; cursor: not-allowed; background: rgba(45,55,75,.5); }
 #action-menu button.am-cancel { background: transparent; color: #93a3c0; padding: 6px; font-size: 12px; }
 
 #activity-chip { position: absolute; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
@@ -529,12 +530,14 @@ export class Hud {
   }
 
   /** Bottom-sheet contextual menu for a tapped object. */
-  showActionMenu(asset: AssetDef, actions: ActionDef[], onPick: (a: ActionDef) => void) {
+  showActionMenu(asset: AssetDef, actions: ActionDef[], onPick: (a: ActionDef) => void, funds = Infinity, currencyName = '§') {
     this.hideActivity();
     this.menu.innerHTML = `<div class="am-title">${asset.name}</div>`;
     for (const action of actions) {
       const b = document.createElement('button');
-      b.textContent = action.name;
+      const cost = Math.max(0, action.cost ?? 0);
+      b.textContent = cost > 0 ? `${action.name} (${currencyName}${cost})` : action.name;
+      b.disabled = funds < cost;
       b.addEventListener('click', () => { this.hideActionMenu(); onPick(action); });
       this.menu.appendChild(b);
     }

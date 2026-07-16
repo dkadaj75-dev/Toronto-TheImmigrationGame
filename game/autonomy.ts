@@ -82,7 +82,9 @@ export class Autonomy {
         // ROADMAP_NEXT B2-1: unmet conditions make this action ineligible for autonomy, same as
         // it being hidden from the tap menu — evaluated fresh per candidate (cheap: no per-tick
         // caching needed, this loop already runs once per needs-decay tick, not per frame).
-        if (action.conditions && (!this.getEvalContext || !isActionAvailable(action.conditions, this.getEvalContext()))) continue;
+        const evalCtx = this.getEvalContext?.();
+        if (action.conditions && (!evalCtx || !isActionAvailable(action.conditions, evalCtx))) continue;
+        if ((action.cost ?? 0) > (evalCtx?.funds ?? 0)) continue;
         const dx = obj.position.x - simPos.x, dz = obj.position.z - simPos.z;
         candidates.push({ obj, action, def, dist: Math.hypot(dx, dz) });
       }

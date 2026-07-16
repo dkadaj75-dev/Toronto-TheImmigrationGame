@@ -140,6 +140,14 @@ export class QuestRunner {
 
   get questDefsList(): readonly QuestDef[] { return this.questDefs; }
 
+  /** B4-2 economy seam for action costs. Returns false without mutation when unaffordable. */
+  spend(amount: number): boolean {
+    const cost = Number.isFinite(amount) ? Math.max(0, amount) : 0;
+    if (this.funds < cost) return false;
+    this.funds -= cost;
+    return true;
+  }
+
   /**
    * Call once per needs-decay tick (same reuse-an-existing-interval convention as autonomy.ts).
    * needs/skills are plain snapshots (e.g. `Object.fromEntries(stats.needs)`); time is the current

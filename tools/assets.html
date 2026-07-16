@@ -490,6 +490,24 @@ function renderEditor() {
     if (!a.interactions.length) clearedChecks.innerHTML = '<span class="hint">Add an interaction above first (e.g. "extinguish", "mop") — clearedBy can only reference this asset\'s own actions.</span>';
     cardCleared.appendChild(clearedChecks);
     root.appendChild(cardCleared);
+
+    // B4-2: only transient assets can be carried food. Sparse as usual: clearing both fields
+    // removes the whole block, so ordinary fire/puddle/ash fixtures stay unchanged.
+    const cardFood = document.createElement('div');
+    cardFood.className = 'card';
+    cardFood.innerHTML = '<h2>Food</h2><div class="hint">Optional carried-food payload. Hunger is granted once eating completes; interrupted food drops and despawns after perishHours in-game hours. Leave both blank for non-food transients.</div>';
+    const pruneFood = () => { if (a.food && a.food.hungerGain === undefined && a.food.perishHours === undefined) delete a.food; };
+    cardFood.appendChild(frow('hunger gain', numInput(
+      () => a.food?.hungerGain,
+      (v) => { if (v === undefined) { if (a.food) delete a.food.hungerGain; } else (a.food ??= {}).hungerGain = v; pruneFood(); },
+      'food.hungerGain',
+    )));
+    cardFood.appendChild(frow('perish after (game hours)', numInput(
+      () => a.food?.perishHours,
+      (v) => { if (v === undefined) { if (a.food) delete a.food.perishHours; } else (a.food ??= {}).perishHours = Math.max(0, v); pruneFood(); },
+      'food.perishHours',
+    )));
+    root.appendChild(cardFood);
   } else {
     root.appendChild(renderAccidentsCard(a));
 

@@ -28,6 +28,7 @@ import { createProgressBarInstance, type ProgressBarInstance } from './progressb
 import { computeDurationSeconds, isDurationComplete } from './duration';
 import { AudioManager, loopSoundFor } from './audio';
 import { initBladderFailureState, checkBladderFailure, rearmBladderFailure } from './bladder';
+import { FoodRegistry, foodAssetForActionEvent } from './food';
 
 /** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
  *  a seat-aware action with no eligible seat in range) plays the dedicated 'sit_ground' state
@@ -443,12 +444,67 @@ async function start() {
   // "recompute, don't assume" convention garbage.ts's own doc comment already uses for the no-carry
   // clean_up path this replaces.
   let carryState: { target: THREE.Object3D; actionId: string } | null = null;
+  const food = new FoodRegistry();
+  const FOOD_EATING_ACTION_ID = '__eat_carried_food';
+  let foodTransitioning = false;
+  const gameHourNow = () => (gameDay - 1) * 24 + gameSeconds / 3600;
+
+  const dropActiveFood = () => {
+    const dropped = food.interruptActive([sim.position.x, sim.position.z], gameHourNow());
+    if (dropped) accidents.setTransientPlacement(dropped.key, dropped.pos, true);
+  };
   /** Any order that redirects the sim away from an in-progress "carry to garbage" walk cancels it —
    *  the transient stays exactly where it was (still dirty), the can's fill is untouched. Call this
    *  from every place that can send the sim somewhere else: a fresh ground-tap/action order, the
    *  buy-mode "stop in place" safety net, and the panic/bladder-failure interrupts (both of which
    *  otherwise leave the sim mid-walk toward the can while "reacting" to something else). */
-  const cancelCarry = () => { carryState = null; };
+  const cancelCarry = () => { carryState = null; dropActiveFood(); };
+
+  const nearestFoodSeat = (): THREE.Object3D | null => {
+    const byId = new Map(data.assets.assets.map((a) => [a.id, a]));
+    let best: THREE.Object3D | null = null;
+    let bestDist = Infinity;
+    for (const obj of world.children) {
+      if (obj.visible === false) continue;
+      const def = byId.get(obj.userData?.assetId as string);
+      if (!def?.seatTarget) continue;
+      const dist = Math.hypot(obj.position.x - sim.position.x, obj.position.z - sim.position.z);
+      if (dist < bestDist) { best = obj; bestDist = dist; }
+    }
+    return best;
+  };
+
+  /** Starts B4-2's second leg using the same bare main.ts orchestration as B3-5 carry-to-garbage.
+   *  The source action has already arrived at the fridge/stove; the transient is hidden while
+   *  carried, then an internal duration action reuses SimAgent's seat pose / sit_ground fallback. */
+  const startCarriedFood = (assetId: string) => {
+    const def = data.assets.assets.find((a) => a.id === assetId && a.category === 'transient');
+    if (!def?.food) return;
+    const pos: [number, number] = [sim.position.x, sim.position.z];
+    const rec = accidents.spawnTransient(assetId, pos, THREE.MathUtils.radToDeg(sim.rotation.y), simClockSeconds);
+    if (!rec) return;
+    food.startCarrying(rec.key, assetId, def.food, pos);
+    accidents.setTransientPlacement(rec.key, pos, false);
+    const target = accidents.groupFor(rec.key);
+    const eatDef = data.interactions.actions.find((a) => a.id === 'eat');
+    if (!target || !eatDef) { dropActiveFood(); return; }
+    const eatingAction = {
+      ...eatDef,
+      id: FOOD_EATING_ACTION_ID,
+      name: `Eating ${def.name.toLowerCase()}`,
+      needGains: {}, skillGains: {}, primaryNeed: null, autonomyEligible: false,
+      cost: undefined,
+      duration: eatDef.duration ?? { baseSeconds: 5 },
+    };
+    const seat = nearestFoodSeat();
+    // Keep the hidden target at the eating destination so SimAgent's final face-target step does
+    // not turn a seated sim back toward the distant fridge/stove after applying the seat pose.
+    if (seat) accidents.setTransientPlacement(rec.key, [seat.position.x, seat.position.z], false);
+    foodTransitioning = true;
+    const ordered = agent.orderAction(eatingAction, target, seat, undefined, true);
+    foodTransitioning = false;
+    if (!ordered) dropActiveFood();
+  };
 
   // --- ROADMAP_NEXT B2-4: bladder failure ("pees itself" at 0) ---------------------------------
   // Trigger/cooldown decision is pure logic (game/bladder.ts, headless-tested in test/bladder.test.ts)
@@ -478,10 +534,22 @@ async function start() {
   };
 
   agent.onActionStart = (a) => {
+    if (a.action.id !== FOOD_EATING_ACTION_ID && !quests.spend(a.action.cost ?? 0)) {
+      hud.showQuestToast('Not enough funds for that action', 'started', 2500);
+      agent.stopAction();
+      return;
+    }
+    if (a.action.id !== FOOD_EATING_ACTION_ID && (a.action.cost ?? 0) > 0) {
+      hud.setFunds(quests.funds, currencyName());
+    }
     hud.showActivity(a.action.name);
     anim?.play(animStateFor(a)); // unmapped states fall back to idle inside AnimController
     const totalSeconds = computeDurationSeconds(a.action.duration, Object.fromEntries(stats.skills), data.stats.skills, Object.fromEntries(stats.needs));
     durationState = totalSeconds !== null ? { action: a, totalSeconds, elapsed: 0 } : null;
+    if (a.action.id === FOOD_EATING_ACTION_ID) {
+      const active = food.active;
+      if (active) food.beginEating(active.key);
+    }
     // ROADMAP_NEXT item 7: start whichever of the target asset's own `sound` (wins, per-instance
     // key so two placed instances of the same asset loop independently) or the action's `sound`
     // (shared key — this single-sim game only ever has one action in flight at a time) applies.
@@ -506,6 +574,8 @@ async function start() {
       refreshPhone();
       hud.openPhone();
     }
+    const foodAssetId = foodAssetForActionEvent(a.action.id, 'start');
+    if (foodAssetId) startCarriedFood(foodAssetId);
   };
   agent.onActionStop = (a, completed) => {
     hud.hideActivity();
@@ -516,6 +586,23 @@ async function start() {
     audio.stopLoop(`asset:${a.target.uuid}`);
     audio.stopLoop(`action:${a.action.id}`);
     if (a.action.id === 'use_phone') hud.closePhone();
+    if (a.action.id === FOOD_EATING_ACTION_ID) {
+      const active = food.active;
+      if (!completed) {
+        if (!foodTransitioning) dropActiveFood();
+        return;
+      }
+      if (active) {
+        const eaten = food.completeEating(active.key, stats.needs.get('hunger') ?? 0);
+        if (eaten) stats.refillNeed('hunger', eaten.hunger);
+        accidents.despawnTransient(active.key);
+      }
+      if (a.action.producesWaste) {
+        const cleanliness = stats.personality.get(garbage.cleanlinessVarId());
+        garbage.handleWaste(a.action.producesWaste, [sim.position.x, sim.position.z], cleanliness, accidents);
+      }
+      return;
+    }
     // ROADMAP_NEXT B3-4: every side effect below represents "the sim actually finished doing
     // this" (clearedBy despawn, an onUse accident roll, waste production, resetting every garbage
     // can) — none of them should fire on a CANCELLED action (player override, a fresh order, a
@@ -523,6 +610,8 @@ async function start() {
     // for main.ts's own two natural-finish call sites (primaryNeed threshold below, and the
     // `duration` timer running out in the render loop) — see sim.ts's stopAction doc comment.
     if (!completed) return;
+    const completedFoodAssetId = foodAssetForActionEvent(a.action.id, 'completion');
+    if (completedFoodAssetId) { startCarriedFood(completedFoodAssetId); return; }
     // §7.20 V3: the short duration on leave_for_work finishes through the ordinary completed-only
     // action path. Re-check the live job/time here because the shift may have ended during the walk
     // from menu-open to the exterior door.
@@ -660,7 +749,7 @@ async function start() {
             const seat = action.seatAware ? findSeatFor(world, data, target) : null;
             if (agent.orderAction(action, target, seat, resolvedAsset, action.seatAware)) cue.showAt(target.position.x, target.position.z);
             else console.log('no path to object', resolvedAsset.id);
-          });
+          }, quests.funds, currencyName());
           return; // object tap opens the menu; don't also walk to the tap point
         }
       }
@@ -1008,6 +1097,9 @@ async function start() {
       garbage.depositAtNearestCan([sim.position.x, sim.position.z]);
       accidents.maybeCleanup(cs.target, cs.actionId);
     }
+    // B4-2: dropped food ages in monotonic in-game hours; pause freezes it and crossing midnight
+    // stays monotonic through gameDay. The pure registry returns keys for the transient layer.
+    for (const key of food.tick(gameHourNow())) accidents.despawnTransient(key);
     // ROADMAP_NEXT item 5 (§7.11): duration-timed actions auto-complete on the same sim time as
     // everything else here — a normal stop (triggers onActionStop → accident roll, animation
     // reset, etc.), just driven by elapsed time instead of a filled primaryNeed.

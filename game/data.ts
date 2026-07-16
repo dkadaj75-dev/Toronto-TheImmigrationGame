@@ -21,6 +21,9 @@ export interface ActionDef {
   autonomyEligible: boolean;
   primaryNeed: string | null;
   seatAware?: boolean;
+  /** B4-2: sparse action-start charge. The tap menu shows and disables this action against the
+   *  live QuestRunner funds balance; QuestRunner.spend performs the authoritative deduction. */
+  cost?: number;
   /** ROADMAP_NEXT item 5: optional completion timer, sim-time seconds (same clock as
    *  needsDecayTickSeconds/activityGainTickSeconds — pause/2x/3x affect it identically, see
    *  game/main.ts's `sdt`). Absent = current behavior (runs until primaryNeed satisfied or
@@ -160,6 +163,9 @@ export interface AssetDef {
    *  findNearestNonFullCan until emptied (the exterior door's `empty_garbage` interaction resets
    *  every can to 0 — see game/garbage.ts). */
   garbage?: { capacity: number };
+  /** B4-2: transient food payload. hungerGain is applied once, only when eating completes;
+   *  perishHours uses the monotonic in-game-hour clock after interrupted food is dropped. */
+  food?: { hungerGain: number; perishHours: number };
 }
 export interface UsePoseEntry { offset?: [number, number]; y?: number; facingDeg?: number; }
 export interface AssetsData { categories: string[]; assets: AssetDef[]; }

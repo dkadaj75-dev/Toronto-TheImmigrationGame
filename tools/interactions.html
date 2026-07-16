@@ -468,6 +468,8 @@ function renderEditor() {
     checkInput(() => !!a.seatAware, (v) => { if (v) a.seatAware = true; else delete a.seatAware; }, 'seatAware')));
   card2.appendChild(frow('censor (Sims-style pixelation quad over the sim while this action runs, e.g. shower/toilet)',
     checkInput(() => !!a.censor, (v) => { if (v) a.censor = true; else delete a.censor; }, 'censor')));
+  card2.appendChild(frow('cost (optional — charged from funds when the action starts)',
+    numInput(() => a.cost, (v) => { if (v === undefined) delete a.cost; else a.cost = Math.max(0, v); }, 'cost')));
 
   const needSel = document.createElement('select');
   needSel.dataset.path = 'primaryNeed';

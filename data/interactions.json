@@ -4,14 +4,15 @@
     {
       "id": "eat",
       "name": "Eat",
-      "needGains": {
-        "hunger": 4,
-        "bladder": -2
-      },
+      "needGains": {},
       "skillGains": {},
       "animation": "sit_eat",
       "autonomyEligible": true,
       "primaryNeed": "hunger",
+      "cost": 5,
+      "duration": {
+        "baseSeconds": 5
+      },
       "producesWaste": "dirty_dishes",
       "_wasteNote": "ROADMAP_NEXT item 10 — on stop, either auto-tidied into a nearby non-full garbage can (sim cleanliness personality stat permitting) or dropped as a 'dirty_dishes' transient. See game/garbage.ts.",
       "seatAware": true
@@ -112,6 +113,7 @@
       "animation": "stand_use",
       "autonomyEligible": true,
       "primaryNeed": null,
+      "cost": 12,
       "_durationNote": "ROADMAP_NEXT item 5 (§7.11) — first duration-driven action, ships the spec's own worked example. Sim-time seconds (same clock as needsDecayTickSeconds=1/activityGainTickSeconds=2): a novice (cooking skill 0) takes 60s to cook, a master (skill at its max, 10) takes 20s. Also fixes 'cook' never auto-stopping on its own (primaryNeed is null — see accidents.ts's onActionStop doc comment).",
       "sound": "sounds/action_beep.wav",
       "duration": {

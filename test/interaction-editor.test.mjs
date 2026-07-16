@@ -15,7 +15,7 @@ const html = readFileSync(join(here, '../tools/interactions.html'), 'utf8');
 const interactions = {
   actions: [
     { id: 'watch_tv', name: 'Watch TV', needGains: { fun: 2.5 }, skillGains: { english: 0.02 }, animation: 'sit_idle', autonomyEligible: true, primaryNeed: 'fun', seatAware: true },
-    { id: 'cook', name: 'Cook', needGains: {}, skillGains: { cooking: 0.05 }, animation: 'stand_use', autonomyEligible: false, primaryNeed: null, duration: { baseSeconds: 60, skillVar: 'skills.cooking', atMaxSeconds: 20, modifiers: [{ var: 'needs.hunger', atMin: 1.2, atMax: 1 }] } },
+    { id: 'cook', name: 'Cook', needGains: {}, skillGains: { cooking: 0.05 }, animation: 'stand_use', autonomyEligible: false, primaryNeed: null, cost: 12, duration: { baseSeconds: 60, skillVar: 'skills.cooking', atMaxSeconds: 20, modifiers: [{ var: 'needs.hunger', atMin: 1.2, atMax: 1 }] } },
   ],
 };
 const assets = {
@@ -165,6 +165,10 @@ assert(doc.querySelector('select[data-path="duration.skillVar"]').value === '', 
 assert(doc.querySelector('input[data-path="duration.atMaxSeconds"]').value === '', 'watch_tv has no duration.atMaxSeconds (blank)');
 
 doc.querySelector('[data-action-id="cook"]').click();
+assert(doc.querySelector('input[data-path="cost"]').value === '12', 'cook cost rendered from data');
+const costInput = doc.querySelector('input[data-path="cost"]');
+costInput.value = '14';
+costInput.dispatchEvent(new window.Event('input', { bubbles: true }));
 assert(doc.querySelector('input[data-path="duration.baseSeconds"]').value === '60', 'cook duration.baseSeconds rendered from data');
 const skillVarSel = doc.querySelector('select[data-path="duration.skillVar"]');
 assert(skillVarSel.value === 'skills.cooking', 'cook duration.skillVar rendered from data, options fed from stats.json skills');
@@ -218,6 +222,7 @@ assert(savedTv.skillGains.english === 0.02, 'untouched skill gain preserved');
 assert(savedTv.duration === undefined, 'PUT: watch_tv still has no duration key (never touched)');
 assert(savedTv.sound === '/sounds/action_beep.wav', 'PUT carries edited sound path');
 let savedCook = saved.actions.find((a) => a.id === 'cook');
+assert(savedCook.cost === 14, 'PUT carries edited sparse action cost');
 assert(savedCook.duration.baseSeconds === 50, 'PUT carries edited cook duration.baseSeconds');
 assert(savedCook.duration.skillVar === undefined, 'PUT: clearing skillVar prunes only that key');
 assert(savedCook.duration.atMaxSeconds === 20, 'PUT: untouched atMaxSeconds preserved after skillVar was cleared');

@@ -114,7 +114,9 @@ Leave via suite door during job hours → sim disappears, game speed auto-set (5
 Implemented: serializable pure `BillState`, `data/bills.json` definitions, `tuning.bills.intervalDays`, day-boundary arrival, phone Bills tab with individual/atomic Pay all actions through QuestRunner funds, arrival/refusal/payment toasts, and a red unpaid-count launcher badge. Bill amounts are `bills.json`-only for now; non-payment consequences remain explicitly deferred.
 Every N days (tunable, default 3): bills arrive (rent, phone, hydro — amounts tunable, data-driven list). Received + paid via the phone (new Bills tab/section). HUD notification when unpaid (toast + badge on the smartphone icon — placeholder badge, designer may supply an icon). Consequences of non-payment: later (record only).
 
-## B4-2. Food as carried transients + action costs
+## B4-2. Food as carried transients + action costs — ✅ DONE 2026-07-15 (see PROJECT_CONTEXT.md §7.23)
+
+Implemented: pure carried/dropped/perishing food lifecycle; snack-on-Eat-start and meal-on-Cook-completion routing to the nearest seat with `sit_ground` fallback; completion-only hunger/waste and interrupt-at-sim drop behavior; sparse action costs with disabled labelled menu entries and QuestRunner start deduction; Interaction/Asset Editor fields and headless coverage.
 - Eat from fridge: sim takes a snack (food transient) and carries it to a seat/table/wherever, eats there. Interrupt → food left at that spot, perishes after a few hours (tunable) → becomes garbage/vanishes.
 - Cook at stove: on cook completion, sim takes the cooked dish (more fulfilling food transient) and eats it same way.
 - Both eat/cook actions COST money (per-action cost field), shown in the action menu label before selecting (e.g. "Eat (§5)"); blocked with feedback if unaffordable.

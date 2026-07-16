@@ -96,8 +96,7 @@
       ],
       "seats": 1,
       "interactions": [
-        "sit",
-        "eat"
+        "sit"
       ],
       "seatTarget": true,
       "usePose": {
@@ -585,6 +584,34 @@
       ],
       "buyable": false,
       "_note": "ROADMAP_NEXT item 10 — spawned by game/garbage.ts (via game/accidents.ts's spawnTransient) when 'eat' finishes and no non-full garbage can is close enough / the sim isn't clean enough to bother auto-tidying. Player taps it -> 'clean_up' -> despawns + deposits into the nearest non-full can. No real mesh yet — flat box stand-in until models/dirty_dishes.glb is imported."
+    },
+    {
+      "id": "snack",
+      "name": "Snack",
+      "category": "transient",
+      "mesh": "",
+      "buyPrice": 0,
+      "sellPrice": 0,
+      "environmentScore": 0,
+      "footprint": [0.35, 0.35],
+      "interactions": [],
+      "buyable": false,
+      "food": { "hungerGain": 18, "perishHours": 3 },
+      "_note": "ROADMAP_NEXT B4-2: spawned when Eat starts, hidden while carried/eaten, dropped at the sim on interruption, then perishes in game hours."
+    },
+    {
+      "id": "meal",
+      "name": "Meal",
+      "category": "transient",
+      "mesh": "",
+      "buyPrice": 0,
+      "sellPrice": 0,
+      "environmentScore": 0,
+      "footprint": [0.45, 0.45],
+      "interactions": [],
+      "buyable": false,
+      "food": { "hungerGain": 45, "perishHours": 6 },
+      "_note": "ROADMAP_NEXT B4-2: spawned only when Cook completes, then carried/eaten like snack with a larger hunger gain."
     },
     {
       "id": "ash",
