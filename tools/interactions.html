@@ -466,6 +466,8 @@ function renderEditor() {
     checkInput(() => a.autonomyEligible, (v) => { a.autonomyEligible = v; renderSidebar(); }, 'autonomyEligible')));
   card2.appendChild(frow('seat aware (walks to nearest seat facing the object, e.g. TV)',
     checkInput(() => !!a.seatAware, (v) => { if (v) a.seatAware = true; else delete a.seatAware; }, 'seatAware')));
+  card2.appendChild(frow('face target after sitting (unticking keeps the seat’s own facing instead — e.g. read_book stays facing however the sofa’s usePose points it, rather than spinning to stare at the bookshelf)',
+    checkInput(() => a.faceTarget !== false, (v) => { if (v) delete a.faceTarget; else a.faceTarget = false; }, 'faceTarget')));
   card2.appendChild(frow('censor (Sims-style pixelation quad over the sim while this action runs, e.g. shower/toilet)',
     checkInput(() => !!a.censor, (v) => { if (v) a.censor = true; else delete a.censor; }, 'censor')));
   card2.appendChild(frow('cost (optional — charged from funds when the action starts)',

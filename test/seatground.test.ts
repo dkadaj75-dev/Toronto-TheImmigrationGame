@@ -181,5 +181,43 @@ const assetsById = new Map<string, AssetDef>([['tv', tvDef], ['sofa', sofaDef]])
   check('non-seat-aware action never sets groundSit', !!agent.current && !agent.current!.groundSit);
 }
 
+console.log('seatground.test — faceTarget (B9-1 follow-up): per-action opt-out of the post-arrival face-the-target rotation');
+{
+  // faceTarget: false (e.g. read_book) → sim keeps whatever facing applyPose/usePose gave it;
+  // the target-facing rotation in sim.ts's update() must be skipped entirely.
+  const grid = bakeNavGrid(map);
+  const { world } = makeWorld([10, 7], [3, 3]); // target far off-axis from the seat so any
+  // face-the-target rotation would be obviously different from the seat's own (unrotated) pose
+  const sofa = world.children.find((o) => o.userData.assetId === 'sofa')!;
+  const obj = new THREE.Group(); obj.position.set(1, 0, 1);
+  const agent = new SimAgent(obj, grid, tuning, assetsById);
+  const readBookAction: ActionDef = {
+    id: 'read_book', name: 'Read a book', needGains: { fun: 1 }, skillGains: {}, animation: 'sit_idle',
+    autonomyEligible: true, primaryNeed: 'fun', seatAware: true, faceTarget: false,
+  };
+  const seat = findSeatFor(world, gameData(), sofa);
+  agent.orderAction(readBookAction, sofa, seat, sofaDef, readBookAction.seatAware);
+  for (let i = 0; i < 600 && !agent.current; i++) agent.update(1 / 30);
+  const targetDx = 3 - obj.position.x, targetDz = 3 - obj.position.z;
+  const yawTowardTarget = Math.atan2(targetDx, targetDz);
+  check('faceTarget:false → sim does NOT rotate to face the target', Math.abs(obj.rotation.y - yawTowardTarget) > 1e-3, `${obj.rotation.y} vs ${yawTowardTarget}`);
+  // sofaDef has no facingDeg/usePose override → usePoseFor's default facing is the sofa's own
+  // rotDeg (0 here) — confirm the sim kept exactly that, not some other stray rotation.
+  check('faceTarget:false → sim keeps the seat\'s own usePose facing (0 rad, sofa rotDeg 0)', Math.abs(obj.rotation.y) < 1e-6, `${obj.rotation.y}`);
+}
+{
+  // faceTarget absent (e.g. watch_tv) → existing behavior unchanged: rotates to face the target.
+  const grid = bakeNavGrid(map);
+  const { world, tv } = makeWorld([10, 7]);
+  const obj = new THREE.Group(); obj.position.set(1, 0, 1);
+  const agent = new SimAgent(obj, grid, tuning, assetsById);
+  const seat = findSeatFor(world, gameData(), tv);
+  agent.orderAction(watchTvAction, tv, seat, tvDef, watchTvAction.seatAware);
+  for (let i = 0; i < 600 && !agent.current; i++) agent.update(1 / 30);
+  const dx = tv.position.x - obj.position.x, dz = tv.position.z - obj.position.z;
+  const expectedYaw = Math.atan2(dx, dz);
+  check('faceTarget absent → sim still rotates to face the target (unchanged default)', Math.abs(obj.rotation.y - expectedYaw) < 1e-3, `${obj.rotation.y} vs ${expectedYaw}`);
+}
+
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }
 console.log('\nall seatground tests passed');

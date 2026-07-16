@@ -133,7 +133,8 @@
       "animation": "sit_idle",
       "autonomyEligible": true,
       "primaryNeed": "fun",
-      "seatAware": true
+      "seatAware": true,
+      "faceTarget": false
     },
     {
       "id": "practice_english",

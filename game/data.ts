@@ -107,6 +107,14 @@ export interface ActionDef {
    *  precedent as accidents.ts's "onActionStop fires for every stop reason" doc comment). Sparse,
    *  absent = false = never censored. Ships true on `shower`/`use_toilet` only. */
   censor?: boolean;
+  /** Designer follow-up (B9-1): sparse, absent/true = current behavior — after a seat-aware
+   *  action perches the sim on a seat (or any locomotion arrival), sim.ts's update() rotates the
+   *  sim to face this action's TARGET object, overriding whatever facing the seat's own usePose
+   *  gave it (right for `watch_tv`: face the TV). Set false to SKIP that rotation and keep the
+   *  perch's own usePose facing instead (right for `read_book`: sit on the sofa facing however
+   *  the sofa's pose says, not spun around to stare at the bookshelf). See game/sim.ts's
+   *  update() arrival block. */
+  faceTarget?: boolean;
 }
 export interface InteractionsData { actions: ActionDef[]; }
 

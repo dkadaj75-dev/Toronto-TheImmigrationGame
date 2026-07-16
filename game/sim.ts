@@ -353,8 +353,10 @@ export class SimAgent {
       this.queued = null;
       this.current = a;
       this.applyPose(a); // sit on the couch / lie on the bed first…
-      const dx = a.target.position.x - p.x, dz = a.target.position.z - p.z;
-      if (Math.hypot(dx, dz) > 1e-3) this.object.rotation.y = Math.atan2(dx, dz); // …then face the target from where we ended up
+      if (a.action.faceTarget !== false) { // …then face the target from where we ended up (unless the action opts out, e.g. read_book keeps the seat's own facing)
+        const dx = a.target.position.x - p.x, dz = a.target.position.z - p.z;
+        if (Math.hypot(dx, dz) > 1e-3) this.object.rotation.y = Math.atan2(dx, dz);
+      }
       this.onActionStart?.(a);
     }
   }
