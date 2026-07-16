@@ -42,7 +42,8 @@ function loadPage(url, bodyHtml) {
   check('no corner button on tool pages', doc.getElementById('condo-toolnav-corner') === null);
 
   const links = [...strip.querySelectorAll('a')];
-  check('all 7 tools listed', links.length === 7, `got ${links.length}`);
+  check('all 8 tools listed', links.length === 8, `got ${links.length}`);
+  check('Career tool is listed', links.some((link) => link.textContent === 'Career' && link.getAttribute('href') === '/tools/career.html'));
   const active = strip.querySelector('a.ctn-active');
   check('Assets tab marked active', active && active.textContent === 'Assets', active && active.textContent);
   check('only one active tab', strip.querySelectorAll('a.ctn-active').length === 1);
@@ -54,6 +55,13 @@ function loadPage(url, bodyHtml) {
   const doc = dom.window.document;
   const active = doc.querySelector('#condo-toolnav a.ctn-active');
   check('Quests tab marked active on quests.html', active && active.textContent === 'Quests', active && active.textContent);
+}
+
+// ------------------------------------------------------------------ Career tool entry + active tab
+{
+  const dom = loadPage('http://localhost:5173/tools/career.html', '<header>Career</header>');
+  const active = dom.window.document.querySelector('#condo-toolnav a.ctn-active');
+  check('Career tab marked active on career.html', active && active.textContent === 'Career', active && active.textContent);
 }
 
 // ------------------------------------------------------------------ game page

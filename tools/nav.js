@@ -37,6 +37,7 @@
       { id: 'map', label: 'Map', href: '/tools/map.html' },
       { id: 'animations', label: 'Animations', href: '/tools/animations.html' },
       { id: 'quests', label: 'Quests', href: '/tools/quests.html' },
+      { id: 'career', label: 'Career', href: '/tools/career.html' },
     ];
 
     function currentToolId() {

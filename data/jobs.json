@@ -1,5 +1,5 @@
 {
-  "_comment": "Smartphone job definitions (PROJECT_CONTEXT.md §7.20 V2/V3). Requirements use the quest evaluator namespace. grantsVisa is applied through VisaMachine when the job application succeeds. Hours/pay/maxSkips drive game/work.ts attendance, return pay, and job loss; V4 editor UI remains deliberately unbuilt.",
+  "_comment": "Smartphone job definitions (PROJECT_CONTEXT.md §7.20 V2/V3/V4). Requirements use the quest evaluator namespace. grantsVisa is applied through VisaMachine when the job application succeeds. Hours/pay/maxSkips drive game/work.ts attendance, return pay, and job loss. Edit these definitions in tools/career.html.",
   "jobs": [
     {
       "id": "dishwasher",
