@@ -103,6 +103,10 @@
         "sit": {
           "y": 0.15
         }
+      },
+      "combustibility": {
+        "chancePercent": 60,
+        "delaySeconds": 10
       }
     },
     {
