@@ -138,6 +138,13 @@
       "default": 5,
       "max": 10,
       "_note": "ROADMAP_NEXT item 10 — a new STATIC stat family (no decay, no gains, unlike needs/skills): personality TRAITS. Gates the garbage/tidying autonomy decision (game/garbage.ts) — a sim with cleanliness >= tuning.garbage.cleanlinessThreshold auto-tidies waste into a nearby can instead of dropping it on the floor."
+    },
+    {
+      "id": "intelligence",
+      "name": "Intelligence",
+      "color": "#c38f32",
+      "default": 5,
+      "max": 10
     }
   ]
 }

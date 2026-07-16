@@ -560,6 +560,9 @@
       "combustibility": {
         "chancePercent": 90,
         "delaySeconds": 5
+      },
+      "meshFit": {
+        "yawOffsetDeg": 90
       }
     },
     {

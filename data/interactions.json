@@ -13,7 +13,8 @@
       "autonomyEligible": true,
       "primaryNeed": "hunger",
       "producesWaste": "dirty_dishes",
-      "_wasteNote": "ROADMAP_NEXT item 10 — on stop, either auto-tidied into a nearby non-full garbage can (sim cleanliness personality stat permitting) or dropped as a 'dirty_dishes' transient. See game/garbage.ts."
+      "_wasteNote": "ROADMAP_NEXT item 10 — on stop, either auto-tidied into a nearby non-full garbage can (sim cleanliness personality stat permitting) or dropped as a 'dirty_dishes' transient. See game/garbage.ts.",
+      "seatAware": true
     },
     {
       "id": "sleep",
@@ -47,7 +48,8 @@
       "skillGains": {},
       "animation": "sit_idle",
       "autonomyEligible": true,
-      "primaryNeed": "comfort"
+      "primaryNeed": "comfort",
+      "seatAware": true
     },
     {
       "id": "use_toilet",
@@ -128,7 +130,8 @@
       },
       "animation": "sit_idle",
       "autonomyEligible": true,
-      "primaryNeed": "fun"
+      "primaryNeed": "fun",
+      "seatAware": true
     },
     {
       "id": "practice_english",
@@ -139,7 +142,8 @@
       },
       "animation": "sit_idle",
       "autonomyEligible": false,
-      "primaryNeed": null
+      "primaryNeed": null,
+      "seatAware": true
     },
     {
       "id": "use_phone",
@@ -195,7 +199,7 @@
       "needGains": {},
       "skillGains": {},
       "animation": "extinguishing_fire",
-      "autonomyEligible": false,
+      "autonomyEligible": true,
       "primaryNeed": null,
       "_note": "Accidents slice (PROJECT_CONTEXT.md §7.3) — cleanup action for the 'fire' accident asset's clearedBy. Player-only by design (autonomyEligible false), no need/skill effect.",
       "_durationNote": "ROADMAP_NEXT B2-5 — base 10s, faster with intelligence (atMin 1 -> atMax 0.5, a smarter sim extinguishes faster), slower when tired (energy atMin 1.6 -> atMax 1, a low-energy sim is slower). Both modifiers multiply onto baseSeconds (no skillVar/atMaxSeconds lerp on this action). See game/duration.ts.",
@@ -223,7 +227,7 @@
       },
       "skillGains": {},
       "animation": "cleaning",
-      "autonomyEligible": false,
+      "autonomyEligible": true,
       "primaryNeed": null,
       "_note": "Accidents slice (PROJECT_CONTEXT.md §7.3) — cleanup action for the 'water_puddle' accident asset's clearedBy. Player-only by design (autonomyEligible false); small hygiene gain for the mopping motion.",
       "_durationNote": "ROADMAP_NEXT B2-5 — base ~6s, slower when tired (same energy modifier as extinguish/clean_up/sweep).",
@@ -244,7 +248,7 @@
       "needGains": {},
       "skillGains": {},
       "animation": "cleaning",
-      "autonomyEligible": false,
+      "autonomyEligible": true,
       "primaryNeed": null,
       "_note": "ROADMAP_NEXT item 6 (fire destruction) — cleanup action for the 'ash' transient asset's clearedBy. Player-only by design (autonomyEligible false), no need/skill effect, same shape as extinguish/mop.",
       "_durationNote": "ROADMAP_NEXT B2-5 — base ~6s, slower when tired (same energy modifier as extinguish/clean_up/mop).",
@@ -265,8 +269,7 @@
       "needGains": {},
       "skillGains": {},
       "animation": "stand_use",
-      "autonomyEligible": false,
-      "primaryNeed": null,
+      "autonomyEligible": true,
       "duration": {
         "baseSeconds": 1
       },
@@ -286,7 +289,7 @@
       "needGains": {},
       "skillGains": {},
       "animation": "cleaning",
-      "autonomyEligible": false,
+      "autonomyEligible": true,
       "primaryNeed": null,
       "_note": "ROADMAP_NEXT item 10 — cleanup action for the 'dirty_dishes' transient's clearedBy (player-taps-it path). game/main.ts refuses to order this action at all (HUD toast) if every garbage can is full/none exist; on completion it deposits into the nearest non-full can (see game/garbage.ts's depositAtNearestCan).",
       "_durationNote": "ROADMAP_NEXT B2-5 — base ~6s, slower when tired (same energy modifier as extinguish/sweep/mop). Duration completion goes through the same agent.stopAction() path as any other stop, so the existing clearedBy/deposit flow above still fires normally.",
@@ -307,7 +310,7 @@
       "needGains": {},
       "skillGains": {},
       "animation": "stand_use",
-      "autonomyEligible": false,
+      "autonomyEligible": true,
       "primaryNeed": null,
       "duration": {
         "baseSeconds": 3
