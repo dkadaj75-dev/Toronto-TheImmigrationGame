@@ -202,8 +202,16 @@
       "duration": {
         "baseSeconds": 10,
         "modifiers": [
-          { "var": "skills.intelligence", "atMin": 1, "atMax": 0.5 },
-          { "var": "needs.energy", "atMin": 1.6, "atMax": 1 }
+          {
+            "var": "skills.intelligence",
+            "atMin": 1,
+            "atMax": 0.5
+          },
+          {
+            "var": "needs.energy",
+            "atMin": 1.6,
+            "atMax": 1
+          }
         ]
       }
     },
@@ -222,7 +230,11 @@
       "duration": {
         "baseSeconds": 6,
         "modifiers": [
-          { "var": "needs.energy", "atMin": 1.6, "atMax": 1 }
+          {
+            "var": "needs.energy",
+            "atMin": 1.6,
+            "atMax": 1
+          }
         ]
       }
     },
@@ -239,7 +251,11 @@
       "duration": {
         "baseSeconds": 6,
         "modifiers": [
-          { "var": "needs.energy", "atMin": 1.6, "atMax": 1 }
+          {
+            "var": "needs.energy",
+            "atMin": 1.6,
+            "atMax": 1
+          }
         ]
       }
     },
@@ -277,7 +293,11 @@
       "duration": {
         "baseSeconds": 6,
         "modifiers": [
-          { "var": "needs.energy", "atMin": 1.6, "atMax": 1 }
+          {
+            "var": "needs.energy",
+            "atMin": 1.6,
+            "atMax": 1
+          }
         ]
       }
     },
@@ -293,6 +313,25 @@
         "baseSeconds": 3
       },
       "_note": "ROADMAP_NEXT item 10 (item 4: emptying) — shipped on 'door_exterior'. Resets EVERY garbage can's fill to 0 (game/main.ts's onActionStop, action.id === 'empty_garbage' -> garbage.emptyAll()). Ships a short fixed `duration` purely so it auto-completes via the existing §7.11 timer instead of needing new instant-action plumbing — documented simplification, no carrying-garbage-out animation (same precedent as §7.14's exterior door itself)."
+    },
+    {
+      "id": "learn_cooking",
+      "name": "Learn Cooking",
+      "needGains": {},
+      "skillGains": {
+        "cooking": 0.5
+      },
+      "animation": "sit_idle",
+      "autonomyEligible": true,
+      "primaryNeed": null,
+      "conditions": {
+        "all": [
+          {
+            "var": "skills.cooking",
+            "lte": 100
+          }
+        ]
+      }
     }
   ]
 }

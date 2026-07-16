@@ -95,22 +95,22 @@
       "id": "cooking",
       "name": "Cooking",
       "color": "#d35400",
-      "default": 0,
+      "default": 10,
       "max": 100
     },
     {
       "id": "engineering",
       "name": "Engineering",
       "color": "#7f8c8d",
-      "default": 0,
-      "max": 10
+      "default": 2,
+      "max": 100
     },
     {
       "id": "finance",
       "name": "Finance",
       "color": "#27ae60",
-      "default": 0,
-      "max": 10
+      "default": 5,
+      "max": 100
     },
     {
       "id": "french",

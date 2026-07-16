@@ -352,7 +352,8 @@
       ],
       "interactions": [
         "read_book",
-        "practice_english"
+        "practice_english",
+        "learn_cooking"
       ],
       "meshFit": {
         "yawOffsetDeg": 90,
