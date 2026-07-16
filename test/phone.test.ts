@@ -21,7 +21,7 @@ const jobs: JobsData = {
   jobs: [
     { id: 'dishwasher', name: 'Dishwasher', grantsVisa: 'lmia', hours: { startHour: 9, endHour: 17 }, payPerShift: 100, maxSkips: 3 },
     { id: 'cook', name: 'Cook', requirements: { var: 'skills.cooking', gte: 3 }, hours: { startHour: 15, endHour: 23 }, payPerShift: 200, maxSkips: 2 },
-    { id: 'tutor', name: 'Tutor', requirements: { var: 'skills.english', gte: 6 }, hours: { startHour: 10, endHour: 18 }, payPerShift: 250, maxSkips: 2 },
+    { id: 'tutor', name: 'Tutor', requirements: { var: 'skills.english', gte: 6 }, minCreditScore: 650, hours: { startHour: 10, endHour: 18 }, payPerShift: 250, maxSkips: 2 },
     { id: 'barista', name: 'Barista', hours: { startHour: 6, endHour: 14 }, payPerShift: 150, maxSkips: 3 },
   ],
 };
@@ -65,10 +65,11 @@ console.log('phone.test — job roll cadence and subset size');
 console.log('phone.test — requirement gating');
 {
   const c = makeContext();
-  const listings = jobListingViews(jobs.jobs, c);
+  const listings = jobListingViews(jobs.jobs, c, 600);
   check('job without requirements is met', listings.find((x) => x.job.id === 'dishwasher')?.requirementsMet === true);
   check('cooking requirement is unmet against live context', listings.find((x) => x.job.id === 'cook')?.requirementsMet === false);
-  check('english requirement is met against live context', listings.find((x) => x.job.id === 'tutor')?.requirementsMet === true);
+  check('credit minimum gates a job even when skill requirement is met', listings.find((x) => x.job.id === 'tutor')?.requirementsMet === false);
+  check('credit requirement display carries its unmet state', listings.find((x) => x.job.id === 'tutor')?.requirements[1]?.met === false);
   check('requirement display carries met/unmet state', listings.find((x) => x.job.id === 'cook')?.requirements[0]?.met === false);
 }
 
@@ -85,6 +86,10 @@ console.log('phone.test — job apply effects');
   check('met job application succeeds', accepted.ok === true);
   check('successful job application sets vars.job', vars.job === 'dishwasher');
   check('grantsVisa goes through injected visa callback with live day', grants.length === 1 && grants[0].id === 'lmia' && grants[0].day === 2);
+  const creditDenied = applyForJob('tutor', jobs, c, vars, () => {}, 600);
+  check('authoritative apply path rejects unmet minCreditScore', creditDenied.ok === false && creditDenied.reason === 'requirements_unmet');
+  const creditAccepted = applyForJob('tutor', jobs, c, vars, () => {}, 650);
+  check('job applies at exact minCreditScore', creditAccepted.ok === true && vars.job === 'tutor');
 }
 
 const visas: VisasData = {

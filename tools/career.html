@@ -358,6 +358,10 @@ function renderJobEditor() {
   details.appendChild(frow('start hour', numberInput(hours.startHour, (v) => { hours.startHour = v; markDirty('jobs.json'); renderValidation(); }, 'job.startHour', { min: 0, max: 23 })));
   details.appendChild(frow('end hour', numberInput(hours.endHour, (v) => { hours.endHour = v; markDirty('jobs.json'); renderValidation(); }, 'job.endHour', { min: 0, max: 23 })));
   details.appendChild(frow('pay per shift', numberInput(job.payPerShift, (v) => { job.payPerShift = v; markDirty('jobs.json'); renderValidation(); }, 'job.payPerShift')));
+  details.appendChild(frow('minimum credit score', numberInput(job.minCreditScore, (v) => {
+    if (v === null) delete job.minCreditScore; else job.minCreditScore = v;
+    markDirty('jobs.json'); renderValidation();
+  }, 'job.minCreditScore', { min: 0, emptyValue: null })));
   details.appendChild(frow('max skips', numberInput(job.maxSkips, (v) => { job.maxSkips = v; markDirty('jobs.json'); }, 'job.maxSkips', { min: 0 })));
   root.appendChild(details);
   const needsCost = card('Needs cost on return');
@@ -460,6 +464,7 @@ function collectValidationIssues() {
     if (job.grantsVisa && !visaIds.has(job.grantsVisa)) issues.push(`Job "${job.name || job.id}" — grantsVisa references unknown visa "${job.grantsVisa}".`);
     if (job.hours && job.hours.startHour === job.hours.endHour) issues.push(`Job "${job.name || job.id}" — endHour equals startHour (${job.hours.startHour}).`);
     if (typeof job.payPerShift === 'number' && job.payPerShift < 0) issues.push(`Job "${job.name || job.id}" — payPerShift is negative (${job.payPerShift}).`);
+    if (typeof job.minCreditScore === 'number' && job.minCreditScore < 0) issues.push(`Job "${job.name || job.id}" — minCreditScore is negative (${job.minCreditScore}).`);
     for (const [needId, amount] of Object.entries(job.needsCost || {})) {
       if (!needIds.has(needId)) issues.push(`Job "${job.name || job.id}" — needsCost references unknown need id "${needId}".`);
       if (typeof amount === 'number' && amount < 0) issues.push(`Job "${job.name || job.id}" — needsCost.${needId} is negative (${amount}).`);

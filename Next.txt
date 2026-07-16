@@ -1,5 +1,24 @@
+For this session, you will save as many tokens as you can, even if it means talking like a caveman. Delegate coding tasks to agents with the following logic: Simple tasks: Sonnet, Medium to Fairly Complex: OPUS or Codex, Complex: Codex.
+For Codex, don't forgot to point to AGENTS.md and activate no tail pipe as well as --sandbox workspace-write.
+
 - The loading bars, for example when we cook, are visually buggy (as the loading element is not aligned visually with the background).
 - When we have a job, the same job should not appear in the research anymore (or we should not be able to apply), and choosing another job prompts a message type "You already work as a X, do you really want to switch to Y?", also the job description should appear in the smartphone, when we are employed.
 - When fetching food to the fridge, the Sim should go ALL THE WAY to the fridge prior to going to the table / seat.
 - Dirty dishes/puddles should not spawn below assets - also the amount that spawn should be directly correlated to one or more need / attribute.
 - Generally, a Sim as more chances to be promoted at work (integrate a level system to jobs such as Dishwasher I, II,III... and a small % to have bonuses) if he is happy, which means we need to integrate an happines gauge that would be a complex calculation (should be editable in the tools) between need levels, job, credit score, money, visa status...).
+- Map grid: 1m by 1m is too much, I want the tiles to be 0.5x0.5 with a 0.25 snap for more flexibility.
+- Assets visualization: the grid shown in the 3D viewer should match the map grid so we know exactly what it will look like in the game.
+- Windows: The windows do no show in-game.
+- Walls: Add a possibility to "cut" the walls at, for example, 1m from the ground, this would be just a view option that the player can use, like in the real Sims game.
+- Add placeholders for sound effects when I click on something, example to walk somewhere or choose an action. Add also a sound placeholder for quests (new quest, quest done...) notifications, and for notifications in general.
+- I want to modify the action menu: instead of having it at the bottom of the screen, I want, like in the real Sims game, to have a contextual menu that pops around the click location / asset (but not really a 3D widget, I don't want walls and other assets to hide it) and the intractions options that are located all around the click location - refer to screenshot for reference.
+- I want to add new assets that may require a new option (applicable for all assets): generate light (because I want lights in the game). Turn ON and Turn OFF actions do change the state of the asset (ON/OFF), hence the light and/or the sound when it is a TV.
+- Another option for the assets: the ones that "stick" to the wall, such as wall mounted lights, or canvas.
+- If a Sim runs out of energy, they play an animation then sleep on the ground right away for a short duration (tunable).
+- If a Sims runs out of Hunger: an internal countdown (tunable) is activated, if the Sim did not eat after the countdown it plays an animation for a duration (tunable) then game over.
+- When a Sim gains a skill point: Play a sound (tunable) and show visual, for example a floating text above the Sim, for a set amount of seconds, with an animation (e.g. the text moves from bottom to top) that says, for example "English: +1!".
+- When paying bills: we should play a sound. When received money: we should play a sound. For both (money up, money down) we should have a graphical effect similar to the Skills one.
+
+
+
+When done, reference everything in the md files then generate a thorough “handoff.json" so I can clear you and reference this file for future work.

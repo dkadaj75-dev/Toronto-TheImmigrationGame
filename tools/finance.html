@@ -18,13 +18,14 @@
 </style>
 </head>
 <body>
-<header><h1>Finance Editor</h1><span id="status" class="status">Loading…</span><button id="save" disabled>Save finance.json</button></header>
+<header><h1>Finance Editor</h1><span id="status" class="status">Loading…</span><button id="save" disabled>Save finance + credit</button></header>
 <main>
   <div class="stack">
     <section class="card"><h2>Rent formula</h2><div id="rentFields" class="grid"></div></section>
     <section class="card"><h2>Property-type adjustments</h2><div id="propertyFields" class="grid"></div></section>
     <section class="card"><h2>Recurring bill formulas</h2><div id="billFields"></div></section>
-    <section class="card"><h2>F1 thresholds (used by future F2)</h2><div id="thresholdFields" class="grid"></div></section>
+    <section class="card"><h2>Debt thresholds</h2><div id="thresholdFields" class="grid"></div></section>
+    <section class="card"><h2>Credit score</h2><div id="creditFields" class="grid"></div></section>
   </div>
   <aside class="card"><h2>Live preview</h2><div id="previewMeta" class="preview-meta">Waiting for current map…</div><div id="preview"></div></aside>
 </main>
@@ -32,16 +33,16 @@
 (() => {
 'use strict';
 const PROPERTY_TYPES = ['condo','basement','townhouse','house','penthouse'];
-const state = { finance:null, map:null, assets:null, dirty:false, compute:null };
+const state = { finance:null, tuning:null, map:null, assets:null, dirty:new Set(), compute:null };
 const $ = (id) => document.getElementById(id);
 function numberInput(value, path, onValue, options={}) {
   const input = document.createElement('input'); input.type = 'number'; input.value = String(value); input.dataset.path = path;
   if (options.min !== undefined) input.min = String(options.min); if (options.step !== undefined) input.step = String(options.step);
-  input.addEventListener('input', () => { const n = Number(input.value); if (!Number.isFinite(n)) return; onValue(n); markDirty(); renderPreview(); });
+  input.addEventListener('input', () => { const n = Number(input.value); if (!Number.isFinite(n)) return; onValue(n); markDirty(options.file || 'finance.json'); renderPreview(); });
   return input;
 }
 function appendField(root, labelText, input) { const label=document.createElement('label'); label.textContent=labelText; root.append(label,input); }
-function markDirty() { state.dirty=true; $('save').disabled=false; $('status').textContent='Unsaved changes'; }
+function markDirty(file) { state.dirty.add(file); $('save').disabled=false; $('status').textContent='Unsaved changes'; }
 function render() {
   const rent=$('rentFields'); rent.innerHTML='';
   appendField(rent,'Base',numberInput(state.finance.rent.base,'rent.base',(v)=>state.finance.rent.base=v));
@@ -57,6 +58,15 @@ function render() {
   });
   const thresholds=$('thresholdFields'); thresholds.innerHTML='';
   [['Overdue days','overdueDays'],['Too-late days','tooLateDays'],['Negative-balance grace days','negativeGraceDays']].forEach(([label,key])=>appendField(thresholds,label,numberInput(state.finance[key],key,(v)=>state.finance[key]=v,{min:0,step:1})));
+  const credit=$('creditFields'); credit.innerHTML='';
+  const creditDefs=[
+    ['Minimum score','min'],['Maximum score','max'],['Starting score','startingScore'],
+    ['On-time payment delta','onTimePaymentDelta'],['Overdue event delta','overdueDelta'],
+    ['Debt entry delta','debtEntryDelta'],['Debt daily delta','debtDailyDelta'],['Repo delta','repoDelta'],
+    ['Low-score window factor','lowScoreDebtWindowFactor'],['High-score window factor','highScoreDebtWindowFactor'],
+    ['History entries','historyLimit'],
+  ];
+  for (const [label,key] of creditDefs) appendField(credit,label,numberInput(state.tuning.credit[key],`credit.${key}`,(v)=>state.tuning.credit[key]=v,{file:'tuning.json',step:'any'}));
   renderPreview();
 }
 function money(value) { return `§${Number(value).toLocaleString(undefined,{maximumFractionDigits:2})}`; }
@@ -71,15 +81,21 @@ async function load() {
   try {
     const get=async(path)=>{const response=await fetch('/api/data/'+path);if(!response.ok)throw new Error(`${path}: ${response.status}`);return response.json();};
     const [finance,assets,tuning]=await Promise.all([get('finance.json'),get('assets.json'),get('tuning.json')]);
-    const map=await get(`maps/${tuning.map?.active || 'condo'}.json`); Object.assign(state,{finance,assets,map}); render(); $('status').textContent='Loaded';
+    const map=await get(`maps/${tuning.map?.active || 'condo'}.json`); Object.assign(state,{finance,assets,tuning,map}); state.dirty.clear(); render(); $('status').textContent='Loaded';
   } catch(error) { $('status').textContent='Load failed'; console.error('[finance-editor]',error); }
 }
 async function save() {
-  if (!state.dirty) return; const response=await fetch('/api/data/finance.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(state.finance,null,2)});
-  if (!response.ok) { $('status').textContent='Save failed'; return; } state.dirty=false; $('save').disabled=true; $('status').textContent='Saved';
+  if (!state.dirty.size) return;
+  const files={'finance.json':state.finance,'tuning.json':state.tuning};
+  for (const file of [...state.dirty]) {
+    const response=await fetch('/api/data/'+file,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(files[file],null,2)});
+    if (!response.ok) { $('status').textContent='Save failed'; return; }
+    state.dirty.delete(file);
+  }
+  $('save').disabled=true; $('status').textContent='Saved';
 }
 function setCompute(fn) { state.compute=fn; renderPreview(); }
-$('save').addEventListener('click',save); window.addEventListener('keydown',(event)=>{if((event.ctrlKey||event.metaKey)&&event.key==='s'){event.preventDefault();save();}}); window.addEventListener('beforeunload',(event)=>{if(state.dirty)event.preventDefault();});
+$('save').addEventListener('click',save); window.addEventListener('keydown',(event)=>{if((event.ctrlKey||event.metaKey)&&event.key==='s'){event.preventDefault();save();}}); window.addEventListener('beforeunload',(event)=>{if(state.dirty.size)event.preventDefault();});
 window.FinanceEditor={state,load,save,setCompute,renderPreview}; load();
 })();
 </script>

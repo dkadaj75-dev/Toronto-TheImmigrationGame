@@ -1,7 +1,7 @@
 // bills.test.ts — headless tests for game/bills.ts. Run: npx tsx test/bills.test.ts
 
-import { FinanceState, computeBillAmounts, computeFinancePreview, countFloorTiles, decideRepoSeizure } from '../game/bills';
-import type { AssetsData, BillsData, FinanceData, MapData } from '../game/data';
+import { FinanceState, applyCreditDelta, clampCreditScore, computeBillAmounts, computeFinancePreview, countFloorTiles, decideRepoSeizure, scaledDebtWindows } from '../game/bills';
+import type { AssetsData, BillsData, CreditTuning, FinanceData, MapData } from '../game/data';
 
 let failures = 0;
 function check(name: string, cond: boolean, detail = '') {
@@ -32,6 +32,12 @@ const assets: AssetsData = { categories: [], assets: [
   { id: 'lamp', name: 'Lamp', category: 'decor', mesh: '', buyPrice: 50, sellPrice: 25, environmentScore: 0, footprint: [1,1], interactions: [] },
 ] };
 const context = { map, assets };
+const credit: CreditTuning = {
+  min: 300, max: 900, startingScore: 500,
+  onTimePaymentDelta: 8, overdueDelta: -20, debtEntryDelta: -10,
+  debtDailyDelta: -3, repoDelta: -100,
+  lowScoreDebtWindowFactor: 0.75, highScoreDebtWindowFactor: 1.5, historyLimit: 6,
+};
 
 console.log('bills.test — formula math');
 {
@@ -81,7 +87,7 @@ console.log('bills.test â€” F2 overdue/debt and pure repo decisions');
   state.tick(5, context);
   check('overdueSince records first day past overdueDays', state.overdueSince === 5);
   state.observeFunds(5, -20);
-  check('tooLateDays counts from first day in negative debt', !state.isRepoDue(11) && state.isRepoDue(12));
+  check('negativeGraceDays counts from first day in negative debt', !state.isRepoDue(6) && state.isRepoDue(7));
   const saved = state.serialize();
   const restored = new FinanceState(defs, finance, 99, 1); restored.restore(saved);
   check('finance state persists outstanding, overdueSince and debt', JSON.stringify(restored.serialize()) === JSON.stringify(saved));
@@ -98,6 +104,42 @@ console.log('bills.test â€” F2 overdue/debt and pure repo decisions');
   check('full seizure still short determines game over', short.seized.length === 3 && short.remainingFunds === -330 && short.gameOver);
   const solvent = decideRepoSeizure(10, candidates);
   check('nothing is seized when solvent', solvent.seized.length === 0 && solvent.remainingFunds === 10 && !solvent.gameOver);
+}
+
+console.log('bills.test — F3 credit score and scaled debt windows');
+{
+  check('delta application clamps at configured minimum', applyCreditDelta(305, -20, credit) === 300);
+  check('score clamping handles both ends', clampCreditScore(100, credit) === 300 && clampCreditScore(1000, credit) === 900);
+  const low = scaledDebtWindows(finance, 300, credit);
+  const start = scaledDebtWindows(finance, 500, credit);
+  const high = scaledDebtWindows(finance, 900, credit);
+  check('debt-window factor scales linearly from low to high credit', low.factor === 0.75 && start.factor === 1 && high.factor === 1.5);
+  check('scaled windows round upward to whole days', low.negativeGraceDays === 2 && high.negativeGraceDays === 3 && high.tooLateDays === 11);
+
+  const onTime = new FinanceState(defs, finance, 99, 1, credit);
+  onTime.outstanding.push({ id: 'rent', name: 'Rent', amount: 100, key: '1:rent:0', arrivalDay: 1 });
+  onTime.pay('1:rent:0', 200, 2);
+  check('on-time bill payment raises score', onTime.creditScore === 508 && onTime.creditHistory[0]?.reason.includes('paid on time'));
+
+  const consequences = new FinanceState(defs, finance, 99, 1, credit);
+  consequences.outstanding.push({ id: 'rent', name: 'Rent', amount: 100, key: '1:rent:0', arrivalDay: 1 });
+  consequences.tick(5, context);
+  check('first overdue event lowers score once', consequences.creditScore === 480);
+  consequences.tick(6, context);
+  check('remaining overdue does not repeat event penalty', consequences.creditScore === 480);
+  consequences.observeFunds(6, -10);
+  consequences.observeFunds(8, -10);
+  check('debt entry and each in-debt day decay score', consequences.creditScore === 464);
+  consequences.applyRepoPenalty(8);
+  check('repo applies the tunable large penalty', consequences.creditScore === 364);
+
+  const highScoreCredit = { ...credit, startingScore: 900 };
+  const highScoreDebt = new FinanceState(defs, finance, 99, 1, highScoreCredit);
+  highScoreDebt.observeFunds(1, -1);
+  check('F2 repo trigger reads score-scaled negative window', !highScoreDebt.isRepoDue(3) && highScoreDebt.isRepoDue(4));
+  const saved = highScoreDebt.serialize();
+  const restored = new FinanceState(defs, finance, 99, 1, credit); restored.restore(saved);
+  check('credit score, trend and decay cursor serialize in FinanceState', JSON.stringify(restored.serialize()) === JSON.stringify(saved));
 }
 
 if (failures > 0) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }

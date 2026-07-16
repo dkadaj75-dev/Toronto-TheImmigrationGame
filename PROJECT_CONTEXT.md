@@ -18,8 +18,8 @@ The designer (Septentrion) must be able to build and balance the entire game **t
 | **Add / remove needs and skills** (not just edit existing ones) | Tuning Editor extension | ✅ done (2026-07-13) |
 | **Add / remove actions** and per-action gains, animation state, autonomy eligibility | Interaction Editor | ✅ done (2026-07-13) |
 | **Quest system**: author quests with trigger & completion conditions + rewards | Quest Editor (replaces roadmap's "Story Editor") | ✅ done (2026-07-13, see §3.3–§3.4) |
-| **Create / edit visas and jobs** (requirements, status/application timing, work hours/pay/skips, visa grants) | Career Editor | ✅ done (2026-07-15, see §7.20 V4 as-built) |
-| **Balance formula-driven rent and recurring bills** (property adjustments, asset-value scaling, debt timing thresholds, live current-map preview) | Finance Editor | ✅ F1 done (2026-07-16, see §7.24) |
+| **Create / edit visas and jobs** (requirements incl. credit minimums, status/application timing, work hours/pay/skips, visa grants) | Career Editor | ✅ done (2026-07-16, see §7.20/§7.24) |
+| **Balance formula-driven rent, recurring bills, debt, and credit** (property/asset scaling, score deltas/range/window factors, live map preview) | Finance Editor | ✅ F1–F3 done (2026-07-16, see §7.24) |
 | Simulate balance headlessly, chart curves | Balance Dashboard | ⬜ nice-to-have |
 | **Navigate between all admin tools** (tabs/buttons in every tool) | Shared tool nav bar | ✅ done (2026-07-14) |
 | **Asset facing direction** ("normal" vector: where the object faces, for use-spots/seating logic) | Asset Editor + Map Editor arrow | ✅ done (2026-07-14, see §7.2 as-built) |
@@ -529,6 +529,7 @@ The advisory validation panel never blocks saving and reports unknown condition 
 - The persistent smartphone launcher has a simple red outstanding-count badge, hidden only when the count is zero. It therefore remains visible after the arrival toast until every bill is paid.
 - Authoring decision at B4-1 was flat JSON amounts; F1 now replaces that temporary path with the dedicated Finance Editor. Non-payment consequences remain deferred to F2.
 - Headless coverage: `test/bills.test.ts` covers exact/default cadence, recurring unpaid cycles, data-driven totals, individual/refused/atomic pay-all decisions, hot-retune, unique keys, and serialize/restore.
+- F3 (§7.24) adds credit consequences to these same transitions: on-time payments, first-overdue events, entering/remaining in debt, and repossession. The repo clock now uses the credit-scaled `tooLateDays` window for ignored overdue bills and the credit-scaled `negativeGraceDays` window for a negative balance.
 
 ## 7.23 Carried food + action costs (B4-2, 2026-07-15)
 
@@ -561,3 +562,9 @@ Runtime orchestration in `main.ts` resolves live Buy Mode effective instances, f
 ### F3 — credit score
 - Score 300–900 (tunable range), start low (immigrant, e.g. 500). Impacted by: on-time payment (+), overdue/debt (−), repo (big −). Phone gains a Credit section (score + simple history/trend). `tuning.credit`. Higher score → longer allowed debt window (scale negativeGraceDays by score) BUT sitting in debt decays score over time.
 - Jobs (data/jobs.json) + future rentals gain optional `minCreditScore` requirement (checked like visa/skill reqs). Career/Finance Editor exposes it.
+
+**F3 as-built (2026-07-16):** `FinanceState` now starts at `tuning.credit.startingScore` (shipped 500), clamps every change to the authored `min`/`max` (300–900), and serializes `creditScore`, newest-first bounded `creditHistory`, the debt-decay day cursor, and each outstanding bill's one-shot overdue-penalty marker. Signed tunables cover every consequence: `onTimePaymentDelta`, `overdueDelta`, `debtEntryDelta`, `debtDailyDelta`, and `repoDelta`; shipped values are +8/−20/−10/−3 per in-debt day/−100. A bill paid no later than `overdueDays` earns the on-time delta, crossing strictly past that threshold applies the overdue delta once, entering debt applies its event delta, every later crossed day still in debt applies daily decay, and an actual seizure decision applies the repo delta. Phone → Credit shows the current score and the last `historyLimit` changes with day, reason, and signed delta.
+
+Debt-window scaling is exact and pure/headless-tested: normalize the clamped score as `(score − min) / (max − min)`, linearly interpolate from `lowScoreDebtWindowFactor` to `highScoreDebtWindowFactor`, then compute each whole-day window as `ceil(baseDays × factor)`. Shipped factors are 0.75 at score 300 and 1.5 at score 900; score 500 is exactly 1.0, so the immigrant start retains authored base timing. `FinanceState.isRepoDue()`—the existing F2 seizure trigger—uses scaled `tooLateDays` from `overdueSince` for ignored bills and scaled `negativeGraceDays` from `debtSince` for negative cash.
+
+`JobDef.minCreditScore?: number` is a sparse gate composed with the existing condition evaluator in both listing display and the authoritative Apply path. The phone renders it as a met/unmet requirement; Career Editor authors the optional field. Current designer-authored data demonstrates the gate with Finance Advisor at 700; absent or zero minima leave entry jobs open. Finance Editor now edits and whole-file-saves `tuning.credit` alongside `finance.json`. Pure coverage in `test/bills.test.ts` covers deltas, decay, clamping, persistence and scaled trigger timing; `test/phone.test.ts` covers listing/apply credit gates, and both editor suites cover their JSON round trips.

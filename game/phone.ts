@@ -86,6 +86,12 @@ export function requirementsMet(requirements: Condition | undefined, ctx: EvalCo
   return !requirements || evaluate(requirements, ctx);
 }
 
+/** Sparse F3 job gate. A score is required only when the job authors a minimum. */
+export function jobCreditRequirementMet(job: Pick<JobDef, 'minCreditScore'>, creditScore?: number): boolean {
+  return job.minCreditScore === undefined
+    || (Number.isFinite(creditScore) && creditScore! >= job.minCreditScore);
+}
+
 function titleCase(value: string): string {
   return value.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -125,12 +131,17 @@ export function requirementViews(requirements: Condition | undefined, ctx: EvalC
   return [{ text: describeCondition(requirements), met: evaluate(requirements, ctx) }];
 }
 
-export function jobListingViews(jobs: readonly JobDef[], ctx: EvalContext): JobListingView[] {
-  return jobs.map((job) => ({
-    job,
-    requirementsMet: requirementsMet(job.requirements, ctx),
-    requirements: requirementViews(job.requirements, ctx),
-  }));
+export function jobListingViews(jobs: readonly JobDef[], ctx: EvalContext, creditScore?: number): JobListingView[] {
+  return jobs.map((job) => {
+    const conditionMet = requirementsMet(job.requirements, ctx);
+    const creditMet = jobCreditRequirementMet(job, creditScore);
+    const requirements = requirementViews(job.requirements, ctx);
+    if (job.minCreditScore !== undefined) requirements.push({
+      text: `Credit score ≥ ${job.minCreditScore}`,
+      met: creditMet,
+    });
+    return { job, requirementsMet: conditionMet && creditMet, requirements };
+  });
 }
 
 /** Apply side effects are deliberately explicit/injected so this remains a pure-logic module. */
@@ -140,10 +151,12 @@ export function applyForJob(
   ctx: EvalContext,
   vars: Record<string, VarValue>,
   grantVisa: (statusId: string, day: number) => void,
+  creditScore?: number,
 ): PhoneApplyResult {
   const job = data.jobs.find((entry) => entry.id === jobId);
   if (!job) return { ok: false, reason: 'not_found' };
   if (!requirementsMet(job.requirements, ctx)) return { ok: false, reason: 'requirements_unmet' };
+  if (!jobCreditRequirementMet(job, creditScore)) return { ok: false, reason: 'requirements_unmet' };
   vars.job = job.id;
   if (job.grantsVisa) grantVisa(job.grantsVisa, ctx.time.day);
   return { ok: true, id: job.id };

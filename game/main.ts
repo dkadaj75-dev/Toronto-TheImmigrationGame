@@ -330,8 +330,8 @@ async function start() {
 
   // --- smartphone jobs + visa applications (PROJECT_CONTEXT.md §7.20 V2, B3-7) ---
   const phoneJobs = new PhoneJobSearch(data.jobs, data.tuning.phone?.jobListSize);
-  const bills = new FinanceState(data.bills, data.finance, data.tuning.bills?.intervalDays, 1);
-  let phoneTab: 'jobs' | 'visas' | 'bills' = 'jobs';
+  const bills = new FinanceState(data.bills, data.finance, data.tuning.bills?.intervalDays, 1, data.tuning.credit);
+  let phoneTab: 'jobs' | 'visas' | 'bills' | 'credit' = 'jobs';
   const refreshPhone = () => {
     const ctx = buildEvalContext();
     const pendingDays = pendingDaysRemaining(visaMachine.pending, gameDay);
@@ -339,7 +339,7 @@ async function start() {
       tab: phoneTab,
       currentStatusName: visaMachine.currentDef()?.name ?? visaMachine.statusId,
       searchedJobs: phoneJobs.lastRolledHour !== null,
-      jobs: jobListingViews(phoneJobs.current(), ctx),
+      jobs: jobListingViews(phoneJobs.current(), ctx, bills.creditScore),
       visas: visaApplicationViews(data.visas, ctx),
       pending: visaMachine.pending && pendingDays !== null
         ? { statusId: visaMachine.pending.statusId, daysRemaining: pendingDays }
@@ -347,6 +347,8 @@ async function start() {
       currencyName: data.tuning.economy.currencyName,
       bills: bills.outstanding,
       billsTotal: bills.total,
+      creditScore: bills.creditScore,
+      creditHistory: bills.creditHistory,
     });
     hud.setPhoneBadge(bills.outstanding.length);
   };
@@ -376,6 +378,7 @@ async function start() {
       buildEvalContext(),
       quests.vars,
       (statusId, day) => visaMachine.grantVisa(statusId, day),
+      bills.creditScore,
     );
     const job = data.jobs.jobs.find((entry) => entry.id === jobId);
     if (result.ok) phoneToast(`Job accepted: ${job?.name ?? jobId}`, true);
@@ -412,7 +415,7 @@ async function start() {
   const handleRepoIfDue = () => {
     if (repoOverlayActive || gameOverActive || !bills.isRepoDue(gameDay)) return;
     if (bills.outstanding.length > 0) {
-      const collection = bills.payAll(quests.funds, gameDay);
+      const collection = bills.payAll(quests.funds, gameDay, false);
       if (collection.ok) quests.funds = collection.remainingFunds;
     }
     bills.observeFunds(gameDay, quests.funds);
@@ -434,6 +437,7 @@ async function start() {
         survivalImportance: def.survivalImportance,
       }] : [];
     }));
+    bills.applyRepoPenalty(gameDay);
     for (const seized of decision.seized) {
       const instance = instanceByKey.get(seized.key);
       const def = instance ? byId.get(instance.asset) : undefined;
@@ -1020,7 +1024,7 @@ async function start() {
     quests.retune(data.quests, data.simstate); // definitions only — runtime quest/var state is untouched
     visaMachine.retune(data.visas); // definitions only — runtime visa state is untouched (§7.20 B3-6)
     phoneJobs.retune(data.jobs, data.tuning.phone?.jobListSize); // defs/tuning only; hourly cadence survives
-    bills.retune(data.bills, data.finance, data.tuning.bills?.intervalDays); // formulas/defs/cadence only; arrived snapshots survive
+    bills.retune(data.bills, data.finance, data.tuning.bills?.intervalDays, data.tuning.credit); // formulas/defs/cadence/credit tuning only; runtime state survives
     hud.setPhoneIcon(data.tuning.phone?.icon ?? '/icons/Smartphone.png');
     refreshVisaChip();
     refreshPhone();

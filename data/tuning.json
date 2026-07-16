@@ -30,6 +30,20 @@
     "currencyName": "$",
     "_source": "PLACEHOLDER — open decision #1 (Phase 3)"
   },
+  "credit": {
+    "min": 300,
+    "max": 900,
+    "startingScore": 500,
+    "onTimePaymentDelta": 8,
+    "overdueDelta": -20,
+    "debtEntryDelta": -10,
+    "debtDailyDelta": -3,
+    "repoDelta": -100,
+    "lowScoreDebtWindowFactor": 0.75,
+    "highScoreDebtWindowFactor": 1.5,
+    "historyLimit": 6,
+    "_source": "PROJECT_CONTEXT.md §7.24 F3. Score changes are signed deltas. Debt windows scale linearly from the low-score factor at min to the high-score factor at max."
+  },
   "quests": {
     "toastDurationSeconds": 4,
     "completedLogLimit": 5,

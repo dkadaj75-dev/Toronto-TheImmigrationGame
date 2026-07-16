@@ -256,6 +256,8 @@ export interface JobDef {
   hours: { startHour: number; endHour: number };
   payPerShift: number;
   maxSkips: number;
+  /** F3 sparse credit gate. Absent means the job has no credit-score requirement. */
+  minCreditScore?: number;
   /** Positive amounts subtracted from matching needs when the sim returns from a completed shift. */
   needsCost?: Record<string, number>;
 }
@@ -277,6 +279,21 @@ export interface FinanceData {
   overdueDays: number;
   tooLateDays: number;
   negativeGraceDays: number;
+}
+
+/** F3 credit-score tuning. Deltas are signed designer-authored score changes. */
+export interface CreditTuning {
+  min: number;
+  max: number;
+  startingScore: number;
+  onTimePaymentDelta: number;
+  overdueDelta: number;
+  debtEntryDelta: number;
+  debtDailyDelta: number;
+  repoDelta: number;
+  lowScoreDebtWindowFactor: number;
+  highScoreDebtWindowFactor: number;
+  historyLimit: number;
 }
 
 export interface MapData {
@@ -348,6 +365,8 @@ export interface TuningData {
   autonomy: { seekBelowThreshold: number; stopAtThreshold: number; postPlayerCommandCooldownSeconds: number };
   time: { secondsPerGameDay: number; nightStartHour: number; nightEndHour: number };
   economy: { startingFunds: number; currencyName: string };
+  /** F3 credit score, consequences, debt-window scaling, and phone history length. */
+  credit?: CreditTuning;
   movement: { walkSpeed: number; arrivalRadius: number };
   /** Optional so pre-existing tuning fixtures/tests stay valid (mirrors the `character?` precedent
    *  below) — game code falls back with `?? <value>` where used (see game/facing.ts). §7.2 as-built:

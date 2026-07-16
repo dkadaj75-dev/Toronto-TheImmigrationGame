@@ -140,7 +140,7 @@
       "name": "Practice English",
       "needGains": {},
       "skillGains": {
-        "english": 0.08
+        "english": 0.2
       },
       "animation": "sit_idle",
       "autonomyEligible": false,

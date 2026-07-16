@@ -68,7 +68,7 @@
         "all": [
           {
             "var": "skills.english",
-            "gte": 30
+            "eq": 30
           }
         ]
       },

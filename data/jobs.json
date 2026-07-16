@@ -1,54 +1,130 @@
 {
-  "_comment": "Smartphone job definitions (PROJECT_CONTEXT.md §7.20 V2/V3/V4). Requirements use the quest evaluator namespace. grantsVisa is applied through VisaMachine when the job application succeeds. Hours/pay/maxSkips/needsCost drive game/work.ts attendance, return pay and need deductions, and job loss. Edit these definitions in tools/career.html.",
+  "_comment": "Smartphone job definitions (PROJECT_CONTEXT.md §7.20 and §7.24 F3). Requirements use the quest evaluator namespace; optional minCreditScore composes with them. grantsVisa is applied through VisaMachine when the job application succeeds. Hours/pay/maxSkips/needsCost drive game/work.ts attendance, return pay and need deductions, and job loss. Edit these definitions in tools/career.html.",
   "jobs": [
     {
       "id": "dishwasher",
       "name": "Dishwasher",
       "grantsVisa": "lmia",
-      "hours": { "startHour": 9, "endHour": 17 },
+      "hours": {
+        "startHour": 9,
+        "endHour": 17
+      },
       "payPerShift": 120,
       "maxSkips": 3,
-      "needsCost": { "energy": 35, "hunger": 20 }
+      "needsCost": {
+        "energy": 35,
+        "hunger": 20
+      },
+      "requirements": {
+        "all": []
+      }
     },
     {
       "id": "cook",
       "name": "Line Cook",
-      "requirements": { "var": "skills.cooking", "gte": 3 },
+      "requirements": {
+        "var": "skills.cooking",
+        "gte": 3
+      },
       "grantsVisa": "lmia",
-      "hours": { "startHour": 15, "endHour": 23 },
+      "hours": {
+        "startHour": 15,
+        "endHour": 23
+      },
       "payPerShift": 190,
       "maxSkips": 2,
-      "needsCost": { "energy": 30, "hygiene": 15 }
+      "minCreditScore": 0,
+      "needsCost": {
+        "energy": 30,
+        "hygiene": 15
+      }
     },
     {
       "id": "barista",
       "name": "Barista",
-      "requirements": { "var": "skills.charisma", "gte": 2 },
+      "requirements": {
+        "var": "skills.charisma",
+        "gte": 2
+      },
       "grantsVisa": "lmia",
-      "hours": { "startHour": 6, "endHour": 14 },
+      "hours": {
+        "startHour": 6,
+        "endHour": 14
+      },
       "payPerShift": 150,
       "maxSkips": 3,
-      "needsCost": { "energy": 25, "hunger": 15, "social": 10 }
+      "minCreditScore": 0,
+      "needsCost": {
+        "energy": 25,
+        "hunger": 15,
+        "social": 10
+      }
     },
     {
       "id": "tutor",
       "name": "English Tutor",
       "requirements": {
         "all": [
-          { "var": "skills.english", "gte": 6 },
+          {
+            "var": "skills.english",
+            "gte": 6
+          },
           {
             "any": [
-              { "var": "vars.visaStatus", "eq": "temp_worker" },
-              { "var": "vars.visaStatus", "eq": "permanent_resident" },
-              { "var": "vars.visaStatus", "eq": "citizen" }
+              {
+                "var": "vars.visaStatus",
+                "eq": "temp_worker"
+              },
+              {
+                "var": "vars.visaStatus",
+                "eq": "permanent_resident"
+              },
+              {
+                "var": "vars.visaStatus",
+                "eq": "citizen"
+              }
             ]
           }
         ]
       },
-      "hours": { "startHour": 10, "endHour": 18 },
+      "hours": {
+        "startHour": 10,
+        "endHour": 18
+      },
       "payPerShift": 260,
       "maxSkips": 2,
-      "needsCost": { "energy": 20, "social": 15 }
+      "minCreditScore": 0,
+      "needsCost": {
+        "energy": 20,
+        "social": 15
+      }
+    },
+    {
+      "id": "finance_advisor",
+      "name": "Finance advisor",
+      "requirements": {
+        "all": [
+          {
+            "var": "quests.pass_the_english_test.state",
+            "gte": "done"
+          },
+          {
+            "var": "vars.visaStatus",
+            "gte": "2"
+          },
+          {
+            "var": "skills.finance",
+            "gte": 40
+          }
+        ]
+      },
+      "hours": {
+        "startHour": 9,
+        "endHour": 17
+      },
+      "payPerShift": 500,
+      "maxSkips": 2,
+      "minCreditScore": 700
     }
   ]
 }

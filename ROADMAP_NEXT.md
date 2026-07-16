@@ -130,9 +130,9 @@ Skill gains currently ~linear. Make higher levels slower: gain scales down as th
 
 Implemented at the single `SimStats.applyGains` chokepoint with pure/tested `scaleSkillGain`: positive deltas use the global hot-reloadable `tuning.skills.growthCurveExp` (default 1.5), exponent 0 preserves linear gains, max blocks gains, and negative deltas remain untouched.
 
-## B5-2. Finance system + tool + credit score (BIG — F1/F2 ✅ DONE 2026-07-16; F3 open; locked design in PROJECT_CONTEXT §7.24)
+## B5-2. Finance system + tool + credit score (BIG — ✅ FULLY DONE 2026-07-16; locked design/as-built in PROJECT_CONTEXT §7.24)
 Finance Editor tool + formula-driven bills/rent, debt/negative-balance grace, repo-man asset seizure (message-only), game-over on unpayable debt, credit score (phone-checkable, gates jobs/rentals, higher score = longer debt tolerance but decays). See §7.24.
 
-F1 shipped: formula constants and thresholds in `data/finance.json`, arrival-time rent/bill computation against floor tiles + live effective asset value, map property type, shared pure calculator, and Finance Editor with current-map live preview. F2/F3 were out of scope for that slice.
+F1 shipped: formula constants and thresholds in `data/finance.json`, arrival-time rent/bill computation against floor tiles + live effective asset value, map property type, shared pure calculator, and Finance Editor with current-map live preview.
 
-F2 done: negative bill payments + serializable overdue/debt timing, pure importance-ordered repo decisions, Buy Mode sold-removal/nav rebake, repo notice, and debt game over. F3 remains open.
+F2 done: negative bill payments + serializable overdue/debt timing, pure importance-ordered repo decisions, Buy Mode sold-removal/nav rebake, repo notice, and debt game over. F3 done: serializable tunable credit score/history, on-time/overdue/debt/repo changes, daily debt decay, score-scaled repo windows, phone Credit tab, job credit gates, and Career/Finance Editor authoring.

@@ -206,6 +206,10 @@ const CSS = `
   .phone-shell { width: 100%; max-height: 88vh; border-radius: 22px 22px 0 0; border-bottom: 0; }
   .phone-header { padding-top: 12px; }
 }
+.phone-credit-score { font-size: 42px; font-weight: 750; text-align: center; color: #b9d2ff; margin: 10px 0 4px; }
+.phone-credit-trend { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 8px; }
+.phone-credit-trend li { display: grid; grid-template-columns: 32px 1fr auto; gap: 8px; font-size: 12px; color: #aebbd1; }
+.phone-credit-trend .positive { color: #76d394; } .phone-credit-trend .negative { color: #ff8b8b; }
 
 #buy-bar { position: absolute; left: 0; right: 0; bottom: 0; pointer-events: none;
   display: none; flex-direction: column; }
@@ -312,7 +316,7 @@ export class Hud {
 
   onPhoneClose: (() => void) | null = null;
   onPhoneOpen: (() => void) | null = null;
-  onPhoneTabPick: ((tab: 'jobs' | 'visas' | 'bills') => void) | null = null;
+  onPhoneTabPick: ((tab: 'jobs' | 'visas' | 'bills' | 'credit') => void) | null = null;
   onPhoneSearchJobs: (() => void) | null = null;
   onPhoneJobApply: ((jobId: string) => void) | null = null;
   onPhoneVisaApply: ((statusId: string) => void) | null = null;
@@ -379,6 +383,7 @@ export class Hud {
             <button data-phone-tab="jobs" class="active">Jobs</button>
             <button data-phone-tab="visas">Visas</button>
             <button data-phone-tab="bills">Bills</button>
+            <button data-phone-tab="credit">Credit</button>
           </div>
           <div id="phone-body"></div>
         </div>
@@ -447,7 +452,7 @@ export class Hud {
       this.onPhoneClose?.();
     });
     this.phoneTabs.forEach((button) => button.addEventListener('click', () => {
-      const tab = button.dataset.phoneTab as 'jobs' | 'visas' | 'bills';
+      const tab = button.dataset.phoneTab as 'jobs' | 'visas' | 'bills' | 'credit';
       this.onPhoneTabPick?.(tab);
     }));
 
@@ -709,7 +714,7 @@ export class Hud {
   }
 
   renderPhone(args: {
-    tab: 'jobs' | 'visas' | 'bills';
+    tab: 'jobs' | 'visas' | 'bills' | 'credit';
     currentStatusName: string;
     searchedJobs: boolean;
     jobs: { job: JobDef; requirementsMet: boolean; requirements: RequirementView[] }[];
@@ -718,10 +723,40 @@ export class Hud {
     currencyName: string;
     bills: { key: string; name: string; amount: number }[];
     billsTotal: number;
+    creditScore: number;
+    creditHistory: { day: number; delta: number; reason: string; score: number }[];
   }) {
     this.phoneStatus.textContent = args.currentStatusName;
     this.phoneTabs.forEach((button) => button.classList.toggle('active', button.dataset.phoneTab === args.tab));
     this.phoneBody.innerHTML = '';
+
+    if (args.tab === 'credit') {
+      const score = document.createElement('div');
+      score.className = 'phone-credit-score';
+      score.textContent = String(args.creditScore);
+      this.phoneBody.appendChild(score);
+      const label = document.createElement('div');
+      label.className = 'phone-meta';
+      label.textContent = 'Current credit score';
+      this.phoneBody.appendChild(label);
+      if (args.creditHistory.length === 0) {
+        this.phoneBody.appendChild(phoneEmpty('No credit changes yet.'));
+      } else {
+        const history = document.createElement('ul');
+        history.className = 'phone-credit-trend';
+        for (const change of args.creditHistory) {
+          const item = document.createElement('li');
+          const day = document.createElement('span'); day.textContent = `D${change.day}`;
+          const reason = document.createElement('span'); reason.textContent = change.reason;
+          const delta = document.createElement('strong');
+          delta.className = change.delta >= 0 ? 'positive' : 'negative';
+          delta.textContent = `${change.delta >= 0 ? '+' : ''}${change.delta}`;
+          item.append(day, reason, delta); history.appendChild(item);
+        }
+        this.phoneBody.appendChild(history);
+      }
+      return;
+    }
 
     if (args.tab === 'jobs') {
       const search = document.createElement('button');
