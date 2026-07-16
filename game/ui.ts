@@ -36,6 +36,7 @@ const CSS = `
 #time-bar button { border: 0; border-radius: 999px; width: 30px; height: 30px; font-size: 12px;
   background: transparent; color: #93a3c0; cursor: pointer; touch-action: manipulation; }
 #time-bar button.active { background: rgba(90,120,190,.4); color: #eaf0fb; }
+#time-bar.work-override button { opacity: .45; cursor: default; }
 
 #action-menu { position: absolute; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
   background: rgba(20,26,40,.92); border-radius: 14px; padding: 10px 12px; pointer-events: auto;
@@ -55,6 +56,12 @@ const CSS = `
 #activity-chip.open { display: flex; }
 #activity-chip button { border: 0; background: rgba(220,90,90,.35); color: #fbdada; border-radius: 999px;
   padding: 4px 10px; font-size: 12px; cursor: pointer; touch-action: manipulation; }
+
+#work-chip { position: absolute; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%); display: none; align-items: center; border-radius: 999px;
+  padding: 9px 16px; background: rgba(41,91,139,.94); color: #f0f7ff; font-size: 13px;
+  font-weight: 700; letter-spacing: .02em; box-shadow: 0 3px 14px rgba(0,0,0,.35); }
+#work-chip.open { display: flex; }
 
 #quest-panel { bottom: calc(40px + env(safe-area-inset-bottom, 0px)); max-height: 38vh; overflow-y: auto; }
 #quest-panel .quest-section-title { font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
@@ -106,7 +113,7 @@ const CSS = `
   bottom: calc(84px + env(safe-area-inset-bottom, 0px)); border: 0; border-radius: 999px;
   padding: 10px 16px; font-size: 13px; background: rgba(90,120,190,.55); color: #eaf0fb;
   cursor: pointer; pointer-events: auto; touch-action: manipulation; }
-#funds-chip.hidden, #buy-button.hidden { display: none; }
+#funds-chip.hidden, #buy-button.hidden, #buy-button.work-hidden { display: none; }
 .hud-panel.buy-mode-hidden { display: none; }
 
 /* --- Visa chip + game-over overlay (PROJECT_CONTEXT.md §7.20 B3-6) ---------------------------
@@ -224,6 +231,7 @@ export class Hud {
   private menu: HTMLElement;
   private chip: HTMLElement;
   private chipLabel: HTMLElement;
+  private workChip: HTMLElement;
   private questPanel: HTMLElement;
   private questBody: HTMLElement;
   private questToasts: HTMLElement;
@@ -281,6 +289,7 @@ export class Hud {
   /** Simulation speed multiplier: 0 (paused), 1, 2, or 3. */
   speed = 1;
   private lastRunningSpeed = 1;
+  private workSpeedLocked = false;
   private timeBar!: HTMLElement;
   private clockEl!: HTMLElement;
 
@@ -304,6 +313,7 @@ export class Hud {
       </div>
       <div id="action-menu"></div>
       <div id="activity-chip"><span id="activity-label"></span><button>Stop</button></div>
+      <div id="work-chip">At work</div>
       <div id="quest-toasts"></div>
       <div id="visa-chip"></div>
       <div id="funds-chip">§ 0</div>
@@ -358,6 +368,7 @@ export class Hud {
     this.menu = root.querySelector('#action-menu')!;
     this.chip = root.querySelector('#activity-chip')!;
     this.chipLabel = root.querySelector('#activity-label')!;
+    this.workChip = root.querySelector('#work-chip')!;
     this.questPanel = root.querySelector('#quest-panel')!;
     this.questBody = root.querySelector('#quest-body')!;
     this.questToasts = root.querySelector('#quest-toasts')!;
@@ -472,6 +483,7 @@ export class Hud {
   }
 
   setSpeed(s: number) {
+    if (this.workSpeedLocked) return;
     this.speed = s;
     if (s > 0) this.lastRunningSpeed = s;
     this.timeBar.classList.toggle('paused', s === 0);
@@ -519,6 +531,18 @@ export class Hud {
   }
 
   hideActivity() { this.chip.classList.remove('open'); }
+
+  /** V3 away-state banner + speed-control lock. The selected speed itself is never mutated. */
+  setAtWork(active: boolean) {
+    this.workSpeedLocked = active;
+    this.workChip.classList.toggle('open', active);
+    this.timeBar.classList.toggle('work-override', active);
+    this.buyButton.classList.toggle('work-hidden', active);
+    if (active) {
+      this.hideActionMenu();
+      this.hideActivity();
+    }
+  }
 
   /** Rebuild the quest log panel. `completed` is the full completion log; only the last `completedLimit` show. */
   setQuestLog(active: { name: string; description: string }[], completed: { name: string }[], completedLimit: number) {

@@ -102,5 +102,5 @@ Implemented: `game/main.ts`'s `onActionStop` routes the sim (bare `agent.goTo`, 
 ## B3-7. Smartphone + jobs — ✅ V2 DONE 2026-07-15, see PROJECT_CONTEXT.md §7.20 as-built
 Phone = UI overlay (modifiable icon) with actions incl. "Search a job": refreshes a random job list every in-game hour (tunable). data/jobs.json: each job has requirements (visa status, skills), grants access to statuses (e.g. cook job → LMIA, time-limited/tunable), work hours, pay. Apply-for-status takes in-game time (pending period — must keep current status valid meanwhile). Permanent residence = application requiring skills, not quests. Lose job if skipped too many times (tunable). Jobs Editor tool (or JSON + editor section).
 
-## B3-8. Going to work
+## B3-8. Going to work — DONE 2026-07-15 (V3, see PROJECT_CONTEXT §7.20 V3 as-built)
 Leave via suite door during job hours → sim disappears, game speed auto-set (5x tunable) until return; each job has its own hours; pay on completion (funds). leave_for_work conditions already gate on vars.job.

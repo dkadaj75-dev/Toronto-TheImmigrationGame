@@ -350,6 +350,9 @@ export interface TuningData {
   visa?: { startStatus: string };
   /** B3-7 phone job-search result count. Optional for old fixtures; game/phone.ts defaults to 3. */
   phone?: { jobListSize?: number };
+  /** B3-8 going-to-work speed override. Optional for old fixtures; main.ts defaults to 5. This is
+   *  an effective simulation multiplier while away, not a mutation of the player's HUD selection. */
+  work?: { autoSpeed?: number };
   /** Optional so pre-existing tuning fixtures/tests stay valid (same precedent as `interaction?`
    *  above). ROADMAP_NEXT item 6: burnSeconds = how long an unextinguished fire instance burns
    *  before destroying its base object; spreadRadius (meters) = how far a live fire scans for

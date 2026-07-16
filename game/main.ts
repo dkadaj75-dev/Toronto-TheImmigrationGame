@@ -17,6 +17,7 @@ import { Autonomy } from './autonomy';
 import { QuestRunner, isActionAvailable, type EvalContext } from './quests';
 import { VisaMachine } from './visas';
 import { PhoneJobSearch, applyForJob, applyForVisa, jobListingViews, pendingDaysRemaining, visaApplicationViews } from './phone';
+import { WorkTracker, isLeaveForWorkAvailable, shouldStartVisaGrace, type WorkTickEvent } from './work';
 import { AccidentsController, resolveTapAssetId, shouldDespawnOnCleanup } from './accidents';
 import { GarbageController } from './garbage';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials } from './buymode';
@@ -112,6 +113,7 @@ async function start() {
   // (currently the only map that exists, so always true — no extra gating needed).
   let panicState: { elapsed: number; totalSeconds: number } | null = null;
   const triggerPanic = () => {
+    if (work.isAtWork) return; // the sim is off-lot and cannot react to a home fire while away
     agent.stopAction(); // fires onActionStop → animation reset to idle, activity chip hidden, etc.
     cancelCarry(); // ROADMAP_NEXT B3-5: panic interrupts an in-progress carry-to-garbage walk too
     const panicSeconds = data.tuning.fire?.panicSeconds ?? 3;
@@ -215,6 +217,12 @@ async function start() {
 
   // --- quest system (PROJECT_CONTEXT.md §3): runtime-only state, see quests.ts's persistence doc comment ---
   const quests = new QuestRunner(data.quests, data.simstate, data.tuning.economy.startingFunds);
+  // --- going to work (PROJECT_CONTEXT.md §7.20 V3, ROADMAP_NEXT B3-8) ---
+  // Pure/serializable attendance state lives in game/work.ts. main.ts owns only scene/UI/economy
+  // effects. The current game-time/job helpers close over clock variables declared below, like the
+  // existing buildEvalContext callback; they are only invoked after initialization is complete.
+  const work = new WorkTracker();
+  const currentJob = () => data.jobs.jobs.find((job) => job.id === quests.vars.job) ?? null;
   const completedQuestLog: { name: string }[] = [];
   const refreshQuestLog = () => {
     const active = data.quests.quests
@@ -263,6 +271,45 @@ async function start() {
       inGrace ? visaMachine.graceDaysLeft(gameDay) : visaMachine.daysLeft(gameDay),
       inGrace,
     );
+  };
+
+  const handleWorkEvent = (event: WorkTickEvent) => {
+    if (event.type === 'returned') {
+      agent.teleportTo(event.returnPoint.pos[0], event.returnPoint.pos[1], event.returnPoint.facingDeg);
+      sim.visible = true;
+      if (marker) marker.pivot.visible = true;
+      hud.setAtWork(false);
+      quests.funds += event.pay; // QuestRunner is the single runtime economy owner (§3 / buy mode)
+      hud.setFunds(quests.funds, data.tuning.economy.currencyName);
+      hud.showQuestToast(
+        `+${data.tuning.economy.currencyName}${event.pay.toLocaleString()}`,
+        'completed',
+        data.tuning.quests.toastDurationSeconds * 1000,
+      );
+      return;
+    }
+
+    const job = data.jobs.jobs.find((entry) => entry.id === event.jobId);
+    if (event.type === 'skipped') {
+      hud.showQuestToast(
+        `Missed work: ${job?.name ?? event.jobId} (${event.skips} skip${event.skips === 1 ? '' : 's'})`,
+        'started',
+        data.tuning.quests.toastDurationSeconds * 1000,
+      );
+      return;
+    }
+
+    quests.vars.job = null;
+    if (job && shouldStartVisaGrace(job, visaMachine.statusId, visaMachine.currentDef())) {
+      visaMachine.startGrace(gameDay);
+    }
+    hud.showQuestToast(
+      `Job lost: ${job?.name ?? event.jobId}`,
+      'started',
+      data.tuning.quests.toastDurationSeconds * 1000,
+    );
+    refreshVisaChip();
+    refreshPhone();
   };
 
   // --- smartphone jobs + visa applications (PROJECT_CONTEXT.md §7.20 V2, B3-7) ---
@@ -441,6 +488,29 @@ async function start() {
     // for main.ts's own two natural-finish call sites (primaryNeed threshold below, and the
     // `duration` timer running out in the render loop) — see sim.ts's stopAction doc comment.
     if (!completed) return;
+    // §7.20 V3: the short duration on leave_for_work finishes through the ordinary completed-only
+    // action path. Re-check the live job/time here because the shift may have ended during the walk
+    // from menu-open to the exterior door.
+    if (a.action.id === 'leave_for_work') {
+      const job = currentJob();
+      if (!job) return;
+      const started = work.beginShift(job, currentWorkTime(), {
+        pos: [a.target.position.x, a.target.position.z],
+        facingDeg: THREE.MathUtils.radToDeg(a.target.rotation.y),
+      });
+      if (!started.ok) {
+        hud.showQuestToast('That work shift has ended', 'started', 2500);
+        return;
+      }
+      cancelCarry();
+      // Clearing at the current point is the SimAgent equivalent of "nav idle" and preserves the
+      // departure facing before the character is hidden.
+      agent.teleportTo(sim.position.x, sim.position.z, THREE.MathUtils.radToDeg(sim.rotation.y));
+      sim.visible = false;
+      if (marker) marker.pivot.visible = false;
+      hud.setAtWork(true);
+      return;
+    }
     // §7.3: roll for a new accident (normal asset finishing a use) or despawn one (a cleanup
     // action just completed on an accident instance). Non-duration actions still roll HERE (their
     // only "the sim is done with this" moment — see accidents.ts's module doc comment); duration
@@ -505,7 +575,7 @@ async function start() {
   };
 
   const tapInput = new TapInput(renderer.domElement, cam.camera, () => world, (hit) => {
-    if (gameOverActive) return; // §7.20 B3-6: no interactions once the game-over overlay is up
+    if (gameOverActive || work.isAtWork) return; // no on-lot input while terminal or away at work
     if (buyMode.active) { handleBuyModeTap(hit); return; }
     if (hit.object) {
       const assetId = hit.object.userData.assetId as string;
@@ -531,7 +601,11 @@ async function start() {
         const actions = asset.interactions
           .map((id) => data.interactions.actions.find((x) => x.id === id))
           .filter((x): x is NonNullable<typeof x> => !!x)
-          .filter((x) => isActionAvailable(x.conditions, evalCtx));
+          .filter((x) => isActionAvailable(x.conditions, evalCtx))
+          // leave_for_work keeps its data-side vars.job condition (§7.16) and adds this code-side
+          // live JobDef-hours gate, including cross-midnight windows (pure math in game/work.ts).
+          .filter((x) => x.id !== 'leave_for_work'
+            || isLeaveForWorkAvailable(quests.vars.job, data.jobs.jobs, currentWorkTime()));
         if (actions.length > 0) {
           const resolvedAsset = asset;
           setSelected(target);
@@ -593,6 +667,7 @@ async function start() {
   hud.setFunds(quests.funds, currencyName());
 
   hud.onBuyOpen = () => {
+    if (work.isAtWork) return;
     if (agent.current?.action.id === 'use_phone') agent.stopAction();
     buyMode.enter();
     hud.setBuyModeActive(true);
@@ -781,7 +856,10 @@ async function start() {
       anim?.retune(data.tuning.character);
       anim?.setWalkSpeed(data.tuning.movement.walkSpeed);
       loadCharacter(); // no-op unless meshPath changed
-      if (!marker) marker = createMarkerInstance(scene, sim, data.tuning.character);
+      if (!marker) {
+        marker = createMarkerInstance(scene, sim, data.tuning.character);
+        marker.pivot.visible = !work.isAtWork;
+      }
     } else if (marker) {
       marker.dispose();
       marker = null;
@@ -813,6 +891,7 @@ async function start() {
       quests: quests.quests,
     };
   }
+  function currentWorkTime() { return { hour: gameSeconds / 3600, day: gameDay }; }
   const clockScale = () => 86400 / data.tuning.time.secondsPerGameDay;
   // ROADMAP_NEXT item 6: monotonic sim-time seconds elapsed since the game started, on the SAME
   // sdt as everything else (pause/2x/3x affect it identically) but — unlike gameSeconds — never
@@ -836,12 +915,17 @@ async function start() {
     // stale-path edge case when it WAS mid-route at the moment buy mode opened).
     // §7.20 B3-6: game over freezes sim time the SAME way buy mode does (reuse, not a new mechanism)
     // — the overlay's Restart button (location.reload()) is the only way out in V1 (no save system).
-    const sdt = (buyMode.active || gameOverActive) ? 0 : dt * hud.speed;
+    // V3 parallels buy mode's one-line effective-speed override without mutating hud.speed: buy
+    // mode multiplies by 0 (freeze), work multiplies by tuning.work.autoSpeed (default 5). The HUD
+    // selection is locked/preserved while away and becomes effective again on return.
+    const selectedSpeed = work.isAtWork ? (data.tuning.work?.autoSpeed ?? 5) : hud.speed;
+    const effectiveSpeed = Number.isFinite(selectedSpeed) ? Math.max(0, selectedSpeed) : 0;
+    const sdt = (buyMode.active || gameOverActive) ? 0 : dt * effectiveSpeed;
     simClockSeconds += sdt;
     // ROADMAP_NEXT item 7: sfx/action/asset loops pause whenever sim time isn't advancing (the
     // pause button OR buy mode's own freeze); music is deliberately NOT touched here (see
     // audio.ts's module doc comment on the PAUSE decision).
-    audio.setPaused(hud.speed === 0 || buyMode.active || gameOverActive);
+    audio.setPaused(effectiveSpeed === 0 || buyMode.active || gameOverActive);
 
     gameSeconds += sdt * clockScale();
     while (gameSeconds >= 86400) {
@@ -858,6 +942,10 @@ async function start() {
     devClock.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     hud.setClock(h, m);
     applyDayNight(lights, scene, gameSeconds / 3600, data.tuning.time.nightStartHour, data.tuning.time.nightEndHour);
+
+    // Pure attendance clock: returns/pay and fully-ended missed windows are decided here after the
+    // clock advances. The cursor in WorkTracker makes each work window process exactly once.
+    for (const event of work.tick(currentJob(), currentWorkTime())) handleWorkEvent(event);
 
     agent.update(sdt);
     // ROADMAP_NEXT B3-5: "carry to garbage" arrival check — carryState is only ever set right after
@@ -936,8 +1024,13 @@ async function start() {
     // active purely from the current action's own `censor` flag (covers autonomy-driven AND
     // player-tapped shower/WC use identically, no extra plumbing at either call site).
     censor.update(dt, sim, !!agent.current?.action.censor, data.tuning.character?.heightMeters ?? 1.55);
-    autonomy.update(sdt);
-    simTick(sdt);
+    // Explicit V3 simplification: while off-lot the sim gets neither autonomy nor needs decay (and
+    // the decay/gain accumulators do not advance, so there is no catch-up burst on return). The
+    // world clock/doors/fires still advance at the work auto-speed above.
+    if (!work.isAtWork) {
+      autonomy.update(sdt);
+      simTick(sdt);
+    }
     hudAcc += dt;
     if (hudAcc >= 0.25) { hudAcc = 0; hud.refresh(); hud.setFunds(quests.funds, currencyName()); } // 4 Hz is plenty for bars/funds
 

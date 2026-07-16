@@ -39,6 +39,10 @@
     "jobListSize": 3,
     "_source": "Smartphone/jobs V2 (PROJECT_CONTEXT.md §7.20 B3-7) — number of random job listings returned by Search a job; a list can reroll at most once per in-game hour."
   },
+  "work": {
+    "autoSpeed": 5,
+    "_source": "Going to work V3 (PROJECT_CONTEXT.md §7.20 B3-8) — effective simulation speed multiplier while the sim is away at work. The player's selected HUD speed is preserved and restored on return."
+  },
   "movement": {
     "walkSpeed": 2,
     "arrivalRadius": 0.35,

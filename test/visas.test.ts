@@ -85,6 +85,17 @@ console.log('visas.test — grace resolved by a fresh grant before it lapses');
   check('no game over — grace was cleared', m.gameOver === false);
 }
 
+console.log('visas.test — job-loss grace API');
+{
+  const m = new VisaMachine(visas, 'lmia', 5);
+  check('startGrace opens current losable visa grace immediately', m.startGrace(10) === true);
+  check('job-loss grace uses the visa definition days', m.graceUntilDay === 13 && m.expiresAtDay === null);
+  check('repeated startGrace does not extend the deadline', m.startGrace(11) === false && m.graceUntilDay === 13);
+
+  const visitor = new VisaMachine(visas, 'visitor', 1);
+  check('non-losable status refuses job-loss grace', visitor.startGrace(2) === false && !visitor.inGrace());
+}
+
 console.log('visas.test — pending application resolution');
 {
   const m = new VisaMachine(visas, 'lmia', 1); // remains valid through the day-35 resolution

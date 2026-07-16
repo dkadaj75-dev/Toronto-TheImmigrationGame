@@ -125,6 +125,22 @@ export class VisaMachine {
   }
 
   /**
+   * V3 job-loss hook: open the CURRENT losable status's grace window immediately. The caller owns
+   * the causal check that the lost job actually granted this status (game/work.ts's
+   * shouldStartVisaGrace); VisaMachine owns the legal-state transition and its per-visa graceDays.
+   * Repeated calls never extend an existing grace period, and non-losable/unknown/no-grace statuses
+   * are safe no-ops. Returns true only when a new grace window was opened.
+   */
+  startGrace(day: number): boolean {
+    if (this.gameOver || this.inGrace()) return false;
+    const d = this.currentDef();
+    if (!d?.losable || !d.graceDays) return false;
+    this.graceUntilDay = day + d.graceDays;
+    this.expiresAtDay = null;
+    return true;
+  }
+
+  /**
    * V2 hook (phone applications): begin a pending application for `statusId`, resolving after
    * that status's own `applicationDays`. The caller (future phone UI) is responsible for checking
    * `requirements` via the quest condition evaluator BEFORE calling this — apply() itself doesn't
