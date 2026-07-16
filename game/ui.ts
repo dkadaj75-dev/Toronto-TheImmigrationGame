@@ -128,6 +128,13 @@ const CSS = `
 #visa-chip.grace { color: #e57a7a; }
 #visa-chip.hidden { display: none; }
 
+#phone-button { position: absolute; right: calc(8px + env(safe-area-inset-right, 0px));
+  bottom: calc(208px + env(safe-area-inset-bottom, 0px)); width: 48px; height: 48px; padding: 5px;
+  border: 1px solid rgba(130,158,210,.55); border-radius: 14px; background: rgba(20,26,40,.9);
+  box-shadow: 0 3px 14px rgba(0,0,0,.35); cursor: pointer; pointer-events: auto; touch-action: manipulation; }
+#phone-button img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+#phone-button.hidden { display: none; }
+
 #game-over { position: fixed; inset: 0; z-index: 20; display: none; align-items: center;
   justify-content: center; flex-direction: column; gap: 18px; background: rgba(8,10,16,.92);
   color: #eaf0fb; text-align: center; padding: 24px; pointer-events: none; }
@@ -221,6 +228,7 @@ const CSS = `
   #funds-chip { bottom: calc(118px + env(safe-area-inset-bottom, 0px)); font-size: 11px; padding: 5px 10px; }
   #visa-chip { bottom: calc(154px + env(safe-area-inset-bottom, 0px)); font-size: 11px; padding: 5px 10px; }
   #buy-button { bottom: calc(78px + env(safe-area-inset-bottom, 0px)); font-size: 12px; padding: 8px 12px; }
+  #phone-button { bottom: calc(190px + env(safe-area-inset-bottom, 0px)); }
   .buy-card { width: 78px; }
 }
 `;
@@ -244,6 +252,8 @@ export class Hud {
 
   // --- Smartphone/jobs/visas (§7.20 V2) ---
   private phoneOverlay: HTMLElement;
+  private phoneButton: HTMLButtonElement;
+  private phoneIcon: HTMLImageElement;
   private phoneBody: HTMLElement;
   private phoneStatus: HTMLElement;
   private phoneTabs: NodeListOf<HTMLButtonElement>;
@@ -277,6 +287,7 @@ export class Hud {
   onSelectionCancel: (() => void) | null = null;
 
   onPhoneClose: (() => void) | null = null;
+  onPhoneOpen: (() => void) | null = null;
   onPhoneTabPick: ((tab: 'jobs' | 'visas') => void) | null = null;
   onPhoneSearchJobs: (() => void) | null = null;
   onPhoneJobApply: ((jobId: string) => void) | null = null;
@@ -318,6 +329,7 @@ export class Hud {
       <div id="visa-chip"></div>
       <div id="funds-chip">§ 0</div>
       <button id="buy-button">🛒 Buy</button>
+      <button id="phone-button" aria-label="Open smartphone" title="Smartphone"><img alt="" /></button>
       <div id="game-over">
         <h2>Game Over</h2>
         <p id="game-over-text"></p>
@@ -382,9 +394,13 @@ export class Hud {
 
     // --- Smartphone/jobs/visas wiring (§7.20 V2) ---
     this.phoneOverlay = root.querySelector('#phone-overlay')!;
+    this.phoneButton = root.querySelector('#phone-button')!;
+    this.phoneIcon = this.phoneButton.querySelector('img')!;
     this.phoneBody = root.querySelector('#phone-body')!;
     this.phoneStatus = root.querySelector('.phone-status')!;
     this.phoneTabs = root.querySelectorAll<HTMLButtonElement>('[data-phone-tab]');
+    this.phoneButton.addEventListener('click', () => this.onPhoneOpen?.());
+    this.setPhoneIcon('/icons/Smartphone.png');
     root.querySelector('.phone-close')!.addEventListener('click', () => {
       this.closePhone();
       this.onPhoneClose?.();
@@ -607,6 +623,8 @@ export class Hud {
 
   /** Terminal V1 overlay. It intentionally has no close path; Restart reloads the page. */
   showGameOver(description: string) {
+    this.closePhone();
+    this.phoneButton.classList.add('hidden');
     this.gameOverText.textContent = description;
     this.gameOverEl.classList.add('open');
   }
@@ -619,6 +637,8 @@ export class Hud {
   }
 
   closePhone() { this.phoneOverlay.classList.remove('open'); }
+
+  setPhoneIcon(path: string) { this.phoneIcon.src = path || '/icons/Smartphone.png'; }
 
   renderPhone(args: {
     tab: 'jobs' | 'visas';
@@ -715,8 +735,10 @@ export class Hud {
     this.skillsPanel.classList.toggle('buy-mode-hidden', active);
     this.fundsChip.classList.toggle('hidden', active);
     this.buyButton.classList.toggle('hidden', active);
+    this.phoneButton.classList.toggle('hidden', active);
     this.buyBar.classList.toggle('open', active);
     if (active) {
+      this.closePhone();
       this.hideActionMenu();
       this.hideActivity();
     } else {

@@ -13,6 +13,7 @@ export interface WorkReturnPoint { pos: [number, number]; facingDeg: number }
 export interface ActiveWorkShift extends WorkWindow {
   jobId: string;
   payPerShift: number;
+  needsCost: Record<string, number>;
   returnPoint: WorkReturnPoint;
 }
 
@@ -21,6 +22,7 @@ export interface WorkSaveState {
   skips: number;
   nextShiftStartAbsHour: number | null;
   attendedShiftStartAbsHour: number | null;
+  notifiedShiftStartAbsHour: number | null;
   activeShift: ActiveWorkShift | null;
 }
 
@@ -29,7 +31,8 @@ export type StartWorkResult =
   | { ok: false; reason: 'already_at_work' | 'outside_hours' };
 
 export type WorkTickEvent =
-  | { type: 'returned'; jobId: string; pay: number; returnPoint: WorkReturnPoint }
+  | { type: 'due'; jobId: string; endHour: number }
+  | { type: 'returned'; jobId: string; pay: number; needsCost: Record<string, number>; returnPoint: WorkReturnPoint }
   | { type: 'skipped'; jobId: string; skips: number }
   | { type: 'job_lost'; jobId: string; skips: number };
 
@@ -86,8 +89,23 @@ export function decideWorkReturn(active: ActiveWorkShift | null, time: WorkTime)
     type: 'returned',
     jobId: active.jobId,
     pay: active.payPerShift,
+    needsCost: { ...active.needsCost },
     returnPoint: { pos: [...active.returnPoint.pos] as [number, number], facingDeg: active.returnPoint.facingDeg },
   };
+}
+
+/** Return a new needs table after subtracting positive job costs. Unknown need ids are ignored. */
+export function applyNeedsCost(
+  currentNeeds: Readonly<Record<string, number>>,
+  needsCost: Readonly<Record<string, number>> | undefined,
+): Record<string, number> {
+  const next = { ...currentNeeds };
+  for (const [needId, rawCost] of Object.entries(needsCost ?? {})) {
+    if (!(needId in next)) continue;
+    const cost = Number.isFinite(rawCost) ? Math.max(0, rawCost) : 0;
+    next[needId] = Math.max(0, next[needId] - cost);
+  }
+  return next;
 }
 
 /** Job-loss grace applies only to the exact job-granted, currently-held, losable visa. */
@@ -110,6 +128,7 @@ function firstShiftStartAtOrAfter(time: WorkTime, hours: WorkHours): number {
 function cloneActive(active: ActiveWorkShift | null): ActiveWorkShift | null {
   return active ? {
     ...active,
+    needsCost: { ...(active.needsCost ?? {}) },
     returnPoint: { pos: [...active.returnPoint.pos] as [number, number], facingDeg: active.returnPoint.facingDeg },
   } : null;
 }
@@ -127,6 +146,7 @@ export class WorkTracker {
     skips: 0,
     nextShiftStartAbsHour: null,
     attendedShiftStartAbsHour: null,
+    notifiedShiftStartAbsHour: null,
     activeShift: null,
   };
 
@@ -144,6 +164,7 @@ export class WorkTracker {
       skips: 0,
       nextShiftStartAbsHour: job ? firstShiftStartAtOrAfter(time, job.hours) : null,
       attendedShiftStartAbsHour: null,
+      notifiedShiftStartAbsHour: null,
       activeShift: null,
     };
   }
@@ -157,6 +178,7 @@ export class WorkTracker {
       ...window,
       jobId: job.id,
       payPerShift: job.payPerShift,
+      needsCost: { ...(job.needsCost ?? {}) },
       returnPoint: { pos: [...returnPoint.pos] as [number, number], facingDeg: returnPoint.facingDeg },
     };
     this.state.activeShift = shift;
@@ -187,6 +209,14 @@ export class WorkTracker {
 
     const now = absoluteGameHour(time);
     const duration = workWindowDuration(job.hours);
+    const nextStart = this.state.nextShiftStartAbsHour;
+    if (now + EPSILON >= nextStart
+      && now < nextStart + duration - EPSILON
+      && this.state.attendedShiftStartAbsHour !== nextStart
+      && this.state.notifiedShiftStartAbsHour !== nextStart) {
+      this.state.notifiedShiftStartAbsHour = nextStart;
+      events.push({ type: 'due', jobId: job.id, endHour: normalizeGameHour(job.hours.endHour) });
+    }
     while (this.state.nextShiftStartAbsHour + duration <= now + EPSILON) {
       const shiftStart = this.state.nextShiftStartAbsHour;
       const attended = this.state.attendedShiftStartAbsHour !== null
@@ -204,6 +234,7 @@ export class WorkTracker {
         this.state.jobId = null;
         this.state.nextShiftStartAbsHour = null;
         this.state.attendedShiftStartAbsHour = null;
+        this.state.notifiedShiftStartAbsHour = null;
         break;
       }
     }
@@ -223,6 +254,7 @@ export class WorkTracker {
       skips: saved.skips,
       nextShiftStartAbsHour: saved.nextShiftStartAbsHour,
       attendedShiftStartAbsHour: saved.attendedShiftStartAbsHour,
+      notifiedShiftStartAbsHour: saved.notifiedShiftStartAbsHour ?? null,
       activeShift: cloneActive(saved.activeShift),
     };
   }

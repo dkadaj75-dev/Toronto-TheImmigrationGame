@@ -1,5 +1,5 @@
 {
-  "_comment": "Smartphone job definitions (PROJECT_CONTEXT.md §7.20 V2/V3/V4). Requirements use the quest evaluator namespace. grantsVisa is applied through VisaMachine when the job application succeeds. Hours/pay/maxSkips drive game/work.ts attendance, return pay, and job loss. Edit these definitions in tools/career.html.",
+  "_comment": "Smartphone job definitions (PROJECT_CONTEXT.md §7.20 V2/V3/V4). Requirements use the quest evaluator namespace. grantsVisa is applied through VisaMachine when the job application succeeds. Hours/pay/maxSkips/needsCost drive game/work.ts attendance, return pay and need deductions, and job loss. Edit these definitions in tools/career.html.",
   "jobs": [
     {
       "id": "dishwasher",
@@ -7,7 +7,8 @@
       "grantsVisa": "lmia",
       "hours": { "startHour": 9, "endHour": 17 },
       "payPerShift": 120,
-      "maxSkips": 3
+      "maxSkips": 3,
+      "needsCost": { "energy": 35, "hunger": 20 }
     },
     {
       "id": "cook",
@@ -16,7 +17,8 @@
       "grantsVisa": "lmia",
       "hours": { "startHour": 15, "endHour": 23 },
       "payPerShift": 190,
-      "maxSkips": 2
+      "maxSkips": 2,
+      "needsCost": { "energy": 30, "hygiene": 15 }
     },
     {
       "id": "barista",
@@ -25,7 +27,8 @@
       "grantsVisa": "lmia",
       "hours": { "startHour": 6, "endHour": 14 },
       "payPerShift": 150,
-      "maxSkips": 3
+      "maxSkips": 3,
+      "needsCost": { "energy": 25, "hunger": 15, "social": 10 }
     },
     {
       "id": "tutor",
@@ -44,7 +47,8 @@
       },
       "hours": { "startHour": 10, "endHour": 18 },
       "payPerShift": 260,
-      "maxSkips": 2
+      "maxSkips": 2,
+      "needsCost": { "energy": 20, "social": 15 }
     }
   ]
 }

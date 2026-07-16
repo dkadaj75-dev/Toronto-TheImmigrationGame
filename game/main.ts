@@ -17,7 +17,7 @@ import { Autonomy } from './autonomy';
 import { QuestRunner, isActionAvailable, type EvalContext } from './quests';
 import { VisaMachine } from './visas';
 import { PhoneJobSearch, applyForJob, applyForVisa, jobListingViews, pendingDaysRemaining, visaApplicationViews } from './phone';
-import { WorkTracker, isLeaveForWorkAvailable, shouldStartVisaGrace, type WorkTickEvent } from './work';
+import { WorkTracker, applyNeedsCost, isLeaveForWorkAvailable, shouldStartVisaGrace, type WorkTickEvent } from './work';
 import { AccidentsController, resolveTapAssetId, shouldDespawnOnCleanup } from './accidents';
 import { GarbageController } from './garbage';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials } from './buymode';
@@ -199,6 +199,7 @@ async function start() {
 
   const stats = new SimStats(data.stats);
   const hud = new Hud(stats);
+  hud.setPhoneIcon(data.tuning.phone?.icon ?? '/icons/Smartphone.png');
 
   // Environment need (Sims "Room" score) = Σ environment scores of placed objects + any
   // currently-live accident instances (§7.3: fire/puddles ship negative environmentScore and
@@ -274,12 +275,23 @@ async function start() {
   };
 
   const handleWorkEvent = (event: WorkTickEvent) => {
+    if (event.type === 'due') {
+      const deadline = `${String(Math.floor(event.endHour)).padStart(2, '0')}:00`;
+      hud.showQuestToast(
+        `Time for work! Leave through the suite door before ${deadline}`,
+        'started',
+        data.tuning.quests.toastDurationSeconds * 1000,
+      );
+      return;
+    }
     if (event.type === 'returned') {
       agent.teleportTo(event.returnPoint.pos[0], event.returnPoint.pos[1], event.returnPoint.facingDeg);
       sim.visible = true;
       if (marker) marker.pivot.visible = true;
       hud.setAtWork(false);
       quests.funds += event.pay; // QuestRunner is the single runtime economy owner (§3 / buy mode)
+      const nextNeeds = applyNeedsCost(Object.fromEntries(stats.needs), event.needsCost);
+      for (const [needId, value] of Object.entries(nextNeeds)) stats.needs.set(needId, value);
       hud.setFunds(quests.funds, data.tuning.economy.currencyName);
       hud.showQuestToast(
         `+${data.tuning.economy.currencyName}${event.pay.toLocaleString()}`,
@@ -337,6 +349,12 @@ async function start() {
   );
   hud.onPhoneClose = () => {
     if (agent.current?.action.id === 'use_phone') agent.stopAction();
+  };
+  hud.onPhoneOpen = () => {
+    if (buyMode.active || gameOverActive) return;
+    phoneTab = 'jobs';
+    refreshPhone();
+    hud.openPhone();
   };
   hud.onPhoneTabPick = (tab) => { phoneTab = tab; refreshPhone(); };
   hud.onPhoneSearchJobs = () => {
@@ -849,6 +867,7 @@ async function start() {
     quests.retune(data.quests, data.simstate); // definitions only — runtime quest/var state is untouched
     visaMachine.retune(data.visas); // definitions only — runtime visa state is untouched (§7.20 B3-6)
     phoneJobs.retune(data.jobs, data.tuning.phone?.jobListSize); // defs/tuning only; hourly cadence survives
+    hud.setPhoneIcon(data.tuning.phone?.icon ?? '/icons/Smartphone.png');
     refreshVisaChip();
     refreshPhone();
     refreshQuestLog();

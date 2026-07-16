@@ -248,6 +248,8 @@ export interface JobDef {
   hours: { startHour: number; endHour: number };
   payPerShift: number;
   maxSkips: number;
+  /** Positive amounts subtracted from matching needs when the sim returns from a completed shift. */
+  needsCost?: Record<string, number>;
 }
 export interface JobsData { jobs: JobDef[]; }
 
@@ -349,7 +351,7 @@ export interface TuningData {
    *  `doors?` above); game/main.ts falls back to "visitor" when absent. */
   visa?: { startStatus: string };
   /** B3-7 phone job-search result count. Optional for old fixtures; game/phone.ts defaults to 3. */
-  phone?: { jobListSize?: number };
+  phone?: { jobListSize?: number; icon?: string };
   /** B3-8 going-to-work speed override. Optional for old fixtures; main.ts defaults to 5. This is
    *  an effective simulation multiplier while away, not a mutation of the player's HUD selection. */
   work?: { autoSpeed?: number };

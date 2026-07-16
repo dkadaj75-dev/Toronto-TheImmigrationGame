@@ -37,7 +37,8 @@
   },
   "phone": {
     "jobListSize": 3,
-    "_source": "Smartphone/jobs V2 (PROJECT_CONTEXT.md §7.20 B3-7) — number of random job listings returned by Search a job; a list can reroll at most once per in-game hour."
+    "icon": "/icons/Smartphone.png",
+    "_source": "Smartphone/jobs V2 + designer HUD launcher delta (PROJECT_CONTEXT.md §7.20) — jobListSize controls hourly listings; icon is the persistent HUD button image."
   },
   "work": {
     "autoSpeed": 5,

@@ -360,6 +360,37 @@ function renderJobEditor() {
   details.appendChild(frow('pay per shift', numberInput(job.payPerShift, (v) => { job.payPerShift = v; markDirty('jobs.json'); renderValidation(); }, 'job.payPerShift')));
   details.appendChild(frow('max skips', numberInput(job.maxSkips, (v) => { job.maxSkips = v; markDirty('jobs.json'); }, 'job.maxSkips', { min: 0 })));
   root.appendChild(details);
+  const needsCost = card('Needs cost on return');
+  const costs = job.needsCost || {};
+  for (const [needId, amount] of Object.entries(costs)) {
+    const row = document.createElement('div'); row.className = 'frow need-cost-row'; row.dataset.needId = needId;
+    const options = state.stats.needs
+      .filter((need) => need.id === needId || !(need.id in costs))
+      .map((need) => [need.id, need.name]);
+    if (!state.stats.needs.some((need) => need.id === needId)) options.push([needId, `${needId} (unknown)`]);
+    const need = selectInput(options, needId, (nextId) => {
+      const value = job.needsCost[needId]; delete job.needsCost[needId]; job.needsCost[nextId] = value;
+      markDirty('jobs.json'); renderJobEditor(); renderValidation();
+    }, `job.needsCost.${needId}.need`);
+    const value = numberInput(amount, (nextAmount) => {
+      job.needsCost[needId] = nextAmount; markDirty('jobs.json'); renderValidation();
+    }, `job.needsCost.${needId}.amount`, { min: 0 });
+    const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove';
+    remove.dataset.action = 'remove-needs-cost'; remove.addEventListener('click', () => {
+      delete job.needsCost[needId]; if (!Object.keys(job.needsCost).length) delete job.needsCost;
+      markDirty('jobs.json'); renderJobEditor(); renderValidation();
+    });
+    const controls = document.createElement('div'); controls.className = 'inline-control'; controls.append(need, value, remove);
+    row.append(controls); needsCost.appendChild(row);
+  }
+  const addCost = document.createElement('button'); addCost.type = 'button'; addCost.id = 'addNeedsCost'; addCost.textContent = '+ Add need cost';
+  const availableNeed = state.stats.needs.find((need) => !(need.id in costs));
+  addCost.disabled = !availableNeed;
+  addCost.addEventListener('click', () => {
+    if (!availableNeed) return;
+    (job.needsCost ||= {})[availableNeed.id] = 0; markDirty('jobs.json'); renderJobEditor(); renderValidation();
+  });
+  needsCost.appendChild(addCost); root.appendChild(needsCost);
   const requirements = card('Job requirements'); requirements.appendChild(conditionEditor(job, 'job', 'jobs.json')); root.appendChild(requirements);
   const actions = card('Actions'); const del = document.createElement('button'); del.id = 'deleteJob'; del.className = 'danger'; del.textContent = 'Delete job';
   del.addEventListener('click', () => removeJob(job.id)); actions.appendChild(del); root.appendChild(actions);
@@ -429,6 +460,10 @@ function collectValidationIssues() {
     if (job.grantsVisa && !visaIds.has(job.grantsVisa)) issues.push(`Job "${job.name || job.id}" — grantsVisa references unknown visa "${job.grantsVisa}".`);
     if (job.hours && job.hours.startHour === job.hours.endHour) issues.push(`Job "${job.name || job.id}" — endHour equals startHour (${job.hours.startHour}).`);
     if (typeof job.payPerShift === 'number' && job.payPerShift < 0) issues.push(`Job "${job.name || job.id}" — payPerShift is negative (${job.payPerShift}).`);
+    for (const [needId, amount] of Object.entries(job.needsCost || {})) {
+      if (!needIds.has(needId)) issues.push(`Job "${job.name || job.id}" — needsCost references unknown need id "${needId}".`);
+      if (typeof amount === 'number' && amount < 0) issues.push(`Job "${job.name || job.id}" — needsCost.${needId} is negative (${amount}).`);
+    }
   }
   const startStatus = state.tuning.visa && state.tuning.visa.startStatus;
   if (!startStatus || !visaIds.has(startStatus)) issues.push(`tuning.visa.startStatus references missing visa "${startStatus || ''}".`);

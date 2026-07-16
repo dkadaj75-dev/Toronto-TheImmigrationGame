@@ -4,6 +4,7 @@ import type { JobDef, VisaDef } from '../game/data';
 import {
   WorkTracker,
   absoluteGameHour,
+  applyNeedsCost,
   decideWorkReturn,
   isLeaveForWorkAvailable,
   isWithinWorkHours,
@@ -20,6 +21,7 @@ function check(name: string, condition: boolean, detail = '') {
 const dayJob: JobDef = {
   id: 'day', name: 'Day job', grantsVisa: 'lmia',
   hours: { startHour: 9, endHour: 17 }, payPerShift: 120, maxSkips: 1,
+  needsCost: { energy: 35, hunger: 20 },
 };
 const nightJob: JobDef = {
   id: 'night', name: 'Night job',
@@ -68,21 +70,44 @@ console.log('work.test — full leave/return/pay flow and serialization');
   const returned = events.find((event) => event.type === 'returned');
   check('endHour emits one return', events.filter((event) => event.type === 'returned').length === 1);
   check('return carries snapshotted pay', returned?.type === 'returned' && returned.pay === 120);
+  check('return carries snapshotted needs costs', returned?.type === 'returned' && returned.needsCost.energy === 35 && returned.needsCost.hunger === 20);
   check('return carries exterior-door position', returned?.type === 'returned' && returned.returnPoint.pos.join(',') === '0,2');
   check('attended window is not a skip', !events.some((event) => event.type === 'skipped'));
   check('tracker is no longer at work', !restored.isAtWork);
   check('repeated end-hour tick does not pay twice', !restored.tick(dayJob, { day: 1, hour: 17.5 }).some((event) => event.type === 'returned'));
 }
 
+console.log('work.test — work-time reminder emits once per window');
+{
+  const work = new WorkTracker();
+  work.syncJob(dayJob, { day: 1, hour: 8 });
+  check('no reminder before startHour', !work.tick(dayJob, { day: 1, hour: 8.99 }).some((event) => event.type === 'due'));
+  const due = work.tick(dayJob, { day: 1, hour: 9 });
+  check('startHour emits one due event with deadline', due.filter((event) => event.type === 'due').length === 1 && due.some((event) => event.type === 'due' && event.endHour === 17));
+  const restored = new WorkTracker(); restored.restore(work.serialize());
+  check('same saved/restored window cannot remind twice', !restored.tick(dayJob, { day: 1, hour: 12 }).some((event) => event.type === 'due'));
+  restored.tick(dayJob, { day: 1, hour: 17 });
+  check('next work window reminds again', restored.tick(dayJob, { day: 2, hour: 9 }).some((event) => event.type === 'due'));
+}
+
+console.log('work.test — needs-cost application decision');
+{
+  const after = applyNeedsCost({ energy: 50, hunger: 10, hygiene: 40 }, { energy: 35, hunger: 20, missing: 99 });
+  check('known costs subtract on return', after.energy === 15);
+  check('needs costs clamp at zero', after.hunger === 0);
+  check('sparse and unknown costs leave other needs unchanged', after.hygiene === 40 && !('missing' in after));
+  check('negative authored costs cannot increase a need', applyNeedsCost({ energy: 50 }, { energy: -10 }).energy === 50);
+}
+
 console.log('work.test — skip increments exactly once per missed window');
 {
   const work = new WorkTracker();
   work.syncJob(dayJob, { day: 1, hour: 8 });
-  check('no skip before the first window ends', work.tick(dayJob, { day: 1, hour: 16.99 }).length === 0);
+  check('no skip before the first window ends', !work.tick(dayJob, { day: 1, hour: 16.99 }).some((event) => event.type === 'skipped'));
   const first = work.tick(dayJob, { day: 1, hour: 17 });
   check('first missed end emits one skip', first.filter((event) => event.type === 'skipped').length === 1 && work.skips === 1);
   check('same ended window cannot increment again', work.tick(dayJob, { day: 1, hour: 23 }).length === 0 && work.skips === 1);
-  check('next day before end cannot increment', work.tick(dayJob, { day: 2, hour: 16 }).length === 0 && work.skips === 1);
+  check('next day before end cannot increment', !work.tick(dayJob, { day: 2, hour: 16 }).some((event) => event.type === 'skipped') && work.skips === 1);
   const second = work.tick(dayJob, { day: 2, hour: 17 });
   check('next missed window increments once', second.filter((event) => event.type === 'skipped').length === 1 && work.skips === 2);
   check('skips > maxSkips emits job loss', second.some((event) => event.type === 'job_lost') && work.jobId === null);
@@ -92,7 +117,7 @@ console.log('work.test — overnight skip and job-acquired-mid-window boundary')
 {
   const overnight = new WorkTracker();
   overnight.syncJob(nightJob, { day: 4, hour: 21 });
-  check('overnight shift is not missed before next-day end', overnight.tick(nightJob, { day: 5, hour: 5.9 }).length === 0);
+  check('overnight shift is not missed before next-day end', !overnight.tick(nightJob, { day: 5, hour: 5.9 }).some((event) => event.type === 'skipped'));
   check('overnight shift skips once at next-day end', overnight.tick(nightJob, { day: 5, hour: 6 }).filter((e) => e.type === 'skipped').length === 1);
   check('overnight repeated tick does not double-skip', overnight.tick(nightJob, { day: 5, hour: 12 }).length === 0);
 
