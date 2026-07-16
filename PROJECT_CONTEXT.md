@@ -533,6 +533,8 @@ The advisory validation panel never blocks saving and reports unknown condition 
 
 **B6-2 job UX delta (2026-07-16):** while employed, Phone → Jobs renders a current-job summary with name, hours, pay, optional future `level`, and `WorkTracker.skips`; the current id is omitted from hourly search results. Applying to a different job first uses pure `jobSwitchPrompt` and browser confirmation with the current/next names; cancellation leaves state untouched, while acceptance immediately syncs WorkTracker for the new employer.
 
+**B7-5/B7-6 work departure delta (2026-07-16):** `tuning.work.departureWindowHours` (default 2) limits `leave_for_work` to the start-inclusive/deadline-exclusive window and moves the one-per-shift missed-skip/toast to that deadline; pure absolute-hour math handles midnight crossings. During an open window, deterministic inclusive `autoDepartHappinessMin` (40) and `autoDepartEnergyMin` (25) thresholds may auto-order the exterior-door action, interrupting ordinary activities/sleep through the normal cancel path. A recent explicit player command suppresses work autonomy for the existing post-command cooldown. Door arrival rechecks the deadline, reminders name it, and all three fields hot-reload through `tuning.work`.
+
 ## 7.22 Bills (B4-1, 2026-07-15)
 
 - `data/bills.json` originally defined the recurring list and flat amounts. F1 (§7.24) supersedes only the amount source: the file remains the ordered `{ bills: [{ id, name }] }` identity/display list, while `data/finance.json` supplies formula constants. `tuning.bills.intervalDays` still controls cadence.

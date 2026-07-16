@@ -42,7 +42,7 @@ export type StartWorkResult =
   | { ok: false; reason: 'already_at_work' | 'outside_hours' };
 
 export type WorkTickEvent =
-  | { type: 'due'; jobId: string; endHour: number }
+  | { type: 'due'; jobId: string; endHour: number; departByHour: number }
   | { type: 'returned'; jobId: string; pay: number; needsCost: Record<string, number>; returnPoint: WorkReturnPoint }
   | { type: 'skipped'; jobId: string; skips: number }
   | { type: 'job_lost'; jobId: string; skips: number };
@@ -127,11 +127,65 @@ export function isWithinWorkHours(time: WorkTime, hours: WorkHours): boolean {
   return workWindowContaining(time, hours) !== null;
 }
 
-/** Code-side companion to leave_for_work's existing vars.job condition. Unknown ids stay hidden. */
-export function isLeaveForWorkAvailable(jobId: unknown, jobs: readonly JobDef[], time: WorkTime): boolean {
+/**
+ * B7-5: how many hours after startHour the DEPARTURE window stays open. Clamped to [0, shift
+ * duration]: you can never leave after the shift itself has ended, and a non-positive value closes
+ * the window entirely. `Number.isFinite`-guarded so a missing/garbage tunable falls back to the
+ * whole shift (old "leave anywhere in hours" behavior).
+ */
+export function departureWindowCloseOffset(hours: WorkHours, departureWindowHours: number): number {
+  const duration = workWindowDuration(hours);
+  const raw = Number.isFinite(departureWindowHours) ? departureWindowHours : duration;
+  return Math.min(Math.max(0, raw), duration);
+}
+
+/**
+ * B7-5: the sim may only LEAVE for work within `departureWindowHours` after the shift's startHour
+ * (start-inclusive, deadline-exclusive), including windows that cross midnight. Before the shift or
+ * past the departure deadline the shift can no longer be attended and is counted as missed.
+ */
+export function isWithinDepartureWindow(time: WorkTime, hours: WorkHours, departureWindowHours: number): boolean {
+  const window = workWindowContaining(time, hours);
+  if (!window) return false;
+  const close = window.startAbsHour + departureWindowCloseOffset(hours, departureWindowHours);
+  return absoluteGameHour(time) < close - EPSILON;
+}
+
+/**
+ * Code-side companion to leave_for_work's existing vars.job condition. Unknown ids stay hidden.
+ * B7-5: pass `departureWindowHours` to gate on the ~2h post-start departure window; omitting it
+ * preserves the old "available anywhere within job hours" behavior (used by pre-B7-5 tests).
+ */
+export function isLeaveForWorkAvailable(
+  jobId: unknown, jobs: readonly JobDef[], time: WorkTime, departureWindowHours?: number,
+): boolean {
   if (typeof jobId !== 'string' || !jobId) return false;
   const job = jobs.find((entry) => entry.id === jobId);
-  return !!job && isWithinWorkHours(time, job.hours);
+  if (!job) return false;
+  return departureWindowHours === undefined
+    ? isWithinWorkHours(time, job.hours)
+    : isWithinDepartureWindow(time, job.hours, departureWindowHours);
+}
+
+/** B7-6 autonomous-departure decision inputs. */
+export interface AutoDepartDecision {
+  withinDepartureWindow: boolean;
+  happiness: number;
+  energy: number;
+  happinessMin: number;
+  energyMin: number;
+}
+
+/**
+ * B7-6 deterministic-threshold model (documented in PROJECT_CONTEXT.md §7.20): while the departure
+ * window is open the sim leaves for work on its OWN iff BOTH happiness and energy clear their
+ * independent minimums; below either it stays home. No RNG — fully predictable/testable, and the
+ * two floors are tuned separately (tuning.work.autoDepartHappinessMin / autoDepartEnergyMin).
+ * Outside the window the decision is always false regardless of stats.
+ */
+export function decideAutoDepart(d: AutoDepartDecision): boolean {
+  if (!d.withinDepartureWindow) return false;
+  return d.happiness >= d.happinessMin && d.energy >= d.energyMin;
 }
 
 /** Pure return/pay decision; the active shift snapshots its pay and end time at departure. */
@@ -224,11 +278,16 @@ export class WorkTracker {
     };
   }
 
-  beginShift(job: JobDef, time: WorkTime, returnPoint: WorkReturnPoint): StartWorkResult {
+  beginShift(job: JobDef, time: WorkTime, returnPoint: WorkReturnPoint, departureWindowHours?: number): StartWorkResult {
     if (this.state.activeShift) return { ok: false, reason: 'already_at_work' };
     this.syncJob(job, time);
     const window = workWindowContaining(time, job.hours);
     if (!window) return { ok: false, reason: 'outside_hours' };
+    // B7-5: even if still within overall job hours, a departure past the ~2h window is too late —
+    // the walk from menu-open to the exterior door can push the sim past the deadline.
+    if (departureWindowHours !== undefined && !isWithinDepartureWindow(time, job.hours, departureWindowHours)) {
+      return { ok: false, reason: 'outside_hours' };
+    }
     const shift: ActiveWorkShift = {
       ...window,
       jobId: job.id,
@@ -254,7 +313,7 @@ export class WorkTracker {
    * window. A missed window increments once; skips > maxSkips emits job_lost and clears the tracked
    * job. The caller owns vars.job and applies that external mutation in response to the event.
    */
-  tick(job: JobDef | null, time: WorkTime): WorkTickEvent[] {
+  tick(job: JobDef | null, time: WorkTime, departureWindowHours?: number): WorkTickEvent[] {
     const events: WorkTickEvent[] = [];
 
     const returned = decideWorkReturn(this.state.activeShift, time);
@@ -272,15 +331,26 @@ export class WorkTracker {
 
     const now = absoluteGameHour(time);
     const duration = workWindowDuration(job.hours);
+    // B7-5: a missed DEPARTURE window registers its skip at the window's close (start +
+    // departureWindowHours), not at the shift's end. Callers that don't pass departureWindowHours
+    // keep the old "miss registers at shift end" behavior (closeOffset = full shift duration).
+    const closeOffset = departureWindowHours === undefined
+      ? duration
+      : departureWindowCloseOffset(job.hours, departureWindowHours);
     const nextStart = this.state.nextShiftStartAbsHour;
     if (now + EPSILON >= nextStart
-      && now < nextStart + duration - EPSILON
+      && now < nextStart + closeOffset - EPSILON
       && this.state.attendedShiftStartAbsHour !== nextStart
       && this.state.notifiedShiftStartAbsHour !== nextStart) {
       this.state.notifiedShiftStartAbsHour = nextStart;
-      events.push({ type: 'due', jobId: job.id, endHour: normalizeGameHour(job.hours.endHour) });
+      events.push({
+        type: 'due',
+        jobId: job.id,
+        endHour: normalizeGameHour(job.hours.endHour),
+        departByHour: normalizeGameHour(normalizeGameHour(job.hours.startHour) + closeOffset),
+      });
     }
-    while (this.state.nextShiftStartAbsHour + duration <= now + EPSILON) {
+    while (this.state.nextShiftStartAbsHour + closeOffset <= now + EPSILON) {
       const shiftStart = this.state.nextShiftStartAbsHour;
       const attended = this.state.attendedShiftStartAbsHour !== null
         && Math.abs(this.state.attendedShiftStartAbsHour - shiftStart) <= EPSILON;

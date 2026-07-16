@@ -302,6 +302,13 @@ export class SimAgent {
     return this.isMoving || this.queued !== null || this.current !== null;
   }
 
+  /** B7-6: the id of whatever action the sim is currently performing OR walking toward (queued),
+   *  or null when idle. Lets main.ts avoid re-issuing an auto-departure while one is already
+   *  in-flight (the leave_for_work walk hasn't reached the door yet, so `current` is still null). */
+  get pendingActionId(): string | null {
+    return this.current?.action.id ?? this.queued?.action.id ?? null;
+  }
+
   update(dt: number) {
     if (this.isMoving !== this.wasMoving) {
       this.wasMoving = this.isMoving;

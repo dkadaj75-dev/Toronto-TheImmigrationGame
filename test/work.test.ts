@@ -5,8 +5,11 @@ import {
   WorkTracker,
   absoluteGameHour,
   applyNeedsCost,
+  decideAutoDepart,
   decideWorkReturn,
+  departureWindowCloseOffset,
   isLeaveForWorkAvailable,
+  isWithinDepartureWindow,
   isWithinWorkHours,
   shouldStartVisaGrace,
   workWindowContaining,
@@ -50,6 +53,29 @@ console.log('work.test — midnight-crossing window');
   const window = workWindowContaining({ day: 3, hour: 2 }, nightJob.hours);
   check('containing overnight window starts previous day at 22', window?.startAbsHour === absoluteGameHour({ day: 2, hour: 22 }));
   check('containing overnight window ends current day at 6', window?.endAbsHour === absoluteGameHour({ day: 3, hour: 6 }));
+}
+
+console.log('work.test — B7-5 departure-window math');
+{
+  check('ordinary window includes start', isWithinDepartureWindow({ day: 1, hour: 9 }, dayJob.hours, 2));
+  check('ordinary window includes time before deadline', isWithinDepartureWindow({ day: 1, hour: 10.999 }, dayJob.hours, 2));
+  check('ordinary deadline is excluded', !isWithinDepartureWindow({ day: 1, hour: 11 }, dayJob.hours, 2));
+  check('manual leave is hidden after departure deadline', !isLeaveForWorkAvailable('day', [dayJob], { day: 1, hour: 12 }, 2));
+  check('beginShift rejects arrival at the deadline', !new WorkTracker().beginShift(dayJob, { day: 1, hour: 11 }, returnPoint, 2).ok);
+  check('window length clamps to shift duration', departureWindowCloseOffset(dayJob.hours, 99) === 8);
+  check('negative window closes immediately', departureWindowCloseOffset(dayJob.hours, -1) === 0);
+  check('overnight window includes pre-midnight start', isWithinDepartureWindow({ day: 2, hour: 23.5 }, nightJob.hours, 2));
+  check('overnight deadline at midnight is excluded', !isWithinDepartureWindow({ day: 3, hour: 0 }, nightJob.hours, 2));
+  check('overnight next-day time past deadline stays excluded', !isWithinDepartureWindow({ day: 3, hour: 1 }, nightJob.hours, 2));
+}
+
+console.log('work.test — B7-6 autonomous-departure decision');
+{
+  const eligible = { withinDepartureWindow: true, happiness: 40, energy: 25, happinessMin: 40, energyMin: 25 };
+  check('inclusive happiness and energy thresholds depart', decideAutoDepart(eligible));
+  check('low happiness stays home', !decideAutoDepart({ ...eligible, happiness: 39.99 }));
+  check('low energy stays home', !decideAutoDepart({ ...eligible, energy: 24.99 }));
+  check('closed departure window always stays home', !decideAutoDepart({ ...eligible, withinDepartureWindow: false }));
 }
 
 console.log('work.test — full leave/return/pay flow and serialization');
@@ -111,6 +137,22 @@ console.log('work.test — skip increments exactly once per missed window');
   const second = work.tick(dayJob, { day: 2, hour: 17 });
   check('next missed window increments once', second.filter((event) => event.type === 'skipped').length === 1 && work.skips === 2);
   check('skips > maxSkips emits job loss', second.some((event) => event.type === 'job_lost') && work.jobId === null);
+}
+
+console.log('work.test — B7-5 miss registers at departure-window close');
+{
+  const work = new WorkTracker();
+  work.syncJob(dayJob, { day: 1, hour: 8 });
+  const due = work.tick(dayJob, { day: 1, hour: 9 }, 2);
+  check('reminder carries departure deadline', due.some((event) => event.type === 'due' && event.departByHour === 11));
+  check('no skip before departure deadline', !work.tick(dayJob, { day: 1, hour: 10.999 }, 2).some((event) => event.type === 'skipped'));
+  check('skip emits at departure deadline', work.tick(dayJob, { day: 1, hour: 11 }, 2).filter((event) => event.type === 'skipped').length === 1 && work.skips === 1);
+  check('same closed departure window cannot double-skip', work.tick(dayJob, { day: 1, hour: 17 }, 2).length === 0 && work.skips === 1);
+
+  const overnight = new WorkTracker();
+  overnight.syncJob(nightJob, { day: 4, hour: 21 });
+  check('overnight reminder deadline normalizes to midnight', overnight.tick(nightJob, { day: 4, hour: 22 }, 2).some((event) => event.type === 'due' && event.departByHour === 0));
+  check('overnight miss registers at next-day midnight', overnight.tick(nightJob, { day: 5, hour: 0 }, 2).filter((event) => event.type === 'skipped').length === 1);
 }
 
 console.log('work.test — overnight skip and job-acquired-mid-window boundary');

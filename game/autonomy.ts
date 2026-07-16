@@ -16,6 +16,14 @@ import { isActionAvailable, type EvalContext } from './quests';
 
 export class Autonomy {
   private cooldownRemaining = 0;
+  /** B7-6: a SEPARATE cooldown raised ONLY by an explicit player command (not by event-driven
+   *  forceCooldown). Work auto-departure gates on this so "player orders still override" holds,
+   *  while energy-collapse/bladder/panic suppression (which use forceCooldown) does NOT block a
+   *  qualifying auto-departure. */
+  private playerCooldownRemaining = 0;
+
+  /** B7-6: true while a recent player command should still suppress autonomous work departure. */
+  get playerCommandActive(): boolean { return this.playerCooldownRemaining > 0; }
 
   constructor(
     private getData: () => GameData,
@@ -38,6 +46,7 @@ export class Autonomy {
   /** Call whenever the player issues a command (go-to, action, stop). */
   notePlayerCommand() {
     this.cooldownRemaining = this.getData().tuning.autonomy.postPlayerCommandCooldownSeconds;
+    this.playerCooldownRemaining = this.cooldownRemaining;
   }
 
   /** ROADMAP_NEXT B2-4: suppress autonomy for an EXPLICIT number of seconds — distinct from
@@ -53,6 +62,7 @@ export class Autonomy {
   /** Call every frame to run the cooldown down. */
   update(dt: number) {
     if (this.cooldownRemaining > 0) this.cooldownRemaining = Math.max(0, this.cooldownRemaining - dt);
+    if (this.playerCooldownRemaining > 0) this.playerCooldownRemaining = Math.max(0, this.playerCooldownRemaining - dt);
   }
 
   /** Call on each needs-decay tick. Returns the started action, or null if it did nothing. */

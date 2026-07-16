@@ -426,9 +426,16 @@ export interface TuningData {
   visa?: { startStatus: string };
   /** B3-7 phone job-search result count. Optional for old fixtures; game/phone.ts defaults to 3. */
   phone?: { jobListSize?: number; icon?: string };
-  /** B3-8 going-to-work speed override. Optional for old fixtures; main.ts defaults to 5. This is
-   *  an effective simulation multiplier while away, not a mutation of the player's HUD selection. */
-  work?: { autoSpeed?: number; promotionHappinessFactor?: number };
+  /** B3-8/B7-5/B7-6 work tuning. Optional for old fixtures. `departureWindowHours` limits how
+   *  long after startHour the sim may leave; the two auto-depart floors are inclusive and must
+   *  both pass. Runtime fallbacks live in main.ts (5 / 2 / 40 / 25 respectively). */
+  work?: {
+    autoSpeed?: number;
+    promotionHappinessFactor?: number;
+    departureWindowHours?: number;
+    autoDepartHappinessMin?: number;
+    autoDepartEnergyMin?: number;
+  };
   /** B4-1 recurring bill arrival cadence in in-game days. */
   bills?: { intervalDays?: number };
   /** Optional so pre-existing tuning fixtures/tests stay valid (same precedent as `interaction?`

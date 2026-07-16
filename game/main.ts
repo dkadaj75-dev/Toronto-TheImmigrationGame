@@ -3,7 +3,7 @@
 // Simulation (needs/autonomy/pathfinding) arrives in Phase 1 and will read the same data objects.
 
 import * as THREE from 'three';
-import { loadAll, watchData, type GameData } from './data';
+import { loadAll, watchData, type ActionDef, type GameData } from './data';
 import { TouchCamera } from './camera';
 import { applyWallCutView, buildWorld, makeSimStandIn, makeLights, applyDayNight, loadRiggedCharacter, normalizeMeshUrl, setAssetObjectOn } from './world';
 import { buildDoors } from './doors';
@@ -18,7 +18,7 @@ import { QuestRunner, isActionAvailable, type EvalContext } from './quests';
 import { VisaMachine } from './visas';
 import { PhoneJobSearch, applyForJob, applyForVisa, jobListingViews, jobSwitchPrompt, pendingDaysRemaining, visaApplicationViews } from './phone';
 import { FinanceState, decideRepoSeizure } from './bills';
-import { WorkTracker, applyNeedsCost, isLeaveForWorkAvailable, jobLevelPay, jobLevelTitle, shouldStartVisaGrace, type WorkTickEvent } from './work';
+import { WorkTracker, applyNeedsCost, decideAutoDepart, isLeaveForWorkAvailable, isWithinDepartureWindow, jobLevelPay, jobLevelTitle, shouldStartVisaGrace, type WorkTickEvent } from './work';
 import { computeHappiness } from './happiness';
 import { AccidentsController, resolveTapAssetId, shouldDespawnOnCleanup } from './accidents';
 import { GarbageController, wasteItemCount } from './garbage';
@@ -293,9 +293,14 @@ async function start() {
 
   const handleWorkEvent = (event: WorkTickEvent) => {
     if (event.type === 'due') {
-      const deadline = `${String(Math.floor(event.endHour)).padStart(2, '0')}:00`;
+      // B7-5: the meaningful deadline is now the DEPARTURE window close, not the shift end — leave
+      // after it and the shift is missed.
+      const depart = event.departByHour;
+      const totalMinutes = Math.round(depart * 60) % (24 * 60);
+      const hh = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
+      const mm = String(totalMinutes % 60).padStart(2, '0');
       hud.showQuestToast(
-        `Time for work! Leave through the suite door before ${deadline}`,
+        `Time for work! Leave through the suite door before ${hh}:${mm} or you'll miss the shift`,
         'started',
         data.tuning.quests.toastDurationSeconds * 1000,
       );
@@ -329,8 +334,13 @@ async function start() {
 
     const job = data.jobs.jobs.find((entry) => entry.id === event.jobId);
     if (event.type === 'skipped') {
+      // A walk/action ordered before the deadline cannot remain actionable after the tracker has
+      // closed the window. Same-position teleport is the existing normal cancel+clear-path seam.
+      if (agent.pendingActionId === 'leave_for_work') {
+        agent.teleportTo(sim.position.x, sim.position.z, THREE.MathUtils.radToDeg(sim.rotation.y));
+      }
       hud.showQuestToast(
-        `Missed work: ${job?.name ?? event.jobId} (${event.skips} skip${event.skips === 1 ? '' : 's'})`,
+        'You missed your shift',
         'started',
         data.tuning.quests.toastDurationSeconds * 1000,
       );
@@ -812,9 +822,9 @@ async function start() {
       const started = work.beginShift(job, currentWorkTime(), {
         pos: [a.target.position.x, a.target.position.z],
         facingDeg: THREE.MathUtils.radToDeg(a.target.rotation.y),
-      });
+      }, data.tuning.work?.departureWindowHours ?? 2); // B7-5: reject a late (past-window) arrival
       if (!started.ok) {
-        hud.showQuestToast('That work shift has ended', 'started', 2500);
+        hud.showQuestToast('Too late — you missed your shift', 'started', 2500);
         return;
       }
       cancelCarry();
@@ -923,9 +933,14 @@ async function start() {
             return !key || isAssetStateActionAvailable(x.id, assetStates.isOn(key, asset));
           })
           // leave_for_work keeps its data-side vars.job condition (§7.16) and adds this code-side
-          // live JobDef-hours gate, including cross-midnight windows (pure math in game/work.ts).
+          // live departure-window gate, including cross-midnight windows (pure math in work.ts).
           .filter((x) => x.id !== 'leave_for_work'
-            || isLeaveForWorkAvailable(quests.vars.job, data.jobs.jobs, currentWorkTime()));
+            || isLeaveForWorkAvailable(
+              quests.vars.job,
+              data.jobs.jobs,
+              currentWorkTime(),
+              data.tuning.work?.departureWindowHours ?? 2,
+            ));
         if (actions.length > 0) {
           const resolvedAsset = asset;
           setSelected(target);
@@ -1079,6 +1094,35 @@ async function start() {
 
   // --- simulation ticks (all intervals & thresholds from tuning.json / stats.json) ---
   let decayAcc = 0, gainAcc = 0;
+  /** B7-6: work departure is higher priority than ordinary free will and deliberately may replace
+   *  an in-progress activity (including bed sleep). `orderAction` performs the normal cancel path;
+   *  a recent explicit player order suppresses this until its ordinary autonomy cooldown expires. */
+  const tryAutoDepartForWork = () => {
+    const job = currentJob();
+    const workTuning = data.tuning.work;
+    const departureWindowHours = workTuning?.departureWindowHours ?? 2;
+    if (!job || work.isAtWork || agent.pendingActionId === 'leave_for_work' || autonomy.playerCommandActive) return false;
+    if (!decideAutoDepart({
+      withinDepartureWindow: isWithinDepartureWindow(currentWorkTime(), job.hours, departureWindowHours),
+      happiness,
+      energy: stats.needs.get('energy') ?? 0,
+      happinessMin: workTuning?.autoDepartHappinessMin ?? 40,
+      energyMin: workTuning?.autoDepartEnergyMin ?? 25,
+    })) return false;
+
+    const action = data.interactions.actions.find((entry): entry is ActionDef => entry.id === 'leave_for_work');
+    const target = doors.group.children.find((entry) => {
+      const def = data.assets.assets.find((asset) => asset.id === entry.userData.assetId);
+      return def?.door?.exterior === true && def.interactions.includes('leave_for_work');
+    });
+    if (!action || !target) return false;
+    const targetDef = data.assets.assets.find((asset) => asset.id === target.userData.assetId);
+    cancelCarry();
+    if (!agent.orderAction(action, target, null, targetDef)) return false;
+    hud.hideActionMenu();
+    hud.showQuestToast('Your Sim is leaving for work', 'started', data.tuning.quests.toastDurationSeconds * 1000);
+    return true;
+  };
   const simTick = (dt: number) => {
     decayAcc += dt;
     const decayEvery = data.tuning.simulation.needsDecayTickSeconds;
@@ -1106,7 +1150,8 @@ async function start() {
       if (!survivalEventActive() && bladderNow !== undefined && checkBladderFailure(bladderFailureState, bladderNow)) {
         triggerBladderFailure();
       }
-      autonomy.maybeAct(); // free will evaluates on the decay tick
+      // Work gets first refusal and may interrupt an activity; ordinary free will remains idle-only.
+      if (!tryAutoDepartForWork()) autonomy.maybeAct();
       // quest triggers/completions evaluate on the same tick (§3.2: "same reuse-an-existing-interval convention")
       quests.tick(
         Object.fromEntries(stats.needs),
@@ -1309,7 +1354,11 @@ async function start() {
 
     // Pure attendance clock: returns/pay and fully-ended missed windows are decided here after the
     // clock advances. The cursor in WorkTracker makes each work window process exactly once.
-    for (const event of work.tick(currentJob(), currentWorkTime())) handleWorkEvent(event);
+    for (const event of work.tick(
+      currentJob(),
+      currentWorkTime(),
+      data.tuning.work?.departureWindowHours ?? 2,
+    )) handleWorkEvent(event);
 
     agent.update(sdt);
     // ROADMAP_NEXT B3-5: "carry to garbage" arrival check — carryState is only ever set right after

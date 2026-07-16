@@ -181,6 +181,8 @@ Projected crisp HTML text rises above the sim for integer skill-level crossings 
 ## B7-2. Cooked meal hunger fulfillment proportional to cooking skill
 ## B7-3. BUG: loading bar still misaligned (screenshot: fill sprite floats detached below the track)
 ## B7-4. BUG: sim STILL does not walk all the way to the fridge before snacking
-## B7-5. Work window: ~2h (tunable) after startHour to leave for work, else shift missed (skip)
-## B7-6. Autonomy: sim may leave for work by itself (happiness/energy-driven, tunable), even waking from sleep
+## B7-5. Work window: ~2h (tunable) after startHour to leave for work, else shift missed (skip) — ✅ DONE 2026-07-16
+`tuning.work.departureWindowHours` gates manual/door arrival, reminders name the deadline, and misses register exactly once when the window closes (including overnight shifts).
+## B7-6. Autonomy: sim may leave for work by itself (happiness/energy-driven, tunable), even waking from sleep — ✅ DONE 2026-07-16
+Deterministic inclusive happiness+energy thresholds auto-order the exterior-door action through the normal cancel path; recent player commands retain priority.
 ## B7-7. Loading screen: blocks until assets loaded (sim time frozen), customizable funny phrases in tools ("Going through customs"...), own music, customizable bar + background image
