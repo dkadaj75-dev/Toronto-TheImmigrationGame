@@ -15,6 +15,7 @@ import { SimStats } from './stats';
 import { Hud } from './ui';
 import { Autonomy } from './autonomy';
 import { QuestRunner, isActionAvailable, type EvalContext } from './quests';
+import { VisaMachine } from './visas';
 import { AccidentsController, resolveTapAssetId, shouldDespawnOnCleanup } from './accidents';
 import { GarbageController } from './garbage';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials } from './buymode';
@@ -231,6 +232,38 @@ async function start() {
   };
   refreshQuestLog();
 
+  // --- visa state machine (PROJECT_CONTEXT.md §7.20 V1, ROADMAP_NEXT B3-6) ---
+  // Constructed with literal day 1 (not the `gameDay` variable, which is declared further below in
+  // this same function and would be a TDZ error to read this early) — matches gameDay's own initial
+  // value, so the visa's day-1 expiry math lines up with the clock the render loop later drives.
+  let gameOverActive = false; // read by the render loop's sdt freeze (same pattern as buyMode.active)
+  const visaMachine = new VisaMachine(data.visas, data.tuning.visa?.startStatus ?? 'visitor', 1);
+  // §7.20: "vars.visaStatus mirrors statusId so quests/conditions keep working" — mirrored once up
+  // front (simstate.json's own default may not match tuning.visa.startStatus) and again on every
+  // transition via onStatusChanged below.
+  quests.vars.visaStatus = visaMachine.statusId;
+  quests.onGrantVisa = (statusId) => visaMachine.grantVisa(statusId, gameDay);
+  visaMachine.onStatusChanged = (def) => {
+    quests.vars.visaStatus = def.id;
+    refreshVisaChip();
+  };
+  visaMachine.onGameOver = (reason, def) => {
+    gameOverActive = true;
+    const name = def?.name ?? visaMachine.statusId;
+    hud.showGameOver(reason === 'grace_expired'
+      ? `Your ${name} status' grace period ended — you had to leave the country.`
+      : `Your ${name} status expired — you had to leave the country.`);
+  };
+  const refreshVisaChip = () => {
+    const def = visaMachine.currentDef();
+    const inGrace = visaMachine.inGrace();
+    hud.setVisaChip(
+      def?.name ?? visaMachine.statusId,
+      inGrace ? visaMachine.graceDaysLeft(gameDay) : visaMachine.daysLeft(gameDay),
+      inGrace,
+    );
+  };
+
   // --- object highlight: subtle box on hover (mouse), bright box while the menu is open ---
   const hoverBox = new THREE.BoxHelper(new THREE.Object3D(), 0x6fa0ff);
   const selectBox = new THREE.BoxHelper(new THREE.Object3D(), 0xffd166);
@@ -411,6 +444,7 @@ async function start() {
   };
 
   const tapInput = new TapInput(renderer.domElement, cam.camera, () => world, (hit) => {
+    if (gameOverActive) return; // §7.20 B3-6: no interactions once the game-over overlay is up
     if (buyMode.active) { handleBuyModeTap(hit); return; }
     if (hit.object) {
       const assetId = hit.object.userData.assetId as string;
@@ -676,6 +710,8 @@ async function start() {
     hud.rebuildBars();
     applyEnvironment();
     quests.retune(data.quests, data.simstate); // definitions only — runtime quest/var state is untouched
+    visaMachine.retune(data.visas); // definitions only — runtime visa state is untouched (§7.20 B3-6)
+    refreshVisaChip();
     refreshQuestLog();
     if (data.tuning.character) {
       anim?.retune(data.tuning.character);
@@ -696,6 +732,7 @@ async function start() {
   // --- game clock (display only in Phase 0; drives day/night in Phase 1; day count feeds quests' time.day) ---
   let gameSeconds = 8 * 3600; // start the day at 08:00
   let gameDay = 1;
+  refreshVisaChip(); // now that gameDay exists, show the starting visa chip immediately
   // ROADMAP_NEXT B2-1: single builder for the EvalContext the quest evaluator (`evaluate` from
   // game/quests.ts) runs against — reused by the accident-roll call below (was already inlined
   // here), the tap-menu action-visibility filter, and Autonomy's condition check (passed in as a
@@ -733,15 +770,25 @@ async function start() {
     // the camera stays free — and freezing agent.update() this way also means the sim can never be
     // mid-move when a buy-mode nav rebake happens (see the onBuyClose safety net for the leftover
     // stale-path edge case when it WAS mid-route at the moment buy mode opened).
-    const sdt = buyMode.active ? 0 : dt * hud.speed;
+    // §7.20 B3-6: game over freezes sim time the SAME way buy mode does (reuse, not a new mechanism)
+    // — the overlay's Restart button (location.reload()) is the only way out in V1 (no save system).
+    const sdt = (buyMode.active || gameOverActive) ? 0 : dt * hud.speed;
     simClockSeconds += sdt;
     // ROADMAP_NEXT item 7: sfx/action/asset loops pause whenever sim time isn't advancing (the
     // pause button OR buy mode's own freeze); music is deliberately NOT touched here (see
     // audio.ts's module doc comment on the PAUSE decision).
-    audio.setPaused(hud.speed === 0 || buyMode.active);
+    audio.setPaused(hud.speed === 0 || buyMode.active || gameOverActive);
 
     gameSeconds += sdt * clockScale();
-    while (gameSeconds >= 86400) { gameSeconds -= 86400; gameDay++; }
+    while (gameSeconds >= 86400) {
+      gameSeconds -= 86400;
+      gameDay++;
+      // §7.20 B3-6: the visa machine ticks once per day BOUNDARY crossed (not per frame/second) —
+      // ticking inside this while loop (rather than once after it) means a multi-day skip (e.g.
+      // a long pause + fast-forward) still evaluates each day in order, same as quests' time.day.
+      visaMachine.tick(gameDay);
+      refreshVisaChip();
+    }
     const h = Math.floor(gameSeconds / 3600), m = Math.floor((gameSeconds % 3600) / 60);
     devClock.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     hud.setClock(h, m);

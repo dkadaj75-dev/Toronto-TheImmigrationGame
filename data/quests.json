@@ -42,7 +42,12 @@
         ]
       },
       "completion": {
-        "all": []
+        "all": [
+          {
+            "var": "quests.find_a_job.state",
+            "gte": "active"
+          }
+        ]
       },
       "rewards": [],
       "onceOnly": true

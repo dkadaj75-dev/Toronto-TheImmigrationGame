@@ -188,6 +188,32 @@ console.log('quests.test — runner: unlockAsset reward');
   check('other assets remain locked', runner.isAssetUnlocked('bed') === false);
 }
 
+console.log('quests.test — runner: grantVisa reward (ROADMAP_NEXT B3-6) fires onGrantVisa, no built-in bookkeeping here');
+{
+  const q = makeQuest({
+    id: 'grantq', trigger: { all: [] }, completion: { all: [] },
+    rewards: [{ type: 'grantVisa', statusId: 'permanent_resident' }],
+  });
+  const runner = new QuestRunner({ quests: [q] }, simState, 0);
+  const granted: string[] = [];
+  runner.onGrantVisa = (statusId) => granted.push(statusId);
+  runner.tick({}, {}, { hour: 0, day: 1 }); // trigger
+  runner.tick({}, {}, { hour: 0, day: 1 }); // complete → applies the reward
+  check('onGrantVisa fired with the reward statusId', granted.length === 1 && granted[0] === 'permanent_resident');
+  check('QuestRunner itself does not mutate vars.visaStatus (that is main.ts wiring visas.onStatusChanged)', runner.vars['visaStatus'] === 'tourist');
+}
+console.log('quests.test — runner: grantVisa reward is a safe no-op when onGrantVisa is unset');
+{
+  const q = makeQuest({
+    id: 'grantq2', trigger: { all: [] }, completion: { all: [] },
+    rewards: [{ type: 'grantVisa', statusId: 'citizen' }],
+  });
+  const runner = new QuestRunner({ quests: [q] }, simState, 0);
+  runner.tick({}, {}, { hour: 0, day: 1 });
+  runner.tick({}, {}, { hour: 0, day: 1 });
+  check('completes without throwing even with no onGrantVisa callback wired', runner.quests['grantq2'] === 'done');
+}
+
 console.log('quests.test — retune (hot-reload) preserves runtime state, adds new defs at defaults');
 {
   const runner = new QuestRunner({ quests: [makeQuest()] }, simState, 300);

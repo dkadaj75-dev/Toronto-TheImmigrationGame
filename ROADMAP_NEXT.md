@@ -96,7 +96,7 @@ clean_up on non-puddle transients (dirty_dishes, ash…): after the timed clean,
 
 Implemented: `game/main.ts`'s `onActionStop` routes the sim (bare `agent.goTo`, no new ActionDef) to `garbage.nearestNonFullCanPos(simPos)` when `clean_up`/`sweep` completes (`CARRY_TO_GARBAGE_ACTIONS` set); `carryState` tracks it, a render-loop check on arrival (`!agent.isMoving`) deposits (`depositAtNearestCan`, re-resolved) then despawns (`accidents.maybeCleanup`). No can reachable → HUD toast, transient untouched. Any other order (`cancelCarry`, wired into the ground-tap/action-menu/panic/bladder-failure/buy-mode-close paths) cancels the walk, leaving the transient dirty in place. Autonomy is suppressed for free via `agent.isBusy`/`isMoving`. No carried-item visual (documented skip). `mop`/puddles unaffected — still vanish in place instantly.
 
-## B3-6. Visa status system (game core loop!)
+## B3-6. Visa status system (game core loop!) — V1 done
 `visaStatus` variable becomes a real system: start "visitor" with 15 in-game days (tunable). Statuses have expiry; failing to hold a valid status = GAME OVER screen. Upgrades via quests (quest rewards already setVar visaStatus) and/or applications (B3-7). Losable statuses (LMIA, temp worker) trigger a grace period (3 days, tunable) to find a new job/status. Status state machine data-driven (data/visas.json + editor or Tuning/Quest integration — design to lock in PROJECT_CONTEXT §7.20).
 
 ## B3-7. Smartphone + jobs

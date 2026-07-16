@@ -1,0 +1,48 @@
+{
+  "_comment": "Visa/status definitions (PROJECT_CONTEXT.md §7.20 V1). Runtime state machine lives in game/visas.ts (VisaMachine) — this file is definitions only, hot-reloaded like every other data/*.json (defs may change live; runtime VisaMachine state is preserved, see VisaMachine.retune). `durationDays: null` = permanent (never expires). `losable` + `graceDays` = on expiry the sim gets a grace window before game over instead of an immediate one (job-loss style statuses). `obtainedVia` describes how a NON-start status is granted: 'quest' via the new grantVisa reward type, 'application' via the phone (V2, not built yet) — the start status (tuning.visa.startStatus) has neither, so the field is optional. `requirements` (quest condition namespace) only matters for 'application' statuses — checked by the V2 phone UI before calling VisaMachine.apply(); V1 ships the data + the pure apply()/pending-resolve logic, no UI.",
+  "visas": [
+    {
+      "id": "visitor",
+      "name": "Visitor",
+      "durationDays": 15,
+      "losable": false
+    },
+    {
+      "id": "lmia",
+      "name": "LMIA Work Permit",
+      "durationDays": 90,
+      "losable": true,
+      "graceDays": 3,
+      "obtainedVia": "quest"
+    },
+    {
+      "id": "temp_worker",
+      "name": "Temporary Worker",
+      "durationDays": 365,
+      "losable": true,
+      "graceDays": 3,
+      "obtainedVia": "quest"
+    },
+    {
+      "id": "permanent_resident",
+      "name": "Permanent Resident",
+      "durationDays": null,
+      "losable": false,
+      "obtainedVia": "application",
+      "applicationDays": 30,
+      "requirements": {
+        "all": [
+          { "var": "skills.english", "gte": 8 },
+          { "var": "funds", "gte": 1000 }
+        ]
+      }
+    },
+    {
+      "id": "citizen",
+      "name": "Citizen",
+      "durationDays": null,
+      "losable": false,
+      "obtainedVia": "quest"
+    }
+  ]
+}

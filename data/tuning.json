@@ -31,6 +31,10 @@
     "completedLogLimit": 5,
     "_source": "Quest system slice (PROJECT_CONTEXT.md §3) — toast on-screen time and how many completed quests the HUD log keeps."
   },
+  "visa": {
+    "startStatus": "visitor",
+    "_source": "Visa system V1 (PROJECT_CONTEXT.md §7.20 B3-6) — must match an id in data/visas.json; game/visas.ts's VisaMachine falls back to \"visitor\" if this whole block is absent."
+  },
   "movement": {
     "walkSpeed": 2,
     "arrivalRadius": 0.35,

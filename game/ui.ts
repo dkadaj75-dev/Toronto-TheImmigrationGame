@@ -108,6 +108,27 @@ const CSS = `
 #funds-chip.hidden, #buy-button.hidden { display: none; }
 .hud-panel.buy-mode-hidden { display: none; }
 
+/* --- Visa chip + game-over overlay (PROJECT_CONTEXT.md §7.20 B3-6) ---------------------------
+   Chip sits directly above #funds-chip (same right-edge stack, same pill language) — "persistent
+   small chip near funds chip" per the brief. Amber at <=3 days left OR while in grace; red once
+   actually in grace (a stronger warning than the plain low-days amber). */
+#visa-chip { position: absolute; right: calc(8px + env(safe-area-inset-right, 0px));
+  bottom: calc(168px + env(safe-area-inset-bottom, 0px)); background: rgba(20,26,40,.82);
+  border-radius: 999px; padding: 6px 12px; font-size: 12px; color: #9fb0cc; pointer-events: none;
+  white-space: nowrap; }
+#visa-chip.warn { color: #e0b05f; }
+#visa-chip.grace { color: #e57a7a; }
+#visa-chip.hidden { display: none; }
+
+#game-over { position: fixed; inset: 0; z-index: 20; display: none; align-items: center;
+  justify-content: center; flex-direction: column; gap: 18px; background: rgba(8,10,16,.92);
+  color: #eaf0fb; text-align: center; padding: 24px; pointer-events: none; }
+#game-over.open { display: flex; pointer-events: auto; }
+#game-over h2 { margin: 0; font-size: 20px; letter-spacing: .04em; color: #e57a7a; }
+#game-over p { margin: 0; font-size: 15px; max-width: 420px; color: #c3cde3; }
+#game-over button { border: 0; border-radius: 999px; padding: 12px 26px; font-size: 14px;
+  background: rgba(90,120,190,.55); color: #eaf0fb; cursor: pointer; touch-action: manipulation; }
+
 #buy-bar { position: absolute; left: 0; right: 0; bottom: 0; pointer-events: none;
   display: none; flex-direction: column; }
 #buy-bar.open { display: flex; }
@@ -148,6 +169,7 @@ const CSS = `
 
 @media (max-width: 500px) {
   #funds-chip { bottom: calc(118px + env(safe-area-inset-bottom, 0px)); font-size: 11px; padding: 5px 10px; }
+  #visa-chip { bottom: calc(154px + env(safe-area-inset-bottom, 0px)); font-size: 11px; padding: 5px 10px; }
   #buy-button { bottom: calc(78px + env(safe-area-inset-bottom, 0px)); font-size: 12px; padding: 8px 12px; }
   .buy-card { width: 78px; }
 }
@@ -163,6 +185,11 @@ export class Hud {
   private questBody: HTMLElement;
   private questToasts: HTMLElement;
   private fills = new Map<string, HTMLElement>();
+
+  // --- Visa chip + game over (§7.20 B3-6) ---
+  private visaChip: HTMLElement;
+  private gameOverEl: HTMLElement;
+  private gameOverText: HTMLElement;
 
   // --- Buy/Sell mode (§7.6) ---
   private fundsChip: HTMLElement;
@@ -223,8 +250,14 @@ export class Hud {
       <div id="action-menu"></div>
       <div id="activity-chip"><span id="activity-label"></span><button>Stop</button></div>
       <div id="quest-toasts"></div>
+      <div id="visa-chip"></div>
       <div id="funds-chip">§ 0</div>
       <button id="buy-button">🛒 Buy</button>
+      <div id="game-over">
+        <h2>Game Over</h2>
+        <p id="game-over-text"></p>
+        <button id="game-over-restart">Restart</button>
+      </div>
       <div id="buy-bar">
         <div class="buy-inner">
           <div class="buy-header">
@@ -260,6 +293,12 @@ export class Hud {
     this.questBody = root.querySelector('#quest-body')!;
     this.questToasts = root.querySelector('#quest-toasts')!;
     this.chip.querySelector('button')!.addEventListener('click', () => this.onCancelAction?.());
+
+    // --- Visa status + terminal game-over UI (§7.20 B3-6) ---
+    this.visaChip = root.querySelector('#visa-chip')!;
+    this.gameOverEl = root.querySelector('#game-over')!;
+    this.gameOverText = root.querySelector('#game-over-text')!;
+    root.querySelector('#game-over-restart')!.addEventListener('click', () => location.reload());
 
     // --- Buy/Sell mode wiring (§7.6) ---
     this.fundsChip = root.querySelector('#funds-chip')!;
@@ -446,6 +485,23 @@ export class Hud {
       el.classList.remove('show');
       setTimeout(() => el.remove(), 300);
     }, durationMs);
+  }
+
+  /** Persistent legal-status readout. Grace is terminal-warning red; an expiring status turns
+   * amber for its final three days. `daysLeft === null` outside grace means permanent. */
+  setVisaChip(statusName: string, daysLeft: number | null, inGrace: boolean) {
+    const remaining = daysLeft === null ? null : Math.max(0, Math.ceil(daysLeft));
+    this.visaChip.textContent = inGrace
+      ? `${statusName} · Grace${remaining === null ? '' : ` ${remaining}d`}`
+      : `${statusName} · ${remaining === null ? 'Permanent' : `${remaining}d`}`;
+    this.visaChip.classList.toggle('warn', !inGrace && remaining !== null && remaining <= 3);
+    this.visaChip.classList.toggle('grace', inGrace);
+  }
+
+  /** Terminal V1 overlay. It intentionally has no close path; Restart reloads the page. */
+  showGameOver(description: string) {
+    this.gameOverText.textContent = description;
+    this.gameOverEl.classList.add('open');
   }
 
   // ================================================================ Buy/Sell mode (§7.6)

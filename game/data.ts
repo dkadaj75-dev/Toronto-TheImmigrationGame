@@ -204,7 +204,12 @@ export type QuestState = 'locked' | 'active' | 'done';
 export interface RewardFunds { type: 'funds'; amount: number; }
 export interface RewardSetVar { type: 'setVar'; var: string; value: string | number | boolean; }
 export interface RewardUnlockAsset { type: 'unlockAsset'; asset: string; }
-export type Reward = RewardFunds | RewardSetVar | RewardUnlockAsset;
+/** PROJECT_CONTEXT.md §7.20 B3-6: goes through the visa state machine (game/visas.ts) instead of
+ *  a raw setVar — bookkeeping (expiry reset, grace clear) happens, not just the mirrored var. The
+ *  existing `setVar visaStatus` reward still works (per §7.20: "KEEPS working but bypasses expiry
+ *  bookkeeping") for quick/legacy authoring; this is the one that should be used going forward. */
+export interface RewardGrantVisa { type: 'grantVisa'; statusId: string; }
+export type Reward = RewardFunds | RewardSetVar | RewardUnlockAsset | RewardGrantVisa;
 
 export interface QuestDef {
   id: string; name: string; description: string;
@@ -214,6 +219,24 @@ export interface QuestDef {
   onceOnly: boolean;
 }
 export interface QuestsData { quests: QuestDef[]; }
+
+/** Visa/status definition (PROJECT_CONTEXT.md §7.20 V1, data/visas.json). `durationDays: null` =
+ *  permanent (never expires — permanent_resident/citizen). `losable`+`graceDays` = on expiry the
+ *  runtime VisaMachine (game/visas.ts) opens a grace window instead of an immediate game over.
+ *  `obtainedVia`/`requirements`/`applicationDays` only matter for non-start statuses granted by a
+ *  quest reward (`grantVisa`) or a V2 phone application; the start status (tuning.visa.startStatus)
+ *  has none of them, so all three are optional (spec's own schema line marks obtainedVia
+ *  non-optional, but the start status has no "via" — deliberate deviation, documented here). */
+export interface VisaDef {
+  id: string; name: string;
+  durationDays: number | null;
+  losable?: boolean;
+  graceDays?: number;
+  obtainedVia?: 'quest' | 'application';
+  requirements?: Condition;
+  applicationDays?: number;
+}
+export interface VisasData { visas: VisaDef[]; }
 
 export interface MapData {
   id: string; name: string; gridSize: number;
@@ -308,6 +331,10 @@ export interface TuningData {
   };
   /** quest log HUD tuning (§3 quest system) — no magic numbers in game/quests.ts or ui.ts */
   quests: { toastDurationSeconds: number; completedLogLimit: number };
+  /** PROJECT_CONTEXT.md §7.20 B3-6: which data/visas.json id the visa state machine starts on.
+   *  Optional so pre-existing tuning fixtures/tests stay valid (same precedent as `interaction?`/
+   *  `doors?` above); game/main.ts falls back to "visitor" when absent. */
+  visa?: { startStatus: string };
   /** Optional so pre-existing tuning fixtures/tests stay valid (same precedent as `interaction?`
    *  above). ROADMAP_NEXT item 6: burnSeconds = how long an unextinguished fire instance burns
    *  before destroying its base object; spreadRadius (meters) = how far a live fire scans for
@@ -356,6 +383,7 @@ export interface GameData {
   tuning: TuningData;
   simstate: SimStateData;
   quests: QuestsData;
+  visas: VisasData;
 }
 
 const FILES = {
@@ -365,6 +393,7 @@ const FILES = {
   tuning: '/data/tuning.json',
   simstate: '/data/simstate.json',
   quests: '/data/quests.json',
+  visas: '/data/visas.json',
 } as const;
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -377,15 +406,16 @@ export async function loadAll(): Promise<GameData> {
   // tuning first — it names the active map (tuning.map.active, default "condo")
   const tuning = await fetchJson<TuningData>(FILES.tuning);
   const mapFile = `/data/maps/${tuning.map?.active ?? 'condo'}.json`;
-  const [stats, interactions, assets, map, simstate, quests] = await Promise.all([
+  const [stats, interactions, assets, map, simstate, quests, visas] = await Promise.all([
     fetchJson<StatsData>(FILES.stats),
     fetchJson<InteractionsData>(FILES.interactions),
     fetchJson<AssetsData>(FILES.assets),
     fetchJson<MapData>(mapFile),
     fetchJson<SimStateData>(FILES.simstate),
     fetchJson<QuestsData>(FILES.quests),
+    fetchJson<VisasData>(FILES.visas),
   ]);
-  return { stats, interactions, assets, map, tuning, simstate, quests };
+  return { stats, interactions, assets, map, tuning, simstate, quests, visas };
 }
 
 /** Dev hot-reload: polls the data files and invokes callbacks when content changes. */

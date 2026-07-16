@@ -5,7 +5,7 @@
       "id": "visaStatus",
       "name": "Visa Status",
       "type": "string",
-      "default": "Tourist"
+      "default": "visitor"
     },
     {
       "id": "job",

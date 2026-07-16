@@ -2,7 +2,7 @@
 // Verifies: load + render (variables list, quest sidebar, quest editor), variable CRUD
 // (edit type/default incl. null toggle, add with slugify+uniquify, both referential-integrity
 // delete branches), quest add + uniquify, condition-builder edits producing exact nested
-// all/any JSON, rewards rows (all 3 types, add/edit/remove), quest delete both branches,
+// all/any JSON, rewards rows (all 4 types, add/edit/remove), quest delete both branches,
 // validation panel (empty groups, unknown ids, missing operator), exact PUT payloads.
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
@@ -39,7 +39,7 @@ const quests = {
       id: 'broken_quest', name: 'Broken Quest', description: 'Intentionally bad data for validation coverage.',
       trigger: { all: [{ var: 'needs.nonexistent_need', gte: 5 }] },
       completion: { all: [{ var: 'vars.missing_var' }] },
-      rewards: [{ type: 'setVar', var: 'missing_var', value: 'x' }],
+      rewards: [{ type: 'setVar', var: 'missing_var', value: 'x' }, { type: 'grantVisa', statusId: 'missing_visa' }],
       onceOnly: true,
     },
   ],
@@ -52,6 +52,12 @@ const assets = {
   categories: ['electronics'],
   assets: [{ id: 'tv', name: 'TV', category: 'electronics', mesh: 'models/tv.glb', buyPrice: 800, sellPrice: 600, environmentScore: 2, footprint: [2, 1], interactions: ['watch_tv'] }],
 };
+const visas = {
+  visas: [
+    { id: 'visitor', name: 'Visitor', durationDays: 15 },
+    { id: 'citizen', name: 'Citizen', durationDays: null, obtainedVia: 'quest' },
+  ],
+};
 
 const puts = {};
 const fetchMock = async (url, opts = {}) => {
@@ -60,7 +66,7 @@ const fetchMock = async (url, opts = {}) => {
     puts[path] = JSON.parse(opts.body);
     return { ok: true, status: 200, json: async () => ({}) };
   }
-  const body = { 'simstate.json': simstate, 'quests.json': quests, 'stats.json': stats, 'assets.json': assets }[path];
+  const body = { 'simstate.json': simstate, 'quests.json': quests, 'stats.json': stats, 'assets.json': assets, 'visas.json': visas }[path];
   return { ok: !!body, status: body ? 200 : 404, json: async () => structuredClone(body) };
 };
 
@@ -99,6 +105,7 @@ assert(validationText().includes('unknown need id "needs.nonexistent_need"'), 'v
 assert(validationText().includes('no operator'), 'validation flags leaf with no operator');
 assert(validationText().includes('unknown variable "missing_var"'), 'validation flags unknown variable in condition');
 assert(validationText().includes('setVar references unknown variable "missing_var"'), 'validation flags unknown variable in setVar reward');
+assert(validationText().includes('grantVisa references unknown visa "missing_visa"'), 'validation flags unknown visa in grantVisa reward');
 
 // ==================================================================== variables: edit type + default incl. null
 const jobRow = doc.querySelector('.var-row[data-var-id="job"]');
@@ -252,6 +259,15 @@ let rewardAssetSel = doc.querySelector('select[data-role="reward-asset"][data-re
 rewardAssetSel.value = 'tv';
 fire(rewardAssetSel, 'change');
 
+doc.getElementById('addReward').click();
+let typeSel3 = doc.querySelector('select[data-role="reward-type"][data-reward-index="3"]');
+typeSel3.value = 'grantVisa';
+fire(typeSel3, 'change');
+let rewardVisaSel = doc.querySelector('select[data-role="reward-visa"][data-reward-index="3"]');
+assert(rewardVisaSel.value === 'visitor', 'grantVisa reward defaults to the first visas.json status');
+rewardVisaSel.value = 'citizen';
+fire(rewardVisaSel, 'change');
+
 // remove the middle (setVar) reward
 doc.querySelector('[data-action="remove-reward"][data-reward-index="1"]').click();
 
@@ -291,9 +307,10 @@ const expectedTrigger = { all: [{ var: 'funds', eq: 500 }, { any: [{ var: 'skill
 assert(JSON.stringify(savedNewQuest.trigger) === JSON.stringify(expectedTrigger), `PUT quests.json new_quest trigger matches exact nested JSON (got ${JSON.stringify(savedNewQuest.trigger)})`);
 const expectedCompletion = { all: [{ var: 'time.day', gte: 0 }] };
 assert(JSON.stringify(savedNewQuest.completion) === JSON.stringify(expectedCompletion), `PUT quests.json new_quest completion matches exact JSON after leaf removal (got ${JSON.stringify(savedNewQuest.completion)})`);
-assert(savedNewQuest.rewards.length === 2, 'PUT quests.json new_quest has 2 rewards after removing the middle one');
+assert(savedNewQuest.rewards.length === 3, 'PUT quests.json new_quest has 3 rewards after removing the middle one');
 assert(savedNewQuest.rewards[0].type === 'funds' && savedNewQuest.rewards[0].amount === 150, 'PUT quests.json new_quest funds reward amount = 150');
 assert(savedNewQuest.rewards[1].type === 'unlockAsset' && savedNewQuest.rewards[1].asset === 'tv', 'PUT quests.json new_quest unlockAsset reward = tv');
+assert(savedNewQuest.rewards[2].type === 'grantVisa' && savedNewQuest.rewards[2].statusId === 'citizen', 'PUT quests.json new_quest grantVisa reward = citizen');
 
 assert(savedSim.variables.some((v) => v.id === 'job' && v.type === 'number' && v.default === 0), 'PUT simstate.json job variable reflects type/default edits');
 assert(savedSim.variables.some((v) => v.id === 'language') && savedSim.variables.some((v) => v.id === 'language_2'), 'PUT simstate.json includes both added variables');

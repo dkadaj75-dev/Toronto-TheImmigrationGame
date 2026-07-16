@@ -115,6 +115,12 @@ export class QuestRunner {
   onQuestStarted: ((q: QuestDef) => void) | null = null;
   /** fired when a quest transitions active → done, AFTER rewards have been applied */
   onQuestCompleted: ((q: QuestDef) => void) | null = null;
+  /** PROJECT_CONTEXT.md §7.20 B3-6: fired for a `grantVisa` reward. QuestRunner doesn't import
+   *  game/visas.ts (avoids a circular import — visas.ts has no reason to know about quests.ts, and
+   *  main.ts is the natural place to wire "quest reward → state machine call"); this callback is
+   *  the seam. If left unset, a grantVisa reward silently no-ops (same "never throw" precedent as
+   *  every other reward/condition path in this file). */
+  onGrantVisa: ((statusId: string) => void) | null = null;
 
   constructor(quests: QuestsData, simState: SimStateData, startingFunds: number) {
     this.questDefs = quests.quests;
@@ -171,6 +177,7 @@ export class QuestRunner {
     if (r.type === 'funds') this.funds += r.amount;
     else if (r.type === 'setVar') this.vars[r.var] = r.value;
     else if (r.type === 'unlockAsset') this.unlockedAssets.add(r.asset);
+    else if (r.type === 'grantVisa') this.onGrantVisa?.(r.statusId);
   }
 
   /** True once any quest reward has unlocked this catalog asset id (see unlockAsset doc below). */
