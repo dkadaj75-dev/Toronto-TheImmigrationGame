@@ -201,3 +201,9 @@ Utility-based autonomy the designer can tune: decisions driven by personality at
 Designer-editable UI: fonts, colors, shapes (radius/outline/shadow) of notifications/messages/buttons/panels, screen positions, accordion nesting of HUD groups. data/theme.json -> CSS variables + layout config consumed by game/ui.ts; new tools/theme.html with live preview. Design locked PROJECT_CONTEXT §7.31. Slices: engine (E), tool (T).
 
 **FULLY DONE (B8-2-E + B8-2-T, 2026-07-16):** default legacy-look theme data, CSS-variable application, safe-area anchors/visibility, accordion grouping, and hot-reload are shipped; Theme Editor now provides fonts/colors/shapes, sparse component overrides, engine-known HUD layout and accordion CRUD, real-`applyTheme` mocked-HUD live preview, whole-file save, nav, and jsdom coverage.
+
+---
+
+# Batch 9 — 2026-07-16
+
+## B9-1. Floor + wall textures: designer drops image files in public/textures/, picks per floor rect and per wall in the Map Editor; game renders them tiled (repeat per meter) with color fallback. Server lists /api/textures. Slices: engine (game render + schema), tool (Map Editor pickers + server listing).
