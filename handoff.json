@@ -1,6 +1,6 @@
 {
   "project": "Condo Life — Web Edition",
-  "generated": "2026-07-16",
+  "generated": "2026-07-16 (batch 7 included)",
   "purpose": "Machine-readable handoff so any agent (Codex, Claude, other) can take over cold. Read the referenced md files for full detail — this file is the index.",
   "repo": {
     "path": "D:\\WebCreation\\condo-life-web",
@@ -41,7 +41,8 @@
     "data/jobs.json": "Jobs: requirements(Condition), grantsVisa, hours, payPerShift, maxSkips, minCreditScore, needsCost, levels[{suffix,payPerShift,promoteChancePercent}]",
     "data/finance.json": "Formula bills/rent (base+perAssetValue*assetTotal; rent by propertyType+floor tiles), overdueDays/tooLateDays/negativeGraceDays",
     "data/bills.json": "Bill id/name list (amounts computed via finance.json)",
-    "data/happiness.json": "Weighted happiness formula components (var, weight, min/max)"
+    "data/happiness.json": "Weighted happiness formula components (var, weight, min/max)",
+    "data/loading.json": "Loading screen: phrases[], phraseIntervalSeconds, music, background, bar{fillColor,trackColor,height}"
   },
   "tools": [
     "tools/assets.html (Asset Editor: everything on AssetDef + 3D preview w/ map-matched grid + sprite/GIF preview)",
@@ -60,8 +61,8 @@
     "boot": "GET http://localhost:5173 must boot (#boot gets class 'done'), zero new console errors"
   },
   "state_summary": {
-    "shipped": "Full sim loop (needs/skills/personality/autonomy/poses), quests, doors/windows/exterior door, wall-cut view, accidents+fire spread/destruction, transients, garbage/tidying+carry, carried food+perish+action costs, buy/sell mode (floor-only, wall-mount rules), PWA/mobile, audio (actions/assets/music/UI+feedback sounds), camera pan/pinch/rotate, sprites/GIF visuals, overhead marker, censor, progress bars (aligned), duration system w/ multi-var modifiers, interaction conditions, contextual radial action menu, asset lights+ON/OFF state, wall-mounted assets, VISA system (game over), phone (HUD icon, jobs, applications, bills, credit), going to work (hide+5x+pay+needsCost+skips), job levels+happiness-scaled promotions, finance (formula bills/rent, debt, repo man, credit score), bladder/energy/hunger failure events, skill/money floating feedback, 0.5m grid/0.25 snap.",
-    "all_roadmap_batches": "1-6 complete (see ROADMAP_NEXT.md)",
+    "shipped": "Full sim loop (needs/skills/personality/autonomy/poses), quests, doors/windows/exterior door, wall-cut view, accidents+fire spread/destruction, transients, garbage/tidying+carry, carried food+perish+action costs, buy/sell mode (floor-only, wall-mount rules), PWA/mobile, audio (actions/assets/music/UI+feedback sounds), camera pan/pinch/rotate, sprites/GIF visuals, overhead marker, censor, progress bars (aligned), duration system w/ multi-var modifiers, interaction conditions, contextual radial action menu, asset lights+ON/OFF state, wall-mounted assets, VISA system (game over), phone (HUD icon, jobs, applications, bills, credit), going to work (hide+5x+pay+needsCost+skips), job levels+happiness-scaled promotions, finance (formula bills/rent, debt, repo man, credit score), bladder/energy/hunger failure events, skill/money floating feedback, 0.5m grid/0.25 snap. BATCH 7: Asset Editor preview shows in-game size grounded at y=0 (game transforms applied live); cooked-meal hunger scales with cooking skill (tuning.food); fridge-walk root cause fixed (food actions defer seat to second leg); progress bar camera-space anchoring fix (world-space offset projected wrong under isometric camera); work departure window (tuning.work.departureWindowHours, missed=skip at window close) + autonomous departure (happiness>=40 & energy>=25, tunable, wakes from sleep); LOADING SCREEN (real asset-load gate, sim time frozen, data/loading.json: phrases/music/background/bar, Tuning Editor Loading card, pure game/loading.ts).",
+    "all_roadmap_batches": "1-7 complete (see ROADMAP_NEXT.md)",
     "commit_head_note": "~60 commits on local master; check git log"
   },
   "next_steps": [
@@ -70,12 +71,14 @@
     "Designer to delete the legacy placed 'phone' asset (smartphone HUD icon replaced it)",
     "Non-payment-of-bills consequences beyond repo (recorded in ROADMAP B4-1 as deferred)",
     "Designer authoring passes: quests granting upgrade visas, Animation Mapper clips for sit_ground/pee/panic/collapse/starve/extinguishing_fire/cleaning, real sounds replacing placeholder WAVs, real meshes for remaining stand-ins",
-    "Playtest-only verifications outstanding: radial menu on real touch, camera twist on device, lights/wall-mounts visuals, repo-man flow end-to-end"
+    "Playtest-only outstanding: radial menu touch, camera twist device, lights/wall-mounts visuals, repo-man flow, loading screen on slow network, auto-depart-to-work behavior"
   ],
   "known_quirks": [
     "test/meshfit.test.mjs passes only under npx tsx, never plain node (documented, ignore)",
     "Sandboxed browser panes can't run WebGL/rAF — verify boot via #boot.done + console, not screenshots",
     "Stove fire baseChancePercent may be a testing value (designer toggles it)",
-    "Windows CRLF warnings on git are noise"
+    "Windows CRLF warnings on git are noise",
+    "Sandboxed browser pane freezes CSS transitions too (computed opacity stuck at start value) — disable transition to read the real end state",
+    "Progress-bar lesson: THREE.Sprite offsets are CAMERA-space; never anchor a sprite by world-space offsets"
   ]
 }
