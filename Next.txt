@@ -1,1 +1,2 @@
 - How the food fulfills the hunder, when cooked, should be directly proportional to the cooking skill.
+- There is still an issue with loading bar, see screenshot.

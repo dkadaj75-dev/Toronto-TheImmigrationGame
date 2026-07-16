@@ -876,7 +876,7 @@ async function start() {
             const seat = action.seatAware ? findSeatFor(world, data, target) : null;
             if (agent.orderAction(action, target, seat, resolvedAsset, action.seatAware)) cue.showAt(target.position.x, target.position.z);
             else console.log('no path to object', resolvedAsset.id);
-          }, quests.funds, currencyName());
+          }, quests.funds, currencyName(), hit.screen);
           return; // object tap opens the menu; don't also walk to the tap point
         }
       }

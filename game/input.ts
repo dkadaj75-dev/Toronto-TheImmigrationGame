@@ -10,6 +10,8 @@ export interface TapResult {
   ground: THREE.Vector3 | null;
   /** the asset group hit (world.ts sets userData.assetId on placed objects), if any */
   object: THREE.Object3D | null;
+  /** screen-space tap point in CSS pixels; optional for older/tests' synthetic results */
+  screen?: { x: number; y: number };
 }
 
 const TAP_SLOP_PX = 8;        // moved less than this → tap, not drag
@@ -43,7 +45,7 @@ export class TapInput {
       const moved = Math.hypot(e.clientX - d.x, e.clientY - d.y);
       const held = performance.now() - d.t;
       if (moved > TAP_SLOP_PX || held > TAP_MAX_MS) return; // it was a camera drag
-      this.onTap(this.raycast(e.clientX, e.clientY));
+      this.onTap({ ...this.raycast(e.clientX, e.clientY), screen: { x: e.clientX, y: e.clientY } });
     });
     el.addEventListener('pointercancel', () => { this.down = null; });
     el.addEventListener('pointermove', (e) => {

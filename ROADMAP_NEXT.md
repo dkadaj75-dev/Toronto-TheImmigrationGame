@@ -159,7 +159,8 @@ Restored the three shipped condo window entries lost from `condo.json`; procedur
 HUD `⌂ Cut` toggles ground-up wall/door visual scaling at auto-exposed `tuning.view.wallCutHeight` (1m default); windows hide in cut view, with nav/game state untouched and choice kept only in-page.
 ## B6-10. UI sound placeholders: click/move-order/action-select; quest events (new/done); notifications in general — ✅ DONE 2026-07-16
 Eight tiny generated WAV cues are live through auto-exposed `tuning.audio` paths: successful move orders, action-menu picks, quest start/completion, generic toasts, skill-ups, and money up/down.
-## B6-11. Contextual action menu around click location (Sims-style radial, screen-space so walls/assets never hide it; replaces bottom menu; screenshot ref on record)
+## B6-11. Contextual action menu around click location (Sims-style radial, screen-space so walls/assets never hide it; replaces bottom menu; screenshot ref on record) — ✅ DONE 2026-07-16
+Canvas taps now carry CSS-pixel coordinates into a fixed HTML bubble menu: up to five options form a clamped radial ring, larger sets use a compact vertical arc, and safe-area-aware touch targets preserve costs/disabled state and Cancel.
 ## B6-12. Asset light emission + ON/OFF state: assets can generate light; Turn ON/OFF actions flip asset state driving light and/or sound (e.g. TV)
 ## B6-13. Wall-mounted assets (stick to wall: wall lights, canvas)
 ## B6-14. Energy 0 → collapse animation then sleep on ground (short tunable duration) — ✅ DONE 2026-07-16

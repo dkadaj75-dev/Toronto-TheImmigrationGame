@@ -7,6 +7,95 @@ import type { ActionDef, AssetDef, JobDef, VisaDef } from './data';
 import type { RequirementView } from './phone';
 import type { SimStats } from './stats';
 
+export interface ScreenPoint { x: number; y: number }
+export interface ScreenInsets { top: number; right: number; bottom: number; left: number }
+export interface ContextMenuItemLayout extends ScreenPoint { width: number; height: number }
+export interface ContextMenuLayout {
+  mode: 'radial' | 'list';
+  center: ScreenPoint;
+  title: ContextMenuItemLayout;
+  items: ContextMenuItemLayout[];
+}
+
+const MENU_EDGE_GAP = 8;
+const MENU_BUTTON_HEIGHT = 48;
+
+/** Pure screen-space layout for B6-11's contextual action bubbles. */
+export function layoutContextMenu(
+  point: ScreenPoint,
+  itemCount: number,
+  viewport: { width: number; height: number },
+  insets: Partial<ScreenInsets> = {},
+): ContextMenuLayout {
+  const safe: ScreenInsets = {
+    top: Math.max(0, insets.top ?? 0), right: Math.max(0, insets.right ?? 0),
+    bottom: Math.max(0, insets.bottom ?? 0), left: Math.max(0, insets.left ?? 0),
+  };
+  const minX = safe.left + MENU_EDGE_GAP;
+  const maxX = Math.max(minX, viewport.width - safe.right - MENU_EDGE_GAP);
+  const minY = safe.top + MENU_EDGE_GAP;
+  const maxY = Math.max(minY, viewport.height - safe.bottom - MENU_EDGE_GAP);
+  const usableWidth = Math.max(1, maxX - minX);
+  const usableHeight = Math.max(1, maxY - minY);
+  const mode: 'radial' | 'list' = itemCount <= 5 ? 'radial' : 'list';
+  const buttonWidth = Math.min(mode === 'radial' ? 116 : 160, usableWidth);
+  const buttonHeight = Math.min(MENU_BUTTON_HEIGHT, usableHeight);
+  const titleWidth = Math.min(120, usableWidth);
+  const titleHeight = Math.min(34, usableHeight);
+  const desired: ScreenPoint[] = [];
+
+  if (mode === 'radial') {
+    const radius = Math.min(106, Math.max(52, Math.min(usableWidth - buttonWidth, usableHeight - buttonHeight) / 2));
+    for (let i = 0; i < itemCount; i++) {
+      const angle = -Math.PI / 2 + (i * Math.PI * 2) / Math.max(1, itemCount);
+      desired.push({ x: point.x + Math.cos(angle) * radius, y: point.y + Math.sin(angle) * radius });
+    }
+  } else {
+    const gap = itemCount <= 1 ? 0 : Math.min(54, Math.max(0, (usableHeight - buttonHeight) / (itemCount - 1)));
+    const side = point.x < viewport.width / 2 ? 1 : -1;
+    // Clear the central asset-title bubble before adding the slight outward arc.
+    const baseX = point.x + side * (buttonWidth / 2 + titleWidth / 2 + 12);
+    const startY = point.y - gap * (itemCount - 1) / 2;
+    for (let i = 0; i < itemCount; i++) {
+      const t = itemCount <= 1 ? 0 : i / (itemCount - 1);
+      desired.push({ x: baseX + side * Math.sin(Math.PI * t) * 14, y: startY + i * gap });
+    }
+  }
+
+  const halfW = buttonWidth / 2;
+  const halfH = buttonHeight / 2;
+  const boundsPoints = [...desired, point];
+  let left = Math.min(...boundsPoints.map((p, i) => p.x - (i < desired.length ? halfW : titleWidth / 2)));
+  let right = Math.max(...boundsPoints.map((p, i) => p.x + (i < desired.length ? halfW : titleWidth / 2)));
+  let top = Math.min(...boundsPoints.map((p, i) => p.y - (i < desired.length ? halfH : titleHeight / 2)));
+  let bottom = Math.max(...boundsPoints.map((p, i) => p.y + (i < desired.length ? halfH : titleHeight / 2)));
+  const shiftAxis = (lo: number, hi: number, safeLo: number, safeHi: number) =>
+    lo < safeLo ? safeLo - lo : hi > safeHi ? safeHi - hi : 0;
+  const dx = shiftAxis(left, right, minX, maxX);
+  const dy = shiftAxis(top, bottom, minY, maxY);
+  const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
+  const center = {
+    x: clamp(point.x + dx, minX + titleWidth / 2, maxX - titleWidth / 2),
+    y: clamp(point.y + dy, minY + titleHeight / 2, maxY - titleHeight / 2),
+  };
+  const items = desired.map((p) => ({
+    x: clamp(p.x + dx, minX + halfW, maxX - halfW),
+    y: clamp(p.y + dy, minY + halfH, maxY - halfH),
+    width: buttonWidth, height: buttonHeight,
+  }));
+  return { mode, center, title: { ...center, width: titleWidth, height: titleHeight }, items };
+}
+
+function readSafeAreaInsets(): ScreenInsets {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
+  document.body.appendChild(probe);
+  const style = getComputedStyle(probe);
+  const result = { top: parseFloat(style.paddingTop) || 0, right: parseFloat(style.paddingRight) || 0, bottom: parseFloat(style.paddingBottom) || 0, left: parseFloat(style.paddingLeft) || 0 };
+  probe.remove();
+  return result;
+}
+
 const CSS = `
 #hud { position: fixed; inset: 0; pointer-events: none; font-family: system-ui, sans-serif; z-index: 10; }
 #hud * { box-sizing: border-box; }
@@ -38,18 +127,18 @@ const CSS = `
 #time-bar button.active { background: rgba(90,120,190,.4); color: #eaf0fb; }
 #time-bar.work-override button { opacity: .45; cursor: default; }
 
-#action-menu { position: absolute; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
-  background: rgba(20,26,40,.92); border-radius: 14px; padding: 10px 12px; pointer-events: auto;
-  display: none; flex-direction: column; gap: 6px; min-width: 220px; max-width: 92vw;
-  color: #dfe6f2; backdrop-filter: blur(6px); }
-#action-menu.open { display: flex; }
-#action-menu .am-title { font-size: 12px; color: #93a3c0; text-align: center; margin-bottom: 2px; }
-#action-menu button { pointer-events: auto; border: 0; border-radius: 9px; padding: 10px 14px;
-  font-size: 14px; background: #33406040; background: rgba(90,120,190,.28); color: #eaf0fb; cursor: pointer;
-  touch-action: manipulation; }
+#action-menu { position: fixed; inset: 0; display: none; pointer-events: none; color: #dfe6f2; z-index: 14; }
+#action-menu.open { display: block; }
+#action-menu .am-title, #action-menu button { position: absolute; transform: translate(-50%, -50%); }
+#action-menu .am-title { display: grid; place-items: center; padding: 5px 9px; border-radius: 999px;
+  background: rgba(20,26,40,.88); box-shadow: 0 3px 14px rgba(0,0,0,.35); backdrop-filter: blur(6px);
+  font-size: 11px; color: #b8c4da; text-align: center; overflow: hidden; }
+#action-menu button { pointer-events: auto; border: 1px solid rgba(130,158,210,.35); border-radius: 999px; padding: 7px 10px;
+  font-size: 13px; line-height: 1.15; font-weight: 650; background: rgba(43,57,86,.96); color: #eaf0fb; cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0,0,0,.4); backdrop-filter: blur(6px); touch-action: manipulation; }
 #action-menu button:active { background: rgba(90,120,190,.55); }
 #action-menu button:disabled { opacity: .42; cursor: not-allowed; background: rgba(45,55,75,.5); }
-#action-menu button.am-cancel { background: transparent; color: #93a3c0; padding: 6px; font-size: 12px; }
+#action-menu button.am-cancel { background: rgba(55,45,58,.96); color: #c5b6c8; }
 
 #activity-chip { position: absolute; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
   background: rgba(20,26,40,.92); border-radius: 999px; padding: 8px 14px; color: #dfe6f2;
@@ -590,8 +679,8 @@ export class Hud {
     this.clockEl.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
   }
 
-  /** Bottom-sheet contextual menu for a tapped object. */
-  showActionMenu(asset: AssetDef, actions: ActionDef[], onPick: (a: ActionDef) => void, funds = Infinity, currencyName = '§') {
+  /** Screen-space contextual menu around a tapped object. `screen` is optional for old callers. */
+  showActionMenu(asset: AssetDef, actions: ActionDef[], onPick: (a: ActionDef) => void, funds = Infinity, currencyName = '§', screen?: ScreenPoint) {
     this.hideActivity();
     this.menu.innerHTML = `<div class="am-title">${asset.name}</div>`;
     for (const action of actions) {
@@ -607,6 +696,24 @@ export class Hud {
     cancel.textContent = 'Cancel';
     cancel.addEventListener('click', () => this.hideActionMenu());
     this.menu.appendChild(cancel);
+    const layout = layoutContextMenu(
+      screen ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 },
+      actions.length + 1,
+      { width: window.innerWidth, height: window.innerHeight },
+      readSafeAreaInsets(),
+    );
+    const title = this.menu.querySelector<HTMLElement>('.am-title')!;
+    Object.assign(title.style, {
+      left: `${layout.title.x}px`, top: `${layout.title.y}px`,
+      width: `${layout.title.width}px`, height: `${layout.title.height}px`,
+    });
+    this.menu.querySelectorAll<HTMLButtonElement>('button').forEach((button, i) => {
+      const item = layout.items[i];
+      Object.assign(button.style, {
+        left: `${item.x}px`, top: `${item.y}px`, width: `${item.width}px`, height: `${item.height}px`,
+      });
+    });
+    this.menu.dataset.layout = layout.mode;
     this.menu.classList.add('open');
   }
 
