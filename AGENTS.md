@@ -1,5 +1,7 @@
 # AGENTS.md — Codex handover for Condo Life (Web Edition)
 
+> **Invoking Codex**: use `codex exec --sandbox workspace-write "<prompt>" < /dev/null`. The old `--full-auto` flag is DEPRECATED and makes Codex hang waiting on stdin (silent stall, writes nothing) — always pass `--sandbox workspace-write` and redirect stdin from /dev/null. Don't pipe the output through `tail` if you need to see errors.
+
 You (Codex) are taking over as the coding agent for this repo when the designer's Claude usage is exhausted. The designer (Septentrion / user) is NOT a programmer — they drive everything through the browser tool suite and plain-language requests.
 
 ## Read these before ANY task
