@@ -21,6 +21,10 @@
     "nightEndHour": 6,
     "_source": "60 s/day is the Unreal DEBUG speed — open decision #2, retune in Phase 1"
   },
+  "textures": {
+    "metersPerTile": 1,
+    "_source": "ROADMAP_NEXT B9-1 (floor/wall image textures). metersPerTile = how many meters of surface one texture repeat spans, so a tiled floor/wall reads at a physical scale regardless of the room size. Per-surface texture image paths live on data/maps/<map>.floors[].texture / walls[].texture. See game/textures.ts (repeat math) + world.ts (loader/UV wiring)."
+  },
   "map": {
     "active": "condo",
     "_source": "which data/maps/<active>.json the game plays; set from the Map Editor \"Play this map\" button"

@@ -11,6 +11,7 @@ import { retargetTrackName, stripPositionTracks, resolveClipName, fileStem } fro
 import { resolveWindowConfig, windowFacePositions, windowPaneRect } from './windows';
 import { wallCutShownHeight } from './wallview';
 import { resolveAssetLight } from './assetstate';
+import { resolveMetersPerTile, textureRepeat, polygonBounds } from './textures';
 
 // ------------------------------------------------------------------ GLB furniture
 // Templates are cached per URL and cloned per placement; clones share geometry/materials
@@ -26,6 +27,61 @@ export function loadMeshTemplate(url: string): Promise<THREE.Group> {
     gltfCache.set(url, p);
   }
   return p;
+}
+
+// ------------------------------------------------------------------ surface textures (B9-1)
+// Loaded images are cached per URL (mirrors gltfCache) so a floor/wall texture decodes once
+// even across hot-reload rebuilds. Each SURFACE clones the cached texture: `.repeat`/`.wrapS`
+// live on the THREE.Texture, so walls of different lengths (or floors of different sizes) each
+// need their own repeat — the clone shares the decoded `.image`, so it's cheap.
+const textureCache = new Map<string, Promise<THREE.Texture>>();
+function loadTexture(url: string): Promise<THREE.Texture> {
+  let p = textureCache.get(url);
+  if (!p) {
+    p = new Promise((resolve, reject) => new THREE.TextureLoader().load(url, resolve, undefined, reject));
+    textureCache.set(url, p);
+  }
+  return p;
+}
+
+/**
+ * B9-1 keep-stand-in swap: the mesh renders with its flat color material immediately; once the
+ * texture image loads it swaps in tiled (physically sized via `repeat`). Any load failure keeps
+ * the color — same "instant stand-in, async swap, never leave it broken" philosophy as attachMesh.
+ * The mesh MUST own a non-shared material (walls share one otherwise) so the swap is per-surface.
+ */
+function applySurfaceTexture(
+  mesh: THREE.Mesh,
+  url: string,
+  repeat: [number, number],
+  trackInitialLoad?: TrackInitialLoad,
+) {
+  const ready = loadTexture(url)
+    .then((base) => {
+      const tex = base.clone();
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(repeat[0], repeat[1]);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.needsUpdate = true;
+      const mat = mesh.material as THREE.MeshLambertMaterial;
+      mat.map = tex;
+      mat.color.setHex(0xffffff); // let the image show through instead of tinting it
+      mat.needsUpdate = true;
+    })
+    .catch(() => console.warn(`Could not load texture "${url}" — keeping color fallback.`));
+  void (trackInitialLoad ? trackInitialLoad(ready) : ready);
+}
+
+/** Normalize a ShapeGeometry's UVs (which come out in raw shape-space meters) to 0..1 across the
+ *  polygon bounds, so a `repeat = spanMeters / metersPerTile` gives physical tiling exactly like a
+ *  wall's 0..1 BoxGeometry face UVs. Only called for textured floors. */
+function normalizeFloorUVs(geo: THREE.BufferGeometry, bounds: { minX: number; minY: number; w: number; h: number }) {
+  const uv = geo.attributes.uv;
+  if (!uv || bounds.w <= 0 || bounds.h <= 0) return;
+  for (let i = 0; i < uv.count; i++) {
+    uv.setXY(i, (uv.getX(i) - bounds.minX) / bounds.w, (uv.getY(i) - bounds.minY) / bounds.h);
+  }
+  uv.needsUpdate = true;
 }
 
 /**
@@ -210,15 +266,22 @@ export function buildWorld(data: GameData, trackInitialLoad?: TrackInitialLoad):
   const { map, assets } = data;
   const byId = new Map(assets.assets.map((a) => [a.id, a]));
   warmTransientAssets(data, trackInitialLoad); // B7-7 counts initial transient cache warmups too
+  const metersPerTile = resolveMetersPerTile(data.tuning); // B9-1 physical texture tile size
 
   // --- floors ---
   for (const floor of map.floors) {
     const shape = new THREE.Shape(floor.polygon.map(([x, y]) => new THREE.Vector2(x, y)));
     const geo = new THREE.ShapeGeometry(shape);
     geo.rotateX(Math.PI / 2); // shape XY → world XZ
+    // Textured floors need their own material (color fallback until the image loads).
     const mat = new THREE.MeshLambertMaterial({ color: FLOOR_COLORS[floor.material] ?? 0x999999, side: THREE.DoubleSide });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
+    if (floor.texture) {
+      const b = polygonBounds(floor.polygon);
+      normalizeFloorUVs(geo, b); // ShapeGeometry UVs are raw meters → 0..1 so repeat sizes physically
+      applySurfaceTexture(mesh, normalizeMeshUrl(floor.texture), [textureRepeat(b.w, metersPerTile), textureRepeat(b.h, metersPerTile)], trackInitialLoad);
+    }
     root.add(mesh);
   }
 
@@ -229,12 +292,19 @@ export function buildWorld(data: GameData, trackInitialLoad?: TrackInitialLoad):
     const [x1, z1] = wall.from, [x2, z2] = wall.to;
     const len = Math.hypot(x2 - x1, z2 - z1);
     const geo = new THREE.BoxGeometry(len, WALL_H, WALL_T);
-    const mesh = new THREE.Mesh(geo, wallMat);
+    // A textured wall gets its own material so the swap doesn't hit the shared color wallMat.
+    const mat = wall.texture ? new THREE.MeshLambertMaterial({ color: 0xf0ead9 }) : wallMat;
+    const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set((x1 + x2) / 2, WALL_H / 2, (z1 + z2) / 2);
     mesh.rotation.y = -Math.atan2(z2 - z1, x2 - x1);
     mesh.userData.wallCutVisual = 'wall';
     mesh.userData.wallCutFullHeight = WALL_H;
     mesh.castShadow = true;
+    if (wall.texture) {
+      // v-repeat from FULL height (WALL_H); the wall-cut view scales the geometry down, which just
+      // compresses the texture vertically with it — acceptable per B9-1 (documented, not re-mapped).
+      applySurfaceTexture(mesh, normalizeMeshUrl(wall.texture), [textureRepeat(len, metersPerTile), textureRepeat(WALL_H, metersPerTile)], trackInitialLoad);
+    }
     root.add(mesh);
   }
 

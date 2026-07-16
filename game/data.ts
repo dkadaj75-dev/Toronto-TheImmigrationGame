@@ -376,8 +376,14 @@ export interface MapData {
   /** Finance rent category; old/hand-authored maps without it are treated as condos. */
   propertyType?: PropertyType;
   bounds: { w: number; h: number };
-  floors: { id: string; polygon: [number, number][]; material: string }[];
-  walls: { from: [number, number]; to: [number, number] }[];
+  /** ROADMAP_NEXT B9-1: optional image texture (path under public/, e.g. "textures/oak.jpg";
+   *  normalizeMeshUrl adds the leading slash). Absent → the material's flat `material` color
+   *  (FLOOR_COLORS in world.ts). On load the texture swaps in tiled at
+   *  tuning.textures.metersPerTile; a load failure keeps the color (keep-stand-in philosophy). */
+  floors: { id: string; polygon: [number, number][]; material: string; texture?: string }[];
+  /** ROADMAP_NEXT B9-1: optional image texture on the wall material (both faces), same drop-in
+   *  convention + color fallback as a floor's `texture`. */
+  walls: { from: [number, number]; to: [number, number]; texture?: string }[];
   doors: { at: [number, number]; orientation: 'vertical' | 'horizontal'; width?: number; assetId?: string }[];
   /** ROADMAP_NEXT item 9: wall openings that are purely visual — a window never affects the nav
    *  grid or wall collision (the wall segment it sits on stays a single unbroken box, unlike a
@@ -510,6 +516,11 @@ export interface TuningData {
   garbage?: { autoTidyRadius?: number; cleanlinessThreshold?: number; cleanlinessVar?: string };
   /** B6-4: chance of one extra waste item, lerped by a quest-namespace numeric stat. */
   waste?: { extraChanceVar?: string; extraAtMin?: number; extraAtMax?: number };
+  /** ROADMAP_NEXT B9-1: floor/wall image-texture tiling. `metersPerTile` = how many meters of
+   *  surface one texture repeat spans (physical sizing) — absent/non-positive → 1m. Optional so
+   *  pre-existing tuning fixtures/tests stay valid (same precedent as `interaction?`/`doors?`).
+   *  See game/textures.ts (pure repeat math) + world.ts (loader/UV wiring). */
+  textures?: { metersPerTile?: number };
   /** which map the game plays: data/maps/<active>.json (set from the Map Editor's "Play this map") */
   map?: { active: string };
   /** optional so pre-rig data files & test fixtures stay valid; game falls back to the capsule */

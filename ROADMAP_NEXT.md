@@ -207,3 +207,5 @@ Designer-editable UI: fonts, colors, shapes (radius/outline/shadow) of notificat
 # Batch 9 — 2026-07-16
 
 ## B9-1. Floor + wall textures: designer drops image files in public/textures/, picks per floor rect and per wall in the Map Editor; game renders them tiled (repeat per meter) with color fallback. Server lists /api/textures. Slices: engine (game render + schema), tool (Map Editor pickers + server listing).
+
+**ENGINE DONE (2026-07-16, see PROJECT_CONTEXT §7.32):** `MapData.floors[].texture?`/`walls[].texture?` schema + `tuning.textures.metersPerTile` tunable; `game/textures.ts` pure repeat math (`resolveMetersPerTile`/`textureRepeat`/`polygonBounds`, headless-tested `test/textures.test.ts`); `world.ts` per-URL texture cache + per-surface clone, keep-stand-in color→texture swap with load-failure fallback, physical tiling (walls via BoxGeometry 0..1 UVs, floors via normalized ShapeGeometry UVs), hot-reload-safe, wall-cut still works. **Tool slice remains:** Map Editor per-floor/per-wall texture pickers + `GET /api/textures` server listing (do NOT modify tools/map.html or server.js here — next slice).
