@@ -1,0 +1,30 @@
+{
+  "rent": {
+    "base": 200,
+    "perFloorTile": 2,
+    "byPropertyType": {
+      "condo": 100,
+      "basement": -50,
+      "townhouse": 250,
+      "house": 500,
+      "penthouse": 900
+    }
+  },
+  "bills": [
+    {
+      "id": "phone",
+      "name": "Phone",
+      "base": 35,
+      "perAssetValue": 0.001
+    },
+    {
+      "id": "hydro",
+      "name": "Hydro",
+      "base": 45,
+      "perAssetValue": 0.005
+    }
+  ],
+  "overdueDays": 3,
+  "tooLateDays": 7,
+  "negativeGraceDays": 3
+}

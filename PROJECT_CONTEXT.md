@@ -19,6 +19,7 @@ The designer (Septentrion) must be able to build and balance the entire game **t
 | **Add / remove actions** and per-action gains, animation state, autonomy eligibility | Interaction Editor | ✅ done (2026-07-13) |
 | **Quest system**: author quests with trigger & completion conditions + rewards | Quest Editor (replaces roadmap's "Story Editor") | ✅ done (2026-07-13, see §3.3–§3.4) |
 | **Create / edit visas and jobs** (requirements, status/application timing, work hours/pay/skips, visa grants) | Career Editor | ✅ done (2026-07-15, see §7.20 V4 as-built) |
+| **Balance formula-driven rent and recurring bills** (property adjustments, asset-value scaling, debt timing thresholds, live current-map preview) | Finance Editor | ✅ F1 done (2026-07-16, see §7.24) |
 | Simulate balance headlessly, chart curves | Balance Dashboard | ⬜ nice-to-have |
 | **Navigate between all admin tools** (tabs/buttons in every tool) | Shared tool nav bar | ✅ done (2026-07-14) |
 | **Asset facing direction** ("normal" vector: where the object faces, for use-spots/seating logic) | Asset Editor + Map Editor arrow | ✅ done (2026-07-14, see §7.2 as-built) |
@@ -522,11 +523,11 @@ The advisory validation panel never blocks saving and reports unknown condition 
 
 ## 7.22 Bills (B4-1, 2026-07-15)
 
-- `data/bills.json` defines the recurring list (`{ bills: [{ id, name, amount }] }`) and ships Rent §300, Phone §40, and Hydro §60. `tuning.bills.intervalDays` controls cadence (default 3). `game/data.ts` loads and hot-reload-polls both alongside the existing databases.
+- `data/bills.json` originally defined the recurring list and flat amounts. F1 (§7.24) supersedes only the amount source: the file remains the ordered `{ bills: [{ id, name }] }` identity/display list, while `data/finance.json` supplies formula constants. `tuning.bills.intervalDays` still controls cadence.
 - Pure `game/bills.ts` owns `BillState`: each crossed day boundary checks the cadence, snapshots the current definitions into uniquely keyed outstanding instances (so an unpaid cycle can coexist with later cycles), and exposes individual and atomic pay-all decisions. Insufficient funds never mutate outstanding state. `serialize()`/`restore()` persists `{ outstanding, lastArrivalDay }`; `retune()` changes only future arrivals/cadence and preserves existing debts.
 - `game/main.ts` ticks bills beside visas on each day boundary. An arrival shows `Bills arrived: §<total>`. The phone has a third Bills tab listing every outstanding name/amount, total, per-bill Pay, and Pay all; successful decisions assign the returned balance to `QuestRunner.funds`, keeping QuestRunner the single economy owner. Insufficient funds reuse the existing toast surface and leave bills untouched.
 - The persistent smartphone launcher has a simple red outstanding-count badge, hidden only when the count is zero. It therefore remains visible after the arrival toast until every bill is paid.
-- Authoring decision: amounts are directly editable in `data/bills.json` only for now; adding a dedicated editor/generic JSON surface was not cheap enough for this runtime slice. Non-payment consequences are explicitly out of scope and deferred.
+- Authoring decision at B4-1 was flat JSON amounts; F1 now replaces that temporary path with the dedicated Finance Editor. Non-payment consequences remain deferred to F2.
 - Headless coverage: `test/bills.test.ts` covers exact/default cadence, recurring unpaid cycles, data-driven totals, individual/refused/atomic pay-all decisions, hot-retune, unique keys, and serialize/restore.
 
 ## 7.23 Carried food + action costs (B4-2, 2026-07-15)
@@ -544,6 +545,10 @@ Extends the bills system (§7.22) into a full economy. Build order: F1 formula b
 ### F1 — formula-driven bills + Finance Editor (tools/finance.html)
 - data/finance.json: `{ rent: { base, perFloorTile, byPropertyType: {condo,basement,townhouse,house,penthouse} }, bills: [{ id, name, base, perAssetValue }], overdueDays, tooLateDays, negativeGraceDays }`. Bills amount = base + perAssetValue * (Σ buyPrice of placed+owned assets in the condo); rent = base + perFloorTile*floorTileCount + byPropertyType[map.propertyType]. `map.propertyType` field (default condo). Replaces §7.22's flat bills.json amounts (keep bills.json for the LIST; amounts computed). All math tunable in the tool.
 - Finance Editor: edit the formula constants, property-type table, overdue/too-late/grace day thresholds, live-preview the computed rent/bills against the current map+assets. nav.js entry.
+
+**F1 as-built (2026-07-16):** `data/finance.json` ships the locked schema and `data/bills.json` is now the amount-free ordered id/name list. Pure `game/bills.ts` exports the shared formula boundary: unique floor cells are counted from the union of map floor polygons at `gridSize`, asset value sums `buyPrice` once per live effective placed object, missing `map.propertyType` falls back to `condo`, and rent/non-rent formulas are computed without DOM/three.js. `BillState.tick()` snapshots those amounts only when a cycle arrives; `main.ts` passes Buy Mode's effective object list (authored objects minus sold/destroyed entries plus player purchases), while hot-reload changes only future arrivals. Existing outstanding-bill phone rendering/payment is unchanged.
+
+`MapData.propertyType` and the shipped condo map default to `condo`; the Map Editor exposes the five locked values and seeds new maps as condos. `tools/finance.html` is a dark, plain-inline `window.FinanceEditor` GET/PUT editor for every F1 constant and threshold. Its separate browser module imports `computeFinancePreview` from `game/bills.ts`, so the live current-map/assets preview and runtime cannot diverge. Finance is in shared tool nav. Headless coverage lives in `test/bills.test.ts` and `tools/finance-editor.test.mjs`; F2 debt/repo/game-over and F3 credit score remain intentionally untouched.
 
 ### F2 — debt, repo man, game over
 - Unpaid past `overdueDays` → overdue (flag; feeds credit F3). Funds may go NEGATIVE (paying anyway / auto-debit) up to `negativeGraceDays`. Past `tooLateDays` while in debt: REPO event — no mesh/character, a message overlay listing seized assets. Seize logic: sell (remove via buymode overlay destroy/sold path) lowest-survival-importance assets first until debt covered. `AssetDef.survivalImportance?: number` (higher = seized last; bed/fridge/stove high, decor low; Asset Editor field). If seizing everything still can't cover debt → GAME OVER (reuse §7.20 overlay).

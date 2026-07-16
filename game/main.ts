@@ -328,7 +328,7 @@ async function start() {
 
   // --- smartphone jobs + visa applications (PROJECT_CONTEXT.md §7.20 V2, B3-7) ---
   const phoneJobs = new PhoneJobSearch(data.jobs, data.tuning.phone?.jobListSize);
-  const bills = new BillState(data.bills, data.tuning.bills?.intervalDays, 1);
+  const bills = new BillState(data.bills, data.finance, data.tuning.bills?.intervalDays, 1);
   let phoneTab: 'jobs' | 'visas' | 'bills' = 'jobs';
   const refreshPhone = () => {
     const ctx = buildEvalContext();
@@ -973,7 +973,7 @@ async function start() {
     quests.retune(data.quests, data.simstate); // definitions only — runtime quest/var state is untouched
     visaMachine.retune(data.visas); // definitions only — runtime visa state is untouched (§7.20 B3-6)
     phoneJobs.retune(data.jobs, data.tuning.phone?.jobListSize); // defs/tuning only; hourly cadence survives
-    bills.retune(data.bills, data.tuning.bills?.intervalDays); // definitions/cadence only; outstanding bills survive
+    bills.retune(data.bills, data.finance, data.tuning.bills?.intervalDays); // formulas/defs/cadence only; arrived snapshots survive
     hud.setPhoneIcon(data.tuning.phone?.icon ?? '/icons/Smartphone.png');
     refreshVisaChip();
     refreshPhone();
@@ -1061,7 +1061,11 @@ async function start() {
       // ticking inside this while loop (rather than once after it) means a multi-day skip (e.g.
       // a long pause + fast-forward) still evaluates each day in order, same as quests' time.day.
       visaMachine.tick(gameDay);
-      const billArrival = bills.tick(gameDay);
+      const billArrival = bills.tick(gameDay, {
+        map: data.map,
+        assets: data.assets,
+        placedObjects: buyMode.effectivePlacedObjectsList(),
+      });
       if (billArrival?.arrived.length) {
         hud.showQuestToast(
           `Bills arrived: §${billArrival.total.toLocaleString()}`,

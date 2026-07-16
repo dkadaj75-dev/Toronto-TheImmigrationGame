@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Condo Life — Finance Editor</title>
+<style>
+  :root{color-scheme:dark;--bg:#0d1119;--panel:#161c28;--line:#2a3448;--text:#e7edf8;--muted:#91a0ba;--accent:#73a7ff}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:14px system-ui,-apple-system,sans-serif}
+  header{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:14px;padding:14px 20px;background:#111722;border-bottom:1px solid var(--line)}
+  header h1{font-size:18px;margin:0;flex:1} button{border:1px solid #4777c5;background:#285fae;color:white;border-radius:7px;padding:8px 15px;cursor:pointer} button:disabled{opacity:.45;cursor:default}
+  main{max-width:1120px;margin:0 auto;padding:20px;display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,.7fr);gap:18px}
+  .stack{display:grid;gap:18px}.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}.card h2{font-size:15px;margin:0 0 14px}.grid{display:grid;grid-template-columns:minmax(150px,1fr) minmax(100px,160px);gap:10px 14px;align-items:center}
+  label{color:#c5d0e4} input{width:100%;padding:7px 9px;border-radius:6px;border:1px solid #35425a;background:#0d131d;color:var(--text)} input:focus{outline:1px solid var(--accent)} input[readonly]{color:var(--muted)}
+  .bill{padding-top:13px;margin-top:13px;border-top:1px solid var(--line)}.bill:first-of-type{padding-top:0;margin-top:0;border-top:0}.bill-title{font-weight:650;margin-bottom:10px}
+  .preview-meta{color:var(--muted);font-size:12px;margin-bottom:12px}.preview-row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #252e3f}.preview-row strong{color:#b9d2ff}.status{min-width:120px;text-align:right;color:var(--muted)}
+  @media(max-width:780px){main{grid-template-columns:1fr}header{padding:12px}.status{display:none}}
+</style>
+</head>
+<body>
+<header><h1>Finance Editor</h1><span id="status" class="status">Loading…</span><button id="save" disabled>Save finance.json</button></header>
+<main>
+  <div class="stack">
+    <section class="card"><h2>Rent formula</h2><div id="rentFields" class="grid"></div></section>
+    <section class="card"><h2>Property-type adjustments</h2><div id="propertyFields" class="grid"></div></section>
+    <section class="card"><h2>Recurring bill formulas</h2><div id="billFields"></div></section>
+    <section class="card"><h2>F1 thresholds (used by future F2)</h2><div id="thresholdFields" class="grid"></div></section>
+  </div>
+  <aside class="card"><h2>Live preview</h2><div id="previewMeta" class="preview-meta">Waiting for current map…</div><div id="preview"></div></aside>
+</main>
+<script>
+(() => {
+'use strict';
+const PROPERTY_TYPES = ['condo','basement','townhouse','house','penthouse'];
+const state = { finance:null, map:null, assets:null, dirty:false, compute:null };
+const $ = (id) => document.getElementById(id);
+function numberInput(value, path, onValue, options={}) {
+  const input = document.createElement('input'); input.type = 'number'; input.value = String(value); input.dataset.path = path;
+  if (options.min !== undefined) input.min = String(options.min); if (options.step !== undefined) input.step = String(options.step);
+  input.addEventListener('input', () => { const n = Number(input.value); if (!Number.isFinite(n)) return; onValue(n); markDirty(); renderPreview(); });
+  return input;
+}
+function appendField(root, labelText, input) { const label=document.createElement('label'); label.textContent=labelText; root.append(label,input); }
+function markDirty() { state.dirty=true; $('save').disabled=false; $('status').textContent='Unsaved changes'; }
+function render() {
+  const rent=$('rentFields'); rent.innerHTML='';
+  appendField(rent,'Base',numberInput(state.finance.rent.base,'rent.base',(v)=>state.finance.rent.base=v));
+  appendField(rent,'Per floor tile',numberInput(state.finance.rent.perFloorTile,'rent.perFloorTile',(v)=>state.finance.rent.perFloorTile=v,{step:'any'}));
+  const props=$('propertyFields'); props.innerHTML='';
+  for (const type of PROPERTY_TYPES) appendField(props,type[0].toUpperCase()+type.slice(1),numberInput(state.finance.rent.byPropertyType[type] ?? 0,`rent.byPropertyType.${type}`,(v)=>state.finance.rent.byPropertyType[type]=v,{step:'any'}));
+  const bills=$('billFields'); bills.innerHTML='';
+  state.finance.bills.forEach((bill,index)=>{
+    const box=document.createElement('div'); box.className='bill'; const title=document.createElement('div'); title.className='bill-title'; title.textContent=`${bill.name} (${bill.id})`; box.appendChild(title);
+    const grid=document.createElement('div'); grid.className='grid';
+    appendField(grid,'Base',numberInput(bill.base,`bills.${index}.base`,(v)=>bill.base=v,{step:'any'}));
+    appendField(grid,'Per asset value',numberInput(bill.perAssetValue,`bills.${index}.perAssetValue`,(v)=>bill.perAssetValue=v,{step:'any'})); box.appendChild(grid); bills.appendChild(box);
+  });
+  const thresholds=$('thresholdFields'); thresholds.innerHTML='';
+  [['Overdue days','overdueDays'],['Too-late days','tooLateDays'],['Negative-balance grace days','negativeGraceDays']].forEach(([label,key])=>appendField(thresholds,label,numberInput(state.finance[key],key,(v)=>state.finance[key]=v,{min:0,step:1})));
+  renderPreview();
+}
+function money(value) { return `§${Number(value).toLocaleString(undefined,{maximumFractionDigits:2})}`; }
+function renderPreview() {
+  if (!state.finance || !state.map || !state.assets || !state.compute) return;
+  const result=state.compute(state.finance,{map:state.map,assets:state.assets});
+  $('previewMeta').textContent=`${result.floorTileCount} floor tiles · ${money(result.totalAssetValue)} placed asset value · ${state.map.propertyType || 'condo'}`;
+  const root=$('preview'); root.innerHTML='';
+  [['Rent',result.rent],...result.bills.map((bill)=>[bill.name,bill.amount])].forEach(([name,amount])=>{const row=document.createElement('div');row.className='preview-row';const label=document.createElement('span');label.textContent=name;const value=document.createElement('strong');value.textContent=money(amount);value.dataset.previewId=name==='Rent'?'rent':result.bills.find((bill)=>bill.name===name)?.id||'';row.append(label,value);root.appendChild(row);});
+}
+async function load() {
+  try {
+    const get=async(path)=>{const response=await fetch('/api/data/'+path);if(!response.ok)throw new Error(`${path}: ${response.status}`);return response.json();};
+    const [finance,assets,tuning]=await Promise.all([get('finance.json'),get('assets.json'),get('tuning.json')]);
+    const map=await get(`maps/${tuning.map?.active || 'condo'}.json`); Object.assign(state,{finance,assets,map}); render(); $('status').textContent='Loaded';
+  } catch(error) { $('status').textContent='Load failed'; console.error('[finance-editor]',error); }
+}
+async function save() {
+  if (!state.dirty) return; const response=await fetch('/api/data/finance.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(state.finance,null,2)});
+  if (!response.ok) { $('status').textContent='Save failed'; return; } state.dirty=false; $('save').disabled=true; $('status').textContent='Saved';
+}
+function setCompute(fn) { state.compute=fn; renderPreview(); }
+$('save').addEventListener('click',save); window.addEventListener('keydown',(event)=>{if((event.ctrlKey||event.metaKey)&&event.key==='s'){event.preventDefault();save();}}); window.addEventListener('beforeunload',(event)=>{if(state.dirty)event.preventDefault();});
+window.FinanceEditor={state,load,save,setCompute,renderPreview}; load();
+})();
+</script>
+<script type="module">
+import { computeFinancePreview } from '/game/bills.ts';
+window.FinanceEditor.setCompute(computeFinancePreview);
+</script>
+<script src="/tools/nav.js"></script>
+</body>
+</html>

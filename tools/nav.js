@@ -38,6 +38,7 @@
       { id: 'animations', label: 'Animations', href: '/tools/animations.html' },
       { id: 'quests', label: 'Quests', href: '/tools/quests.html' },
       { id: 'career', label: 'Career', href: '/tools/career.html' },
+      { id: 'finance', label: 'Finance', href: '/tools/finance.html' },
     ];
 
     function currentToolId() {

@@ -42,8 +42,9 @@ function loadPage(url, bodyHtml) {
   check('no corner button on tool pages', doc.getElementById('condo-toolnav-corner') === null);
 
   const links = [...strip.querySelectorAll('a')];
-  check('all 8 tools listed', links.length === 8, `got ${links.length}`);
+  check('all 9 tools listed', links.length === 9, `got ${links.length}`);
   check('Career tool is listed', links.some((link) => link.textContent === 'Career' && link.getAttribute('href') === '/tools/career.html'));
+  check('Finance tool is listed', links.some((link) => link.textContent === 'Finance' && link.getAttribute('href') === '/tools/finance.html'));
   const active = strip.querySelector('a.ctn-active');
   check('Assets tab marked active', active && active.textContent === 'Assets', active && active.textContent);
   check('only one active tab', strip.querySelectorAll('a.ctn-active').length === 1);
@@ -62,6 +63,13 @@ function loadPage(url, bodyHtml) {
   const dom = loadPage('http://localhost:5173/tools/career.html', '<header>Career</header>');
   const active = dom.window.document.querySelector('#condo-toolnav a.ctn-active');
   check('Career tab marked active on career.html', active && active.textContent === 'Career', active && active.textContent);
+}
+
+// ------------------------------------------------------------------ Finance tool entry + active tab
+{
+  const dom = loadPage('http://localhost:5173/tools/finance.html', '<header>Finance</header>');
+  const active = dom.window.document.querySelector('#condo-toolnav a.ctn-active');
+  check('Finance tab marked active on finance.html', active && active.textContent === 'Finance', active && active.textContent);
 }
 
 // ------------------------------------------------------------------ game page

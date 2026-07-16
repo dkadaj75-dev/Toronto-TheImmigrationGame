@@ -259,12 +259,28 @@ export interface JobDef {
 }
 export interface JobsData { jobs: JobDef[]; }
 
-/** Recurring household bill definitions (PROJECT_CONTEXT.md §7.22, data/bills.json). */
-export interface BillDef { id: string; name: string; amount: number; }
+/** Recurring household bill identity/display list (PROJECT_CONTEXT.md §7.24 F1, data/bills.json).
+ *  Amounts are snapshotted from FinanceData formulas when a bill cycle arrives. */
+export interface BillDef { id: string; name: string; }
 export interface BillsData { bills: BillDef[]; }
+
+export type PropertyType = 'condo' | 'basement' | 'townhouse' | 'house' | 'penthouse';
+export interface FinanceData {
+  rent: {
+    base: number;
+    perFloorTile: number;
+    byPropertyType: Record<PropertyType, number>;
+  };
+  bills: { id: string; name: string; base: number; perAssetValue: number }[];
+  overdueDays: number;
+  tooLateDays: number;
+  negativeGraceDays: number;
+}
 
 export interface MapData {
   id: string; name: string; gridSize: number;
+  /** Finance rent category; old/hand-authored maps without it are treated as condos. */
+  propertyType?: PropertyType;
   bounds: { w: number; h: number };
   floors: { id: string; polygon: [number, number][]; material: string }[];
   walls: { from: [number, number]; to: [number, number] }[];
@@ -421,6 +437,7 @@ export interface GameData {
   visas: VisasData;
   jobs: JobsData;
   bills: BillsData;
+  finance: FinanceData;
 }
 
 const FILES = {
@@ -433,6 +450,7 @@ const FILES = {
   visas: '/data/visas.json',
   jobs: '/data/jobs.json',
   bills: '/data/bills.json',
+  finance: '/data/finance.json',
 } as const;
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -445,7 +463,7 @@ export async function loadAll(): Promise<GameData> {
   // tuning first — it names the active map (tuning.map.active, default "condo")
   const tuning = await fetchJson<TuningData>(FILES.tuning);
   const mapFile = `/data/maps/${tuning.map?.active ?? 'condo'}.json`;
-  const [stats, interactions, assets, map, simstate, quests, visas, jobs, bills] = await Promise.all([
+  const [stats, interactions, assets, map, simstate, quests, visas, jobs, bills, finance] = await Promise.all([
     fetchJson<StatsData>(FILES.stats),
     fetchJson<InteractionsData>(FILES.interactions),
     fetchJson<AssetsData>(FILES.assets),
@@ -455,8 +473,9 @@ export async function loadAll(): Promise<GameData> {
     fetchJson<VisasData>(FILES.visas),
     fetchJson<JobsData>(FILES.jobs),
     fetchJson<BillsData>(FILES.bills),
+    fetchJson<FinanceData>(FILES.finance),
   ]);
-  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills };
+  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills, finance };
 }
 
 /** Dev hot-reload: polls the data files and invokes callbacks when content changes. */

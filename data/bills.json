@@ -2,18 +2,15 @@
   "bills": [
     {
       "id": "rent",
-      "name": "Rent",
-      "amount": 300
+      "name": "Rent"
     },
     {
       "id": "phone",
-      "name": "Phone",
-      "amount": 40
+      "name": "Phone"
     },
     {
       "id": "hydro",
-      "name": "Hydro",
-      "amount": 60
+      "name": "Hydro"
     }
   ]
 }

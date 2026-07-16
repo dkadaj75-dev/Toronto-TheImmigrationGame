@@ -172,7 +172,7 @@ async function newMap(idArg) {
   if (!/^[a-z0-9_-]+$/i.test(id)) { setStatus('invalid id — letters/numbers/-/_ only', 'err'); return false; }
   if (state.maps.includes(id)) { setStatus('a map with that id already exists', 'err'); return false; }
   const doc = {
-    id, name: id, gridSize: 1.0, bounds: { w: 14, h: 10 },
+    id, name: id, propertyType: 'condo', gridSize: 1.0, bounds: { w: 14, h: 10 },
     floors: [], walls: [], doors: [], windows: [],
     spawn: { pos: [2, 2], facingDeg: 0 },
     placedObjects: [],
@@ -703,6 +703,7 @@ function renderInspector() {
   if (!s) {
     host.appendChild(Object.assign(document.createElement('h2'), { textContent: 'Map properties' }));
     host.appendChild(field('name', doc.name, edit((v) => { doc.name = v; }), { text: true, data: 'map.name' }));
+    host.appendChild(field('property type', doc.propertyType ?? 'condo', edit((v) => { doc.propertyType = v; }), { options: ['condo', 'basement', 'townhouse', 'house', 'penthouse'], data: 'map.propertyType' }));
     host.appendChild(field('grid size', doc.gridSize, edit((v) => { doc.gridSize = Math.max(0.25, v); }), { data: 'map.gridSize' }));
     host.appendChild(field('bounds w', doc.bounds.w, edit((v) => { doc.bounds.w = Math.max(2, v); fitView(); }), { data: 'map.bounds.w' }));
     host.appendChild(field('bounds h', doc.bounds.h, edit((v) => { doc.bounds.h = Math.max(2, v); fitView(); }), { data: 'map.bounds.h' }));
