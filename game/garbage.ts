@@ -45,7 +45,8 @@
 // simplification, no per-can walk/collection loop.
 
 import * as THREE from 'three';
-import type { GameData } from './data';
+import type { GameData, StatsData, TuningData } from './data';
+import { resolveVar, type EvalContext } from './quests';
 import type { AccidentsController } from './accidents';
 
 // ==================================================================== pure fill/capacity bookkeeping
@@ -103,6 +104,29 @@ export function findNearestNonFullCan(
 /** Fallback when `tuning.garbage` (or one of its fields) is absent. */
 export const DEFAULT_GARBAGE_TUNING = { autoTidyRadius: 4, cleanlinessThreshold: 5, cleanlinessVar: 'cleanliness' };
 export interface GarbageTuning { autoTidyRadius: number; cleanlinessThreshold: number; }
+
+/** B6-4 baseline-one waste quantity with at most one probabilistic extra item. The probability is
+ * linearly interpolated by any numeric quest-namespace stat, including personality.*. */
+export function wasteItemCount(
+  tuning: TuningData['waste'],
+  ctx: EvalContext,
+  stats: StatsData,
+  rng: () => number = Math.random,
+): number {
+  if (!tuning?.extraChanceVar) return 1;
+  const value = resolveVar(tuning.extraChanceVar, ctx);
+  if (typeof value !== 'number') return 1;
+  const id = tuning.extraChanceVar.slice(tuning.extraChanceVar.indexOf('.') + 1);
+  const max = tuning.extraChanceVar.startsWith('skills.')
+    ? stats.skills.find((entry) => entry.id === id)?.max ?? 100
+    : tuning.extraChanceVar.startsWith('personality.')
+      ? stats.personality?.find((entry) => entry.id === id)?.max ?? 100
+      : 100;
+  const t = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
+  const atMin = tuning.extraAtMin ?? 0;
+  const chance = Math.min(1, Math.max(0, atMin + ((tuning.extraAtMax ?? 0) - atMin) * t));
+  return 1 + (rng() < chance ? 1 : 0);
+}
 
 export type WastePlan =
   | { kind: 'auto'; canKey: string; canPos: [number, number] }

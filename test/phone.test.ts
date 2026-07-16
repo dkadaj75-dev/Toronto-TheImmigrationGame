@@ -5,6 +5,7 @@ import {
   applyForJob,
   applyForVisa,
   jobListingViews,
+  jobSwitchPrompt,
   pendingDaysRemaining,
   visaApplicationViews,
 } from '../game/phone';
@@ -90,6 +91,9 @@ console.log('phone.test — job apply effects');
   check('authoritative apply path rejects unmet minCreditScore', creditDenied.ok === false && creditDenied.reason === 'requirements_unmet');
   const creditAccepted = applyForJob('tutor', jobs, c, vars, () => {}, 650);
   check('job applies at exact minCreditScore', creditAccepted.ok === true && vars.job === 'tutor');
+  check('different employed job produces exact switch confirmation',
+    jobSwitchPrompt(jobs.jobs[0], jobs.jobs[1]) === 'You already work as Dishwasher. Switch to Cook?');
+  check('same current job needs no switch confirmation', jobSwitchPrompt(jobs.jobs[0], jobs.jobs[0]) === null);
 }
 
 const visas: VisasData = {

@@ -27,6 +27,12 @@ export type PhoneApplyResult =
   | { ok: true; id: string }
   | { ok: false; reason: 'not_found' | 'requirements_unmet' | 'application_rejected' };
 
+/** Copy used by the runtime confirmation seam; null means no switch confirmation is needed. */
+export function jobSwitchPrompt(current: JobDef | null, next: JobDef): string | null {
+  if (!current || current.id === next.id) return null;
+  return `You already work as ${current.name}. Switch to ${next.name}?`;
+}
+
 /** A day-aware hour key: 08:00 on consecutive days must count as two distinct roll windows. */
 export function gameHourKey(time: { hour: number; day: number }): number {
   return time.day * 24 + Math.floor(time.hour);

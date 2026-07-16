@@ -14,6 +14,7 @@ function ctx(overrides: Partial<EvalContext> = {}): EvalContext {
   return {
     needs: { hunger: 80, energy: 40 },
     skills: { english: 5, cooking: 0 },
+    personality: { cleanliness: 4 },
     funds: 300,
     time: { hour: 14, day: 3 },
     vars: { visaStatus: 'tourist', job: null, income: 0 },
@@ -34,6 +35,7 @@ console.log('quests.test — operators');
   check('eq null true (vars.job is null)', evaluate({ var: 'vars.job', eq: null }, c) === true);
   check('neq true', evaluate({ var: 'vars.visaStatus', neq: 'student' }, c) === true);
   check('neq false', evaluate({ var: 'vars.visaStatus', neq: 'tourist' }, c) === false);
+  check('personality namespace resolves like needs/skills', evaluate({ var: 'personality.cleanliness', gte: 4 }, c) === true);
   // ROADMAP_NEXT B2-1: leave_for_work ships `{ all: [{ var: "vars.job", neq: null }] }`. job's
   // simstate.json default is null, and QuestRunner seeds `vars.job = null` (an actual present key,
   // not an absent one) — so resolveVar returns `null`, not `undefined`, and the `value === undefined`

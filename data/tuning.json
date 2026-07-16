@@ -89,6 +89,12 @@
     "cleanlinessVar": "cleanliness",
     "_source": "ROADMAP_NEXT item 10 (garbage/tidying). autoTidyRadius (meters) = how close a non-full garbage can must be for the sim to deposit waste itself instead of dropping a transient; cleanlinessThreshold = the minimum value of the personality stat named by cleanlinessVar (stats.json's personality[] family) required to bother; see game/garbage.ts's decideWasteHandling."
   },
+  "waste": {
+    "extraChanceVar": "personality.cleanliness",
+    "extraAtMin": 1,
+    "extraAtMax": 0,
+    "_source": "ROADMAP_NEXT B6-4. Every waste-producing completion creates one baseline item; this is the chance of one extra item, linearly interpolated from extraAtMin at stat 0 to extraAtMax at that stat's authored maximum."
+  },
   "doors": {
     "openSeconds": 0.25,
     "closeSeconds": 0.25,

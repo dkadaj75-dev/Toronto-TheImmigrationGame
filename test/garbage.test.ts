@@ -4,7 +4,7 @@
 // decideWasteHandling) — GarbageController's three.js layer (world-scanning, spawnTransient
 // delegation) is sanity-checked by wiring/dev-server verification instead, same convention as
 // AccidentsController/BuyModeController/doors.ts's own three.js layers.
-import { GarbageRegistry, findNearestNonFullCan, decideWasteHandling, DEFAULT_GARBAGE_TUNING, type CanCandidate } from '../game/garbage';
+import { GarbageRegistry, findNearestNonFullCan, decideWasteHandling, wasteItemCount, DEFAULT_GARBAGE_TUNING, type CanCandidate } from '../game/garbage';
 
 let failures = 0;
 function check(name: string, cond: boolean, detail = '') {
@@ -103,6 +103,18 @@ console.log('garbage.test — decideWasteHandling');
 
   check('DEFAULT_GARBAGE_TUNING matches the roadmap-specified defaults',
     DEFAULT_GARBAGE_TUNING.autoTidyRadius === 4 && DEFAULT_GARBAGE_TUNING.cleanlinessThreshold === 5 && DEFAULT_GARBAGE_TUNING.cleanlinessVar === 'cleanliness');
+}
+
+console.log('garbage.test - tunable waste amount');
+{
+  const stats = { needs: [], skills: [], personality: [{ id: 'cleanliness', name: 'Cleanliness', default: 5, max: 10 }] };
+  const base = { needs: {}, skills: {}, personality: { cleanliness: 0 }, funds: 0, time: { hour: 0, day: 1 }, vars: {}, quests: {} };
+  const tuning = { extraChanceVar: 'personality.cleanliness', extraAtMin: 1, extraAtMax: 0 };
+  check('minimum cleanliness guarantees one extra item', wasteItemCount(tuning, base, stats, () => 0.999) === 2);
+  check('maximum cleanliness produces baseline only', wasteItemCount(tuning, { ...base, personality: { cleanliness: 10 } }, stats, () => 0) === 1);
+  check('mid cleanliness lerps to 50% extra chance', wasteItemCount(tuning, { ...base, personality: { cleanliness: 5 } }, stats, () => 0.49) === 2
+    && wasteItemCount(tuning, { ...base, personality: { cleanliness: 5 } }, stats, () => 0.5) === 1);
+  check('missing mapping preserves one baseline item', wasteItemCount(undefined, base, stats, () => 0) === 1);
 }
 
 if (failures > 0) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }

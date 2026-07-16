@@ -735,6 +735,7 @@ export class Hud {
     currentStatusName: string;
     searchedJobs: boolean;
     jobs: { job: JobDef; requirementsMet: boolean; requirements: RequirementView[] }[];
+    currentJob: { job: JobDef; skips: number } | null;
     visas: { visa: VisaDef; requirementsMet: boolean; requirements: RequirementView[] }[];
     pending: { statusId: string; daysRemaining: number } | null;
     currencyName: string;
@@ -776,6 +777,19 @@ export class Hud {
     }
 
     if (args.tab === 'jobs') {
+      if (args.currentJob) {
+        const current = phoneCard(args.currentJob.job.name);
+        const badge = document.createElement('span');
+        badge.className = 'phone-pending';
+        badge.textContent = 'Current job';
+        current.head.appendChild(badge);
+        const details = document.createElement('div');
+        details.className = 'phone-meta';
+        const level = args.currentJob.job.level === undefined ? '' : ` · Level ${args.currentJob.job.level}`;
+        details.textContent = `${formatHour(args.currentJob.job.hours.startHour)}–${formatHour(args.currentJob.job.hours.endHour)} · ${args.currencyName}${args.currentJob.job.payPerShift}/shift${level} · ${args.currentJob.skips} skip${args.currentJob.skips === 1 ? '' : 's'} so far`;
+        current.el.appendChild(details);
+        this.phoneBody.appendChild(current.el);
+      }
       const search = document.createElement('button');
       search.className = 'phone-search';
       search.textContent = 'Search a job';

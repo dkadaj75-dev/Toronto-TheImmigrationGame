@@ -158,11 +158,31 @@ export function findAdjacentCell(
   return candidates[idx];
 }
 
+/** Deterministic nearest-free fallback over expanding Chebyshev rings. */
+export function findNearestFreeCell(
+  grid: NavGrid,
+  baseCell: Cell,
+  isFree: (cell: Cell) => boolean,
+): Cell | null {
+  const maxRadius = Math.max(grid.cols, grid.rows);
+  for (let radius = 0; radius <= maxRadius; radius++) {
+    for (let dr = -radius; dr <= radius; dr++) {
+      for (let dc = -radius; dc <= radius; dc++) {
+        if (Math.max(Math.abs(dr), Math.abs(dc)) !== radius) continue;
+        const cell = { col: baseCell.col + dc, row: baseCell.row + dr };
+        if (isWalkable(grid, cell) && isFree(cell)) return cell;
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * Full placement decision for one risk entry (§7.3): "on" spawns at the base asset's own
  * position (same cells as the base asset — the point of a kitchen fire being ON the stove);
- * "adjacent" picks a random free in-bounds non-wall cell in `adjacentRange` squares, falling
- * back to "on" if none qualify.
+ * "adjacent" picks a random free in-bounds non-wall cell in `adjacentRange` squares, then expands
+ * to the nearest free grid cell if that preferred ring is crowded. Only a completely full grid
+ * retains the legacy "on" fallback; the live controller refuses an overlapping adjacent spawn.
  */
 export function planAccidentPlacement(
   risk: AccidentRisk,
@@ -176,7 +196,9 @@ export function planAccidentPlacement(
     const range = risk.adjacentRange ?? [1, 2];
     const cell = findAdjacentCell(grid, baseCell, range, isFree, rng);
     if (cell) return { placement: 'adjacent', pos: cellCenter(grid, cell) };
-    // no free adjacent cell — fall back to "on" (§7.3)
+    const fallback = findNearestFreeCell(grid, baseCell, isFree);
+    if (fallback) return { placement: 'adjacent', pos: cellCenter(grid, fallback) };
+    // No free floor cell anywhere: preserve the pure legacy fallback; the controller rejects it.
   }
   return { placement: 'on', pos: basePos };
 }
@@ -438,7 +460,9 @@ export class AccidentsController {
   spawnTransient(assetId: string, pos: [number, number], rotDeg = 0, now?: number): AccidentInstanceRecord | null {
     const def = this.getData().assets.assets.find((a) => a.id === assetId && a.category === 'transient');
     if (!def) { console.warn(`spawnTransient: unknown transient asset "${assetId}"`); return null; }
-    const rec = this.registry.spawn({ accidentId: assetId, pos, rotDeg, footprint: def.footprint, placement: 'on', baseKey: null, bornAt: now });
+    const freePos = this.resolveFreePosition(def, pos, rotDeg);
+    if (!freePos) { console.warn(`spawnTransient: no free floor cell for "${assetId}"`); return null; }
+    const rec = this.registry.spawn({ accidentId: assetId, pos: freePos, rotDeg, footprint: def.footprint, placement: 'on', baseKey: null, bornAt: now });
     this.buildGroup(rec, def);
     return rec;
   }
@@ -449,8 +473,11 @@ export class AccidentsController {
     const rec = this.registry.all.find((i) => i.key === key);
     const group = this.groups.get(key);
     if (!rec || !group) return false;
-    rec.pos = [...pos];
-    group.position.set(pos[0], 0, pos[1]);
+    const def = this.getData().assets.assets.find((a) => a.id === rec.accidentId);
+    const resolved = visible && def ? this.resolveFreePosition(def, pos, rec.rotDeg, key) : pos;
+    if (!resolved) return false;
+    rec.pos = [...resolved];
+    group.position.set(resolved[0], 0, resolved[1]);
     group.visible = visible;
     return true;
   }
@@ -464,11 +491,12 @@ export class AccidentsController {
     if (!accidentDef) { console.warn(`accident risk references unknown accident asset "${risk.accidentId}"`); return; }
     const grid = this.getGrid();
     const basePos: [number, number] = [baseObj.position.x, baseObj.position.z];
-    const isFree = (cell: Cell) => {
-      const rect = footprintRect(cellCenter(grid, cell), 0, accidentDef.footprint);
-      return !this.registry.all.some((i) => rectsOverlap(rect, footprintRect(i.pos, i.rotDeg, i.footprint)));
-    };
+    const isFree = (cell: Cell) => this.isPlacementFree(accidentDef, cellCenter(grid, cell), 0);
     const plan = planAccidentPlacement(risk, basePos, grid, isFree, rng);
+    if (risk.placement === 'adjacent' && !this.isPlacementFree(accidentDef, plan.pos, 0)) {
+      console.warn(`accident spawn: no free floor cell for "${accidentDef.id}"`);
+      return;
+    }
     const rec = this.registry.spawn({
       accidentId: accidentDef.id, pos: plan.pos, rotDeg: 0,
       footprint: accidentDef.footprint, placement: plan.placement, baseKey, bornAt: now,
@@ -477,6 +505,33 @@ export class AccidentsController {
     // ROADMAP_NEXT B2-5: an onUse risk can spawn any accident (fire, water_puddle, ...) — only a
     // fire triggers panic.
     if (accidentDef.id === 'fire') this.onFireSpawned?.(rec);
+  }
+
+  /** Candidate footprint must avoid every live normal placed object and other transient. */
+  private isPlacementFree(def: AssetDef, pos: [number, number], rotDeg: number, ignoreKey?: string): boolean {
+    const rect = footprintRect(pos, rotDeg, def.footprint);
+    if (this.registry.all.some((inst) => inst.key !== ignoreKey
+      && rectsOverlap(rect, footprintRect(inst.pos, inst.rotDeg, inst.footprint)))) return false;
+    const data = this.getData();
+    for (const obj of this.getWorld().children) {
+      if (obj.visible === false) continue;
+      const placedDef = data.assets.assets.find((asset) => asset.id === obj.userData?.assetId);
+      if (!placedDef || placedDef.category === 'transient') continue;
+      const placedRect = footprintRect(
+        [obj.position.x, obj.position.z],
+        THREE.MathUtils.radToDeg(obj.rotation.y),
+        placedDef.footprint,
+      );
+      if (rectsOverlap(rect, placedRect)) return false;
+    }
+    return true;
+  }
+
+  private resolveFreePosition(def: AssetDef, pos: [number, number], rotDeg: number, ignoreKey?: string): [number, number] | null {
+    const grid = this.getGrid();
+    const cell = findNearestFreeCell(grid, worldToCell(grid, pos[0], pos[1]), (candidate) =>
+      this.isPlacementFree(def, cellCenter(grid, candidate), rotDeg, ignoreKey));
+    return cell ? cellCenter(grid, cell) : null;
   }
 
   // ------------------------------------------------------ fire destruction/spread (ROADMAP_NEXT item 6)

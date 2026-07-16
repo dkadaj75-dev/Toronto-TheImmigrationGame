@@ -16,11 +16,11 @@ import { Hud } from './ui';
 import { Autonomy } from './autonomy';
 import { QuestRunner, isActionAvailable, type EvalContext } from './quests';
 import { VisaMachine } from './visas';
-import { PhoneJobSearch, applyForJob, applyForVisa, jobListingViews, pendingDaysRemaining, visaApplicationViews } from './phone';
+import { PhoneJobSearch, applyForJob, applyForVisa, jobListingViews, jobSwitchPrompt, pendingDaysRemaining, visaApplicationViews } from './phone';
 import { FinanceState, decideRepoSeizure } from './bills';
 import { WorkTracker, applyNeedsCost, isLeaveForWorkAvailable, shouldStartVisaGrace, type WorkTickEvent } from './work';
 import { AccidentsController, resolveTapAssetId, shouldDespawnOnCleanup } from './accidents';
-import { GarbageController } from './garbage';
+import { GarbageController, wasteItemCount } from './garbage';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials, isSelectableForSell } from './buymode';
 import { createMarkerInstance, type MarkerInstance } from './marker';
 import { createCensorInstance, type CensorInstance } from './censor';
@@ -346,7 +346,8 @@ async function start() {
       tab: phoneTab,
       currentStatusName: visaMachine.currentDef()?.name ?? visaMachine.statusId,
       searchedJobs: phoneJobs.lastRolledHour !== null,
-      jobs: jobListingViews(phoneJobs.current(), ctx, bills.creditScore),
+      jobs: jobListingViews(phoneJobs.current().filter((job) => job.id !== currentJob()?.id), ctx, bills.creditScore),
+      currentJob: currentJob() ? { job: currentJob()!, skips: work.skips } : null,
       visas: visaApplicationViews(data.visas, ctx),
       pending: visaMachine.pending && pendingDays !== null
         ? { statusId: visaMachine.pending.statusId, daysRemaining: pendingDays }
@@ -379,6 +380,10 @@ async function start() {
     refreshPhone();
   };
   hud.onPhoneJobApply = (jobId) => {
+    const job = data.jobs.jobs.find((entry) => entry.id === jobId);
+    if (!job) return;
+    const prompt = jobSwitchPrompt(currentJob(), job);
+    if (prompt && !confirm(prompt)) return;
     const result = applyForJob(
       jobId,
       data.jobs,
@@ -387,8 +392,10 @@ async function start() {
       (statusId, day) => visaMachine.grantVisa(statusId, day),
       bills.creditScore,
     );
-    const job = data.jobs.jobs.find((entry) => entry.id === jobId);
-    if (result.ok) phoneToast(`Job accepted: ${job?.name ?? jobId}`, true);
+    if (result.ok) {
+      work.syncJob(currentJob(), currentWorkTime());
+      phoneToast(`Job accepted: ${job?.name ?? jobId}`, true);
+    }
     else if (result.reason === 'requirements_unmet') phoneToast('Job requirements are not met');
     refreshVisaChip();
     refreshPhone();
@@ -506,6 +513,13 @@ async function start() {
   const FOOD_EATING_ACTION_ID = '__eat_carried_food';
   let foodTransitioning = false;
   const gameHourNow = () => (gameDay - 1) * 24 + gameSeconds / 3600;
+  const handleProducedWaste = (assetId: string) => {
+    const count = wasteItemCount(data.tuning.waste, buildEvalContext(), data.stats);
+    const cleanliness = stats.personality.get(garbage.cleanlinessVarId());
+    for (let i = 0; i < count; i++) {
+      garbage.handleWaste(assetId, [sim.position.x, sim.position.z], cleanliness, accidents);
+    }
+  };
 
   const dropActiveFood = () => {
     const dropped = food.interruptActive([sim.position.x, sim.position.z], gameHourNow());
@@ -632,7 +646,7 @@ async function start() {
       refreshPhone();
       hud.openPhone();
     }
-    const foodAssetId = foodAssetForActionEvent(a.action.id, 'start');
+    const foodAssetId = foodAssetForActionEvent(a.action.id, 'arrival');
     if (foodAssetId) startCarriedFood(foodAssetId);
   };
   agent.onActionStop = (a, completed) => {
@@ -656,8 +670,7 @@ async function start() {
         accidents.despawnTransient(active.key);
       }
       if (a.action.producesWaste) {
-        const cleanliness = stats.personality.get(garbage.cleanlinessVarId());
-        garbage.handleWaste(a.action.producesWaste, [sim.position.x, sim.position.z], cleanliness, accidents);
+        handleProducedWaste(a.action.producesWaste);
       }
       return;
     }
@@ -725,8 +738,7 @@ async function start() {
     // be. Reads the sim's current cleanliness personality stat (undefined if that stat was deleted
     // or predates this slice — garbage.ts's decideWasteHandling treats that as "not clean enough").
     if (a.action.producesWaste) {
-      const cleanliness = stats.personality.get(garbage.cleanlinessVarId());
-      garbage.handleWaste(a.action.producesWaste, [sim.position.x, sim.position.z], cleanliness, accidents);
+      handleProducedWaste(a.action.producesWaste);
     }
     // ROADMAP_NEXT item 4/10: the exterior door's `empty_garbage` interaction resets every can —
     // ships with a fixed `duration` (see interactions.json) so it auto-completes and lands here
@@ -1070,6 +1082,7 @@ async function start() {
     return {
       needs: Object.fromEntries(stats.needs),
       skills: Object.fromEntries(stats.skills),
+      personality: Object.fromEntries(stats.personality),
       funds: quests.funds,
       time: { hour: Math.floor(gameSeconds / 3600), day: gameDay },
       vars: quests.vars,

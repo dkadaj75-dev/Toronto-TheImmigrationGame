@@ -256,6 +256,8 @@ export interface JobDef {
   hours: { startHour: number; endHour: number };
   payPerShift: number;
   maxSkips: number;
+  /** Sparse forward-compatible display value; B6-5 may author job levels later. */
+  level?: string | number;
   /** F3 sparse credit gate. Absent means the job has no credit-score requirement. */
   minCreditScore?: number;
   /** Positive amounts subtracted from matching needs when the sim returns from a completed shift. */
@@ -429,6 +431,8 @@ export interface TuningData {
    *  required to bother auto-tidying at all. game/garbage.ts falls back to `{4, 5, "cleanliness"}`
    *  when this whole block (or an individual field) is absent. */
   garbage?: { autoTidyRadius?: number; cleanlinessThreshold?: number; cleanlinessVar?: string };
+  /** B6-4: chance of one extra waste item, lerped by a quest-namespace numeric stat. */
+  waste?: { extraChanceVar?: string; extraAtMin?: number; extraAtMax?: number };
   /** which map the game plays: data/maps/<active>.json (set from the Map Editor's "Play this map") */
   map?: { active: string };
   /** optional so pre-rig data files & test fixtures stay valid; game falls back to the capsule */

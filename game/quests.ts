@@ -22,6 +22,8 @@ export type VarValue = string | number | boolean | null;
 export interface EvalContext {
   needs: Record<string, number>;
   skills: Record<string, number>;
+  /** Static designer-authored traits. Optional for pre-personality fixtures/saves. */
+  personality?: Record<string, number>;
   funds: number;
   time: { hour: number; day: number };
   vars: Record<string, VarValue>;
@@ -38,6 +40,7 @@ export function resolveVar(path: string, ctx: EvalContext): number | VarValue | 
   if (path === 'time.day') return ctx.time.day;
   if (path.startsWith('needs.')) return ctx.needs[path.slice('needs.'.length)];
   if (path.startsWith('skills.')) return ctx.skills[path.slice('skills.'.length)];
+  if (path.startsWith('personality.')) return ctx.personality?.[path.slice('personality.'.length)];
   if (path.startsWith('vars.')) return ctx.vars[path.slice('vars.'.length)];
   const questMatch = /^quests\.(.+)\.state$/.exec(path);
   if (questMatch) return ctx.quests[questMatch[1]];

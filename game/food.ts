@@ -2,7 +2,8 @@
 // AccidentsController owns transient visuals, while this registry decides spawn timing, carried /
 // eating / dropped transitions, completion-only hunger, and in-game-hour perishing.
 
-export type FoodSpawnEvent = 'start' | 'completion';
+/** `arrival` is SimAgent.onActionStart: after the source asset's route reaches its use spot. */
+export type FoodSpawnEvent = 'arrival' | 'completion';
 export type FoodPhase = 'carried' | 'eating' | 'dropped';
 
 export interface FoodConfig { hungerGain: number; perishHours: number; }
@@ -14,10 +15,10 @@ export interface FoodItem extends FoodConfig {
   droppedAtHour?: number;
 }
 
-/** The source-action timing is intentionally explicit: fridge Eat produces immediately, while a
+/** The source-action timing is intentionally explicit: fridge Eat produces on use-spot arrival, while a
  * cooked meal does not exist unless Cook genuinely completes. */
 export function foodAssetForActionEvent(actionId: string, event: FoodSpawnEvent): string | null {
-  if (actionId === 'eat' && event === 'start') return 'snack';
+  if (actionId === 'eat' && event === 'arrival') return 'snack';
   if (actionId === 'cook' && event === 'completion') return 'meal';
   return null;
 }

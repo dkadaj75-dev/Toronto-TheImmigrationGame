@@ -3,7 +3,7 @@
 import {
   accidentModifierContribution, computeAccidentChance, rollAccident,
   footprintRect, rectsOverlap,
-  findAdjacentCell, planAccidentPlacement,
+  findAdjacentCell, findNearestFreeCell, planAccidentPlacement,
   AccidentRegistry, shouldDespawnOnCleanup, resolveTapAssetId, isAutonomyBlocked,
   fireShouldDestroy, spreadShouldRoll, DEFAULT_FIRE_TUNING,
   type AccidentInstanceRecord,
@@ -129,6 +129,8 @@ console.log('accidents.test — findAdjacentCell / planAccidentPlacement (on/adj
   })());
 
   check('no free cell (isFree always false) → null', findAdjacentCell(grid, baseCell, [1, 2], () => false, () => 0) === null);
+  const nearest = findNearestFreeCell(grid, baseCell, (cell) => cell.col === 3 && cell.row === 5);
+  check('nearest-free fallback expands beyond a crowded preferred ring', nearest?.col === 3 && nearest.row === 5);
 
   // every distance-2 neighbor of a 3x3 grid's center cell falls off the grid — a clean way to
   // prove out-of-bounds candidates are rejected (isWalkable already bounds-checks) rather than
@@ -151,6 +153,8 @@ console.log('accidents.test — findAdjacentCell / planAccidentPlacement (on/adj
 
   const fallbackPlan = planAccidentPlacement(adjRisk, [3.5, 3.5], grid, () => false, () => 0);
   check('"adjacent" with no free cell falls back to "on" (§7.3)', fallbackPlan.placement === 'on' && approx(fallbackPlan.pos[0], 3.5) && approx(fallbackPlan.pos[1], 3.5));
+  const distantFallback = planAccidentPlacement(adjRisk, [3.5, 3.5], grid, (cell) => cell.col === 3 && cell.row === 6, () => 0);
+  check('adjacent placement uses nearest-free fallback outside authored range', distantFallback.placement === 'adjacent' && distantFallback.pos[1] === 6.5);
 
   const defaultRangeRisk: AccidentRisk = { accidentId: 'water_puddle', trigger: 'onUse', baseChancePercent: 4, placement: 'adjacent' };
   const defaultPlan = planAccidentPlacement(defaultRangeRisk, [3.5, 3.5], grid, alwaysFree, () => 0);

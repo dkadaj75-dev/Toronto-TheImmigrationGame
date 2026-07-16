@@ -7,9 +7,9 @@ function check(name: string, ok: boolean) {
 }
 
 console.log('food.test — spawn timing');
-check('eat spawns snack at action start', foodAssetForActionEvent('eat', 'start') === 'snack');
+check('eat spawns snack only on source-asset arrival', foodAssetForActionEvent('eat', 'arrival') === 'snack');
 check('eat does not spawn again on completion', foodAssetForActionEvent('eat', 'completion') === null);
-check('cook does not spawn before completion', foodAssetForActionEvent('cook', 'start') === null);
+check('cook does not spawn on source-asset arrival', foodAssetForActionEvent('cook', 'arrival') === null);
 check('cook completion spawns meal', foodAssetForActionEvent('cook', 'completion') === 'meal');
 
 console.log('food.test — carry, interrupt, perish');
