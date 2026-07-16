@@ -1,7 +1,7 @@
 {
   "rent": {
-    "base": 200,
-    "perFloorTile": 2,
+    "base": 150,
+    "perFloorTile": 0.5,
     "byPropertyType": {
       "condo": 100,
       "basement": -50,
@@ -24,7 +24,7 @@
       "perAssetValue": 0.005
     }
   ],
-  "overdueDays": 3,
-  "tooLateDays": 7,
+  "overdueDays": 2,
+  "tooLateDays": 5,
   "negativeGraceDays": 3
 }
