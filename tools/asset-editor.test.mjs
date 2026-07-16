@@ -55,6 +55,12 @@ const { window } = dom;
 const doc = window.document;
 await new Promise((r) => setTimeout(r, 50));
 
+// --- preview live-refresh (B7-1): the module 3D script is inert in jsdom, so spy on the API it
+// exposes. schedulePreview must always hand the CURRENT asset to the preview, and any field edit
+// (via markDirty) must trigger a refresh so footprint/meshFit changes update the grounded preview.
+const previewCalls = [];
+window.AssetPreview = { show: (mesh, asset) => previewCalls.push({ mesh, asset }) };
+
 assert(window.AssetEditor.previewGridSize() === 0.5, 'preview grid reads the map tile size');
 const previewGrid = window.AssetEditor.previewGridSpec();
 assert(previewGrid.size / previewGrid.divisions === condo.gridSize, 'one preview square equals one map tile');
@@ -71,9 +77,12 @@ assert(doc.querySelector('[data-asset-id="tv"] .badge') === null, 'tv has no bad
 // --- couch selected by default; edit price
 assert(doc.querySelector('input[data-path="buyPrice"]').value === '500', 'buy price rendered');
 const price = doc.querySelector('input[data-path="buyPrice"]');
+const nPreviewBefore = previewCalls.length;
 price.value = '650';
 price.dispatchEvent(new window.Event('input', { bubbles: true }));
 assert(!doc.getElementById('save').disabled, 'save enabled after edit');
+assert(previewCalls.length > nPreviewBefore, 'a field edit live-refreshes the preview (markDirty → schedulePreview)');
+assert(previewCalls.at(-1).asset?.id === 'couch', 'preview refresh passes the current asset');
 
 // --- F2 repo priority: sparse number, higher values are seized later
 const survivalImportance = doc.querySelector('input[data-path="survivalImportance"]');

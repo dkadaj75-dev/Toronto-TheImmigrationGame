@@ -110,7 +110,7 @@ async function save() {
   } catch (e) { setStatus(String(e.message || e), 'err'); }
 }
 
-function markDirty() { state.dirty = true; updateSave(); setStatus('unsaved changes'); }
+function markDirty() { state.dirty = true; updateSave(); setStatus('unsaved changes'); schedulePreview(); }
 function updateSave() { document.getElementById('save').disabled = !state.dirty; }
 function setStatus(msg, cls = '') { const s = document.getElementById('status'); s.textContent = msg; s.className = cls; }
 const placedCount = (id) => (state.map?.placedObjects ?? []).filter((p) => p.asset === id).length;
@@ -802,15 +802,14 @@ load();
 <!-- 3D preview — module script processed by Vite dev server; safely ignored in headless tests -->
 <script type="module">
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { classifyMeshPath, createSpriteInstance } from '/game/sprites.ts';
+import { normalizeModelToFootprint, applyMeshFit, loadMeshTemplate } from '/game/world.ts';
 
 let renderer = null, scene, camera, controls, current = null, raf = 0;
 let activeSprite = null; // §7.5: SpriteInstance being previewed — its update() drives GIF frames (real time here, sim time in-game)
 let previewSeq = 0; // staleness token: a slow decode must not clobber a newer show()
 const previewClock = new THREE.Clock();
-const loader = new GLTFLoader();
 
 function ensure(canvas) {
   if (renderer && renderer.domElement === canvas) return true;
@@ -885,28 +884,39 @@ window.AssetPreview = {
         .catch(() => { inst.dispose(); if (msg) msg.textContent = `Could not load ${url} — the file should be at public${url}.`; });
       return;
     }
-    loader.load(
-      url,
-      (gltf) => {
+    // GLB furniture — apply the SAME transforms the game applies (game/world.ts), so the
+    // designer sees the model at its real in-game size, grounded at y=0 on the grid, rather
+    // than the raw GLB centered by its own bounds. loadMeshTemplate caches per URL, so
+    // footprint/meshFit live-edits re-clone cheaply instead of re-fetching.
+    const seq = previewSeq;
+    const def = assetDef && Array.isArray(assetDef.footprint) ? assetDef : { ...(assetDef || {}), footprint: [1, 1] };
+    loadMeshTemplate(url)
+      .then((template) => {
+        if (seq !== previewSeq) return; // superseded by a newer show()
+        const model = template.clone(true);
+        normalizeModelToFootprint(model, def.footprint); // footprint-fit scale + center XZ + ground y=0
+        if (def.wallMounted) { // wall-mounted assets re-center vertically like the game does
+          const wb = new THREE.Box3().setFromObject(model);
+          model.position.y -= wb.getCenter(new THREE.Vector3()).y;
+        }
+        applyMeshFit(model, def.meshFit); // scale / yawOffsetDeg / yOffset corrections
         if (current) scene.remove(current);
-        current = gltf.scene;
-        // center + frame the model, adapting clip planes to its scale
-        const box = new THREE.Box3().setFromObject(current);
-        const size = box.getSize(new THREE.Vector3()).length() || 1;
+        current = model;
+        scene.add(current);
+        // frame the grounded model: orbit its center, keep the y=0 grid in view
+        const box = new THREE.Box3().setFromObject(model);
+        const worldSize = box.getSize(new THREE.Vector3());
+        const size = worldSize.length() || 1;
         const center = box.getCenter(new THREE.Vector3());
-        current.position.sub(center);
         camera.near = Math.max(size / 100, 0.001);
         camera.far = size * 20;
         camera.updateProjectionMatrix();
-        camera.position.set(1, 0.7, 1.2).setLength(size * 1.2);
-        controls.target.set(0, 0, 0);
+        camera.position.copy(center).add(new THREE.Vector3(1, 0.7, 1.2).setLength(size * 1.2));
+        controls.target.copy(center);
         controls.update();
-        scene.add(current);
-        if (msg) msg.textContent = `${url} — bounds ${box.getSize(new THREE.Vector3()).toArray().map((v) => v.toFixed(2)).join(' × ')}`;
-      },
-      undefined,
-      () => { if (msg) msg.textContent = `Could not load ${url} — the file should be at public${url} (e.g. public/models/bed.glb → "/models/bed.glb").`; },
-    );
+        if (msg) msg.textContent = `${url} — in-game size ${worldSize.toArray().map((v) => v.toFixed(2)).join(' × ')} m · grounded at y=0`;
+      })
+      .catch(() => { if (msg) msg.textContent = `Could not load ${url} — the file should be at public${url} (e.g. public/models/bed.glb → "/models/bed.glb").`; });
   },
 };
 </script>
