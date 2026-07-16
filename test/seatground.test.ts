@@ -90,6 +90,50 @@ console.log('seatground.test — findSeatFor radius cutoff');
   check('seatSearchRadius is tuning-driven (3m rejected at radius 2)', seat4 === null);
 }
 
+console.log('seatground.test — sit ON a seat: the target is its own seat (B10 bug fix)');
+{
+  // Ordering a seat-aware "Sit" on the sofa itself must resolve the sofa as the seat — it used
+  // to return null (the loop excludes `target`), flagging groundSit and sitting the sim on the
+  // floor at the walk-up spot beside the furniture.
+  const { world } = makeWorld([10, 7]);
+  const sofa = world.children.find((o) => o.userData.assetId === 'sofa')!;
+  const seat = findSeatFor(world, gameData(), sofa);
+  check('seat-aware action on a seatTarget resolves the target itself', seat === sofa);
+
+  // ...even when another seat sits in front of it (must NOT get teleported to the other chair)
+  const { world: world2 } = makeWorld([10, 7]);
+  const other = new THREE.Group();
+  other.position.set(10, 0, 5); // 2m "in front" (sofa rotDeg 0 → faces +Z... either way: target wins)
+  other.userData.assetId = 'sofa';
+  world2.add(other);
+  const sofa2 = world2.children.find((o) => o !== other && o.userData.assetId === 'sofa')!;
+  check('target seat wins over any other nearby seat', findSeatFor(world2, gameData(), sofa2) === sofa2);
+
+  // non-seat targets (TV) are unaffected — still search for a seat in front
+  const { world: world3, tv: tv3 } = makeWorld([10, 7]);
+  const seat3 = findSeatFor(world3, gameData(), tv3);
+  check('non-seatTarget target still searches for a seat', seat3 !== null && seat3.userData.assetId === 'sofa');
+}
+{
+  // End-to-end: ordering the seat-aware Sit on the sofa perches the sim ON the sofa (usePoseFor
+  // footprint center + tuning sitHeight), not groundSit at the approach spot.
+  const grid = bakeNavGrid(map);
+  const { world } = makeWorld([10, 7]);
+  const sofa = world.children.find((o) => o.userData.assetId === 'sofa')!;
+  const obj = new THREE.Group(); obj.position.set(1, 0, 1);
+  const agent = new SimAgent(obj, grid, tuning, new Map<string, AssetDef>([['tv', tvDef], ['sofa', sofaDef]]));
+  const sitAction: ActionDef = {
+    id: 'sit', name: 'Sit', needGains: { comfort: 1 }, skillGains: {}, animation: 'sit_idle',
+    autonomyEligible: true, primaryNeed: 'comfort', seatAware: true,
+  };
+  const seat = findSeatFor(world, gameData(), sofa);
+  agent.orderAction(sitAction, sofa, seat, sofaDef, sitAction.seatAware);
+  for (let i = 0; i < 600 && !agent.current; i++) agent.update(1 / 30);
+  check('sit on sofa → groundSit not set', !!agent.current && !agent.current!.groundSit);
+  check('sit on sofa → sim perches at the sofa position', Math.abs(obj.position.x - 10) < 1e-6 && Math.abs(obj.position.z - 7) < 1e-6, `${obj.position.x},${obj.position.z}`);
+  check('sit on sofa → sim perches at tuning sitHeight', Math.abs(obj.position.y - 0.4) < 1e-6, `${obj.position.y}`);
+}
+
 console.log('seatground.test — orderAction groundSit decision');
 const watchTvAction: ActionDef = {
   id: 'watch_tv', name: 'Watch TV', needGains: { fun: 2.5 }, skillGains: {}, animation: 'sit_idle',

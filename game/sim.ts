@@ -43,6 +43,13 @@ export function findSeatFor(world: THREE.Group, data: GameData, target: THREE.Ob
   const assetsById = new Map(data.assets.assets.map((a) => [a.id, a]));
   const targetDef = assetsById.get(target.userData?.assetId as string);
   if (!targetDef) return null;
+  // A seat-aware action ordered ON a seat itself (Sit on the sofa/armchair): the target IS the
+  // seat. Without this, the candidate loop below excludes `target` and demands other seats sit
+  // in the target's OWN front half-space — usually none, so the action fell into the groundSit
+  // fallback and the sim sat on the floor at the walk-up spot beside the furniture (or, worse,
+  // on some other chair that happened to face it). Watch-TV-style targets (TV, fridge) are not
+  // seatTarget, so their seat search is unchanged.
+  if (targetDef.seatTarget) return target;
   const targetInstance = facingInstanceOf(target);
   const viewPoint = viewingPointFor(targetInstance, targetDef, data.tuning);
   const searchRadius = data.tuning.interaction?.seatSearchRadius ?? 5;
