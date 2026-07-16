@@ -183,6 +183,11 @@
     "yOffsetMeters": 0.25,
     "_source": "ROADMAP_NEXT B6-16. Projected HTML feedback above the sim; duration is simulation seconds, rise is screen pixels, yOffset is meters above character height."
   },
+  "food": {
+    "cookHungerAtSkill0": 0.6,
+    "cookHungerAtSkillMax": 1.5,
+    "_source": "ROADMAP_NEXT B7-2: a COOKED meal's hunger fulfillment scales with cooking skill. effectiveHungerGain = base hungerGain (data/assets.json 'meal' = 45) * lerp(cookHungerAtSkill0, cookHungerAtSkillMax, skills.cooking/max). Novice (cooking 0) fills 60% (27), master (cooking at max 100) fills 150% (67.5, clamped by need cap). Snacks (fridge) unaffected."
+  },
   "camera": {
     "minZoom": 4,
     "maxZoom": 18,

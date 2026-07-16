@@ -480,6 +480,11 @@ export interface TuningData {
   starvation?: { countdownSeconds?: number; collapseSeconds?: number; recoveryThreshold?: number; message?: string };
   /** B6-16 projected HTML feedback above the sim. */
   feedback?: { durationSeconds?: number; risePixels?: number; yOffsetMeters?: number };
+  /** ROADMAP_NEXT B7-2: a COOKED meal's hunger fulfillment scales with cooking skill (snacks
+   *  unaffected). effectiveHungerGain = base * lerp(cookHungerAtSkill0, cookHungerAtSkillMax,
+   *  skills.cooking/max). Optional so old fixtures stay valid; game/food.ts + main.ts default to
+   *  {0.6, 1.5} when absent (novice fills 60% of the meal's base, master 150%). */
+  food?: { cookHungerAtSkill0?: number; cookHungerAtSkillMax?: number };
 }
 
 export interface GameData {

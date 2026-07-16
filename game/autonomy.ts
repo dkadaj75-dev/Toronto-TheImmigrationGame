@@ -9,6 +9,7 @@ import type * as THREE from 'three';
 import type { GameData, ActionDef, AssetDef } from './data';
 import type { SimAgent } from './sim';
 import { findSeatFor } from './sim';
+import { firstLegSeatAware } from './food';
 import type { SimStats } from './stats';
 import type { AccidentsController } from './accidents';
 import { isActionAvailable, type EvalContext } from './quests';
@@ -93,8 +94,11 @@ export class Autonomy {
 
     // nearest reachable wins — orderAction() path-checks, so unreachable ones are skipped
     for (const c of candidates) {
-      const seat = c.action.seatAware ? findSeatFor(this.getWorld(), data, c.obj) : null;
-      if (this.agent.orderAction(c.action, c.obj, seat, c.def, c.action.seatAware)) {
+      // ROADMAP_NEXT B7-4: food-source actions (fridge Eat / stove Cook) defer their seat to the
+      // carry/eat second leg — the first leg must reach the source (see game/food.ts firstLegSeatAware).
+      const legSeatAware = firstLegSeatAware(c.action);
+      const seat = legSeatAware ? findSeatFor(this.getWorld(), data, c.obj) : null;
+      if (this.agent.orderAction(c.action, c.obj, seat, c.def, legSeatAware)) {
         return { action: c.action, target: c.obj };
       }
     }

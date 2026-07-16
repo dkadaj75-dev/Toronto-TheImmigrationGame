@@ -29,7 +29,7 @@ import { createProgressBarInstance, type ProgressBarInstance } from './progressb
 import { computeDurationSeconds, isDurationComplete } from './duration';
 import { AudioManager, loopSoundFor } from './audio';
 import { initBladderFailureState, checkBladderFailure, rearmBladderFailure } from './bladder';
-import { FoodRegistry, foodAssetForActionEvent } from './food';
+import { FoodRegistry, foodAssetForActionEvent, firstLegSeatAware, cookedMealHungerGain } from './food';
 import { initEnergyCollapseState, StarvationTracker, tickEnergyCollapse } from './survival';
 import { formatMoneyChange, formatSkillUp, skillLevelUps } from './feedback';
 import { AssetStateRegistry, isAssetStateActionAvailable, isStatefulAsset, powerStateForAction } from './assetstate';
@@ -611,13 +611,25 @@ async function start() {
   /** Starts B4-2's second leg using the same bare main.ts orchestration as B3-5 carry-to-garbage.
    *  The source action has already arrived at the fridge/stove; the transient is hidden while
    *  carried, then an internal duration action reuses SimAgent's seat pose / sit_ground fallback. */
-  const startCarriedFood = (assetId: string) => {
+  const startCarriedFood = (assetId: string, cooked = false) => {
     const def = data.assets.assets.find((a) => a.id === assetId && a.category === 'transient');
     if (!def?.food) return;
     const pos: [number, number] = [sim.position.x, sim.position.z];
     const rec = accidents.spawnTransient(assetId, pos, THREE.MathUtils.radToDeg(sim.rotation.y), simClockSeconds);
     if (!rec) return;
-    food.startCarrying(rec.key, assetId, def.food, pos);
+    // ROADMAP_NEXT B7-2: a COOKED meal's hunger fill scales with cooking skill (snacks unaffected).
+    let foodConfig = def.food;
+    if (cooked) {
+      const ft = data.tuning.food;
+      const cookingSkill = stats.skills.get('cooking') ?? 0;
+      const skillMax = data.stats.skills.find((s) => s.id === 'cooking')?.max ?? 100;
+      const gain = cookedMealHungerGain(def.food.hungerGain, cookingSkill, skillMax, {
+        cookHungerAtSkill0: ft?.cookHungerAtSkill0 ?? 0.6,
+        cookHungerAtSkillMax: ft?.cookHungerAtSkillMax ?? 1.5,
+      });
+      foodConfig = { ...def.food, hungerGain: gain };
+    }
+    food.startCarrying(rec.key, assetId, foodConfig, pos);
     accidents.setTransientPlacement(rec.key, pos, false);
     const target = accidents.groupFor(rec.key);
     const eatDef = data.interactions.actions.find((a) => a.id === 'eat');
@@ -790,7 +802,7 @@ async function start() {
     // `duration` timer running out in the render loop) — see sim.ts's stopAction doc comment.
     if (!completed) return;
     const completedFoodAssetId = foodAssetForActionEvent(a.action.id, 'completion');
-    if (completedFoodAssetId) { startCarriedFood(completedFoodAssetId); return; }
+    if (completedFoodAssetId) { startCarriedFood(completedFoodAssetId, true); return; }
     // §7.20 V3: the short duration on leave_for_work finishes through the ordinary completed-only
     // action path. Re-check the live job/time here because the shift may have ended during the walk
     // from menu-open to the exterior door.
@@ -930,8 +942,12 @@ async function start() {
             }
             autonomy.notePlayerCommand();
             cancelCarry(); // ROADMAP_NEXT B3-5: a fresh order interrupts any in-progress carry walk
-            const seat = action.seatAware ? findSeatFor(world, data, target) : null;
-            if (agent.orderAction(action, target, seat, resolvedAsset, action.seatAware)) cue.showAt(target.position.x, target.position.z);
+            // ROADMAP_NEXT B7-4: a food-source action (fridge Eat / stove Cook) is seatAware but its
+            // FIRST leg must reach the source — seat routing is deferred to the carry/eat second leg
+            // (startCarriedFood). firstLegSeatAware encodes that so the sim never skips the fridge.
+            const legSeatAware = firstLegSeatAware(action);
+            const seat = legSeatAware ? findSeatFor(world, data, target) : null;
+            if (agent.orderAction(action, target, seat, resolvedAsset, legSeatAware)) cue.showAt(target.position.x, target.position.z);
             else console.log('no path to object', resolvedAsset.id);
           }, quests.funds, currencyName(), hit.screen);
           return; // object tap opens the menu; don't also walk to the tap point

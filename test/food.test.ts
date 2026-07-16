@@ -1,4 +1,4 @@
-import { FoodRegistry, foodAssetForActionEvent } from '../game/food';
+import { FoodRegistry, foodAssetForActionEvent, actionSpawnsCarriedFood, firstLegSeatAware, cookedMealHungerGain } from '../game/food';
 
 let passed = 0;
 function check(name: string, ok: boolean) {
@@ -34,5 +34,28 @@ food.startCarrying('snack#2', 'snack', { hungerGain: 18, perishHours: 3 }, [0, 0
 food.beginEating('snack#2');
 food.interruptActive([9, 9], 20);
 check('interrupted eating grants no hunger', food.completeEating('snack#2', 25) === null);
+
+console.log('food.test — B7-4 two-leg order decision (walk to fridge BEFORE carrying to a seat)');
+// The regression: `eat` is seatAware, so the old order sites resolved a seat up front and routed the
+// sim straight to a chair near the fridge — skipping the fridge, spawning the snack at the seat.
+check('eat is a carried-food source action', actionSpawnsCarriedFood('eat') === true);
+check('cook is a carried-food source action', actionSpawnsCarriedFood('cook') === true);
+check('non-food actions do not carry food', actionSpawnsCarriedFood('watch_tv') === false && actionSpawnsCarriedFood('sit') === false);
+// The two-leg decision: a food-source action's FIRST leg is NOT seat-aware even though the action is
+// seatAware — the seat is chosen only for the carry/eat second leg. This is what stops the fridge skip.
+check('fridge Eat first leg walks to the source, not a seat', firstLegSeatAware({ id: 'eat', seatAware: true }) === false);
+check('stove Cook first leg walks to the source, not a seat', firstLegSeatAware({ id: 'cook', seatAware: true }) === false);
+// Ordinary seat-aware actions still sit in front of their target on the first (only) leg.
+check('watch TV first leg stays seat-aware', firstLegSeatAware({ id: 'watch_tv', seatAware: true }) === true);
+check('sit first leg stays seat-aware', firstLegSeatAware({ id: 'sit', seatAware: true }) === true);
+check('a non-seat-aware action never becomes seat-aware', firstLegSeatAware({ id: 'shower', seatAware: false }) === false);
+
+console.log('food.test — B7-2 cooked-meal hunger scales with cooking skill');
+const ct = { cookHungerAtSkill0: 0.6, cookHungerAtSkillMax: 1.5 };
+check('novice (skill 0) fills 60% of the base meal', Math.abs(cookedMealHungerGain(45, 0, 100, ct) - 27) < 1e-9);
+check('master (skill at max) fills 150% of the base meal', Math.abs(cookedMealHungerGain(45, 100, 100, ct) - 67.5) < 1e-9);
+check('mid skill lerps linearly (skill 50/100 → factor 1.05)', Math.abs(cookedMealHungerGain(45, 50, 100, ct) - 45 * 1.05) < 1e-9);
+check('skill above max clamps to the max factor', Math.abs(cookedMealHungerGain(45, 250, 100, ct) - 67.5) < 1e-9);
+check('zero skillMax degrades to the skill-0 factor (no divide-by-zero)', Math.abs(cookedMealHungerGain(45, 5, 0, ct) - 27) < 1e-9);
 
 console.log(`food.test: ${passed} passed`);
