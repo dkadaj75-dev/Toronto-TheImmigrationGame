@@ -120,3 +120,13 @@ Implemented: pure carried/dropped/perishing food lifecycle; snack-on-Eat-start a
 - Eat from fridge: sim takes a snack (food transient) and carries it to a seat/table/wherever, eats there. Interrupt → food left at that spot, perishes after a few hours (tunable) → becomes garbage/vanishes.
 - Cook at stove: on cook completion, sim takes the cooked dish (more fulfilling food transient) and eats it same way.
 - Both eat/cook actions COST money (per-action cost field), shown in the action menu label before selecting (e.g. "Eat (§5)"); blocked with feedback if unaffordable.
+
+---
+
+# Batch 5 — 2026-07-16
+
+## B5-1. Non-linear skill growth
+Skill gains currently ~linear. Make higher levels slower: gain scales down as the skill approaches its max (e.g. effectiveGain = baseGain * (1 - level/max)^curveExp, or a tunable curve). 90→100 much harder than 10→40. Tunable curve param(s) in tuning (global or per-skill). Keep data-driven; find where skill gains apply (game/stats.ts / duration / action gains).
+
+## B5-2. Finance system + tool + credit score (BIG — locked design in PROJECT_CONTEXT §7.24)
+Finance Editor tool + formula-driven bills/rent, debt/negative-balance grace, repo-man asset seizure (message-only), game-over on unpayable debt, credit score (phone-checkable, gates jobs/rentals, higher score = longer debt tolerance but decays). See §7.24.

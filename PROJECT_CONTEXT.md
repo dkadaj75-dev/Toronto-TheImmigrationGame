@@ -535,3 +535,19 @@ The advisory validation panel never blocks saving and reports unknown condition 
 - Pure `game/food.ts` owns the lifecycle and exact timing: Eat spawns `snack` at action start; Cook spawns `meal` only from the completed-only `onActionStop` branch; food moves carried → eating → consumed, or carried/eating → dropped on interrupt. Hunger is applied once on eating completion only. Dropped food ages on the monotonic in-game-hour clock and despawns at `perishHours`.
 - Runtime orchestration in `game/main.ts` deliberately reuses §7.15 B3-5's main-owned second-leg pattern rather than adding multi-leg state to `SimAgent`: the food transient is spawned through `AccidentsController.spawnTransient`, hidden while carried/eaten, and the sim is routed with the existing `orderAction`/`goTo` machinery to the nearest live `seatTarget`; no seat uses the existing `groundSit`/`sit_ground` fallback. A redirect, panic, bladder failure, buy-mode stop, or eating cancel drops the same transient at the sim's exact position and starts its perish clock. Arrival begins a fixed short Eat duration (the shipped Eat action's 5 seconds); completion consumes the transient, applies its food hunger value, and runs Eat's existing dirty-dishes waste flow.
 - `test/food.test.ts` headlessly covers source-action spawn timing, drop-on-interrupt position/state, inclusive perish timing, and completion-only/clamped hunger gain. Interaction/Asset Editor suites cover cost and food-field round trips.
+
+## 7.24 Finance / bills / credit — locked design (B5-2, 2026-07-16)
+
+Extends the bills system (§7.22) into a full economy. Build order: F1 formula bills+rent + Finance Editor, F2 debt/repo/game-over, F3 credit score.
+
+### F1 — formula-driven bills + Finance Editor (tools/finance.html)
+- data/finance.json: `{ rent: { base, perFloorTile, byPropertyType: {condo,basement,townhouse,house,penthouse} }, bills: [{ id, name, base, perAssetValue }], overdueDays, tooLateDays, negativeGraceDays }`. Bills amount = base + perAssetValue * (Σ buyPrice of placed+owned assets in the condo); rent = base + perFloorTile*floorTileCount + byPropertyType[map.propertyType]. `map.propertyType` field (default condo). Replaces §7.22's flat bills.json amounts (keep bills.json for the LIST; amounts computed). All math tunable in the tool.
+- Finance Editor: edit the formula constants, property-type table, overdue/too-late/grace day thresholds, live-preview the computed rent/bills against the current map+assets. nav.js entry.
+
+### F2 — debt, repo man, game over
+- Unpaid past `overdueDays` → overdue (flag; feeds credit F3). Funds may go NEGATIVE (paying anyway / auto-debit) up to `negativeGraceDays`. Past `tooLateDays` while in debt: REPO event — no mesh/character, a message overlay listing seized assets. Seize logic: sell (remove via buymode overlay destroy/sold path) lowest-survival-importance assets first until debt covered. `AssetDef.survivalImportance?: number` (higher = seized last; bed/fridge/stove high, decor low; Asset Editor field). If seizing everything still can't cover debt → GAME OVER (reuse §7.20 overlay).
+- Runtime FinanceState serializable (outstanding, overdueSince, debt).
+
+### F3 — credit score
+- Score 300–900 (tunable range), start low (immigrant, e.g. 500). Impacted by: on-time payment (+), overdue/debt (−), repo (big −). Phone gains a Credit section (score + simple history/trend). `tuning.credit`. Higher score → longer allowed debt window (scale negativeGraceDays by score) BUT sitting in debt decays score over time.
+- Jobs (data/jobs.json) + future rentals gain optional `minCreditScore` requirement (checked like visa/skill reqs). Career/Finance Editor exposes it.
