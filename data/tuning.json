@@ -5,6 +5,10 @@
     "activityGainTickSeconds": 2,
     "_source": "roadmap §5 — matches Unreal prototype exactly"
   },
+  "skills": {
+    "growthCurveExp": 1.5,
+    "_source": "ROADMAP_NEXT B5-1: positive skill gains are multiplied by (1 - level/max)^growthCurveExp; 0 restores linear gains, higher values slow growth near max."
+  },
   "autonomy": {
     "seekBelowThreshold": 30,
     "stopAtThreshold": 95,

@@ -324,6 +324,9 @@ export interface MarkerTuning {
 
 export interface TuningData {
   simulation: { needsDecayTickSeconds: number; activityGainTickSeconds: number };
+  /** B5-1 global positive skill-gain taper. 0 preserves linear gains; larger values make gains
+   *  progressively harder near each skill's max. Optional for old fixtures; stats.ts defaults 1.5. */
+  skills?: { growthCurveExp?: number };
   autonomy: { seekBelowThreshold: number; stopAtThreshold: number; postPlayerCommandCooldownSeconds: number };
   time: { secondsPerGameDay: number; nightStartHour: number; nightEndHour: number };
   economy: { startingFunds: number; currencyName: string };

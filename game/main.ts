@@ -199,7 +199,7 @@ async function start() {
     }
   };
 
-  const stats = new SimStats(data.stats);
+  const stats = new SimStats(data.stats, data.tuning.skills?.growthCurveExp ?? 1.5);
   const hud = new Hud(stats);
   hud.setPhoneIcon(data.tuning.phone?.icon ?? '/icons/Smartphone.png');
 
@@ -967,7 +967,7 @@ async function start() {
     // keep the music channel pointed at the right context (its own track/playlist content may
     // have changed even without a context switch — setMusicContext no-ops when nothing changed)
     audio.setMusicContext(buyMode.active ? 'buymode' : 'map', data.map);
-    stats.retune(data.stats);
+    stats.retune(data.stats, data.tuning.skills?.growthCurveExp ?? 1.5);
     hud.rebuildBars();
     applyEnvironment();
     quests.retune(data.quests, data.simstate); // definitions only — runtime quest/var state is untouched

@@ -5,6 +5,16 @@
 
 import type { StatsData, ActionDef, NeedDef, SkillDef, PersonalityDef } from './data';
 
+/** B5-1: positive practice gains taper as a skill approaches its max. Losses/decay are returned
+ *  untouched; exponent 0 preserves the previous linear gain, except that a skill already at max
+ *  can never gain further. */
+export function scaleSkillGain(rawDelta: number, level: number, max: number, curveExp = 1.5): number {
+  if (rawDelta <= 0) return rawDelta;
+  if (max <= 0 || level >= max) return 0;
+  const ratio = clamp(level / max, 0, 1);
+  return rawDelta * Math.pow(1 - ratio, Math.max(0, curveExp));
+}
+
 export class SimStats {
   needs = new Map<string, number>();
   skills = new Map<string, number>();
@@ -15,17 +25,20 @@ export class SimStats {
    *  decision) read this map directly by id. */
   personality = new Map<string, number>();
   private defs: StatsData;
+  private growthCurveExp: number;
 
-  constructor(defs: StatsData) {
+  constructor(defs: StatsData, growthCurveExp = 1.5) {
     this.defs = defs;
+    this.growthCurveExp = growthCurveExp;
     for (const n of defs.needs) this.needs.set(n.id, n.default);
     for (const s of defs.skills) if (s.enabled !== false) this.skills.set(s.id, s.default);
     for (const p of defs.personality ?? []) this.personality.set(p.id, p.default);
   }
 
   /** Hot-reload: adopt new definitions, keep current values, add any new stats at their default. */
-  retune(defs: StatsData) {
+  retune(defs: StatsData, growthCurveExp = 1.5) {
     this.defs = defs;
+    this.growthCurveExp = growthCurveExp;
     for (const n of defs.needs) if (!this.needs.has(n.id)) this.needs.set(n.id, n.default);
     for (const s of defs.skills) if (s.enabled !== false && !this.skills.has(s.id)) this.skills.set(s.id, s.default);
     for (const p of defs.personality ?? []) if (!this.personality.has(p.id)) this.personality.set(p.id, p.default);
@@ -54,7 +67,8 @@ export class SimStats {
       const v = this.skills.get(skillId);
       if (v === undefined) continue;
       const max = this.defs.skills.find((s) => s.id === skillId)?.max ?? 100;
-      this.skills.set(skillId, clamp(v + gain, 0, max));
+      const effectiveGain = scaleSkillGain(gain, v, max, this.growthCurveExp);
+      this.skills.set(skillId, clamp(v + effectiveGain, 0, max));
     }
   }
 

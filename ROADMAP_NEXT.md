@@ -125,8 +125,10 @@ Implemented: pure carried/dropped/perishing food lifecycle; snack-on-Eat-start a
 
 # Batch 5 — 2026-07-16
 
-## B5-1. Non-linear skill growth
+## B5-1. Non-linear skill growth — ✅ DONE 2026-07-16
 Skill gains currently ~linear. Make higher levels slower: gain scales down as the skill approaches its max (e.g. effectiveGain = baseGain * (1 - level/max)^curveExp, or a tunable curve). 90→100 much harder than 10→40. Tunable curve param(s) in tuning (global or per-skill). Keep data-driven; find where skill gains apply (game/stats.ts / duration / action gains).
+
+Implemented at the single `SimStats.applyGains` chokepoint with pure/tested `scaleSkillGain`: positive deltas use the global hot-reloadable `tuning.skills.growthCurveExp` (default 1.5), exponent 0 preserves linear gains, max blocks gains, and negative deltas remain untouched.
 
 ## B5-2. Finance system + tool + credit score (BIG — locked design in PROJECT_CONTEXT §7.24)
 Finance Editor tool + formula-driven bills/rent, debt/negative-balance grace, repo-man asset seizure (message-only), game-over on unpayable debt, credit score (phone-checkable, gates jobs/rentals, higher score = longer debt tolerance but decays). See §7.24.
