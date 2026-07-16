@@ -30,6 +30,13 @@ const interactions = {
     { id: 'watch_tv', name: 'Watch TV', needGains: { fun: 5 }, skillGains: { english: 0.1 }, animation: 'sit', autonomyEligible: true, primaryNeed: 'fun', seatAware: true },
   ],
 };
+const loading = {
+  phrases: ['Loading visa status…', 'Going through customs…'],
+  phraseIntervalSeconds: 2.5,
+  music: 'sounds/loading.mp3',
+  background: '',
+  bar: { fillColor: '#9fd08c', trackColor: '#313b50', height: 14 },
+};
 
 const puts = {};
 const fetchMock = async (url, opts = {}) => {
@@ -38,7 +45,7 @@ const fetchMock = async (url, opts = {}) => {
     puts[file] = JSON.parse(opts.body);
     return { ok: true, status: 200, json: async () => ({}) };
   }
-  const body = { 'tuning.json': tuning, 'stats.json': stats, 'interactions.json': interactions }[file];
+  const body = { 'tuning.json': tuning, 'stats.json': stats, 'interactions.json': interactions, 'loading.json': loading }[file];
   return { ok: !!body, status: body ? 200 : 404, json: async () => structuredClone(body) };
 };
 
@@ -59,6 +66,20 @@ const walkSpeed = doc.querySelector('input[data-path="movement.walkSpeed"]');
 assert(walkSpeed && walkSpeed.value === '2', 'walkSpeed rendered with value 2');
 assert(doc.querySelector('input[data-path="need.environment.decayPerTick"]') === null, 'computed need hides decay field');
 assert(doc.getElementById('save').disabled, 'save disabled while clean');
+
+// --- dedicated loading card: edit presentation, add/remove phrases, normalize Windows public path
+assert(doc.querySelector('section[data-file="loading.json"]'), 'loading screen section rendered');
+const loadingBg = doc.querySelector('input[data-path="loading.background"]');
+loadingBg.value = 'D:\\Game\\public\\images\\loading.jpg';
+loadingBg.dispatchEvent(new window.Event('input', { bubbles: true }));
+const loadingFill = doc.querySelector('input[data-path="loading.bar.fillColor"]');
+loadingFill.value = '#ff8800';
+loadingFill.dispatchEvent(new window.Event('input', { bubbles: true }));
+doc.querySelector('[data-action="remove-loading-phrase"]').click();
+doc.querySelector('[data-action="add-loading-phrase"]').click();
+const addedPhrase = doc.querySelector('input[data-path="loading.phrase.1"]');
+addedPhrase.value = 'Calling immigration…';
+addedPhrase.dispatchEvent(new window.Event('input', { bubbles: true }));
 
 // --- edit a tuning number → dirty + PUT payload contains it
 walkSpeed.value = '3.5';
@@ -91,6 +112,9 @@ await new Promise((r) => setTimeout(r, 50));
 assert(puts['tuning.json']?.movement.walkSpeed === 3.5, 'PUT tuning.json carries new walkSpeed');
 assert(puts['stats.json']?.needs[0].decayPerTick === 0.8, 'PUT stats.json carries new decay');
 assert(puts['interactions.json']?.actions[0].needGains.hunger === -2, 'PUT adds hunger gain key');
+assert(puts['loading.json']?.background === '/images/loading.jpg', 'PUT normalizes pasted Windows public path');
+assert(puts['loading.json']?.bar.fillColor === '#ff8800', 'PUT carries loading bar color');
+assert(JSON.stringify(puts['loading.json']?.phrases) === JSON.stringify(['Going through customs…', 'Calling immigration…']), 'PUT carries phrase add/remove/edit');
 assert(!('english' in puts['interactions.json'].actions[0].skillGains), 'PUT removed blanked skill gain key');
 assert(puts['interactions.json'].actions[0].needGains.fun === 5, 'untouched gain preserved');
 assert(doc.getElementById('save').disabled, 'save disabled again after saving');

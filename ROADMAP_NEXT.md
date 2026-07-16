@@ -185,4 +185,5 @@ Projected crisp HTML text rises above the sim for integer skill-level crossings 
 `tuning.work.departureWindowHours` gates manual/door arrival, reminders name the deadline, and misses register exactly once when the window closes (including overnight shifts).
 ## B7-6. Autonomy: sim may leave for work by itself (happiness/energy-driven, tunable), even waking from sleep — ✅ DONE 2026-07-16
 Deterministic inclusive happiness+energy thresholds auto-order the exterior-door action through the normal cancel path; recent player commands retain priority.
-## B7-7. Loading screen: blocks until assets loaded (sim time frozen), customizable funny phrases in tools ("Going through customs"...), own music, customizable bar + background image
+## B7-7. Loading screen: blocks until assets loaded (sim time frozen), customizable funny phrases in tools ("Going through customs"...), own music, customizable bar + background image — ✅ DONE 2026-07-16
+Boot now seals and awaits a real started/settled asset tracker (fallbacks count as settled), freezes `sdt`, and presents boot-only `data/loading.json` through a dedicated Tuning Editor card with phrases, music/background paths, and bar styling.

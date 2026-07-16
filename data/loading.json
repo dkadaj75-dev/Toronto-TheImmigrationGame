@@ -1,0 +1,20 @@
+{
+  "phrases": [
+    "Loading visa status…",
+    "Going through customs…",
+    "Bribing the landlord…",
+    "Checking the fridge for leftovers…",
+    "Explaining the credit score…",
+    "Assembling suspiciously flat furniture…",
+    "Teaching the shower some manners…",
+    "Hiding the repo man's clipboard…"
+  ],
+  "phraseIntervalSeconds": 2.5,
+  "music": "sounds/music_buymode.mp3",
+  "background": "",
+  "bar": {
+    "fillColor": "#9fd08c",
+    "trackColor": "#313b50",
+    "height": 14
+  }
+}

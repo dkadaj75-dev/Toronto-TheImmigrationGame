@@ -252,9 +252,9 @@ function cachedDecodeGifFrames(url: string): Promise<{ frames: HTMLCanvasElement
  *  and reports failures there; this is purely a "get a head start" call). No-op for a non-gif URL
  *  or when `ImageDecoder` isn't available — callers should gate on the same conditions
  *  `createSpriteInstance` itself uses (see `warmSpriteCache` below, world.ts's one caller). */
-export function preloadGif(url: string): void {
-  if (!isGifPath(url) || typeof (globalThis as { ImageDecoder?: unknown }).ImageDecoder === 'undefined') return;
-  cachedDecodeGifFrames(url).catch(() => {}); // failure is handled by the real decode attempt later
+export function preloadGif(url: string): Promise<void> {
+  if (!isGifPath(url) || typeof (globalThis as { ImageDecoder?: unknown }).ImageDecoder === 'undefined') return Promise.resolve();
+  return cachedDecodeGifFrames(url).then(() => undefined).catch(() => {}); // failure is handled by the real decode attempt later
 }
 
 async function decodeGifFrames(url: string): Promise<{ frames: HTMLCanvasElement[]; delaysMs: number[] }> {

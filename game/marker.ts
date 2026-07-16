@@ -36,7 +36,7 @@
 import * as THREE from 'three';
 import type { AssetDef, CharacterTuning, MarkerTuning } from './data';
 import { classifyMeshPath } from './sprites';
-import { attachMesh } from './world';
+import { attachMesh, type TrackInitialLoad } from './world';
 
 // ==================================================================== pure logic (headless-tested)
 
@@ -173,6 +173,7 @@ export function createMarkerInstance(
   scene: THREE.Object3D,
   characterRoot: THREE.Object3D,
   character: CharacterTuning,
+  trackInitialLoad?: TrackInitialLoad,
 ): MarkerInstance {
   const pivot = new THREE.Group();
   pivot.name = 'overhead-marker';
@@ -190,10 +191,11 @@ export function createMarkerInstance(
     visual.clear();
     visual.add(buildDefaultOctahedron()); // instant stand-in — same philosophy as every other mesh call site
     if (classifyMarkerMesh(mesh) !== 'default') {
-      attachMesh(visual, markerAssetDef(mesh)); // async swap; attachMesh itself keeps the stand-in on any failure
+      attachMesh(visual, markerAssetDef(mesh), { trackInitialLoad }); // initial boot can join B7-7's gate
     }
   };
   rebuild(resolveMarkerConfig(character.marker).mesh);
+  trackInitialLoad = undefined; // later hot-retune marker swaps are never part of the sealed boot gate
 
   return {
     pivot,

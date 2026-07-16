@@ -507,6 +507,16 @@ export interface GameData {
   bills: BillsData;
   finance: FinanceData;
   happiness: HappinessData;
+  loading: LoadingConfig;
+}
+
+/** B7-7 boot-only presentation. Unlike tuning.json this file is intentionally not hot-reloaded. */
+export interface LoadingConfig {
+  phrases: string[];
+  phraseIntervalSeconds: number;
+  music?: string;
+  background?: string;
+  bar?: { fillColor?: string; trackColor?: string; height?: number };
 }
 
 const FILES = {
@@ -521,6 +531,7 @@ const FILES = {
   bills: '/data/bills.json',
   finance: '/data/finance.json',
   happiness: '/data/happiness.json',
+  loading: '/data/loading.json',
 } as const;
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -533,7 +544,7 @@ export async function loadAll(): Promise<GameData> {
   // tuning first — it names the active map (tuning.map.active, default "condo")
   const tuning = await fetchJson<TuningData>(FILES.tuning);
   const mapFile = `/data/maps/${tuning.map?.active ?? 'condo'}.json`;
-  const [stats, interactions, assets, map, simstate, quests, visas, jobs, bills, finance, happiness] = await Promise.all([
+  const [stats, interactions, assets, map, simstate, quests, visas, jobs, bills, finance, happiness, loading] = await Promise.all([
     fetchJson<StatsData>(FILES.stats),
     fetchJson<InteractionsData>(FILES.interactions),
     fetchJson<AssetsData>(FILES.assets),
@@ -545,8 +556,9 @@ export async function loadAll(): Promise<GameData> {
     fetchJson<BillsData>(FILES.bills),
     fetchJson<FinanceData>(FILES.finance),
     fetchJson<HappinessData>(FILES.happiness),
+    fetchJson<LoadingConfig>(FILES.loading),
   ]);
-  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills, finance, happiness };
+  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills, finance, happiness, loading };
 }
 
 /** Dev hot-reload: polls the data files and invokes callbacks when content changes. */
@@ -555,7 +567,10 @@ export function watchData(onChange: (data: GameData) => void, intervalMs = 2000)
   const tick = async () => {
     try {
       const data = await loadAll();
-      const sig = JSON.stringify(data);
+      // loading.json is boot-only: editing it prepares the next boot without rebuilding a live
+      // world just because a phrase/color changed.
+      const { loading: _bootOnlyLoading, ...hotReloadable } = data;
+      const sig = JSON.stringify(hotReloadable);
       if (last && sig !== last) onChange(data);
       last = sig;
     } catch { /* server briefly unavailable — ignore */ }

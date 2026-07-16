@@ -23,11 +23,20 @@
     #app { position: fixed; inset: 0; overscroll-behavior: none; }
     canvas { display: block; touch-action: none; }
     #boot {
+      --loading-fill: #9fd08c; --loading-track: #313b50; --loading-height: 14px;
       position: fixed; inset: 0; display: grid; place-items: center;
-      color: var(--hud-fg); background: #1b2230; z-index: 10;
+      color: var(--hud-fg); background: #1b2230 center / cover no-repeat; z-index: 100;
       transition: opacity .3s; font-size: 14px; letter-spacing: .04em;
     }
     #boot.done { opacity: 0; pointer-events: none; }
+    #boot::before { content: ''; position: absolute; inset: 0; background: rgba(9, 13, 22, .58); }
+    .loading-card { position: relative; width: min(520px, calc(100vw - 48px)); text-align: center; text-shadow: 0 2px 12px #000; }
+    #loading-phrase { min-height: 1.5em; margin-bottom: 18px; font-size: clamp(16px, 4vw, 22px); font-weight: 650; }
+    #loading-track { height: var(--loading-height); overflow: hidden; border-radius: 999px; background: var(--loading-track); box-shadow: 0 2px 12px rgba(0,0,0,.5); }
+    #loading-fill { width: 0; height: 100%; border-radius: inherit; background: var(--loading-fill); transition: width .15s ease-out; }
+    #loading-count { margin-top: 8px; font-size: 11px; opacity: .8; font-variant-numeric: tabular-nums; }
+    #loading-tap { margin-top: 18px; padding: 10px 16px; border: 1px solid rgba(255,255,255,.45); border-radius: 999px; color: inherit; background: rgba(20,26,38,.72); font: inherit; cursor: pointer; }
+    #loading-tap[hidden] { display: none; }
     #devbar {
       position: fixed; left: env(safe-area-inset-left, 0); right: env(safe-area-inset-right, 0);
       bottom: env(safe-area-inset-bottom, 0);
@@ -40,7 +49,14 @@
 </head>
 <body>
   <div id="app"></div>
-  <div id="boot">loading condo…</div>
+  <div id="boot">
+    <div class="loading-card">
+      <div id="loading-phrase">Loading condo…</div>
+      <div id="loading-track" role="progressbar" aria-label="Loading assets" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="loading-fill"></div></div>
+      <div id="loading-count">Preparing paperwork…</div>
+      <button id="loading-tap" type="button" hidden>Tap to start the music</button>
+    </div>
+  </div>
   <div id="devbar">
     <span id="dev-data">data: …</span>
     <span id="dev-clock">–</span>

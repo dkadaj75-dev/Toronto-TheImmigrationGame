@@ -45,6 +45,9 @@
   .toolbar { padding: 10px 14px; display: flex; gap: 8px; }
   .row-delete { margin-top: 6px; background: #7a3040; }
   .group h3 .del-wrap { float: right; }
+  .phrase-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 4px 0; }
+  .phrase-row input { width: 100%; background: #10182a; border: 1px solid #2c3a58; color: #dfe6f2; border-radius: 6px; padding: 6px 8px; }
+  .phrase-row button { background: #7a3040; }
 </style>
 </head>
 <body>
@@ -61,7 +64,7 @@
 <script>
 // ------------------------------------------------------------------ state
 const API = '/api/data/'; // matches server.js GET/PUT /api/data/*
-const FILES = ['tuning.json', 'stats.json', 'interactions.json'];
+const FILES = ['tuning.json', 'stats.json', 'interactions.json', 'loading.json'];
 const state = { docs: {}, dirty: new Set() };
 
 // soft sanity ranges (warn, never block — the designer is in charge)
@@ -98,6 +101,11 @@ async function load() {
 async function saveAll() {
   setStatus('saving…');
   try {
+    const loading = state.docs['loading.json'];
+    if (loading) {
+      loading.music = normalizeLoadingPath(loading.music);
+      loading.background = normalizeLoadingPath(loading.background);
+    }
     for (const f of [...state.dirty]) {
       const res = await fetch(API + f, {
         method: 'PUT',
@@ -122,6 +130,19 @@ function markDirty(file) {
 const sectionEl = (file) => document.querySelector(`section[data-file="${file}"]`);
 function updateSaveButton() { document.getElementById('save').disabled = state.dirty.size === 0; }
 function setStatus(msg, cls = '') { const s = document.getElementById('status'); s.textContent = msg; s.className = cls; }
+
+// Same Windows-paste convention as the Animation Mapper: public/ is the served URL root.
+function normalizeLoadingPath(raw) {
+  let path = String(raw ?? '').trim();
+  if (!path) return '';
+  if (/^\/?[a-zA-Z]:[\\/]/.test(path) || path.includes('\\')) {
+    const match = /\/public(\/.+)$/i.exec(path.replace(/\\/g, '/'));
+    if (!match) throw new Error('Loading paths pasted from Windows must point inside public/.');
+    path = match[1];
+  }
+  if (!/^(\/|https?:)/.test(path)) path = '/' + path;
+  return path;
+}
 
 // ------------------------------------------------------------------ field factory
 function fieldRow(label, path, get, set, file, kind = 'number') {
@@ -191,6 +212,7 @@ function render() {
   const root = document.getElementById('root');
   root.innerHTML = '';
   root.appendChild(renderTuning());
+  root.appendChild(renderLoading());
   root.appendChild(renderNeeds());
   root.appendChild(renderSkills());
   root.appendChild(renderPersonality());
@@ -222,6 +244,47 @@ function renderTuning() {
   }
   return s;
 }
+
+function renderLoading() {
+  const file = 'loading.json';
+  const doc = state.docs[file];
+  const s = makeSection('Loading screen', file);
+  doc.phrases ??= [];
+  doc.bar ??= {};
+  const settings = document.createElement('div');
+  settings.className = 'group';
+  settings.innerHTML = '<h3>Presentation</h3>';
+  settings.appendChild(fieldRow('phrase interval (seconds)', 'loading.phraseIntervalSeconds', () => doc.phraseIntervalSeconds, (v) => { doc.phraseIntervalSeconds = v; }, file));
+  settings.appendChild(fieldRow('music path', 'loading.music', () => doc.music, (v) => { doc.music = v; }, file, 'text'));
+  settings.appendChild(fieldRow('background image path', 'loading.background', () => doc.background, (v) => { doc.background = v; }, file, 'text'));
+  settings.appendChild(fieldRow('bar fill color', 'loading.bar.fillColor', () => doc.bar.fillColor, (v) => { doc.bar.fillColor = v; }, file, 'color'));
+  settings.appendChild(fieldRow('bar track color', 'loading.bar.trackColor', () => doc.bar.trackColor, (v) => { doc.bar.trackColor = v; }, file, 'color'));
+  settings.appendChild(fieldRow('bar height (pixels)', 'loading.bar.height', () => doc.bar.height, (v) => { doc.bar.height = v; }, file));
+  s.appendChild(settings);
+
+  const phrases = document.createElement('div');
+  phrases.className = 'group';
+  phrases.innerHTML = '<h3>Cycling phrases</h3>';
+  doc.phrases.forEach((phrase, index) => {
+    const row = document.createElement('div');
+    row.className = 'phrase-row row';
+    row.dataset.label = `loading phrase ${index + 1} ${phrase}`.toLowerCase();
+    const input = document.createElement('input');
+    input.type = 'text'; input.value = phrase; input.dataset.path = `loading.phrase.${index}`;
+    input.addEventListener('input', () => { doc.phrases[index] = input.value; markDirty(file); });
+    const remove = document.createElement('button');
+    remove.type = 'button'; remove.textContent = 'Remove'; remove.dataset.action = 'remove-loading-phrase';
+    remove.addEventListener('click', () => { doc.phrases.splice(index, 1); render(); markDirty(file); });
+    row.append(input, remove); phrases.appendChild(row);
+  });
+  const toolbar = document.createElement('div'); toolbar.className = 'toolbar';
+  const add = document.createElement('button'); add.type = 'button'; add.textContent = 'Add phrase'; add.dataset.action = 'add-loading-phrase';
+  add.addEventListener('click', () => { doc.phrases.push('Another suspicious delay…'); render(); markDirty(file); });
+  toolbar.appendChild(add); phrases.appendChild(toolbar); s.appendChild(phrases);
+  return s;
+}
+
+window.TuningEditor = { normalizeLoadingPath };
 
 function renderNeeds() {
   const file = 'stats.json';

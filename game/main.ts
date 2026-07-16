@@ -33,6 +33,7 @@ import { FoodRegistry, foodAssetForActionEvent, firstLegSeatAware, cookedMealHun
 import { initEnergyCollapseState, StarvationTracker, tickEnergyCollapse } from './survival';
 import { formatMoneyChange, formatSkillUp, skillLevelUps } from './feedback';
 import { AssetStateRegistry, isAssetStateActionAvailable, isStatefulAsset, powerStateForAction } from './assetstate';
+import { InitialLoadTracker, phraseAt } from './loading';
 
 /** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
  *  a seat-aware action with no eligible seat in range) plays the dedicated 'sit_ground' state
@@ -49,6 +50,11 @@ const CARRY_TO_GARBAGE_ACTIONS = new Set(['clean_up', 'sweep']);
 
 const app = document.getElementById('app')!;
 const boot = document.getElementById('boot')!;
+const loadingPhrase = document.getElementById('loading-phrase')!;
+const loadingTrack = document.getElementById('loading-track')!;
+const loadingFill = document.getElementById('loading-fill')!;
+const loadingCount = document.getElementById('loading-count')!;
+const loadingTap = document.getElementById('loading-tap') as HTMLButtonElement;
 const devData = document.getElementById('dev-data')!;
 const devClock = document.getElementById('dev-clock')!;
 const devFps = document.getElementById('dev-fps')!;
@@ -62,6 +68,36 @@ async function start() {
     return;
   }
 
+  // B7-7 presentation starts once boot data is available. The initial data fetch still uses the
+  // same dark overlay; loading.json itself is boot-only and intentionally has no live retune path.
+  const loading = data.loading;
+  const phrases = loading.phrases.filter((phrase) => typeof phrase === 'string' && phrase.trim());
+  const phraseStarted = performance.now();
+  const updateLoadingPhrase = () => {
+    loadingPhrase.textContent = phraseAt(phrases, (performance.now() - phraseStarted) / 1000, loading.phraseIntervalSeconds);
+  };
+  updateLoadingPhrase();
+  const phraseTimer = window.setInterval(updateLoadingPhrase, 250);
+  if (loading.background) boot.style.backgroundImage = `url("${normalizeMeshUrl(loading.background).replace(/"/g, '%22')}")`;
+  boot.style.setProperty('--loading-fill', loading.bar?.fillColor ?? '#9fd08c');
+  boot.style.setProperty('--loading-track', loading.bar?.trackColor ?? '#313b50');
+  boot.style.setProperty('--loading-height', `${Math.max(2, loading.bar?.height ?? 14)}px`);
+  loadingTap.hidden = !loading.music;
+  loadingTap.addEventListener('click', () => { loadingTap.hidden = true; }, { once: true });
+
+  const initialLoads = new InitialLoadTracker();
+  let initialLoadingActive = true;
+  let initialLoadRegistrationOpen = true;
+  function trackInitialLoad<T>(promise: Promise<T>): Promise<T> { return initialLoads.track(promise); }
+  initialLoads.subscribe((progress) => {
+    const percent = Math.round(progress.ratio * 100);
+    loadingFill.style.width = `${percent}%`;
+    loadingTrack.setAttribute('aria-valuenow', String(percent));
+    loadingCount.textContent = progress.started > 0
+      ? `${progress.settled} / ${progress.started} arrivals cleared`
+      : 'Preparing paperwork…';
+  });
+
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // mobile perf budget
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -74,8 +110,8 @@ async function start() {
 
   const assetStates = new AssetStateRegistry();
   let wallCutActive = false; // in-page preference only; deliberately not serialized
-  let world = buildWorld(data);
-  let doors = buildDoors(data);
+  let world = buildWorld(data, trackInitialLoad);
+  let doors = buildDoors(data, trackInitialLoad);
   world.add(doors.group);
   applyWallCutView(world, wallCutActive, data.tuning.view?.wallCutHeight ?? 1);
   const lights = makeLights();
@@ -161,7 +197,7 @@ async function start() {
     const sig = sigOf(c);
     if (sig === charSig) return;
     charSig = sig;
-    loadRiggedCharacter(c)
+    loadRiggedCharacter(c, initialLoadRegistrationOpen ? trackInitialLoad : undefined)
       .then(({ model, clips }) => {
         if (!data.tuning.character || sigOf(data.tuning.character) !== sig) return; // changed again mid-flight
         disposeGroup(sim); // free the capsule (or a previous rig)
@@ -183,7 +219,9 @@ async function start() {
   // parented under `sim` (loadCharacter's `sim.clear()` on every rig reload would delete it).
   // No character block → no marker, same precedent as the rig itself (`loadCharacter` no-ops
   // without `meshPath`).
-  let marker: MarkerInstance | null = data.tuning.character ? createMarkerInstance(scene, sim, data.tuning.character) : null;
+  let marker: MarkerInstance | null = data.tuning.character ? createMarkerInstance(scene, sim, data.tuning.character, trackInitialLoad) : null;
+  initialLoadRegistrationOpen = false;
+  initialLoads.seal(); // every initial world/door/character/marker promise has now been registered
 
   // --- censor pixelation (ROADMAP_NEXT B2-3): always created (no character-block gate — it's a
   // pure overlay quad, not part of the rig), visibility polled from agent.current every render
@@ -547,7 +585,7 @@ async function start() {
     stateSoundKeys = desiredSounds;
   };
   syncAssetStates();
-  audio.setMusicContext('map', data.map); // starts (or queues, pre-gesture) the active map's playlist
+  audio.setMusicContext('loading', data.map, loading.music); // queued until first gesture if autoplay is locked
   const playTunedSfx = (key: 'moveOrder' | 'actionSelect' | 'questStarted' | 'questCompleted' | 'notification' | 'skillUp' | 'moneyUp' | 'moneyDown') => {
     const path = data.tuning.audio?.[key];
     if (path) audio.playSfx(path);
@@ -1314,12 +1352,12 @@ async function start() {
     // selection is locked/preserved while away and becomes effective again on return.
     const selectedSpeed = work.isAtWork ? (data.tuning.work?.autoSpeed ?? 5) : hud.speed;
     const effectiveSpeed = Number.isFinite(selectedSpeed) ? Math.max(0, selectedSpeed) : 0;
-    const sdt = (buyMode.active || repoOverlayActive || gameOverActive) ? 0 : dt * effectiveSpeed;
+    const sdt = (initialLoadingActive || buyMode.active || repoOverlayActive || gameOverActive) ? 0 : dt * effectiveSpeed;
     simClockSeconds += sdt;
     // ROADMAP_NEXT item 7: sfx/action/asset loops pause whenever sim time isn't advancing (the
     // pause button OR buy mode's own freeze); music is deliberately NOT touched here (see
     // audio.ts's module doc comment on the PAUSE decision).
-    audio.setPaused(effectiveSpeed === 0 || buyMode.active || repoOverlayActive || gameOverActive);
+    audio.setPaused(initialLoadingActive || effectiveSpeed === 0 || buyMode.active || repoOverlayActive || gameOverActive);
     syncAssetStates(); // picks up newly purchased/sold stateful instances; idempotent for steady state
 
     gameSeconds += sdt * clockScale();
@@ -1483,6 +1521,10 @@ async function start() {
     renderer.render(scene, cam.camera);
   });
 
+  await initialLoads.done; // success and stand-in fallback both settle the real boot gate
+  initialLoadingActive = false;
+  window.clearInterval(phraseTimer);
+  audio.setMusicContext('map', data.map);
   boot.classList.add('done');
 }
 

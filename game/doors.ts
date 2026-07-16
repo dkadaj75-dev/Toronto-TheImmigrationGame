@@ -25,7 +25,7 @@
 
 import * as THREE from 'three';
 import type { AssetDef, GameData, TuningData } from './data';
-import { attachMesh } from './world';
+import { attachMesh, type TrackInitialLoad } from './world';
 
 /** Marker height for the stand-in panel — matches the pre-existing plain door marker in world.ts. */
 export const DOOR_HEIGHT = 2.1;
@@ -195,7 +195,7 @@ export interface DoorInstance {
  * footprint[1] = thickness) and swaps to a GLB clone if/when `def.mesh` loads — same "instant
  * box, async swap, keep the box on failure" philosophy as world.ts's attachMesh for furniture.
  */
-export function createDoorInstance(door: DoorEntry, def: AssetDef, tuning: TuningData): DoorInstance | null {
+export function createDoorInstance(door: DoorEntry, def: AssetDef, tuning: TuningData, trackInitialLoad?: TrackInitialLoad): DoorInstance | null {
   const config = resolveDoorConfig(def, tuning);
   if (!config) return null;
 
@@ -231,7 +231,7 @@ export function createDoorInstance(door: DoorEntry, def: AssetDef, tuning: Tunin
   // §7.5: door panels explicitly reject the image/sprite path (allowSprite: false) — see
   // world.ts's attachMesh doc comment for why a billboard or floor-flat plane can't represent a
   // swinging hinge panel. GLB behavior is completely unchanged (shared with furniture/accidents).
-  attachMesh(panel, def, { allowSprite: false });
+  attachMesh(panel, def, { allowSprite: false, trackInitialLoad });
 
   let angle = 0; // 0 = closed, degrees of swing added on top of baseYaw
   let open = false; // current target state (not the mid-swing angle)
@@ -253,7 +253,7 @@ export function createDoorInstance(door: DoorEntry, def: AssetDef, tuning: Tunin
  * asset). Doors without an assetId, or pointing at an asset with no `door` block, are left to
  * world.ts's existing plain-marker rendering — old maps/behavior stay unchanged (§7.1).
  */
-export function buildDoors(data: GameData): { group: THREE.Group; instances: DoorInstance[] } {
+export function buildDoors(data: GameData, trackInitialLoad?: TrackInitialLoad): { group: THREE.Group; instances: DoorInstance[] } {
   const group = new THREE.Group();
   group.name = 'doors';
   const instances: DoorInstance[] = [];
@@ -262,7 +262,7 @@ export function buildDoors(data: GameData): { group: THREE.Group; instances: Doo
     if (!door.assetId) continue;
     const def = byId.get(door.assetId);
     if (!def) { console.warn(`Unknown door asset in map: ${door.assetId}`); continue; }
-    const instance = createDoorInstance(door, def, data.tuning);
+    const instance = createDoorInstance(door, def, data.tuning, trackInitialLoad);
     if (!instance) continue; // asset has no `door` block — world.ts already keeps the plain marker for it
     group.add(instance.pivot);
     instances.push(instance);

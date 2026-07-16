@@ -16,6 +16,7 @@ import { resolveAssetLight } from './assetstate';
 // Templates are cached per URL and cloned per placement; clones share geometry/materials
 // with the template, so they're tagged sharedResource and skipped by disposal.
 const gltfCache = new Map<string, Promise<THREE.Group>>();
+export type TrackInitialLoad = <T>(promise: Promise<T>) => Promise<T>;
 
 /** Exported for reuse by game/doors.ts (same cached-template-clone pattern for door panels). */
 export function loadMeshTemplate(url: string): Promise<THREE.Group> {
@@ -94,7 +95,7 @@ export function normalizeMeshUrl(mesh: string): string {
  * (see main.ts), so any group anywhere in the scene graph gets its frames advanced with zero
  * additional per-call-site wiring.
  */
-export function attachMesh(group: THREE.Group, def: AssetDef, opts: { allowSprite?: boolean } = {}) {
+export function attachMesh(group: THREE.Group, def: AssetDef, opts: { allowSprite?: boolean; trackInitialLoad?: TrackInitialLoad } = {}) {
   if (!def.mesh) return;
   const url = normalizeMeshUrl(def.mesh);
   if (classifyMeshPath(url) === 'image') {
@@ -103,7 +104,7 @@ export function attachMesh(group: THREE.Group, def: AssetDef, opts: { allowSprit
       return;
     }
     const inst = createSpriteInstance(def, url);
-    inst.ready
+    const ready = inst.ready
       .then(() => {
         const persistent = group.children.filter((child) => child.userData.assetPersistent);
         group.clear();
@@ -111,9 +112,10 @@ export function attachMesh(group: THREE.Group, def: AssetDef, opts: { allowSprit
         group.userData.spriteUpdate = (dt: number) => inst.update(dt);
       })
       .catch(() => console.warn(`Could not load sprite image for "${def.id}" (${url}) — keeping stand-in.`));
+    void (opts.trackInitialLoad ? opts.trackInitialLoad(ready) : ready);
     return;
   }
-  loadMeshTemplate(url)
+  const ready = loadMeshTemplate(url)
     .then((template) => {
       const model = template.clone(true);
       normalizeModelToFootprint(model, def.footprint);
@@ -130,6 +132,7 @@ export function attachMesh(group: THREE.Group, def: AssetDef, opts: { allowSprit
       group.add(model, ...persistent);
     })
     .catch(() => console.warn(`Could not load mesh for "${def.id}" (${url}) — keeping stand-in.`));
+  void (opts.trackInitialLoad ? opts.trackInitialLoad(ready) : ready);
 }
 
 /** B6-12 thin THREE layer: runtime state lives in the pure AssetStateRegistry. */
@@ -174,12 +177,14 @@ export function applyAssetPlacement(group: THREE.Object3D, def: AssetDef, pos: [
  * actually tries to attach that mesh for real. Called once per `buildWorld()` (i.e. also on every
  * hot-reload) — cheap no-op on repeats since both caches are keyed by URL.
  */
-function warmTransientAssets(data: GameData) {
+function warmTransientAssets(data: GameData, trackInitialLoad?: TrackInitialLoad) {
   for (const def of data.assets.assets) {
     if (def.category !== 'transient' || !def.mesh) continue;
     const url = normalizeMeshUrl(def.mesh);
-    if (classifyMeshPath(url) === 'image') preloadGif(url);
-    else loadMeshTemplate(url).catch(() => {}); // real attachMesh call still reports+keeps the stand-in on failure
+    const ready = classifyMeshPath(url) === 'image'
+      ? preloadGif(url).then(() => undefined).catch(() => undefined)
+      : loadMeshTemplate(url).then(() => undefined).catch(() => undefined);
+    void (trackInitialLoad ? trackInitialLoad(ready) : ready);
   }
 }
 
@@ -199,12 +204,12 @@ const CATEGORY_COLORS: Record<string, number> = {
   decor: 0xd17a9e,
 };
 
-export function buildWorld(data: GameData): THREE.Group {
+export function buildWorld(data: GameData, trackInitialLoad?: TrackInitialLoad): THREE.Group {
   const root = new THREE.Group();
   root.name = 'world';
   const { map, assets } = data;
   const byId = new Map(assets.assets.map((a) => [a.id, a]));
-  warmTransientAssets(data); // ROADMAP_NEXT B3-1(b): fire/other transients render instantly on first real spawn
+  warmTransientAssets(data, trackInitialLoad); // B7-7 counts initial transient cache warmups too
 
   // --- floors ---
   for (const floor of map.floors) {
@@ -306,7 +311,7 @@ export function buildWorld(data: GameData): THREE.Group {
     applyAssetPlacement(obj, def, placed.pos, placed.rotDeg);
     obj.userData = { assetId: def.id, interactions: def.interactions, placedIndex, assetStateKey: `designer:${placedIndex}` };
     attachAssetLight(obj, def);
-    attachMesh(obj, def);
+    attachMesh(obj, def, { trackInitialLoad });
     root.add(obj);
   });
 
@@ -456,7 +461,8 @@ export async function loadFbxClips(
  * needed) and normalize it to the tuned height. Rejects on load failure — the caller
  * keeps the capsule stand-in, same philosophy as furniture placeholders.
  */
-export async function loadRiggedCharacter(character: CharacterTuning): Promise<LoadedCharacter> {
+export function loadRiggedCharacter(character: CharacterTuning, trackInitialLoad?: TrackInitialLoad): Promise<LoadedCharacter> {
+  const task = (async (): Promise<LoadedCharacter> => {
   const norm = (p: string) => (/^(\/|https?:)/.test(p) ? p : '/' + p);
   const loader = new GLTFLoader();
   const load = (u: string) =>
@@ -498,6 +504,10 @@ export async function loadRiggedCharacter(character: CharacterTuning): Promise<L
     return finishCharacter(inner, clips);
   }
   return finishCharacter(model, clips);
+  })();
+  // One tracked unit spans the base rig and every dependent animation source. The dependent
+  // requests begin only after the skeleton arrives, so this keeps boot sealing race-free.
+  return trackInitialLoad ? trackInitialLoad(task) : task;
 }
 
 function finishCharacter(model: THREE.Group, clips: THREE.AnimationClip[]): LoadedCharacter {

@@ -18,7 +18,8 @@
 //   - Music: one channel, one context at a time. Contexts today: 'map' (cycles through the active
 //     map's `music[]` playlist — advances to the NEXT track when one ends; a single-cut, not a
 //     crossfade, since "cycling" reads as a playlist advancing between separate tracks) and
-//     'buymode' (single fixed track, `tuning.audio.buyModeMusic`). Switching CONTEXT (e.g. entering
+//     'buymode' (single fixed track, `tuning.audio.buyModeMusic`), and boot-only 'loading'
+//     (`data/loading.json.music`). Switching CONTEXT (e.g. entering
 //     buy mode, or exiting it back to the map) crossfades over `tuning.audio.musicCrossfadeSeconds`
 //     — the "crossfade-or-cut" the roadmap item names: crossfade across a context switch, cut
 //     between playlist entries within the same context. Silence (empty/absent playlist, or no
@@ -78,14 +79,16 @@ export function effectiveVolume(audio: AudioTuning, category: 'music' | 'sfx'): 
   return audio.masterVolume * (category === 'music' ? audio.musicVolume : audio.sfxVolume);
 }
 
-export type MusicContext = 'map' | 'buymode';
+export type MusicContext = 'map' | 'buymode' | 'loading';
 
 /** What SHOULD be playing for a given context, independent of what IS currently playing (the
  *  AudioManager below diffs against its own current state to decide whether to crossfade).
  *  'map': the map's own music[] playlist, current entry by (possibly out-of-range) index — wraps
  *  via modulo so a stale index after a playlist edit still resolves; empty/absent playlist = null
- *  (silence is this context's valid "track"). 'buymode': tuning.audio.buyModeMusic, or null if unset. */
-export function trackForContext(context: MusicContext, map: Pick<MapData, 'music'>, audio: AudioTuning, playlistIndex: number): string | null {
+ *  (silence is this context's valid "track"). 'buymode': tuning.audio.buyModeMusic; 'loading':
+ *  the boot-only argument supplied by main.ts. Either fixed context may resolve to silence. */
+export function trackForContext(context: MusicContext, map: Pick<MapData, 'music'>, audio: AudioTuning, playlistIndex: number, loadingMusic?: string): string | null {
+  if (context === 'loading') return loadingMusic || null;
   if (context === 'buymode') return audio.buyModeMusic ?? null;
   const list = map.music ?? [];
   if (list.length === 0) return null;
@@ -215,9 +218,9 @@ export class AudioManager {
    *  No-ops if that's already what's playing (including "already silent"). A genuine change
    *  crossfades from the current track (or from silence) to the new one (or to silence) over
    *  `tuning.audio.musicCrossfadeSeconds`. */
-  setMusicContext(context: MusicContext, map: Pick<MapData, 'music'>): void {
+  setMusicContext(context: MusicContext, map: Pick<MapData, 'music'>, loadingMusic?: string): void {
     if (context !== this.musicContext) this.musicPlaylistIndex = 0; // fresh context starts its playlist from the top
-    const desired = trackForContext(context, map, this.audio, this.musicPlaylistIndex);
+    const desired = trackForContext(context, map, this.audio, this.musicPlaylistIndex, loadingMusic);
     const contextChanged = context !== this.musicContext;
     const trackChanged = desired !== this.musicTrack;
     this.musicContext = context;
@@ -263,6 +266,7 @@ export class AudioManager {
   }
 
   private onTrackEnded(context: MusicContext, map: Pick<MapData, 'music'>): void {
+    if (context !== this.musicContext) return; // an outgoing context may finish during its crossfade
     if (context !== 'map') { // buyModeMusic (or any single fixed track) just loops in place
       const active = this.musicActiveIsA ? this.musicA : this.musicB;
       if (active && this.musicTrack) { active.currentTime = 0; active.play().catch(() => {}); }
