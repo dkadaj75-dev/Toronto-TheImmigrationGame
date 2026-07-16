@@ -44,6 +44,10 @@
     "autoSpeed": 5,
     "_source": "Going to work V3 (PROJECT_CONTEXT.md §7.20 B3-8) — effective simulation speed multiplier while the sim is away at work. The player's selected HUD speed is preserved and restored on return."
   },
+  "bills": {
+    "intervalDays": 1,
+    "_source": "Bills system (PROJECT_CONTEXT.md §7.22) — in-game days between recurring arrivals from data/bills.json."
+  },
   "movement": {
     "walkSpeed": 2,
     "arrivalRadius": 0.35,

@@ -134,6 +134,10 @@ const CSS = `
   box-shadow: 0 3px 14px rgba(0,0,0,.35); cursor: pointer; pointer-events: auto; touch-action: manipulation; }
 #phone-button img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 #phone-button.hidden { display: none; }
+.phone-badge { position: absolute; top: -5px; right: -5px; min-width: 20px; height: 20px; padding: 0 5px;
+  display: none; align-items: center; justify-content: center; border-radius: 999px; background: #d9364f;
+  color: #fff; border: 2px solid #111827; font-size: 11px; font-weight: 800; line-height: 1; }
+.phone-badge.show { display: flex; }
 
 #game-over { position: fixed; inset: 0; z-index: 20; display: none; align-items: center;
   justify-content: center; flex-direction: column; gap: 18px; background: rgba(8,10,16,.92);
@@ -158,7 +162,7 @@ const CSS = `
 .phone-header .phone-status { font-size: 11px; color: #93a3c0; }
 .phone-close { width: 34px; height: 34px; border: 0; border-radius: 50%; background: #263149;
   color: #dfe6f2; font-size: 18px; cursor: pointer; touch-action: manipulation; }
-.phone-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 14px 12px; }
+.phone-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 0 14px 12px; }
 .phone-tabs button { border: 0; border-radius: 10px; padding: 10px; background: #1c2436;
   color: #93a3c0; font-size: 13px; cursor: pointer; touch-action: manipulation; }
 .phone-tabs button.active { background: rgba(90,120,190,.55); color: #fff; }
@@ -179,6 +183,11 @@ const CSS = `
 .phone-pending { display: inline-block; border-radius: 999px; padding: 4px 8px; background: rgba(224,176,95,.2);
   color: #e0b05f; font-size: 10px; white-space: nowrap; }
 .phone-empty { color: #7886a1; font-size: 12px; text-align: center; padding: 28px 10px; }
+.phone-bills-summary { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding: 10px 12px;
+  border-radius: 12px; background: #1c2436; color: #eaf0fb; font-size: 13px; font-weight: 700; }
+.phone-bills-summary span { flex: 1; }
+.phone-bills-summary button, .phone-bill-pay { border: 0; border-radius: 9px; padding: 8px 11px;
+  background: #5277be; color: #fff; font-weight: 700; cursor: pointer; }
 
 @media (max-width: 500px) {
   #phone-overlay { padding: 0; align-items: flex-end; }
@@ -254,6 +263,7 @@ export class Hud {
   private phoneOverlay: HTMLElement;
   private phoneButton: HTMLButtonElement;
   private phoneIcon: HTMLImageElement;
+  private phoneBadge: HTMLElement;
   private phoneBody: HTMLElement;
   private phoneStatus: HTMLElement;
   private phoneTabs: NodeListOf<HTMLButtonElement>;
@@ -288,10 +298,12 @@ export class Hud {
 
   onPhoneClose: (() => void) | null = null;
   onPhoneOpen: (() => void) | null = null;
-  onPhoneTabPick: ((tab: 'jobs' | 'visas') => void) | null = null;
+  onPhoneTabPick: ((tab: 'jobs' | 'visas' | 'bills') => void) | null = null;
   onPhoneSearchJobs: (() => void) | null = null;
   onPhoneJobApply: ((jobId: string) => void) | null = null;
   onPhoneVisaApply: ((statusId: string) => void) | null = null;
+  onPhoneBillPay: ((key: string) => void) | null = null;
+  onPhoneBillsPayAll: (() => void) | null = null;
 
   onCancelAction: (() => void) | null = null;
   /** fires whenever the action menu closes (pick, cancel, or tap-away) */
@@ -329,7 +341,7 @@ export class Hud {
       <div id="visa-chip"></div>
       <div id="funds-chip">§ 0</div>
       <button id="buy-button">🛒 Buy</button>
-      <button id="phone-button" aria-label="Open smartphone" title="Smartphone"><img alt="" /></button>
+      <button id="phone-button" aria-label="Open smartphone" title="Smartphone"><img alt="" /><span class="phone-badge" aria-label="0 unpaid bills"></span></button>
       <div id="game-over">
         <h2>Game Over</h2>
         <p id="game-over-text"></p>
@@ -345,6 +357,7 @@ export class Hud {
           <div class="phone-tabs">
             <button data-phone-tab="jobs" class="active">Jobs</button>
             <button data-phone-tab="visas">Visas</button>
+            <button data-phone-tab="bills">Bills</button>
           </div>
           <div id="phone-body"></div>
         </div>
@@ -396,6 +409,7 @@ export class Hud {
     this.phoneOverlay = root.querySelector('#phone-overlay')!;
     this.phoneButton = root.querySelector('#phone-button')!;
     this.phoneIcon = this.phoneButton.querySelector('img')!;
+    this.phoneBadge = this.phoneButton.querySelector('.phone-badge')!;
     this.phoneBody = root.querySelector('#phone-body')!;
     this.phoneStatus = root.querySelector('.phone-status')!;
     this.phoneTabs = root.querySelectorAll<HTMLButtonElement>('[data-phone-tab]');
@@ -406,7 +420,7 @@ export class Hud {
       this.onPhoneClose?.();
     });
     this.phoneTabs.forEach((button) => button.addEventListener('click', () => {
-      const tab = button.dataset.phoneTab as 'jobs' | 'visas';
+      const tab = button.dataset.phoneTab as 'jobs' | 'visas' | 'bills';
       this.onPhoneTabPick?.(tab);
     }));
 
@@ -640,14 +654,23 @@ export class Hud {
 
   setPhoneIcon(path: string) { this.phoneIcon.src = path || '/icons/Smartphone.png'; }
 
+  setPhoneBadge(count: number) {
+    const safeCount = Math.max(0, Math.floor(count));
+    this.phoneBadge.textContent = safeCount > 99 ? '99+' : String(safeCount);
+    this.phoneBadge.setAttribute('aria-label', `${safeCount} unpaid bill${safeCount === 1 ? '' : 's'}`);
+    this.phoneBadge.classList.toggle('show', safeCount > 0);
+  }
+
   renderPhone(args: {
-    tab: 'jobs' | 'visas';
+    tab: 'jobs' | 'visas' | 'bills';
     currentStatusName: string;
     searchedJobs: boolean;
     jobs: { job: JobDef; requirementsMet: boolean; requirements: RequirementView[] }[];
     visas: { visa: VisaDef; requirementsMet: boolean; requirements: RequirementView[] }[];
     pending: { statusId: string; daysRemaining: number } | null;
     currencyName: string;
+    bills: { key: string; name: string; amount: number }[];
+    billsTotal: number;
   }) {
     this.phoneStatus.textContent = args.currentStatusName;
     this.phoneTabs.forEach((button) => button.classList.toggle('active', button.dataset.phoneTab === args.tab));
@@ -683,6 +706,36 @@ export class Hud {
           card.el.appendChild(apply);
           this.phoneBody.appendChild(card.el);
         }
+      }
+      return;
+    }
+
+    if (args.tab === 'bills') {
+      if (args.bills.length === 0) {
+        this.phoneBody.appendChild(phoneEmpty('No outstanding bills.'));
+        return;
+      }
+      const summary = document.createElement('div');
+      summary.className = 'phone-bills-summary';
+      const total = document.createElement('span');
+      total.textContent = `Total · §${args.billsTotal.toLocaleString()}`;
+      const payAll = document.createElement('button');
+      payAll.textContent = 'Pay all';
+      payAll.addEventListener('click', () => this.onPhoneBillsPayAll?.());
+      summary.append(total, payAll);
+      this.phoneBody.appendChild(summary);
+      for (const bill of args.bills) {
+        const card = phoneCard(bill.name);
+        const amount = document.createElement('span');
+        amount.className = 'phone-card-pay';
+        amount.textContent = `§${bill.amount.toLocaleString()}`;
+        card.head.appendChild(amount);
+        const pay = document.createElement('button');
+        pay.className = 'phone-bill-pay';
+        pay.textContent = 'Pay';
+        pay.addEventListener('click', () => this.onPhoneBillPay?.(bill.key));
+        card.el.appendChild(pay);
+        this.phoneBody.appendChild(card.el);
       }
       return;
     }

@@ -17,6 +17,7 @@ import { Autonomy } from './autonomy';
 import { QuestRunner, isActionAvailable, type EvalContext } from './quests';
 import { VisaMachine } from './visas';
 import { PhoneJobSearch, applyForJob, applyForVisa, jobListingViews, pendingDaysRemaining, visaApplicationViews } from './phone';
+import { BillState } from './bills';
 import { WorkTracker, applyNeedsCost, isLeaveForWorkAvailable, shouldStartVisaGrace, type WorkTickEvent } from './work';
 import { AccidentsController, resolveTapAssetId, shouldDespawnOnCleanup } from './accidents';
 import { GarbageController } from './garbage';
@@ -326,7 +327,8 @@ async function start() {
 
   // --- smartphone jobs + visa applications (PROJECT_CONTEXT.md §7.20 V2, B3-7) ---
   const phoneJobs = new PhoneJobSearch(data.jobs, data.tuning.phone?.jobListSize);
-  let phoneTab: 'jobs' | 'visas' = 'jobs';
+  const bills = new BillState(data.bills, data.tuning.bills?.intervalDays, 1);
+  let phoneTab: 'jobs' | 'visas' | 'bills' = 'jobs';
   const refreshPhone = () => {
     const ctx = buildEvalContext();
     const pendingDays = pendingDaysRemaining(visaMachine.pending, gameDay);
@@ -340,7 +342,10 @@ async function start() {
         ? { statusId: visaMachine.pending.statusId, daysRemaining: pendingDays }
         : null,
       currencyName: data.tuning.economy.currencyName,
+      bills: bills.outstanding,
+      billsTotal: bills.total,
     });
+    hud.setPhoneBadge(bills.outstanding.length);
   };
   const phoneToast = (text: string, completed = false) => hud.showQuestToast(
     text,
@@ -383,6 +388,18 @@ async function start() {
     else if (result.reason === 'application_rejected') phoneToast('Another visa application is already pending');
     refreshPhone();
   };
+  const applyBillPayment = (result: ReturnType<BillState['pay']>) => {
+    if (!result.ok) {
+      if (result.reason === 'insufficient_funds') phoneToast('Not enough funds to pay bills');
+      return;
+    }
+    quests.funds = result.remainingFunds;
+    hud.setFunds(quests.funds, data.tuning.economy.currencyName);
+    phoneToast(`Bills paid: §${result.paid.toLocaleString()}`, true);
+    refreshPhone();
+  };
+  hud.onPhoneBillPay = (key) => applyBillPayment(bills.pay(key, quests.funds));
+  hud.onPhoneBillsPayAll = () => applyBillPayment(bills.payAll(quests.funds));
 
   // --- object highlight: subtle box on hover (mouse), bright box while the menu is open ---
   const hoverBox = new THREE.BoxHelper(new THREE.Object3D(), 0x6fa0ff);
@@ -867,6 +884,7 @@ async function start() {
     quests.retune(data.quests, data.simstate); // definitions only — runtime quest/var state is untouched
     visaMachine.retune(data.visas); // definitions only — runtime visa state is untouched (§7.20 B3-6)
     phoneJobs.retune(data.jobs, data.tuning.phone?.jobListSize); // defs/tuning only; hourly cadence survives
+    bills.retune(data.bills, data.tuning.bills?.intervalDays); // definitions/cadence only; outstanding bills survive
     hud.setPhoneIcon(data.tuning.phone?.icon ?? '/icons/Smartphone.png');
     refreshVisaChip();
     refreshPhone();
@@ -954,6 +972,14 @@ async function start() {
       // ticking inside this while loop (rather than once after it) means a multi-day skip (e.g.
       // a long pause + fast-forward) still evaluates each day in order, same as quests' time.day.
       visaMachine.tick(gameDay);
+      const billArrival = bills.tick(gameDay);
+      if (billArrival?.arrived.length) {
+        hud.showQuestToast(
+          `Bills arrived: §${billArrival.total.toLocaleString()}`,
+          'started',
+          data.tuning.quests.toastDurationSeconds * 1000,
+        );
+      }
       refreshVisaChip();
       refreshPhone();
     }

@@ -109,7 +109,9 @@ Leave via suite door during job hours → sim disappears, game speed auto-set (5
 
 # Batch 4 — 2026-07-16
 
-## B4-1. Bills
+## B4-1. Bills — ✅ DONE 2026-07-15 (see PROJECT_CONTEXT.md §7.22)
+
+Implemented: serializable pure `BillState`, `data/bills.json` definitions, `tuning.bills.intervalDays`, day-boundary arrival, phone Bills tab with individual/atomic Pay all actions through QuestRunner funds, arrival/refusal/payment toasts, and a red unpaid-count launcher badge. Bill amounts are `bills.json`-only for now; non-payment consequences remain explicitly deferred.
 Every N days (tunable, default 3): bills arrive (rent, phone, hydro — amounts tunable, data-driven list). Received + paid via the phone (new Bills tab/section). HUD notification when unpaid (toast + badge on the smartphone icon — placeholder badge, designer may supply an icon). Consequences of non-payment: later (record only).
 
 ## B4-2. Food as carried transients + action costs

@@ -253,6 +253,10 @@ export interface JobDef {
 }
 export interface JobsData { jobs: JobDef[]; }
 
+/** Recurring household bill definitions (PROJECT_CONTEXT.md §7.22, data/bills.json). */
+export interface BillDef { id: string; name: string; amount: number; }
+export interface BillsData { bills: BillDef[]; }
+
 export interface MapData {
   id: string; name: string; gridSize: number;
   bounds: { w: number; h: number };
@@ -355,6 +359,8 @@ export interface TuningData {
   /** B3-8 going-to-work speed override. Optional for old fixtures; main.ts defaults to 5. This is
    *  an effective simulation multiplier while away, not a mutation of the player's HUD selection. */
   work?: { autoSpeed?: number };
+  /** B4-1 recurring bill arrival cadence in in-game days. */
+  bills?: { intervalDays?: number };
   /** Optional so pre-existing tuning fixtures/tests stay valid (same precedent as `interaction?`
    *  above). ROADMAP_NEXT item 6: burnSeconds = how long an unextinguished fire instance burns
    *  before destroying its base object; spreadRadius (meters) = how far a live fire scans for
@@ -405,6 +411,7 @@ export interface GameData {
   quests: QuestsData;
   visas: VisasData;
   jobs: JobsData;
+  bills: BillsData;
 }
 
 const FILES = {
@@ -416,6 +423,7 @@ const FILES = {
   quests: '/data/quests.json',
   visas: '/data/visas.json',
   jobs: '/data/jobs.json',
+  bills: '/data/bills.json',
 } as const;
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -428,7 +436,7 @@ export async function loadAll(): Promise<GameData> {
   // tuning first — it names the active map (tuning.map.active, default "condo")
   const tuning = await fetchJson<TuningData>(FILES.tuning);
   const mapFile = `/data/maps/${tuning.map?.active ?? 'condo'}.json`;
-  const [stats, interactions, assets, map, simstate, quests, visas, jobs] = await Promise.all([
+  const [stats, interactions, assets, map, simstate, quests, visas, jobs, bills] = await Promise.all([
     fetchJson<StatsData>(FILES.stats),
     fetchJson<InteractionsData>(FILES.interactions),
     fetchJson<AssetsData>(FILES.assets),
@@ -437,8 +445,9 @@ export async function loadAll(): Promise<GameData> {
     fetchJson<QuestsData>(FILES.quests),
     fetchJson<VisasData>(FILES.visas),
     fetchJson<JobsData>(FILES.jobs),
+    fetchJson<BillsData>(FILES.bills),
   ]);
-  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs };
+  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills };
 }
 
 /** Dev hot-reload: polls the data files and invokes callbacks when content changes. */

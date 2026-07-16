@@ -1,0 +1,19 @@
+{
+  "bills": [
+    {
+      "id": "rent",
+      "name": "Rent",
+      "amount": 300
+    },
+    {
+      "id": "phone",
+      "name": "Phone",
+      "amount": 40
+    },
+    {
+      "id": "hydro",
+      "name": "Hydro",
+      "amount": 60
+    }
+  ]
+}
