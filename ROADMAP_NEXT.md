@@ -187,3 +187,13 @@ Projected crisp HTML text rises above the sim for integer skill-level crossings 
 Deterministic inclusive happiness+energy thresholds auto-order the exterior-door action through the normal cancel path; recent player commands retain priority.
 ## B7-7. Loading screen: blocks until assets loaded (sim time frozen), customizable funny phrases in tools ("Going through customs"...), own music, customizable bar + background image — ✅ DONE 2026-07-16
 Boot now seals and awaits a real started/settled asset tracker (fallbacks count as settled), freezes `sdt`, and presents boot-only `data/loading.json` through a dedicated Tuning Editor card with phrases, music/background paths, and bar styling.
+
+---
+
+# Batch 8 — 2026-07-16 (night): two big features
+
+## B8-1. Behavior/autonomy editor (engine + tool)
+Utility-based autonomy the designer can tune: decisions driven by personality attributes, current needs, skills; candidate scoring differentiates assets (nap on sofa vs sleep in bed — per-asset need generation matters). data/behavior.json rules/weights + condition gates (quest namespace incl. personality.*); new tools/behavior.html with condition builders + live candidate-score preview. Design locked PROJECT_CONTEXT §7.30. Slices: engine (E), tool (T).
+
+## B8-2. UI theme & layout editor (engine + tool)
+Designer-editable UI: fonts, colors, shapes (radius/outline/shadow) of notifications/messages/buttons/panels, screen positions, accordion nesting of HUD groups. data/theme.json -> CSS variables + layout config consumed by game/ui.ts; new tools/theme.html with live preview. Design locked PROJECT_CONTEXT §7.31. Slices: engine (E), tool (T).
