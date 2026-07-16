@@ -10,8 +10,8 @@
     "Hiding the repo man's clipboard…"
   ],
   "phraseIntervalSeconds": 2.5,
-  "music": "sounds/music_buymode.mp3",
-  "background": "",
+  "music": "/sounds/music_buymode.mp3",
+  "background": "/textures/Title1.jpg",
   "bar": {
     "fillColor": "#9fd08c",
     "trackColor": "#313b50",

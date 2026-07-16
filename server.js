@@ -10,6 +10,8 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, 'data');
+const TEXTURES_DIR = path.join(__dirname, 'public', 'textures');
+const TEXTURE_RE = /\.(png|jpe?g|webp)$/i;
 const PORT = process.env.PORT || 5173;
 
 // Only files under data/ may be read/written, and only .json.
@@ -34,6 +36,19 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ maps: files.map((f) => f.slice(0, -5)).sort() }));
     } catch { res.writeHead(500); res.end('cannot list maps'); }
+    return;
+  }
+
+  // --- texture listing (B9-1 tool slice: floor/wall texture pickers) ---
+  // Flat list of image files under public/textures/ as 'textures/<file>' paths
+  // (drop-in convention matching MapData.floors[].texture / walls[].texture).
+  // Read-only; missing/empty dir → []. Refuses nothing.
+  if (url.pathname === '/api/textures' && req.method === 'GET') {
+    try {
+      const files = (await readdir(TEXTURES_DIR)).filter((f) => TEXTURE_RE.test(f)).sort();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(files.map((f) => 'textures/' + f)));
+    } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('[]'); }
     return;
   }
 

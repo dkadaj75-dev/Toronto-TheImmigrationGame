@@ -20,6 +20,7 @@ const fetchMock = async (url, opts = {}) => {
   if (opts.method === 'PUT') { puts[u] = JSON.parse(opts.body); return { ok: true, status: 200, json: async () => ({}) }; }
   if (opts.method === 'DELETE') { deletes.push(u); return { ok: true, status: 200, json: async () => ({}) }; }
   if (u === '/api/maps') return { ok: true, status: 200, json: async () => ({ maps: ['condo'] }) };
+  if (u === '/api/textures') return { ok: true, status: 200, json: async () => ['textures/oak.jpg', 'textures/tile.png'] };
   const body = {
     '/api/data/maps/condo.json': condo,
     '/api/data/assets.json': assets,
@@ -191,6 +192,27 @@ console.log('map-editor.test — floors: draw rect / material / edit / delete');
   check('click selects existing floor', st.sel?.kind === 'floor' && st.doc.floors[st.sel.index].id === firstFloor.id);
 }
 
+// ------------------------------------------------------------------ B9-1: floor texture picker
+console.log('map-editor.test — floor texture dropdown (texture round-trip)');
+{
+  ME.setMode('floors');
+  const f0 = st.doc.floors[0];
+  const cx = f0.polygon.reduce((s, [x]) => s + x, 0) / f0.polygon.length;
+  const cz = f0.polygon.reduce((s, [, z]) => s + z, 0) / f0.polygon.length;
+  pointer('pointerdown', cx, cz);
+  const sel = doc.querySelector('select[data-field="floor.texture"]');
+  check('floor texture dropdown renders, defaulting to (none)', !!sel && sel.value === '');
+  const offered = [...sel.options].slice(1).map((o) => o.value); // skip "(none)"
+  check('dropdown offers the listed textures', offered.includes('textures/oak.jpg') && offered.includes('textures/tile.png'), offered.join(','));
+  sel.value = 'textures/oak.jpg';
+  sel.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('picking a texture sets floors[].texture', st.doc.floors[st.sel.index].texture === 'textures/oak.jpg');
+  check('preview swatch reflects the selection', doc.querySelector('img[data-field="floor.texture.swatch"]')?.getAttribute('src') === '/textures/oak.jpg');
+  sel.value = '';
+  sel.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('picking (none) removes texture — back to color material', !('texture' in st.doc.floors[st.sel.index]));
+}
+
 // ------------------------------------------------------------------ slice 2: walls
 console.log('map-editor.test — walls: draw axis-locked / select / edit / delete');
 {
@@ -214,6 +236,29 @@ console.log('map-editor.test — walls: draw axis-locked / select / edit / delet
   st.sel = { kind: 'wall', index: st.doc.walls.length - 1 };
   ME.deleteSelected();
   check('wall deletable', st.doc.walls.length === count - 1);
+}
+
+// ------------------------------------------------------------------ B9-1: wall texture picker
+console.log('map-editor.test — wall texture dropdown (texture round-trip)');
+{
+  ME.setMode('walls');
+  const before = st.doc.walls.length;
+  pointer('pointerdown', 1.2, 11.2); // draw a fresh wall in the empty new-floor zone (auto-selected)
+  pointer('pointermove', 3.7, 11.5);
+  pointer('pointerup', 3.7, 11.5);
+  check('wall selected for texture edit', st.sel?.kind === 'wall' && st.doc.walls.length === before + 1);
+  const sel = doc.querySelector('select[data-field="wall.texture"]');
+  check('wall texture dropdown renders, defaulting to (none)', !!sel && sel.value === '');
+  const offered = [...sel.options].slice(1).map((o) => o.value);
+  check('dropdown offers the listed textures', offered.includes('textures/oak.jpg') && offered.includes('textures/tile.png'), offered.join(','));
+  sel.value = 'textures/tile.png';
+  sel.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('picking a texture sets walls[].texture', st.doc.walls[st.sel.index].texture === 'textures/tile.png');
+  sel.value = '';
+  sel.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('picking (none) removes wall texture', !('texture' in st.doc.walls[st.sel.index]));
+  ME.deleteSelected(); // clean up the test wall
+  check('cleanup: wall count restored', st.doc.walls.length === before);
 }
 
 // ------------------------------------------------------------------ slice 2: doors

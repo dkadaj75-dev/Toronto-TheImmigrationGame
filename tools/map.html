@@ -117,7 +117,7 @@ const FLOOR_COLORS = { wood: '#8a6b46', tile: '#9aa3ad', carpet: '#6f7f97' };
 
 const state = {
   maps: [], mapId: null, doc: null,
-  assets: null, tuning: null,
+  assets: null, tuning: null, textures: [],
   dirty: false, mode: 'objects', sel: null,       // sel: {kind, index} | {kind:'spawn'}
   undoStack: [],
   navCells: null, navDirty: true,
@@ -132,10 +132,14 @@ async function getJson(u) { const r = await fetch(u); if (!r.ok) throw new Error
 async function boot() {
   setStatus('loading…');
   try {
-    const [list, assets, tuning] = await Promise.all([getJson('/api/maps'), getJson(API + 'assets.json'), getJson(API + 'tuning.json')]);
+    const [list, assets, tuning, textures] = await Promise.all([
+      getJson('/api/maps'), getJson(API + 'assets.json'), getJson(API + 'tuning.json'),
+      getJson('/api/textures').catch(() => []), // B9-1: texture pickers; resilient if unlisted
+    ]);
     state.maps = list.maps;
     state.assets = assets;
     state.tuning = tuning;
+    state.textures = Array.isArray(textures) ? textures : [];
     const active = tuning.map?.active;
     await selectMap(state.maps.includes(active) ? active : state.maps[0]);
     renderPalette();
@@ -712,6 +716,33 @@ function field(labelText, value, onChange, opts = {}) {
   return row;
 }
 
+// B9-1: floor/wall texture picker — '(none)' = color material; a path writes floors[]/walls[].texture.
+// Preview swatch mirrors the selection (public/ served at root → '/'+path).
+function textureRow(kind, current, onChange) {
+  const row = document.createElement('div'); row.className = 'field';
+  const lab = document.createElement('label'); lab.textContent = 'texture';
+  const wrap = document.createElement('div');
+  wrap.style.display = 'flex'; wrap.style.gap = '6px'; wrap.style.alignItems = 'center';
+  const sel = document.createElement('select'); sel.dataset.field = kind + '.texture';
+  const none = document.createElement('option'); none.value = ''; none.textContent = '(none)'; sel.appendChild(none);
+  const opts = [...state.textures];
+  if (current && !opts.includes(current)) opts.push(current); // keep an unknown saved value selectable
+  for (const t of opts) { const o = document.createElement('option'); o.value = t; o.textContent = t; sel.appendChild(o); }
+  sel.value = current ?? '';
+  const swatch = document.createElement('img'); swatch.dataset.field = kind + '.texture.swatch';
+  swatch.style.width = '22px'; swatch.style.height = '22px'; swatch.style.objectFit = 'cover';
+  swatch.style.borderRadius = '4px'; swatch.style.border = '1px solid #2c3a58';
+  const updateSwatch = () => {
+    if (sel.value) { swatch.src = '/' + sel.value; swatch.style.visibility = 'visible'; }
+    else { swatch.removeAttribute('src'); swatch.style.visibility = 'hidden'; }
+  };
+  updateSwatch();
+  sel.addEventListener('change', () => { pushUndo(); onChange(sel.value); markDirty(); updateSwatch(); redraw(); });
+  wrap.append(sel, swatch);
+  row.append(lab, wrap);
+  return row;
+}
+
 function renderInspector() {
   const host = document.getElementById('inspector');
   host.innerHTML = '';
@@ -765,6 +796,7 @@ function renderInspector() {
     host.appendChild(Object.assign(document.createElement('h2'), { textContent: 'Floor' }));
     host.appendChild(field('id', f.id, edit((v) => { f.id = v; }), { text: true, data: 'floor.id' }));
     host.appendChild(field('material', f.material, edit((v) => { f.material = v; }), { options: [...FLOOR_MATERIALS], data: 'floor.material' }));
+    host.appendChild(textureRow('floor', f.texture, (v) => { if (v) f.texture = v; else delete f.texture; }));
     const poly = document.createElement('div'); poly.className = 'hint';
     poly.textContent = 'polygon: ' + JSON.stringify(f.polygon);
     host.appendChild(poly);
@@ -776,6 +808,7 @@ function renderInspector() {
     host.appendChild(field('from z', w.from[1], edit((v) => { w.from[1] = v; }), { data: 'wall.fz' }));
     host.appendChild(field('to x', w.to[0], edit((v) => { w.to[0] = v; }), { data: 'wall.tx' }));
     host.appendChild(field('to z', w.to[1], edit((v) => { w.to[1] = v; }), { data: 'wall.tz' }));
+    host.appendChild(textureRow('wall', w.texture, (v) => { if (v) w.texture = v; else delete w.texture; }));
     host.appendChild(del);
   } else if (s.kind === 'door') {
     const d = doc.doors[s.index];
