@@ -120,17 +120,20 @@ export class SimAgent {
 
   /**
    * Walk to an object, then perform an action on it. For seat-aware actions pass the
-   * resolved seat (findSeatFor) — the sim walks to the seat instead and sits facing the
-   * target. Unreachable seat falls back to standing at the target. Returns false only
+   * resolved seat (findSeatFor) — the sim walks to the seat's reachable front use spot,
+   * then snaps onto its authored perch and faces the target. Unreachable seat falls back
+   * to sitting at the target. Returns false only
    * if neither is reachable.
    *
    * `targetDef` (optional, §7.2): when supplied, the walk-to point for `target` is
    * useSpotFor's footprint-edge-along-facing point instead of the raw pivot — the sim
    * approaches the asset from its front (fridge, stove, sink…) rather than beelining to
    * its center. Omitting it (e.g. tests with no asset data) falls back to the old pivot
-   * heuristic. The seat branch is unchanged — sitting is still ON the seat, not in front
-   * of it — and either way the FINAL sit/lie position still snaps onto the seat/target
-   * itself once arrived (applyPose, below), so this only changes where the sim walks to.
+   * heuristic. Seats use the same approach calculation when their AssetDef is available:
+   * their pivot is normally inside a nav-blocked furniture footprint, and an arbitrary
+   * `nearestWalkable` cell can be behind the seat or in a disconnected pocket. The FINAL
+   * sit/lie position still snaps onto the seat/target itself (applyPose, below), so the
+   * approach point affects walking only, never the authored perch transform.
    *
    * `seatAware` (optional, ROADMAP_NEXT item 2): pass the action's own `seatAware` flag (NOT
    * just "was a seat resolved") so that BOTH "no eligible seat found" (`seat` is null) AND
@@ -156,9 +159,13 @@ export class SimAgent {
       const [sx, sz] = cellCenter(this.grid, stand);
       return this.route(sx, sz);
     };
-    if (seat && routeToPivot(seat)) {
-      this.queued = { action, target, seat };
-      return true;
+    if (seat) {
+      const seatDef = this.assetsById.get(seat.userData?.assetId as string);
+      const reachedSeat = seatDef ? routeToTargetFront(seat, seatDef) : routeToPivot(seat);
+      if (reachedSeat) {
+        this.queued = { action, target, seat };
+        return true;
+      }
     }
     const reachedTarget = targetDef ? routeToTargetFront(target, targetDef) : routeToPivot(target);
     if (reachedTarget) {
@@ -353,7 +360,13 @@ export class SimAgent {
       this.queued = null;
       this.current = a;
       this.applyPose(a); // sit on the couch / lie on the bed first…
-      if (a.action.faceTarget !== false) { // …then face the target from where we ended up (unless the action opts out, e.g. read_book keeps the seat's own facing)
+      const perch = a.seat ?? a.target;
+      // A direct Sit has target === perch. Its authored usePose already owns the final facing;
+      // with a non-zero offset, turning back toward the same object's pivot both disagreed with
+      // the Asset Editor preview and could swing an animated rig visibly off the cushion. Only
+      // target→different-seat actions (Watch TV), plus the no-seat ground fallback, need this
+      // post-pose target-facing override.
+      if (a.action.faceTarget !== false && (a.groundSit || a.target !== perch)) {
         const dx = a.target.position.x - p.x, dz = a.target.position.z - p.z;
         if (Math.hypot(dx, dz) > 1e-3) this.object.rotation.y = Math.atan2(dx, dz);
       }

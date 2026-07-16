@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { bakeNavGrid } from '../game/nav';
 import { SimAgent, findSeatFor } from '../game/sim';
+import { usePoseFor } from '../game/facing';
 import type { MapData, TuningData, GameData, AssetDef, ActionDef } from '../game/data';
 
 let failures = 0;
@@ -179,6 +180,70 @@ const assetsById = new Map<string, AssetDef>([['tv', tvDef], ['sofa', sofaDef]])
   agent.orderAction(plainAction, target, null, sofaDef, false);
   for (let i = 0; i < 600 && !agent.current; i++) agent.update(1 / 30);
   check('non-seat-aware action never sets groundSit', !!agent.current && !agent.current!.groundSit);
+}
+
+console.log('seatground.test — blocked furniture pivot routes to the seat front, then uses the exact authored perch');
+{
+  // Regression fixture for the live-condo failure: furniture footprints are included in the nav
+  // bake, and the first walkable cell found around this sofa's blocked pivot is on the far side of
+  // a wall. The sofa's own front use spot is reachable. The old routeToPivot path rejected the
+  // already-resolved sofa, fell through to the TV, and set groundSit — visually sitting at the TV.
+  const routedMap: MapData = {
+    id: 'seat-route', name: 'seat-route', gridSize: 0.5, bounds: { w: 6, h: 6 },
+    floors: [{ id: 'f', polygon: [[0, 0], [6, 0], [6, 6], [0, 6]], material: 'wood' }],
+    walls: [{ from: [3.5, 0], to: [3.5, 6] }], doors: [],
+    spawn: { pos: [1, 1], facingDeg: 0 },
+    placedObjects: [
+      { asset: 'sofa_pose', pos: [3, 3], rotDeg: 270 },
+      { asset: 'tv_pose', pos: [1, 3], rotDeg: 90 },
+    ],
+  };
+  const posedSofaDef = asset({
+    id: 'sofa_pose', name: 'Posed sofa', footprint: [3, 1], interactions: ['sit'], seatTarget: true,
+    usePose: { sit: { offset: [0, 0.15], y: 0.05 } },
+  });
+  const posedTvDef = asset({ id: 'tv_pose', name: 'TV', footprint: [1, 1], interactions: ['watch_tv'] });
+  const routedAssets = { categories: [], assets: [posedSofaDef, posedTvDef] };
+  const routedData: GameData = { ...gameData(), map: routedMap, assets: routedAssets };
+  const routedWorld = new THREE.Group();
+  const posedSofa = new THREE.Group();
+  posedSofa.position.set(3, 0, 3); posedSofa.rotation.y = THREE.MathUtils.degToRad(270); posedSofa.userData.assetId = 'sofa_pose';
+  const posedTv = new THREE.Group();
+  posedTv.position.set(1, 0, 3); posedTv.rotation.y = THREE.MathUtils.degToRad(90); posedTv.userData.assetId = 'tv_pose';
+  routedWorld.add(posedSofa, posedTv);
+  const routedGrid = bakeNavGrid(routedMap, routedAssets);
+  const routedById = new Map<string, AssetDef>([['sofa_pose', posedSofaDef], ['tv_pose', posedTvDef]]);
+  const expectedPerch = usePoseFor('sit', { pos: [3, 3], rotDeg: 270 }, posedSofaDef, tuning);
+
+  const watchObj = new THREE.Group(); watchObj.position.set(1, 0, 1);
+  const watchAgent = new SimAgent(watchObj, routedGrid, tuning, routedById);
+  const watchSeat = findSeatFor(routedWorld, routedData, posedTv);
+  check('Watch TV resolves the sofa before routing', watchSeat === posedSofa);
+  check('Watch TV can route to the reachable front of a nav-blocking sofa', watchAgent.orderAction(watchTvAction, posedTv, watchSeat, posedTvDef, true));
+  for (let i = 0; i < 600 && !watchAgent.current; i++) watchAgent.update(1 / 30);
+  check('Watch TV keeps the resolved sofa instead of falling back to groundSit at the TV', !!watchAgent.current && watchAgent.current.seat === posedSofa && !watchAgent.current.groundSit);
+  check('Watch TV lands at the sofa authored usePose',
+    Math.abs(watchObj.position.x - expectedPerch.pos[0]) < 1e-6
+      && Math.abs(watchObj.position.z - expectedPerch.pos[1]) < 1e-6
+      && Math.abs(watchObj.position.y - expectedPerch.y) < 1e-6,
+    `${watchObj.position.toArray()} vs ${JSON.stringify(expectedPerch)}`);
+  const watchYaw = Math.atan2(posedTv.position.x - watchObj.position.x, posedTv.position.z - watchObj.position.z);
+  check('Watch TV faces the TV from the sofa', Math.abs(watchObj.rotation.y - watchYaw) < 1e-6, `${watchObj.rotation.y} vs ${watchYaw}`);
+
+  const sitObj = new THREE.Group(); sitObj.position.set(1, 0, 1);
+  const sitAgent = new SimAgent(sitObj, routedGrid, tuning, routedById);
+  const directSeat = findSeatFor(routedWorld, routedData, posedSofa);
+  const directSit: ActionDef = { ...watchTvAction, id: 'sit', name: 'Sit', primaryNeed: 'comfort' };
+  check('direct Sit can route to the same sofa front', sitAgent.orderAction(directSit, posedSofa, directSeat, posedSofaDef, true));
+  for (let i = 0; i < 600 && !sitAgent.current; i++) sitAgent.update(1 / 30);
+  check('direct Sit position/height exactly match the preview usePoseFor transform',
+    Math.abs(sitObj.position.x - expectedPerch.pos[0]) < 1e-6
+      && Math.abs(sitObj.position.z - expectedPerch.pos[1]) < 1e-6
+      && Math.abs(sitObj.position.y - expectedPerch.y) < 1e-6,
+    `${sitObj.position.toArray()} vs ${JSON.stringify(expectedPerch)}`);
+  check('direct Sit keeps the authored usePose facing instead of turning back toward its own pivot',
+    Math.abs(sitObj.rotation.y - THREE.MathUtils.degToRad(expectedPerch.facingDeg)) < 1e-6,
+    `${THREE.MathUtils.radToDeg(sitObj.rotation.y)}° vs ${expectedPerch.facingDeg}°`);
 }
 
 console.log('seatground.test — faceTarget (B9-1 follow-up): per-action opt-out of the post-arrival face-the-target rotation');
