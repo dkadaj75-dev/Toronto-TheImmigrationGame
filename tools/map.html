@@ -771,20 +771,21 @@ function textureSideBRow(current, onChange) {
   const row = document.createElement('div'); row.className = 'field';
   const lab = document.createElement('label');
   lab.textContent = 'Texture side B (optional)';
-  lab.title = 'Side A faces world +Z (south) on a horizontal wall, or +X (east) on a vertical wall. Side B is the opposite face. Leave as "(same as side A)" for a single texture on both faces.';
+  lab.title = 'Side A faces world +Z (south) on a horizontal wall, or +X (east) on a vertical wall. Side B is the opposite face. "(same as side A)" = one texture on both faces; "(none — plain color)" = side B stays untextured.';
   const wrap = document.createElement('div');
   wrap.style.display = 'flex'; wrap.style.gap = '6px'; wrap.style.alignItems = 'center';
   const sel = document.createElement('select'); sel.dataset.field = 'wall.textureB';
-  const none = document.createElement('option'); none.value = ''; none.textContent = '(same as side A)'; sel.appendChild(none);
+  const same = document.createElement('option'); same.value = ''; same.textContent = '(same as side A)'; sel.appendChild(same);
+  const none = document.createElement('option'); none.value = '__none__'; none.textContent = '(none — plain color)'; sel.appendChild(none);
   const opts = [...state.textures];
   if (current && !opts.includes(current)) opts.push(current); // keep an unknown saved value selectable
   for (const t of opts) { const o = document.createElement('option'); o.value = t; o.textContent = t; sel.appendChild(o); }
-  sel.value = current ?? '';
+  sel.value = current === null ? '__none__' : (current ?? '');
   const swatch = document.createElement('img'); swatch.dataset.field = 'wall.textureB.swatch';
   swatch.style.width = '22px'; swatch.style.height = '22px'; swatch.style.objectFit = 'cover';
   swatch.style.borderRadius = '4px'; swatch.style.border = '1px solid #2c3a58';
   const updateSwatch = () => {
-    if (sel.value) { swatch.src = '/' + sel.value; swatch.style.visibility = 'visible'; }
+    if (sel.value && sel.value !== '__none__') { swatch.src = '/' + sel.value; swatch.style.visibility = 'visible'; }
     else { swatch.removeAttribute('src'); swatch.style.visibility = 'hidden'; }
   };
   updateSwatch();
@@ -860,7 +861,7 @@ function renderInspector() {
     host.appendChild(field('to x', w.to[0], edit((v) => { w.to[0] = v; }), { data: 'wall.tx' }));
     host.appendChild(field('to z', w.to[1], edit((v) => { w.to[1] = v; }), { data: 'wall.tz' }));
     host.appendChild(textureRow('wall', w.texture, (v) => { if (v) w.texture = v; else delete w.texture; }, w.textureScale, (v) => { if (v) w.textureScale = v; else delete w.textureScale; }, 'Texture (side A / both)'));
-    host.appendChild(textureSideBRow(w.textureB, (v) => { if (v) w.textureB = v; else delete w.textureB; }));
+    host.appendChild(textureSideBRow(w.textureB, (v) => { if (v === '__none__') w.textureB = null; else if (v) w.textureB = v; else delete w.textureB; }));
     host.appendChild(del);
   } else if (s.kind === 'door') {
     const d = doc.doors[s.index];

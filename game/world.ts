@@ -300,7 +300,9 @@ export function buildWorld(data: GameData, trackInitialLoad?: TrackInitialLoad):
     let mat: THREE.Material | THREE.Material[];
     let matA: THREE.MeshLambertMaterial | undefined;
     let matB: THREE.MeshLambertMaterial | undefined;
-    if (wall.textureB) {
+    // textureB semantics: undefined = same as side A (single material); a path = that texture on
+    // side B; null = side B stays PLAIN COLOR even though side A is textured ("(none)" in the tool).
+    if (wall.textureB !== undefined) {
       matA = new THREE.MeshLambertMaterial({ color: 0xf0ead9 });
       matB = new THREE.MeshLambertMaterial({ color: 0xf0ead9 });
       // Which local face (+z or -z) is "side A" depends on the wall's actual placement, not on

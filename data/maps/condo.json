@@ -34,29 +34,6 @@
       "texture": "textures/ShittyFloor.jpg"
     },
     {
-      "id": "Kitchen",
-      "polygon": [
-        [
-          6,
-          0
-        ],
-        [
-          9,
-          0
-        ],
-        [
-          9,
-          6
-        ],
-        [
-          6,
-          6
-        ]
-      ],
-      "material": "tile",
-      "texture": "textures/ShittyTiling.jpg"
-    },
-    {
       "id": "Bedroom",
       "polygon": [
         [
@@ -80,15 +57,38 @@
       "texture": "textures/ShittyFloor.jpg"
     },
     {
-      "id": "Washroom",
+      "id": "floor_1",
       "polygon": [
         [
           6,
-          6
+          0
         ],
         [
           9,
-          6
+          0
+        ],
+        [
+          9,
+          5
+        ],
+        [
+          6,
+          5
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/ShittyTiling.jpg"
+    },
+    {
+      "id": "floor_2",
+      "polygon": [
+        [
+          6,
+          5
+        ],
+        [
+          9,
+          5
         ],
         [
           9,
@@ -163,6 +163,7 @@
         6,
         5
       ],
+      "textureB": null,
       "texture": "textures/Tiling.jpg"
     },
     {

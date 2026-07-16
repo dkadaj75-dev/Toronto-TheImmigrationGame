@@ -395,7 +395,7 @@ export interface MapData {
    *  face. A wall running mostly along the Z axis ("vertical") has faces pointing +X/-X — side A
    *  is whichever faces WORLD +X ("east"), side B is -X ("west"). See world.ts buildWorld()'s wall
    *  loop for the face-assignment math. `textureScale` applies to both sides equally. */
-  walls: { from: [number, number]; to: [number, number]; texture?: string; textureB?: string; textureScale?: number }[];
+  walls: { from: [number, number]; to: [number, number]; texture?: string; textureB?: string | null; textureScale?: number }[];
   doors: { at: [number, number]; orientation: 'vertical' | 'horizontal'; width?: number; assetId?: string }[];
   /** ROADMAP_NEXT item 9: wall openings that are purely visual — a window never affects the nav
    *  grid or wall collision (the wall segment it sits on stays a single unbroken box, unlike a
