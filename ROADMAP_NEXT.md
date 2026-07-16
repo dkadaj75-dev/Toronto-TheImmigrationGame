@@ -235,3 +235,11 @@ Designer-editable UI: fonts, colors, shapes (radius/outline/shadow) of notificat
 ## B10-4. Follow-up: after sitting, the sim faced the bookshelf when reading a book.
 
 **DONE (2026-07-16):** the post-perch "face the target" rotation (right for Watch TV) is now per-action: sparse `ActionDef.faceTarget?: boolean` (absent/true = rotate to the target, `false` = keep the seat's own usePose facing). `read_book` ships with `faceTarget: false`; Interaction Editor gained a sparse "face target after sitting" checkbox (untick for fetch-style actions like eat, if desired). New `tools/interaction-editor.test.mjs` jsdom suite covers the round-trip.
+
+## B10-5. REGRESSION: seat-aware sitting placement disagrees with the Asset Editor preview
+
+Designer report: Watch TV now sits the sim in mid-air at/inside the TV footprint instead of on the facing sofa; direct Sit on the sofa floats just beyond the TV-facing cushion edge, while the Asset Editor character preview shows the intended pose. Find and fix the actual seat-resolution and placement-coordinate causes without retuning designer data. The game must perch Watch TV on the sofa facing the TV, place direct Sit exactly at the sofa's authored `usePose`, and make preview/game transforms identical. Add headless regressions for both paths.
+
+**Design reading:** trace `findSeatFor`, ordered-action leg/seat state, `applyPose`, arrival facing, world instance transforms, and the preview's virtual instance. Share one placement semantic rather than compensating with asset offsets; preserve `data/*.json` unchanged.
+
+**DONE 2026-07-16:** `findSeatFor` was correct; `orderAction` discarded its sofa when pivot routing chose an unreachable cell inside/behind the nav-blocking footprint, then ground-sat at the TV. Seats now route to their reachable front approach before snapping to `usePose`. Direct Sit no longer post-rotates toward its own target pivot, so its complete transform matches the Asset Editor's shared `usePoseFor` preview. Headless regression covers both paths with a blocked-pivot/rotated-offset fixture; designer data untouched. See PROJECT_CONTEXT §7.34 B10-5.
