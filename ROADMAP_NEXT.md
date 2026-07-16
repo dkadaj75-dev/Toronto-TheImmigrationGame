@@ -199,3 +199,5 @@ Utility-based autonomy the designer can tune: decisions driven by personality at
 
 ## B8-2. UI theme & layout editor (engine + tool)
 Designer-editable UI: fonts, colors, shapes (radius/outline/shadow) of notifications/messages/buttons/panels, screen positions, accordion nesting of HUD groups. data/theme.json -> CSS variables + layout config consumed by game/ui.ts; new tools/theme.html with live preview. Design locked PROJECT_CONTEXT §7.31. Slices: engine (E), tool (T).
+
+**ENGINE DONE (B8-2-E, 2026-07-16):** default legacy-look theme data, CSS-variable application, safe-area anchors/visibility, accordion grouping, hot-reload, and pure headless coverage shipped; Theme Editor (T) remains.

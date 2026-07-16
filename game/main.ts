@@ -34,6 +34,7 @@ import { initEnergyCollapseState, StarvationTracker, tickEnergyCollapse } from '
 import { formatMoneyChange, formatSkillUp, skillLevelUps } from './feedback';
 import { AssetStateRegistry, isAssetStateActionAvailable, isStatefulAsset, powerStateForAction } from './assetstate';
 import { InitialLoadTracker, phraseAt } from './loading';
+import { applyTheme } from './theme';
 
 /** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
  *  a seat-aware action with no eligible seat in range) plays the dedicated 'sit_ground' state
@@ -246,6 +247,7 @@ async function start() {
 
   const stats = new SimStats(data.stats, data.tuning.skills?.growthCurveExp ?? 1.5);
   const hud = new Hud(stats);
+  applyTheme(data.theme);
   hud.setPhoneIcon(data.tuning.phone?.icon ?? '/icons/Smartphone.png');
   hud.onWallCutToggle = () => {
     wallCutActive = !wallCutActive;
@@ -1238,6 +1240,7 @@ async function start() {
   let currentMapId = data.map.id;
   watchData((fresh) => {
     data = fresh;
+    applyTheme(data.theme);
     scene.remove(world);
     disposeGroup(world);
     world = buildWorld(data);

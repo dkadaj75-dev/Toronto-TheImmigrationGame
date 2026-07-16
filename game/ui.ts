@@ -98,12 +98,14 @@ function readSafeAreaInsets(): ScreenInsets {
 }
 
 const CSS = `
-#hud { position: fixed; inset: 0; pointer-events: none; font-family: system-ui, sans-serif; z-index: 10; }
+#hud { position: fixed; inset: 0; pointer-events: none;
+  font-family: var(--theme-font-family, system-ui, sans-serif); font-size: var(--theme-font-size, 16px); z-index: 10; }
 #hud * { box-sizing: border-box; }
 #hud, #hud * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .hud-panel { position: absolute; left: calc(8px + env(safe-area-inset-left, 0px));
-  background: rgba(20,26,40,.82); border-radius: 10px;
-  padding: 8px 10px; width: 168px; pointer-events: auto; color: #dfe6f2; backdrop-filter: blur(4px); }
+  background: var(--theme-panel-bg, rgba(20,26,40,.82)); border-radius: var(--theme-panel-radius, 10px);
+  box-shadow: var(--theme-panel-shadow, none); font-family: var(--theme-panel-font-family, system-ui, sans-serif);
+  padding: 8px 10px; width: 168px; pointer-events: auto; color: var(--theme-panel-fg, #dfe6f2); backdrop-filter: blur(4px); }
 #needs-panel { top: calc(8px + env(safe-area-inset-top, 0px)); }
 #skills-panel { top: calc(8px + env(safe-area-inset-top, 0px)); left: auto; right: calc(8px + env(safe-area-inset-right, 0px)); }
 .hud-panel h3 { margin: 0 0 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
@@ -123,25 +125,28 @@ const CSS = `
 @keyframes hud-blink { 50% { filter: brightness(1.7); } }
 
 #time-bar { position: absolute; top: calc(8px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%);
-  background: rgba(20,26,40,.82); border-radius: 999px; padding: 5px 8px; pointer-events: auto;
-  display: flex; align-items: center; gap: 4px; color: #dfe6f2; backdrop-filter: blur(4px); }
+  background: var(--theme-panel-bg, rgba(20,26,40,.82)); border-radius: var(--theme-button-radius, 999px); padding: 5px 8px; pointer-events: auto;
+  display: flex; align-items: center; gap: 4px; color: var(--theme-panel-fg, #dfe6f2); backdrop-filter: blur(4px); }
 #time-bar .clock { font-size: 14px; font-variant-numeric: tabular-nums; padding: 0 6px; min-width: 46px; text-align: center; }
-#time-bar.paused .clock { color: #e0b05f; }
+#time-bar.paused .clock { color: var(--theme-warn, #e0b05f); }
 #time-bar button { border: 0; border-radius: 999px; width: 30px; height: 30px; font-size: 12px;
   background: transparent; color: #93a3c0; cursor: pointer; touch-action: manipulation; }
-#time-bar button.active { background: rgba(90,120,190,.4); color: #eaf0fb; }
+#time-bar button.active { background: var(--theme-button-accent, rgba(90,120,190,.4)); color: var(--theme-button-fg, #eaf0fb); }
 #time-bar.work-override button { opacity: .45; cursor: default; }
 
-#action-menu { position: fixed; inset: 0; display: none; pointer-events: none; color: #dfe6f2; z-index: 14; }
+#action-menu { position: fixed; inset: 0; display: none; pointer-events: none; color: var(--theme-action-menu-fg, #dfe6f2); z-index: 14; }
 #action-menu.open { display: block; }
 #action-menu .am-title, #action-menu button { position: absolute; transform: translate(-50%, -50%); }
 #action-menu .am-title { display: grid; place-items: center; padding: 5px 9px; border-radius: 999px;
   background: rgba(20,26,40,.88); box-shadow: 0 3px 14px rgba(0,0,0,.35); backdrop-filter: blur(6px);
   font-size: 11px; color: #b8c4da; text-align: center; overflow: hidden; }
-#action-menu button { pointer-events: auto; border: 1px solid rgba(130,158,210,.35); border-radius: 999px; padding: 7px 10px;
-  font-size: 13px; line-height: 1.15; font-weight: 650; background: rgba(43,57,86,.96); color: #eaf0fb; cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0,0,0,.4); backdrop-filter: blur(6px); touch-action: manipulation; }
-#action-menu button:active { background: rgba(90,120,190,.55); }
+#action-menu button { pointer-events: auto; border: var(--theme-action-menu-outline-width, 1px) solid var(--theme-action-menu-outline, rgba(130,158,210,.35));
+  border-radius: var(--theme-action-menu-radius, 999px); padding: 7px 10px;
+  font-family: var(--theme-action-menu-font-family, system-ui, sans-serif); font-size: var(--theme-action-menu-font-size, 13px);
+  line-height: 1.15; font-weight: 650; background: var(--theme-action-menu-bg, rgba(43,57,86,.96));
+  color: var(--theme-action-menu-fg, #eaf0fb); cursor: pointer;
+  box-shadow: var(--theme-action-menu-shadow, 0 4px 16px rgba(0,0,0,.4)); backdrop-filter: blur(6px); touch-action: manipulation; }
+#action-menu button:active { background: var(--theme-action-menu-accent, rgba(90,120,190,.55)); }
 #action-menu button:disabled { opacity: .42; cursor: not-allowed; background: rgba(45,55,75,.5); }
 #action-menu button.am-cancel { background: rgba(55,45,58,.96); color: #c5b6c8; }
 
@@ -149,7 +154,7 @@ const CSS = `
   background: rgba(20,26,40,.92); border-radius: 999px; padding: 8px 14px; color: #dfe6f2;
   font-size: 13px; display: none; align-items: center; gap: 10px; pointer-events: auto; }
 #activity-chip.open { display: flex; }
-#activity-chip button { border: 0; background: rgba(220,90,90,.35); color: #fbdada; border-radius: 999px;
+#activity-chip button { border: 0; background: rgba(220,90,90,.35); color: #fbdada; border-radius: var(--theme-button-radius, 999px);
   padding: 4px 10px; font-size: 12px; cursor: pointer; touch-action: manipulation; }
 
 #work-chip { position: absolute; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px));
@@ -169,9 +174,12 @@ const CSS = `
 
 #quest-toasts { position: absolute; top: calc(56px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%);
   display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; z-index: 11; }
-.quest-toast { background: rgba(20,26,40,.92); color: #eaf0fb; border-radius: 10px; padding: 8px 14px;
-  font-size: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.35); opacity: 0; transform: translateY(-6px);
-  transition: opacity .25s, transform .25s; border-left: 3px solid #5a9fd6; max-width: 80vw; text-align: center; }
+.quest-toast { background: var(--theme-toast-bg, rgba(20,26,40,.92)); color: var(--theme-toast-fg, #eaf0fb);
+  border-radius: var(--theme-toast-radius, 10px); padding: 8px 14px;
+  font-family: var(--theme-toast-font-family, system-ui, sans-serif); font-size: var(--theme-toast-font-size, 12px);
+  box-shadow: var(--theme-toast-shadow, 0 2px 10px rgba(0,0,0,.35)); opacity: 0; transform: translateY(-6px);
+  transition: opacity .25s, transform .25s;
+  border-left: var(--theme-toast-outline-width, 3px) solid var(--theme-toast-accent, #5a9fd6); max-width: 80vw; text-align: center; }
 .quest-toast.show { opacity: 1; transform: translateY(0); }
 .quest-toast.completed { border-left-color: #6fce7a; }
 
@@ -196,10 +204,10 @@ const CSS = `
   .hud-panel h3 { font-size: 10px; }
   .bar-row { grid-template-columns: 44px 1fr; gap: 4px; margin: 2px 0; }
   .bar-row label { font-size: 9px; }
-  #time-bar { top: calc(46px + env(safe-area-inset-top, 0px)); padding: 4px 6px; gap: 3px; }
+  #time-bar { top: calc(46px + env(safe-area-inset-top, 0px)) !important; padding: 4px 6px; gap: 3px; }
   #time-bar button { width: 26px; height: 26px; }
   #time-bar .clock { min-width: 38px; font-size: 12px; padding: 0 4px; }
-  #quest-toasts { top: calc(90px + env(safe-area-inset-top, 0px)); }
+  #quest-toasts { top: calc(90px + env(safe-area-inset-top, 0px)) !important; }
 }
 
 /* --- Buy/Sell mode (PROJECT_CONTEXT.md §7.6) ---------------------------------------------
@@ -208,16 +216,17 @@ const CSS = `
    #buy-button stack ABOVE that, clear of both; #action-menu/#activity-chip stay bottom-center so
    there's no conflict there either. */
 #funds-chip { position: absolute; right: calc(8px + env(safe-area-inset-right, 0px));
-  bottom: calc(128px + env(safe-area-inset-bottom, 0px)); background: rgba(20,26,40,.82);
+  bottom: calc(128px + env(safe-area-inset-bottom, 0px)); background: var(--theme-panel-bg, rgba(20,26,40,.82));
   border-radius: 999px; padding: 6px 12px; font-size: 12px; font-variant-numeric: tabular-nums;
   color: #e0c26f; pointer-events: none; }
 #buy-button { position: absolute; right: calc(8px + env(safe-area-inset-right, 0px));
-  bottom: calc(84px + env(safe-area-inset-bottom, 0px)); border: 0; border-radius: 999px;
-  padding: 10px 16px; font-size: 13px; background: rgba(90,120,190,.55); color: #eaf0fb;
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px)); border: 0; border-radius: var(--theme-button-radius, 999px);
+  padding: 10px 16px; font-family: var(--theme-button-font-family, system-ui, sans-serif); font-size: 13px;
+  background: var(--theme-button-bg, rgba(90,120,190,.55)); color: var(--theme-button-fg, #eaf0fb);
   cursor: pointer; pointer-events: auto; touch-action: manipulation; }
 #wall-cut-button { position: absolute; right: calc(92px + env(safe-area-inset-right, 0px));
-  bottom: calc(84px + env(safe-area-inset-bottom, 0px)); border: 1px solid rgba(130,158,210,.45);
-  border-radius: 999px; padding: 9px 12px; font-size: 13px; background: rgba(20,26,40,.88);
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px)); border: var(--theme-outline-width, 1px) solid var(--theme-outline, rgba(130,158,210,.45));
+  border-radius: var(--theme-button-radius, 999px); padding: 9px 12px; font-size: 13px; background: rgba(20,26,40,.88);
   color: #b8c4da; cursor: pointer; pointer-events: auto; touch-action: manipulation; }
 #wall-cut-button.active { background: rgba(90,120,190,.7); color: #fff; }
 #funds-chip.hidden, #buy-button.hidden, #buy-button.work-hidden, #wall-cut-button.hidden { display: none; }
@@ -228,17 +237,18 @@ const CSS = `
    small chip near funds chip" per the brief. Amber at <=3 days left OR while in grace; red once
    actually in grace (a stronger warning than the plain low-days amber). */
 #visa-chip { position: absolute; right: calc(8px + env(safe-area-inset-right, 0px));
-  bottom: calc(168px + env(safe-area-inset-bottom, 0px)); background: rgba(20,26,40,.82);
+  bottom: calc(168px + env(safe-area-inset-bottom, 0px)); background: var(--theme-panel-bg, rgba(20,26,40,.82));
   border-radius: 999px; padding: 6px 12px; font-size: 12px; color: #9fb0cc; pointer-events: none;
   white-space: nowrap; }
-#visa-chip.warn { color: #e0b05f; }
-#visa-chip.grace { color: #e57a7a; }
+#visa-chip.warn { color: var(--theme-warn, #e0b05f); }
+#visa-chip.grace { color: var(--theme-error, #e57a7a); }
 #visa-chip.hidden { display: none; }
 
 #phone-button { position: absolute; right: calc(8px + env(safe-area-inset-right, 0px));
   bottom: calc(208px + env(safe-area-inset-bottom, 0px)); width: 48px; height: 48px; padding: 5px;
-  border: 1px solid rgba(130,158,210,.55); border-radius: 14px; background: rgba(20,26,40,.9);
-  box-shadow: 0 3px 14px rgba(0,0,0,.35); cursor: pointer; pointer-events: auto; touch-action: manipulation; }
+  border: var(--theme-outline-width, 1px) solid var(--theme-button-outline, rgba(130,158,210,.55)); border-radius: 14px;
+  background: rgba(20,26,40,.9); box-shadow: var(--theme-shadow, 0 3px 14px rgba(0,0,0,.35));
+  cursor: pointer; pointer-events: auto; touch-action: manipulation; }
 #phone-button img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 #phone-button.hidden { display: none; }
 .phone-badge { position: absolute; top: -5px; right: -5px; min-width: 20px; height: 20px; padding: 0 5px;
@@ -250,21 +260,21 @@ const CSS = `
   justify-content: center; flex-direction: column; gap: 18px; background: rgba(8,10,16,.92);
   color: #eaf0fb; text-align: center; padding: 24px; pointer-events: none; }
 #game-over.open { display: flex; pointer-events: auto; }
-#game-over h2 { margin: 0; font-size: 20px; letter-spacing: .04em; color: #e57a7a; }
+#game-over h2 { margin: 0; font-size: 20px; letter-spacing: .04em; color: var(--theme-error, #e57a7a); }
 #game-over p { margin: 0; font-size: 15px; max-width: 420px; color: #c3cde3; }
-#game-over button { border: 0; border-radius: 999px; padding: 12px 26px; font-size: 14px;
-  background: rgba(90,120,190,.55); color: #eaf0fb; cursor: pointer; touch-action: manipulation; }
+#game-over button { border: 0; border-radius: var(--theme-button-radius, 999px); padding: 12px 26px; font-size: 14px;
+  background: var(--theme-button-bg, rgba(90,120,190,.55)); color: var(--theme-button-fg, #eaf0fb); cursor: pointer; touch-action: manipulation; }
 
 /* F2 repo notice deliberately shares the visa game-over visual language, but is non-terminal. */
 #repo-overlay { position: fixed; inset: 0; z-index: 19; display: none; align-items: center;
   justify-content: center; flex-direction: column; gap: 16px; background: rgba(8,10,16,.88);
   color: #eaf0fb; text-align: center; padding: 24px; pointer-events: none; }
 #repo-overlay.open { display: flex; pointer-events: auto; }
-#repo-overlay h2 { margin: 0; font-size: 20px; letter-spacing: .04em; color: #e0b05f; }
+#repo-overlay h2 { margin: 0; font-size: 20px; letter-spacing: .04em; color: var(--theme-warn, #e0b05f); }
 #repo-overlay p { margin: 0; font-size: 15px; max-width: 460px; color: #c3cde3; }
 #repo-overlay ul { margin: 0; padding-left: 22px; max-height: 42vh; overflow: auto; text-align: left; color: #eaf0fb; }
-#repo-overlay button { border: 0; border-radius: 999px; padding: 12px 26px; font-size: 14px;
-  background: rgba(90,120,190,.55); color: #eaf0fb; cursor: pointer; touch-action: manipulation; }
+#repo-overlay button { border: 0; border-radius: var(--theme-button-radius, 999px); padding: 12px 26px; font-size: 14px;
+  background: var(--theme-button-bg, rgba(90,120,190,.55)); color: var(--theme-button-fg, #eaf0fb); cursor: pointer; touch-action: manipulation; }
 
 /* --- Smartphone overlay (PROJECT_CONTEXT.md §7.20 V2) -------------------------------------- */
 #phone-overlay { position: fixed; inset: 0; z-index: 18; display: none; align-items: center;
@@ -355,11 +365,19 @@ const CSS = `
 #buy-ghost-controls button.gc-cancel, #buy-selection-chips button.sc-cancel { background: transparent; color: #93a3c0; }
 #buy-selection-chips .sel-name { font-size: 12px; color: #93a3c0; padding: 0 4px; white-space: nowrap; }
 
+.theme-accordion { pointer-events: auto; display: grid; gap: 6px; min-width: 136px; }
+.theme-accordion-toggle { border: var(--theme-button-outline-width, 0px) solid var(--theme-button-outline, transparent);
+  border-radius: var(--theme-button-radius, 999px); padding: 7px 11px;
+  background: var(--theme-button-bg, rgba(90,120,190,.55)); color: var(--theme-button-fg, #eaf0fb);
+  font-family: var(--theme-button-font-family, system-ui, sans-serif); cursor: pointer; touch-action: manipulation; }
+.theme-accordion-body { display: grid; gap: 8px; }
+.theme-accordion.collapsed .theme-accordion-body { display: none; }
+
 @media (max-width: 500px) {
-  #funds-chip { bottom: calc(118px + env(safe-area-inset-bottom, 0px)); font-size: 11px; padding: 5px 10px; }
-  #visa-chip { bottom: calc(154px + env(safe-area-inset-bottom, 0px)); font-size: 11px; padding: 5px 10px; }
-  #buy-button { bottom: calc(78px + env(safe-area-inset-bottom, 0px)); font-size: 12px; padding: 8px 12px; }
-  #phone-button { bottom: calc(190px + env(safe-area-inset-bottom, 0px)); }
+  #funds-chip { bottom: calc(118px + env(safe-area-inset-bottom, 0px)) !important; font-size: 11px; padding: 5px 10px; }
+  #visa-chip { bottom: calc(154px + env(safe-area-inset-bottom, 0px)) !important; font-size: 11px; padding: 5px 10px; }
+  #buy-button { bottom: calc(78px + env(safe-area-inset-bottom, 0px)) !important; font-size: 12px; padding: 8px 12px; }
+  #phone-button { bottom: calc(190px + env(safe-area-inset-bottom, 0px)) !important; }
   .buy-card { width: 78px; }
 }
 `;

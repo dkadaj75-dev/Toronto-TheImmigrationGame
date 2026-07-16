@@ -1,6 +1,42 @@
 // data.ts — single entry point for the "databases" (design pillar #2: data-driven everything).
 // Loads data/*.json and, in dev, polls for changes so tuning edits hot-reload into a running game.
 
+export type ThemeAnchor = 'tl' | 'tr' | 'bl' | 'br' | 'tc' | 'bc';
+export interface ThemeComponentOverrides {
+  fontFamily?: string;
+  fontSizePx?: number;
+  background?: string;
+  foreground?: string;
+  accent?: string;
+  outline?: string;
+  radiusPx?: number;
+  outlineWidthPx?: number;
+  shadow?: string;
+}
+export interface ThemeLayoutItem {
+  anchor: ThemeAnchor;
+  offsetX: number;
+  offsetY: number;
+  hidden?: boolean;
+  accordion?: string;
+}
+export interface ThemeData {
+  fonts: { family: string; sizePx: number };
+  colors: {
+    panelBg: string; panelFg: string; accent: string; warn: string; error: string;
+    buttonBg: string; buttonFg: string; outline: string;
+  };
+  shapes: { radiusPx: number; outlineWidthPx: number; shadow: string };
+  components?: {
+    toast?: ThemeComponentOverrides;
+    button?: ThemeComponentOverrides;
+    panel?: ThemeComponentOverrides;
+    actionMenu?: ThemeComponentOverrides;
+  };
+  layout: Record<string, ThemeLayoutItem>;
+  accordions?: { name: string; collapsedByDefault?: boolean }[];
+}
+
 export interface NeedDef { id: string; name: string; color: string; default: number; decayPerTick: number; autonomy: boolean; computed?: string; }
 export interface SkillDef { id: string; name: string; color: string; default: number; max: number; enabled?: boolean; }
 /** ROADMAP_NEXT item 10: a new designer-editable stat family alongside needs/skills — static
@@ -527,6 +563,8 @@ export interface GameData {
   loading: LoadingConfig;
   /** B8-1-E: missing behavior.json deliberately preserves the original lowest-need picker. */
   behavior?: BehaviorData;
+  /** B8-2-E: optional for compatibility; absence applies game/theme.ts's exact legacy defaults. */
+  theme?: ThemeData;
 }
 
 /** B7-7 boot-only presentation. Unlike tuning.json this file is intentionally not hot-reloaded. */
@@ -552,6 +590,7 @@ const FILES = {
   happiness: '/data/happiness.json',
   loading: '/data/loading.json',
   behavior: '/data/behavior.json',
+  theme: '/data/theme.json',
 } as const;
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -564,7 +603,7 @@ export async function loadAll(): Promise<GameData> {
   // tuning first — it names the active map (tuning.map.active, default "condo")
   const tuning = await fetchJson<TuningData>(FILES.tuning);
   const mapFile = `/data/maps/${tuning.map?.active ?? 'condo'}.json`;
-  const [stats, interactions, assets, map, simstate, quests, visas, jobs, bills, finance, happiness, loading, behavior] = await Promise.all([
+  const [stats, interactions, assets, map, simstate, quests, visas, jobs, bills, finance, happiness, loading, behavior, theme] = await Promise.all([
     fetchJson<StatsData>(FILES.stats),
     fetchJson<InteractionsData>(FILES.interactions),
     fetchJson<AssetsData>(FILES.assets),
@@ -578,8 +617,9 @@ export async function loadAll(): Promise<GameData> {
     fetchJson<HappinessData>(FILES.happiness),
     fetchJson<LoadingConfig>(FILES.loading),
     fetchOptionalJson<BehaviorData>(FILES.behavior),
+    fetchOptionalJson<ThemeData>(FILES.theme),
   ]);
-  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills, finance, happiness, loading, behavior };
+  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills, finance, happiness, loading, behavior, theme };
 }
 
 async function fetchOptionalJson<T>(url: string): Promise<T | undefined> {

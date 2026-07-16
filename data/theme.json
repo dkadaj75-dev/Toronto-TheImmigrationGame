@@ -1,0 +1,37 @@
+{
+  "fonts": { "family": "system-ui, sans-serif", "sizePx": 16 },
+  "colors": {
+    "panelBg": "rgba(20,26,40,.82)",
+    "panelFg": "#dfe6f2",
+    "accent": "rgba(90,120,190,.55)",
+    "warn": "#e0b05f",
+    "error": "#e57a7a",
+    "buttonBg": "rgba(90,120,190,.55)",
+    "buttonFg": "#eaf0fb",
+    "outline": "rgba(130,158,210,.45)"
+  },
+  "shapes": { "radiusPx": 10, "outlineWidthPx": 1, "shadow": "0 3px 14px rgba(0,0,0,.35)" },
+  "components": {
+    "panel": { "background": "rgba(20,26,40,.82)", "foreground": "#dfe6f2", "radiusPx": 10, "shadow": "none" },
+    "button": { "background": "rgba(90,120,190,.55)", "foreground": "#eaf0fb", "accent": "rgba(90,120,190,.4)", "outline": "rgba(130,158,210,.55)", "radiusPx": 999, "outlineWidthPx": 0, "shadow": "none" },
+    "toast": { "background": "rgba(20,26,40,.92)", "foreground": "#eaf0fb", "accent": "#5a9fd6", "radiusPx": 10, "outlineWidthPx": 3, "shadow": "0 2px 10px rgba(0,0,0,.35)", "fontSizePx": 12 },
+    "actionMenu": { "background": "rgba(43,57,86,.96)", "foreground": "#eaf0fb", "accent": "rgba(90,120,190,.55)", "outline": "rgba(130,158,210,.35)", "radiusPx": 999, "outlineWidthPx": 1, "shadow": "0 4px 16px rgba(0,0,0,.4)", "fontSizePx": 13 }
+  },
+  "layout": {
+    "needs-panel": { "anchor": "tl", "offsetX": 8, "offsetY": 8 },
+    "skills-panel": { "anchor": "tr", "offsetX": 8, "offsetY": 8 },
+    "quest-panel": { "anchor": "bl", "offsetX": 8, "offsetY": 40 },
+    "time-bar": { "anchor": "tc", "offsetX": 0, "offsetY": 8 },
+    "activity-chip": { "anchor": "bc", "offsetX": 0, "offsetY": 14 },
+    "work-chip": { "anchor": "bc", "offsetX": 0, "offsetY": 14 },
+    "quest-toasts": { "anchor": "tc", "offsetX": 0, "offsetY": 56 },
+    "visa-chip": { "anchor": "br", "offsetX": 8, "offsetY": 168 },
+    "funds-chip": { "anchor": "br", "offsetX": 8, "offsetY": 128 },
+    "buy-button": { "anchor": "br", "offsetX": 8, "offsetY": 84 },
+    "wall-cut-button": { "anchor": "br", "offsetX": 92, "offsetY": 84 },
+    "phone-button": { "anchor": "br", "offsetX": 8, "offsetY": 208 },
+    "buy-ghost-controls": { "anchor": "bc", "offsetX": 0, "offsetY": 14 },
+    "buy-selection-chips": { "anchor": "bc", "offsetX": 0, "offsetY": 14 }
+  },
+  "accordions": []
+}
