@@ -61,6 +61,19 @@ function seededRandom(seed) {
 
 // --- individual placeholder sounds -------------------------------------------------------------
 const sounds = [
+  ...[
+    ['ui_move.wav', 0.12, 420, 620],
+    ['ui_action.wav', 0.10, 700, 900],
+    ['quest_started.wav', 0.32, 520, 780],
+    ['quest_completed.wav', 0.40, 660, 990],
+    ['notification.wav', 0.18, 600, 600],
+    ['skill_up.wav', 0.35, 740, 1110],
+    ['money_up.wav', 0.24, 560, 840],
+    ['money_down.wav', 0.24, 420, 280],
+  ].map(([file, duration, firstHz, secondHz]) => ({
+    file, duration,
+    gen: (t) => 0.28 * Math.sin(2 * Math.PI * (t < duration / 2 ? firstHz : secondHz) * t) * fadeEnvelope(t, duration, 0.015),
+  })),
   {
     // TV hum: a soft low-frequency drone (AssetDef.sound on "tv") — loops for as long as
     // "Watch TV" targets a TV instance.

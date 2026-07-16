@@ -29,6 +29,8 @@ import { computeDurationSeconds, isDurationComplete } from './duration';
 import { AudioManager, loopSoundFor } from './audio';
 import { initBladderFailureState, checkBladderFailure, rearmBladderFailure } from './bladder';
 import { FoodRegistry, foodAssetForActionEvent } from './food';
+import { initEnergyCollapseState, StarvationTracker, tickEnergyCollapse } from './survival';
+import { formatMoneyChange, formatSkillUp, skillLevelUps } from './feedback';
 
 /** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
  *  a seat-aware action with no eligible seat in range) plays the dedicated 'sit_ground' state
@@ -241,11 +243,11 @@ async function start() {
     hud.setQuestLog(active, completedQuestLog, data.tuning.quests.completedLogLimit);
   };
   quests.onQuestStarted = (q) => {
-    hud.showQuestToast(`Quest started: ${q.name}`, 'started', data.tuning.quests.toastDurationSeconds * 1000);
+    hud.showQuestToast(`Quest started: ${q.name}`, 'started', data.tuning.quests.toastDurationSeconds * 1000, 'questStarted');
     refreshQuestLog();
   };
   quests.onQuestCompleted = (q) => {
-    hud.showQuestToast(`Quest completed: ${q.name}`, 'completed', data.tuning.quests.toastDurationSeconds * 1000);
+    hud.showQuestToast(`Quest completed: ${q.name}`, 'completed', data.tuning.quests.toastDurationSeconds * 1000, 'questCompleted');
     completedQuestLog.push({ name: q.name });
     refreshQuestLog();
   };
@@ -491,6 +493,21 @@ async function start() {
   // built here unconditionally like every other subsystem.
   const audio = new AudioManager(data.tuning);
   audio.setMusicContext('map', data.map); // starts (or queues, pre-gesture) the active map's playlist
+  const playTunedSfx = (key: 'moveOrder' | 'actionSelect' | 'questStarted' | 'questCompleted' | 'notification' | 'skillUp' | 'moneyUp' | 'moneyDown') => {
+    const path = data.tuning.audio?.[key];
+    if (path) audio.playSfx(path);
+  };
+  hud.onActionSelected = () => playTunedSfx('actionSelect');
+  hud.onToast = (cue) => playTunedSfx(cue);
+  let observedFunds = quests.funds;
+  const feedbackAnchor = new THREE.Vector3();
+  const observeFundsFeedback = () => {
+    const delta = quests.funds - observedFunds;
+    if (delta === 0) return;
+    observedFunds = quests.funds;
+    hud.showFloatingFeedback(formatMoneyChange(delta, data.tuning.economy.currencyName), delta > 0 ? 'money-up' : 'money-down');
+    playTunedSfx(delta > 0 ? 'moneyUp' : 'moneyDown');
+  };
 
   // --- ROADMAP_NEXT item 5: per-action duration timer (§7.11) ---------------------------------
   // Computed once when an action starts (skill snapshot at that moment — matches "how long THIS
@@ -649,6 +666,46 @@ async function start() {
     const foodAssetId = foodAssetForActionEvent(a.action.id, 'arrival');
     if (foodAssetId) startCarriedFood(foodAssetId);
   };
+
+  // B6-14/B6-15: pure state lives in survival.ts; this layer owns interruption and presentation.
+  const energyCollapseState = initEnergyCollapseState();
+  const starvation = new StarvationTracker();
+  const survivalEventActive = () => energyCollapseState.phase !== 'ready' || starvation.state.phase === 'collapse';
+  const handleEnergyCollapse = (event: ReturnType<typeof tickEnergyCollapse>) => {
+    if (event === 'collapse') {
+      agent.stopAction(); cancelCarry();
+      const cfg = data.tuning.energyCollapse;
+      autonomy.forceCooldown((cfg?.collapseSeconds ?? 2) + (cfg?.sleepSeconds ?? 20));
+      anim?.play('collapse');
+    } else if (event === 'sleep') {
+      agent.setGroundLie(true);
+      anim?.play('lie_sleep');
+    } else if (event === 'complete') {
+      agent.setGroundLie(false);
+      stats.refillNeed('energy', data.tuning.energyCollapse?.energyAfter ?? 40);
+      anim?.play('idle');
+    }
+  };
+  const tickStarvation = (sdt: number) => {
+    const cfg = data.tuning.starvation;
+    const event = starvation.tick(sdt, stats.needs.get('hunger') ?? 100, {
+      countdownSeconds: cfg?.countdownSeconds ?? 120,
+      collapseSeconds: cfg?.collapseSeconds ?? 4,
+      recoveryThreshold: cfg?.recoveryThreshold ?? 0,
+    });
+    if (event === 'warning') {
+      hud.showQuestToast('Starving! Eat before the countdown expires.', 'started', data.tuning.quests.toastDurationSeconds * 1000);
+    } else if (event === 'collapse') {
+      // Starvation is terminal and takes precedence if its countdown expires during energy sleep.
+      energyCollapseState.phase = 'ready'; energyCollapseState.elapsed = 0; energyCollapseState.armed = true;
+      agent.stopAction(); cancelCarry(); agent.setGroundLie(true);
+      autonomy.forceCooldown(cfg?.collapseSeconds ?? 4);
+      anim?.play('starve');
+    } else if (event === 'gameOver') {
+      gameOverActive = true;
+      hud.showGameOver(cfg?.message ?? 'Your Sim starved after going too long without food.');
+    }
+  };
   agent.onActionStop = (a, completed) => {
     hud.hideActivity();
     anim?.play('idle');
@@ -769,7 +826,7 @@ async function start() {
   };
 
   const tapInput = new TapInput(renderer.domElement, cam.camera, () => world, (hit) => {
-    if (repoOverlayActive || gameOverActive || work.isAtWork) return; // no on-lot input under modal/terminal or away
+    if (repoOverlayActive || gameOverActive || work.isAtWork || survivalEventActive()) return; // no orders during terminal/away/collapse events
     if (buyMode.active) { handleBuyModeTap(hit); return; }
     if (hit.object) {
       const assetId = hit.object.userData.assetId as string;
@@ -829,7 +886,7 @@ async function start() {
       autonomy.notePlayerCommand();
       cancelCarry(); // ROADMAP_NEXT B3-5: a fresh move order interrupts any in-progress carry walk
       const ok = agent.goTo(hit.ground.x, hit.ground.z);
-      if (ok) cue.showAt(hit.ground.x, hit.ground.z);
+      if (ok) { cue.showAt(hit.ground.x, hit.ground.z); playTunedSfx('moveOrder'); }
     }
   });
   tapInput.onHover = setHover;
@@ -965,7 +1022,13 @@ async function start() {
       // happens explicitly once the event completes (see peeState's completion below), not from a
       // later bladder reading (bladder-only decay can never climb back above reliefAmount on its
       // own, which made the old re-arm condition unreachable in practice).
-      if (bladderNow !== undefined && checkBladderFailure(bladderFailureState, bladderNow)) {
+      if (starvation.state.phase !== 'collapse' && starvation.state.phase !== 'gameOver') {
+        handleEnergyCollapse(tickEnergyCollapse(
+          energyCollapseState, 0, stats.needs.get('energy') ?? 100,
+          { collapseSeconds: data.tuning.energyCollapse?.collapseSeconds ?? 2, sleepSeconds: data.tuning.energyCollapse?.sleepSeconds ?? 20 },
+        ));
+      }
+      if (!survivalEventActive() && bladderNow !== undefined && checkBladderFailure(bladderFailureState, bladderNow)) {
         triggerBladderFailure();
       }
       autonomy.maybeAct(); // free will evaluates on the decay tick
@@ -983,7 +1046,14 @@ async function start() {
       gainAcc -= gainEvery;
       const active = agent.current;
       if (active) {
+        const skillsBefore = Object.fromEntries(stats.skills);
         stats.applyGains(active.action);
+        const skillsAfter = Object.fromEntries(stats.skills);
+        for (const up of skillLevelUps(skillsBefore, skillsAfter)) {
+          const name = data.stats.skills.find((def) => def.id === up.id)?.name ?? up.id;
+          hud.showFloatingFeedback(formatSkillUp(name, up.levels), 'skill');
+          playTunedSfx('skillUp');
+        }
         // auto-stop when the action's primary need is satisfied
         const pn = active.action.primaryNeed;
         if (pn && (stats.needs.get(pn) ?? 0) >= data.tuning.autonomy.stopAtThreshold) {
@@ -1193,7 +1263,7 @@ async function start() {
       peeState.elapsed += sdt;
       if (isDurationComplete(peeState.elapsed, peeState.totalSeconds)) {
         peeState = null;
-        anim?.play('idle');
+        if (!survivalEventActive()) anim?.play('idle');
         stats.refillNeed('bladder', data.tuning.bladderFailure?.reliefAmount ?? 30);
         // ROADMAP_NEXT B3-2: pees itself → hygiene takes a hit too (absolute set, same convention
         // as the bladder relief top-up above — not a delta).
@@ -1212,7 +1282,7 @@ async function start() {
       panicState.elapsed += sdt;
       if (isDurationComplete(panicState.elapsed, panicState.totalSeconds)) {
         panicState = null;
-        anim?.play('idle');
+        if (!survivalEventActive()) anim?.play('idle');
       }
     }
     // doors advance on the same sim time as the animation mixer (pause freezes them mid-swing,
@@ -1245,7 +1315,34 @@ async function start() {
     if (!work.isAtWork) {
       autonomy.update(sdt);
       simTick(sdt);
+      if (starvation.state.phase !== 'collapse' && starvation.state.phase !== 'gameOver') {
+        handleEnergyCollapse(tickEnergyCollapse(
+          energyCollapseState,
+          sdt,
+          stats.needs.get('energy') ?? 100,
+          {
+            collapseSeconds: data.tuning.energyCollapse?.collapseSeconds ?? 2,
+            sleepSeconds: data.tuning.energyCollapse?.sleepSeconds ?? 20,
+          },
+        ));
+      }
+      tickStarvation(sdt);
     }
+    observeFundsFeedback();
+    const feedbackCfg = data.tuning.feedback;
+    feedbackAnchor.set(
+      sim.position.x,
+      sim.position.y + (data.tuning.character?.heightMeters ?? 1.55) + (feedbackCfg?.yOffsetMeters ?? 0.25),
+      sim.position.z,
+    ).project(cam.camera);
+    const canvasRect = renderer.domElement.getBoundingClientRect();
+    hud.updateFloatingFeedback(
+      sdt,
+      canvasRect.left + (feedbackAnchor.x + 1) * canvasRect.width / 2,
+      canvasRect.top + (1 - feedbackAnchor.y) * canvasRect.height / 2,
+      feedbackCfg?.durationSeconds ?? 1.6,
+      feedbackCfg?.risePixels ?? 48,
+    );
     hudAcc += dt;
     if (hudAcc >= 0.25) { hudAcc = 0; hud.refresh(); hud.setFunds(quests.funds, currencyName()); } // 4 Hz is plenty for bars/funds
 

@@ -157,10 +157,14 @@ The preview GridHelper now derives exact square size from the fetched map's `gri
 Restored the three shipped condo window entries lost from `condo.json`; procedural panes now use visible frame rails and render on both wall faces instead of inside opaque wall depth.
 ## B6-9. Wall-cut view option (cut walls at ~1m, Sims-style, player toggle, view-only) — ✅ DONE 2026-07-16
 HUD `⌂ Cut` toggles ground-up wall/door visual scaling at auto-exposed `tuning.view.wallCutHeight` (1m default); windows hide in cut view, with nav/game state untouched and choice kept only in-page.
-## B6-10. UI sound placeholders: click/move-order/action-select; quest events (new/done); notifications in general
+## B6-10. UI sound placeholders: click/move-order/action-select; quest events (new/done); notifications in general — ✅ DONE 2026-07-16
+Eight tiny generated WAV cues are live through auto-exposed `tuning.audio` paths: successful move orders, action-menu picks, quest start/completion, generic toasts, skill-ups, and money up/down.
 ## B6-11. Contextual action menu around click location (Sims-style radial, screen-space so walls/assets never hide it; replaces bottom menu; screenshot ref on record)
 ## B6-12. Asset light emission + ON/OFF state: assets can generate light; Turn ON/OFF actions flip asset state driving light and/or sound (e.g. TV)
 ## B6-13. Wall-mounted assets (stick to wall: wall lights, canvas)
-## B6-14. Energy 0 → collapse animation then sleep on ground (short tunable duration)
-## B6-15. Hunger 0 → tunable countdown; if still starving → animation then GAME OVER
-## B6-16. Skill-up + money feedback: sound + floating rising text above sim ("English: +1!"); same for money gained/spent (amount, up/down)
+## B6-14. Energy 0 → collapse animation then sleep on ground (short tunable duration) — ✅ DONE 2026-07-16
+An armed survival event interrupts at zero energy, plays `collapse`, changes to ground `lie_sleep`, refills to the tuned value after the tuned sim-time sleep, then re-arms.
+## B6-15. Hunger 0 → tunable countdown; if still starving → animation then GAME OVER — ✅ DONE 2026-07-16
+Serializable starvation state warns at zero hunger, cancels after food recovery, or plays tuned `starve` collapse before the existing terminal overlay.
+## B6-16. Skill-up + money feedback: sound + floating rising text above sim ("English: +1!"); same for money gained/spent (amount, up/down) — ✅ DONE 2026-07-16
+Projected crisp HTML text rises above the sim for integer skill-level crossings and every authoritative funds delta, with tuned duration/rise/anchor and distinct sounds/colors.

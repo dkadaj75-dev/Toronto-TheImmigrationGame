@@ -81,6 +81,13 @@ const CSS = `
 .quest-toast.show { opacity: 1; transform: translateY(0); }
 .quest-toast.completed { border-left-color: #6fce7a; }
 
+#floating-feedback { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 12; }
+.floating-feedback-item { position: absolute; transform: translate(-50%, -100%); white-space: nowrap;
+  font-size: 16px; font-weight: 800; color: #f2f5ff; text-shadow: 0 1px 3px #000, 0 0 5px #000;
+  will-change: transform, opacity; }
+.floating-feedback-item.money-up { color: #74dc83; }
+.floating-feedback-item.money-down { color: #ff7777; }
+
 /* Mobile-polish audit (PROJECT_CONTEXT.md §8): at narrow portrait widths (~375-414px) the
    top-center #time-bar (~210px wide) collides with the top-left/top-right needs/skills
    panels (168px each) — three top:8px elements can't fit side by side under ~546px of
@@ -273,6 +280,8 @@ export class Hud {
   private questPanel: HTMLElement;
   private questBody: HTMLElement;
   private questToasts: HTMLElement;
+  private feedbackRoot: HTMLElement;
+  private feedbackItems: { el: HTMLElement; elapsed: number }[] = [];
   private fills = new Map<string, HTMLElement>();
 
   // --- Visa chip + game over (§7.20 B3-6) ---
@@ -335,6 +344,8 @@ export class Hud {
   onCancelAction: (() => void) | null = null;
   /** fires whenever the action menu closes (pick, cancel, or tap-away) */
   onMenuHidden: (() => void) | null = null;
+  onActionSelected: (() => void) | null = null;
+  onToast: ((cue: 'questStarted' | 'questCompleted' | 'notification') => void) | null = null;
 
   /** Simulation speed multiplier: 0 (paused), 1, 2, or 3. */
   speed = 1;
@@ -365,6 +376,7 @@ export class Hud {
       <div id="activity-chip"><span id="activity-label"></span><button>Stop</button></div>
       <div id="work-chip">At work</div>
       <div id="quest-toasts"></div>
+      <div id="floating-feedback"></div>
       <div id="visa-chip"></div>
       <div id="funds-chip">§ 0</div>
       <button id="buy-button">🛒 Buy</button>
@@ -432,6 +444,7 @@ export class Hud {
     this.questPanel = root.querySelector('#quest-panel')!;
     this.questBody = root.querySelector('#quest-body')!;
     this.questToasts = root.querySelector('#quest-toasts')!;
+    this.feedbackRoot = root.querySelector('#floating-feedback')!;
     this.chip.querySelector('button')!.addEventListener('click', () => this.onCancelAction?.());
 
     // --- Visa status + terminal game-over UI (§7.20 B3-6) ---
@@ -586,7 +599,7 @@ export class Hud {
       const cost = Math.max(0, action.cost ?? 0);
       b.textContent = cost > 0 ? `${action.name} (${currencyName}${cost})` : action.name;
       b.disabled = funds < cost;
-      b.addEventListener('click', () => { this.hideActionMenu(); onPick(action); });
+      b.addEventListener('click', () => { this.onActionSelected?.(); this.hideActionMenu(); onPick(action); });
       this.menu.appendChild(b);
     }
     const cancel = document.createElement('button');
@@ -663,7 +676,8 @@ export class Hud {
   }
 
   /** Transient toast for a quest trigger/completion. Duration comes from tuning.quests.toastDurationSeconds. */
-  showQuestToast(text: string, kind: 'started' | 'completed', durationMs: number) {
+  showQuestToast(text: string, kind: 'started' | 'completed', durationMs: number, cue: 'questStarted' | 'questCompleted' | 'notification' = 'notification') {
+    this.onToast?.(cue);
     const el = document.createElement('div');
     el.className = kind === 'completed' ? 'quest-toast completed' : 'quest-toast';
     el.textContent = text;
@@ -673,6 +687,28 @@ export class Hud {
       el.classList.remove('show');
       setTimeout(() => el.remove(), 300);
     }, durationMs);
+  }
+
+  showFloatingFeedback(text: string, kind: 'skill' | 'money-up' | 'money-down'): void {
+    const el = document.createElement('div');
+    el.className = `floating-feedback-item ${kind}`;
+    el.textContent = text;
+    this.feedbackRoot.appendChild(el);
+    this.feedbackItems.push({ el, elapsed: 0 });
+  }
+
+  /** Sim-time animation, anchored each frame to main.ts's projected point for crisp HTML text. */
+  updateFloatingFeedback(dt: number, x: number, y: number, durationSeconds: number, risePixels: number): void {
+    const duration = Math.max(0.01, durationSeconds);
+    for (let i = this.feedbackItems.length - 1; i >= 0; i--) {
+      const item = this.feedbackItems[i];
+      item.elapsed += Math.max(0, dt);
+      const t = Math.min(1, item.elapsed / duration);
+      item.el.style.left = `${x}px`;
+      item.el.style.top = `${y - risePixels * t - i * 20}px`;
+      item.el.style.opacity = String(1 - t);
+      if (t >= 1) { item.el.remove(); this.feedbackItems.splice(i, 1); }
+    }
   }
 
   /** Persistent legal-status readout. Grace is terminal-warning red; an expiring status turns

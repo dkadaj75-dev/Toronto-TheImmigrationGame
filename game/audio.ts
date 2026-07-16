@@ -44,7 +44,11 @@ import type { ActionDef, AssetDef, MapData, TuningData } from './data';
 
 // ==================================================================== pure logic (headless-tested)
 
-export interface AudioTuning { masterVolume: number; musicVolume: number; sfxVolume: number; musicCrossfadeSeconds: number; buyModeMusic?: string }
+export interface AudioTuning {
+  masterVolume: number; musicVolume: number; sfxVolume: number; musicCrossfadeSeconds: number; buyModeMusic?: string;
+  moveOrder?: string; actionSelect?: string; questStarted?: string; questCompleted?: string; notification?: string;
+  skillUp?: string; moneyUp?: string; moneyDown?: string;
+}
 
 const AUDIO_DEFAULTS: AudioTuning = { masterVolume: 0.8, musicVolume: 0.6, sfxVolume: 0.8, musicCrossfadeSeconds: 1.5 };
 
@@ -58,6 +62,14 @@ export function resolveAudioTuning(tuning: Pick<TuningData, 'audio'>): AudioTuni
     sfxVolume: clamp01(a?.sfxVolume ?? AUDIO_DEFAULTS.sfxVolume),
     musicCrossfadeSeconds: Math.max(0, a?.musicCrossfadeSeconds ?? AUDIO_DEFAULTS.musicCrossfadeSeconds),
     buyModeMusic: a?.buyModeMusic,
+    moveOrder: a?.moveOrder,
+    actionSelect: a?.actionSelect,
+    questStarted: a?.questStarted,
+    questCompleted: a?.questCompleted,
+    notification: a?.notification,
+    skillUp: a?.skillUp,
+    moneyUp: a?.moneyUp,
+    moneyDown: a?.moneyDown,
   };
 }
 

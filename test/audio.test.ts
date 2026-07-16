@@ -22,6 +22,9 @@ console.log('audio.test — resolveAudioTuning');
   check('explicit values pass through', custom.masterVolume === 0.5 && custom.musicVolume === 0.3 && custom.sfxVolume === 0.9 && custom.musicCrossfadeSeconds === 2);
   check('buyModeMusic passes through', custom.buyModeMusic === 'sounds/x.wav');
 
+  const cues = resolveAudioTuning({ audio: { moveOrder: 'move.wav', actionSelect: 'pick.wav', questStarted: 'new.wav', questCompleted: 'done.wav', notification: 'note.wav', skillUp: 'skill.wav', moneyUp: 'up.wav', moneyDown: 'down.wav' } });
+  check('B6-10/B6-16 cue paths pass through', cues.moveOrder === 'move.wav' && cues.actionSelect === 'pick.wav' && cues.questStarted === 'new.wav' && cues.questCompleted === 'done.wav' && cues.notification === 'note.wav' && cues.skillUp === 'skill.wav' && cues.moneyUp === 'up.wav' && cues.moneyDown === 'down.wav');
+
   const clamped = resolveAudioTuning({ audio: { masterVolume: 2, musicVolume: -1 } });
   check('out-of-range volumes clamp to 0..1', clamped.masterVolume === 1 && clamped.musicVolume === 0, JSON.stringify(clamped));
 

@@ -147,6 +147,14 @@
     "sfxVolume": 0.8,
     "musicCrossfadeSeconds": 1.5,
     "buyModeMusic": "sounds/music_buymode.mp3",
+    "moveOrder": "sounds/ui_move.wav",
+    "actionSelect": "sounds/ui_action.wav",
+    "questStarted": "sounds/quest_started.wav",
+    "questCompleted": "sounds/quest_completed.wav",
+    "notification": "sounds/notification.wav",
+    "skillUp": "sounds/skill_up.wav",
+    "moneyUp": "sounds/money_up.wav",
+    "moneyDown": "sounds/money_down.wav",
     "_source": "ROADMAP_NEXT item 7 (audio placeholders). masterVolume/musicVolume/sfxVolume are 0..1 and multiply together per channel; musicCrossfadeSeconds is how long a music CONTEXT switch (map <-> buy mode) takes; buyModeMusic is the fixed track played while in Buy/Sell mode. See game/audio.ts's resolveAudioTuning for defaults when this whole block is absent."
   },
   "bladderFailure": {
@@ -154,6 +162,25 @@
     "reliefAmount": 30,
     "hygieneAfter": 0,
     "_source": "ROADMAP_NEXT B2-4 (bladder failure). durationSeconds = how long the sim plays the 'pee' animation before autonomy resumes; reliefAmount (0..100) = bladder's value right after the accident (a minimal top-up, not a full refill — the sim likely still wants a real bathroom trip). ROADMAP_NEXT B3-2: hygieneAfter (0..100) = hygiene's value right after the accident too (an absolute set, like reliefAmount — not a delta); 0 = fully soiled. game/bladder.ts's checkBladderFailure re-arms as soon as the failure event COMPLETES (main.ts calls initBladderFailureState's re-arm at that point, ROADMAP_NEXT B3-3) rather than waiting on bladder to climb back above reliefAmount via decay alone, which can never happen without a real bathroom trip."
+  },
+  "energyCollapse": {
+    "collapseSeconds": 2,
+    "sleepSeconds": 20,
+    "energyAfter": 40,
+    "_source": "ROADMAP_NEXT B6-14. At zero energy: collapse, lie_sleep on the ground for sleepSeconds, then refill energyAfter and re-arm. All durations are simulation seconds."
+  },
+  "starvation": {
+    "countdownSeconds": 120,
+    "collapseSeconds": 4,
+    "recoveryThreshold": 0,
+    "message": "Your Sim starved after going too long without food.",
+    "_source": "ROADMAP_NEXT B6-15. Hunger at zero starts the countdown; eating above recoveryThreshold cancels it. Expiry plays starve before terminal game over."
+  },
+  "feedback": {
+    "durationSeconds": 1.6,
+    "risePixels": 48,
+    "yOffsetMeters": 0.25,
+    "_source": "ROADMAP_NEXT B6-16. Projected HTML feedback above the sim; duration is simulation seconds, rise is screen pixels, yOffset is meters above character height."
   },
   "camera": {
     "minZoom": 4,

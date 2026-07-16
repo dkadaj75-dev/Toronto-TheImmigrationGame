@@ -443,7 +443,11 @@ export interface TuningData {
    *  is how long a music CONTEXT switch (map ↔ buy mode) takes to cross-fade; buyModeMusic is the
    *  fixed track for buy mode (absent = silence in buy mode). See game/audio.ts's
    *  resolveAudioTuning for the exact defaults applied when this whole block is absent. */
-  audio?: { masterVolume?: number; musicVolume?: number; sfxVolume?: number; musicCrossfadeSeconds?: number; buyModeMusic?: string };
+  audio?: {
+    masterVolume?: number; musicVolume?: number; sfxVolume?: number; musicCrossfadeSeconds?: number; buyModeMusic?: string;
+    moveOrder?: string; actionSelect?: string; questStarted?: string; questCompleted?: string; notification?: string;
+    skillUp?: string; moneyUp?: string; moneyDown?: string;
+  };
   /** Optional so pre-existing tuning fixtures/tests stay valid (same precedent as `fire?`/
    *  `garbage?` above). ROADMAP_NEXT B2-4 (bladder failure): durationSeconds = how long the sim
    *  plays the 'pee' animation before control returns to autonomy; reliefAmount (0..100) = the
@@ -454,6 +458,11 @@ export interface TuningData {
    *  delta) immediately after the accident too — "pees itself" should also make the sim dirty.
    *  Defaults to 0 (fully soiled) when absent. */
   bladderFailure?: { durationSeconds?: number; reliefAmount?: number; hygieneAfter?: number };
+  /** B6-14/B6-15 survival events. All durations use simulation seconds. */
+  energyCollapse?: { collapseSeconds?: number; sleepSeconds?: number; energyAfter?: number };
+  starvation?: { countdownSeconds?: number; collapseSeconds?: number; recoveryThreshold?: number; message?: string };
+  /** B6-16 projected HTML feedback above the sim. */
+  feedback?: { durationSeconds?: number; risePixels?: number; yOffsetMeters?: number };
 }
 
 export interface GameData {

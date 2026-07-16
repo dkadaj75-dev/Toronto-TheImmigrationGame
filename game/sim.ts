@@ -188,6 +188,20 @@ export class SimAgent {
 
   // --- stand-in poses (replaced by real animation clips when the rigged GLB lands) ---
   private savedPose: { pos: THREE.Vector3; rotX: number } | null = null;
+  private groundLieRotX: number | null = null;
+
+  /** B6-14/B6-15 event pose: lie at the current world spot without manufacturing an ActionDef. */
+  setGroundLie(active: boolean): void {
+    if (active) {
+      if (this.groundLieRotX === null) this.groundLieRotX = this.object.rotation.x;
+      this.object.position.y = 0;
+      if (!this.hasRig) this.object.rotation.x = -Math.PI / 2;
+    } else if (this.groundLieRotX !== null) {
+      this.object.position.y = 0;
+      this.object.rotation.x = this.groundLieRotX;
+      this.groundLieRotX = null;
+    }
+  }
 
   /**
    * Snap onto the seat/target for sit/lie actions (roadmap item 1 fix, PROJECT_CONTEXT.md §7.8):
