@@ -195,5 +195,7 @@ Boot now seals and awaits a real started/settled asset tracker (fallbacks count 
 ## B8-1. Behavior/autonomy editor (engine + tool)
 Utility-based autonomy the designer can tune: decisions driven by personality attributes, current needs, skills; candidate scoring differentiates assets (nap on sofa vs sleep in bed — per-asset need generation matters). data/behavior.json rules/weights + condition gates (quest namespace incl. personality.*); new tools/behavior.html with condition builders + live candidate-score preview. Design locked PROJECT_CONTEXT §7.30. Slices: engine (E), tool (T).
 
+**ENGINE DONE (B8-1-E, 2026-07-16):** optional hot-reloaded behavior data, pure weighted scorer/rules/threshold, Autonomy integration, and legacy absent-file fallback are shipped with headless coverage. Tool (T) remains pending.
+
 ## B8-2. UI theme & layout editor (engine + tool)
 Designer-editable UI: fonts, colors, shapes (radius/outline/shadow) of notifications/messages/buttons/panels, screen positions, accordion nesting of HUD groups. data/theme.json -> CSS variables + layout config consumed by game/ui.ts; new tools/theme.html with live preview. Design locked PROJECT_CONTEXT §7.31. Slices: engine (E), tool (T).

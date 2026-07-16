@@ -211,6 +211,23 @@ export interface ConditionAll { all: Condition[]; }
 export interface ConditionAny { any: Condition[]; }
 export type Condition = ConditionLeaf | ConditionAll | ConditionAny;
 
+/** B8-1-E utility-autonomy configuration. Rules reuse the quest condition tree verbatim. */
+export interface BehaviorRule {
+  id: string; name: string;
+  action?: string;
+  assetCategory?: string;
+  assetId?: string;
+  conditions?: Condition;
+  scoreBonus: number;
+  enabled: boolean;
+}
+export interface BehaviorData {
+  weights: { needDeficit: number; distance: number; personalityAffinity: number };
+  decisionThreshold: number;
+  needWeights?: Record<string, number>;
+  rules: BehaviorRule[];
+}
+
 export type QuestState = 'locked' | 'active' | 'done';
 
 export interface RewardFunds { type: 'funds'; amount: number; }
@@ -508,6 +525,8 @@ export interface GameData {
   finance: FinanceData;
   happiness: HappinessData;
   loading: LoadingConfig;
+  /** B8-1-E: missing behavior.json deliberately preserves the original lowest-need picker. */
+  behavior?: BehaviorData;
 }
 
 /** B7-7 boot-only presentation. Unlike tuning.json this file is intentionally not hot-reloaded. */
@@ -532,6 +551,7 @@ const FILES = {
   finance: '/data/finance.json',
   happiness: '/data/happiness.json',
   loading: '/data/loading.json',
+  behavior: '/data/behavior.json',
 } as const;
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -544,7 +564,7 @@ export async function loadAll(): Promise<GameData> {
   // tuning first — it names the active map (tuning.map.active, default "condo")
   const tuning = await fetchJson<TuningData>(FILES.tuning);
   const mapFile = `/data/maps/${tuning.map?.active ?? 'condo'}.json`;
-  const [stats, interactions, assets, map, simstate, quests, visas, jobs, bills, finance, happiness, loading] = await Promise.all([
+  const [stats, interactions, assets, map, simstate, quests, visas, jobs, bills, finance, happiness, loading, behavior] = await Promise.all([
     fetchJson<StatsData>(FILES.stats),
     fetchJson<InteractionsData>(FILES.interactions),
     fetchJson<AssetsData>(FILES.assets),
@@ -557,8 +577,16 @@ export async function loadAll(): Promise<GameData> {
     fetchJson<FinanceData>(FILES.finance),
     fetchJson<HappinessData>(FILES.happiness),
     fetchJson<LoadingConfig>(FILES.loading),
+    fetchOptionalJson<BehaviorData>(FILES.behavior),
   ]);
-  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills, finance, happiness, loading };
+  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills, finance, happiness, loading, behavior };
+}
+
+async function fetchOptionalJson<T>(url: string): Promise<T | undefined> {
+  const res = await fetch(url, { cache: 'no-cache' });
+  if (res.status === 404) return undefined;
+  if (!res.ok) throw new Error(`Failed to load ${url}: ${res.status}`);
+  return res.json() as Promise<T>;
 }
 
 /** Dev hot-reload: polls the data files and invokes callbacks when content changes. */

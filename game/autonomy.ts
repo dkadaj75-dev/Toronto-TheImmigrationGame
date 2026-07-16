@@ -1,7 +1,6 @@
 // autonomy.ts — free will (roadmap §2: "Autonomy").
-// When the sim is idle and its lowest autonomy-participating need drops below
-// tuning.autonomy.seekBelowThreshold, it walks to the nearest reachable object
-// offering an autonomy-eligible action whose primaryNeed matches, and uses it.
+// With behavior.json, an idle sim utility-scores every eligible placed-object action. Without it,
+// the legacy lowest-need threshold + nearest primary-need match remains the fallback.
 // Player commands suppress autonomy for tuning.autonomy.postPlayerCommandCooldownSeconds.
 // Evaluation happens on the needs-decay tick, so no extra interval constant exists.
 
@@ -13,6 +12,7 @@ import { firstLegSeatAware } from './food';
 import type { SimStats } from './stats';
 import type { AccidentsController } from './accidents';
 import { isActionAvailable, type EvalContext } from './quests';
+import { pickBest, type BehaviorCandidate } from './behavior';
 
 export class Autonomy {
   private cooldownRemaining = 0;
@@ -71,14 +71,18 @@ export class Autonomy {
     if (this.agent.isBusy) return null;
 
     const data = this.getData();
-    const lowest = this.stats.lowestAutonomyNeed();
-    if (!lowest || lowest.value >= data.tuning.autonomy.seekBelowThreshold) return null;
+    // B8-1-E: behavior.json opts into utility scoring. Its deliberate absence keeps the exact
+    // original lowest-need gate/filter below for old installs and fixtures.
+    const behavior = data.behavior;
+    const lowest = behavior ? null : this.stats.lowestAutonomyNeed();
+    if (!behavior && (!lowest || lowest.value >= data.tuning.autonomy.seekBelowThreshold)) return null;
 
     const actionsById = new Map(data.interactions.actions.map((a) => [a.id, a]));
     const assetsById = new Map(data.assets.assets.map((a) => [a.id, a]));
     const simPos = this.agent.object.position;
+    const evalCtx = this.getEvalContext?.();
 
-    // collect (object, action, def) triples that can serve the lowest need, nearest first
+    // Collect every eligible triple for utility mode; legacy mode retains its primary-need filter.
     const candidates: { obj: THREE.Object3D; action: ActionDef; def: AssetDef; dist: number }[] = [];
     for (const obj of this.getWorld().children) {
       const assetId = obj.userData?.assetId as string | undefined;
@@ -89,17 +93,50 @@ export class Autonomy {
       for (const actionId of def.interactions) {
         const action = actionsById.get(actionId);
         if (!action || !action.autonomyEligible) continue;
-        if (action.primaryNeed !== lowest.def.id) continue;
+        if (!behavior && action.primaryNeed !== lowest!.def.id) continue;
         // ROADMAP_NEXT B2-1: unmet conditions make this action ineligible for autonomy, same as
-        // it being hidden from the tap menu — evaluated fresh per candidate (cheap: no per-tick
-        // caching needed, this loop already runs once per needs-decay tick, not per frame).
-        const evalCtx = this.getEvalContext?.();
+        // it being hidden from the tap menu — evaluated from one fresh snapshot per autonomy scan
+        // (this loop already runs once per needs-decay tick, not per frame).
         if (action.conditions && (!evalCtx || !isActionAvailable(action.conditions, evalCtx))) continue;
         if ((action.cost ?? 0) > (evalCtx?.funds ?? 0)) continue;
         const dx = obj.position.x - simPos.x, dz = obj.position.z - simPos.z;
         candidates.push({ obj, action, def, dist: Math.hypot(dx, dz) });
       }
     }
+
+    if (behavior) {
+      const scoringCtx: EvalContext = evalCtx ?? {
+        needs: Object.fromEntries(this.stats.needs),
+        skills: Object.fromEntries(this.stats.skills),
+        personality: Object.fromEntries(this.stats.personality),
+        funds: 0,
+        time: { hour: 0, day: 1 },
+        vars: {},
+        quests: {},
+      };
+      const remaining: BehaviorCandidate<typeof candidates[number]>[] = candidates.map((candidate) => ({
+        asset: candidate.def,
+        action: candidate.action,
+        distance: candidate.dist,
+        value: candidate,
+      }));
+
+      // orderAction path-checks. If the best candidate is unreachable, remove it and score the
+      // remainder so utility mode preserves the legacy "nearest reachable" resilience.
+      while (remaining.length) {
+        const best = pickBest(remaining, { behavior, eval: scoringCtx });
+        if (!best) return null;
+        const c = best.candidate.value!;
+        const legSeatAware = firstLegSeatAware(c.action);
+        const seat = legSeatAware ? findSeatFor(this.getWorld(), data, c.obj) : null;
+        if (this.agent.orderAction(c.action, c.obj, seat, c.def, legSeatAware)) {
+          return { action: c.action, target: c.obj };
+        }
+        remaining.splice(remaining.indexOf(best.candidate), 1);
+      }
+      return null;
+    }
+
     candidates.sort((a, b) => a.dist - b.dist);
 
     // nearest reachable wins — orderAction() path-checks, so unreachable ones are skipped

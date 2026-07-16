@@ -1,0 +1,45 @@
+{
+  "weights": {
+    "needDeficit": 0.1,
+    "distance": 0.5,
+    "personalityAffinity": 1
+  },
+  "decisionThreshold": 2,
+  "needWeights": {
+    "hunger": 1.3,
+    "comfort": 0.7,
+    "bladder": 1.4,
+    "energy": 1.2,
+    "fun": 0.8,
+    "social": 0.8,
+    "hygiene": 1,
+    "environment": 0.3
+  },
+  "rules": [
+    {
+      "id": "low_cleanliness_avoids_cleanup",
+      "name": "Low cleanliness avoids cleaning up",
+      "action": "clean_up",
+      "conditions": { "all": [{ "var": "personality.cleanliness", "lte": 3 }] },
+      "scoreBonus": -20,
+      "enabled": true
+    },
+    {
+      "id": "very_tired_prefers_bed",
+      "name": "Prefer the bed when energy is very low",
+      "action": "sleep",
+      "assetId": "bed",
+      "conditions": { "all": [{ "var": "needs.energy", "lte": 20 }] },
+      "scoreBonus": 12,
+      "enabled": true
+    },
+    {
+      "id": "high_cleanliness_likes_cleanup",
+      "name": "High cleanliness likes cleaning up",
+      "action": "clean_up",
+      "conditions": { "all": [{ "var": "personality.cleanliness", "gte": 7 }] },
+      "scoreBonus": 8,
+      "enabled": true
+    }
+  ]
+}
