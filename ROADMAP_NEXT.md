@@ -172,3 +172,15 @@ An armed survival event interrupts at zero energy, plays `collapse`, changes to 
 Serializable starvation state warns at zero hunger, cancels after food recovery, or plays tuned `starve` collapse before the existing terminal overlay.
 ## B6-16. Skill-up + money feedback: sound + floating rising text above sim ("English: +1!"); same for money gained/spent (amount, up/down) — ✅ DONE 2026-07-16
 Projected crisp HTML text rises above the sim for integer skill-level crossings and every authoritative funds delta, with tuned duration/rise/anchor and distinct sounds/colors.
+
+---
+
+# Batch 7 — 2026-07-16 (evening)
+
+## B7-1. Asset tool viewer: grid at ground level + show IN-GAME size (footprint-fit + meshFit/scale/rotation applied), not raw GLB size
+## B7-2. Cooked meal hunger fulfillment proportional to cooking skill
+## B7-3. BUG: loading bar still misaligned (screenshot: fill sprite floats detached below the track)
+## B7-4. BUG: sim STILL does not walk all the way to the fridge before snacking
+## B7-5. Work window: ~2h (tunable) after startHour to leave for work, else shift missed (skip)
+## B7-6. Autonomy: sim may leave for work by itself (happiness/energy-driven, tunable), even waking from sleep
+## B7-7. Loading screen: blocks until assets loaded (sim time frozen), customizable funny phrases in tools ("Going through customs"...), own music, customizable bar + background image

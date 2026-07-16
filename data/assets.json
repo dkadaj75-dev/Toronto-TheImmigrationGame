@@ -162,7 +162,8 @@
         "eat"
       ],
       "meshFit": {
-        "yawOffsetDeg": -90
+        "yawOffsetDeg": -90,
+        "scale": 0.9
       }
     },
     {
@@ -676,10 +677,16 @@
       "buyPrice": 0,
       "sellPrice": 0,
       "environmentScore": 0,
-      "footprint": [0.35, 0.35],
+      "footprint": [
+        0.35,
+        0.35
+      ],
       "interactions": [],
       "buyable": false,
-      "food": { "hungerGain": 18, "perishHours": 3 },
+      "food": {
+        "hungerGain": 18,
+        "perishHours": 3
+      },
       "_note": "ROADMAP_NEXT B4-2: spawned when Eat starts, hidden while carried/eaten, dropped at the sim on interruption, then perishes in game hours."
     },
     {
@@ -690,10 +697,16 @@
       "buyPrice": 0,
       "sellPrice": 0,
       "environmentScore": 0,
-      "footprint": [0.45, 0.45],
+      "footprint": [
+        0.45,
+        0.45
+      ],
       "interactions": [],
       "buyable": false,
-      "food": { "hungerGain": 45, "perishHours": 6 },
+      "food": {
+        "hungerGain": 45,
+        "perishHours": 6
+      },
       "_note": "ROADMAP_NEXT B4-2: spawned only when Cook completes, then carried/eaten like snack with a larger hunger gain."
     },
     {
