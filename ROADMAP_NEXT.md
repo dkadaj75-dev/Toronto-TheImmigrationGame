@@ -136,3 +136,24 @@ Finance Editor tool + formula-driven bills/rent, debt/negative-balance grace, re
 F1 shipped: formula constants and thresholds in `data/finance.json`, arrival-time rent/bill computation against floor tiles + live effective asset value, map property type, shared pure calculator, and Finance Editor with current-map live preview.
 
 F2 done: negative bill payments + serializable overdue/debt timing, pure importance-ordered repo decisions, Buy Mode sold-removal/nav rebake, repo notice, and debt game over. F3 done: serializable tunable credit score/history, on-time/overdue/debt/repo changes, daily debt decay, score-scaled repo windows, phone Credit tab, job credit gates, and Career/Finance Editor authoring.
+
+---
+
+# Batch 6 — 2026-07-16 (16 items)
+
+## B6-1. BUG: progress bar misaligned (fill vs background not visually aligned)
+## B6-2. Job UX: current job excluded from search (or apply blocked); switching prompts "You already work as X, switch to Y?"; job description visible in smartphone while employed
+## B6-3. BUG: fridge eat — sim must walk ALL THE WAY to the fridge first, then carry food to seat
+## B6-4. Transient spawn placement: dirty dishes/puddles must not spawn under assets; spawn AMOUNT correlated to need(s)/attribute(s) (tunable mapping)
+## B6-5. Happiness gauge + job levels/promotions: happiness = complex tunable formula (needs, job, credit score, money, visa status — editable in tools); jobs get levels (Dishwasher I/II/III + % bonus chance); promotion chance scales with happiness
+## B6-6. Map grid 0.5×0.5 tiles with 0.25 snap (map editor, nav, buymode)
+## B6-7. Asset Editor 3D preview grid must match the map grid
+## B6-8. BUG: windows don't show in-game
+## B6-9. Wall-cut view option (cut walls at ~1m, Sims-style, player toggle, view-only)
+## B6-10. UI sound placeholders: click/move-order/action-select; quest events (new/done); notifications in general
+## B6-11. Contextual action menu around click location (Sims-style radial, screen-space so walls/assets never hide it; replaces bottom menu; screenshot ref on record)
+## B6-12. Asset light emission + ON/OFF state: assets can generate light; Turn ON/OFF actions flip asset state driving light and/or sound (e.g. TV)
+## B6-13. Wall-mounted assets (stick to wall: wall lights, canvas)
+## B6-14. Energy 0 → collapse animation then sleep on ground (short tunable duration)
+## B6-15. Hunger 0 → tunable countdown; if still starving → animation then GAME OVER
+## B6-16. Skill-up + money feedback: sound + floating rising text above sim ("English: +1!"); same for money gained/spent (amount, up/down)
