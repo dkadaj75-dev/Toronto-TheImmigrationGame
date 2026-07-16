@@ -384,9 +384,18 @@ export interface MapData {
    *  tuning.textures.metersPerTile (2 = texture twice as big / fewer repeats). Absent/1 → default
    *  size; only meaningful alongside `texture`. See game/textures.ts effectiveMetersPerTile. */
   floors: { id: string; polygon: [number, number][]; material: string; texture?: string; textureScale?: number }[];
-  /** ROADMAP_NEXT B9-1: optional image texture on the wall material (both faces), same drop-in
-   *  convention + color fallback as a floor's `texture`. */
-  walls: { from: [number, number]; to: [number, number]; texture?: string; textureScale?: number }[];
+  /** ROADMAP_NEXT B9-1: optional image texture on the wall material (both faces unless `textureB`
+   *  is set — see below), same drop-in convention + color fallback as a floor's `texture`. */
+  /** Follow-up to B9-1 (PROJECT_CONTEXT §7.32): optional texture for the wall's OTHER large face,
+   *  when it should differ from `texture`. Absent → both faces use `texture` (unchanged behavior).
+   *  A/B convention (geometric, computed at render time from the wall's actual from→to placement,
+   *  so it does NOT depend on which endpoint is `from` vs `to`): a wall running mostly along the
+   *  X axis ("horizontal") has its two big faces pointing +Z/-Z — side A (`texture`) is whichever
+   *  face's outward normal points WORLD +Z ("south"), side B (`textureB`) is the -Z ("north")
+   *  face. A wall running mostly along the Z axis ("vertical") has faces pointing +X/-X — side A
+   *  is whichever faces WORLD +X ("east"), side B is -X ("west"). See world.ts buildWorld()'s wall
+   *  loop for the face-assignment math. `textureScale` applies to both sides equally. */
+  walls: { from: [number, number]; to: [number, number]; texture?: string; textureB?: string; textureScale?: number }[];
   doors: { at: [number, number]; orientation: 'vertical' | 'horizontal'; width?: number; assetId?: string }[];
   /** ROADMAP_NEXT item 9: wall openings that are purely visual — a window never affects the nav
    *  grid or wall collision (the wall segment it sits on stays a single unbroken box, unlike a

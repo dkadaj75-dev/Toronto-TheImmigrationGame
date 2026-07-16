@@ -283,6 +283,18 @@ console.log('map-editor.test — wall texture dropdown (texture round-trip)');
   sel.value = '';
   sel.dispatchEvent(new window.Event('change', { bubbles: true }));
   check('picking (none) removes wall texture', !('texture' in st.doc.walls[st.sel.index]));
+  // per-side follow-up (PROJECT_CONTEXT §7.32): side-B dropdown, sparse (absent = same as side A)
+  const selB = doc.querySelector('select[data-field="wall.textureB"]');
+  check('wall side-B dropdown renders, defaulting to (same as side A)', !!selB && selB.value === '');
+  const offeredB = [...selB.options].slice(1).map((o) => o.value);
+  check('side-B dropdown offers the listed textures', offeredB.includes('textures/oak.jpg') && offeredB.includes('textures/tile.png'), offeredB.join(','));
+  selB.value = 'textures/oak.jpg';
+  selB.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('picking a side-B texture sets walls[].textureB', st.doc.walls[st.sel.index].textureB === 'textures/oak.jpg');
+  check('side-B swatch reflects the selection', doc.querySelector('img[data-field="wall.textureB.swatch"]')?.getAttribute('src') === '/textures/oak.jpg');
+  selB.value = '';
+  selB.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('picking (same as side A) removes walls[].textureB (sparse)', !('textureB' in st.doc.walls[st.sel.index]));
   ME.deleteSelected(); // clean up the test wall
   check('cleanup: wall count restored', st.doc.walls.length === before);
 }

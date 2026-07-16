@@ -51,7 +51,7 @@ function loadTexture(url: string): Promise<THREE.Texture> {
  * The mesh MUST own a non-shared material (walls share one otherwise) so the swap is per-surface.
  */
 function applySurfaceTexture(
-  mesh: THREE.Mesh,
+  mat: THREE.MeshLambertMaterial,
   url: string,
   repeat: [number, number],
   trackInitialLoad?: TrackInitialLoad,
@@ -63,7 +63,6 @@ function applySurfaceTexture(
       tex.repeat.set(repeat[0], repeat[1]);
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.needsUpdate = true;
-      const mat = mesh.material as THREE.MeshLambertMaterial;
       mat.map = tex;
       mat.color.setHex(0xffffff); // let the image show through instead of tinting it
       mat.needsUpdate = true;
@@ -281,7 +280,7 @@ export function buildWorld(data: GameData, trackInitialLoad?: TrackInitialLoad):
       const b = polygonBounds(floor.polygon);
       const mpt = effectiveMetersPerTile(metersPerTile, floor.textureScale); // per-surface scale follow-up
       normalizeFloorUVs(geo, b); // ShapeGeometry UVs are raw meters → 0..1 so repeat sizes physically
-      applySurfaceTexture(mesh, normalizeMeshUrl(floor.texture), [textureRepeat(b.w, mpt), textureRepeat(b.h, mpt)], trackInitialLoad);
+      applySurfaceTexture(mat, normalizeMeshUrl(floor.texture), [textureRepeat(b.w, mpt), textureRepeat(b.h, mpt)], trackInitialLoad);
     }
     root.add(mesh);
   }
@@ -292,20 +291,47 @@ export function buildWorld(data: GameData, trackInitialLoad?: TrackInitialLoad):
   for (const wall of map.walls) {
     const [x1, z1] = wall.from, [x2, z2] = wall.to;
     const len = Math.hypot(x2 - x1, z2 - z1);
+    const dx = x2 - x1, dz = z2 - z1;
     const geo = new THREE.BoxGeometry(len, WALL_H, WALL_T);
     // A textured wall gets its own material so the swap doesn't hit the shared color wallMat.
-    const mat = wall.texture ? new THREE.MeshLambertMaterial({ color: 0xf0ead9 }) : wallMat;
+    // A two-sided wall (textureB) needs a 6-entry material array — BoxGeometry's default face
+    // groups are [+x,-x,+y,-y,+z,-z] (indices 0..5); the wall's two BIG faces are the local
+    // +z/-z ones (index 4/5), since the box is long in x (length) and thin in z (WALL_T).
+    let mat: THREE.Material | THREE.Material[];
+    let matA: THREE.MeshLambertMaterial | undefined;
+    let matB: THREE.MeshLambertMaterial | undefined;
+    if (wall.textureB) {
+      matA = new THREE.MeshLambertMaterial({ color: 0xf0ead9 });
+      matB = new THREE.MeshLambertMaterial({ color: 0xf0ead9 });
+      // Which local face (+z or -z) is "side A" depends on the wall's actual placement, not on
+      // from/to point order: local +z's world-space outward normal, after mesh.rotation.y below,
+      // is (-dz/len, dx/len) in the world XZ plane (see game/data.ts walls doc for the A/B
+      // convention). Horizontal wall (runs mostly along X) → normal is mostly along Z, A = the
+      // face pointing world +Z ("south"). Vertical wall (runs mostly along Z) → normal is mostly
+      // along X, A = the face pointing world +X ("east").
+      const horizontal = Math.abs(dx) >= Math.abs(dz);
+      const localPlusZFacesA = horizontal ? (dx / len) > 0 : (-dz / len) > 0;
+      const materials: THREE.Material[] = [matA, matA, matA, matA, matA, matA]; // edges reuse side A
+      materials[4] = localPlusZFacesA ? matA : matB; // local +z
+      materials[5] = localPlusZFacesA ? matB : matA; // local -z
+      mat = materials;
+    } else {
+      mat = wall.texture ? new THREE.MeshLambertMaterial({ color: 0xf0ead9 }) : wallMat;
+      if (wall.texture) matA = mat as THREE.MeshLambertMaterial;
+    }
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set((x1 + x2) / 2, WALL_H / 2, (z1 + z2) / 2);
     mesh.rotation.y = -Math.atan2(z2 - z1, x2 - x1);
     mesh.userData.wallCutVisual = 'wall';
     mesh.userData.wallCutFullHeight = WALL_H;
     mesh.castShadow = true;
-    if (wall.texture) {
+    if (wall.texture || wall.textureB) {
       // v-repeat from FULL height (WALL_H); the wall-cut view scales the geometry down, which just
       // compresses the texture vertically with it — acceptable per B9-1 (documented, not re-mapped).
       const mpt = effectiveMetersPerTile(metersPerTile, wall.textureScale); // per-surface scale follow-up
-      applySurfaceTexture(mesh, normalizeMeshUrl(wall.texture), [textureRepeat(len, mpt), textureRepeat(WALL_H, mpt)], trackInitialLoad);
+      const repeat: [number, number] = [textureRepeat(len, mpt), textureRepeat(WALL_H, mpt)];
+      if (wall.texture && matA) applySurfaceTexture(matA, normalizeMeshUrl(wall.texture), repeat, trackInitialLoad);
+      if (wall.textureB && matB) applySurfaceTexture(matB, normalizeMeshUrl(wall.textureB), repeat, trackInitialLoad);
     }
     root.add(mesh);
   }
