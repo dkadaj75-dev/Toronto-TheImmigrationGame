@@ -39,6 +39,7 @@
       { id: 'quests', label: 'Quests', href: '/tools/quests.html' },
       { id: 'career', label: 'Career', href: '/tools/career.html' },
       { id: 'finance', label: 'Finance', href: '/tools/finance.html' },
+      { id: 'behavior', label: 'Behavior', href: '/tools/behavior.html' },
     ];
 
     function currentToolId() {

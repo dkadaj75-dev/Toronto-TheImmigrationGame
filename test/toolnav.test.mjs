@@ -42,12 +42,20 @@ function loadPage(url, bodyHtml) {
   check('no corner button on tool pages', doc.getElementById('condo-toolnav-corner') === null);
 
   const links = [...strip.querySelectorAll('a')];
-  check('all 9 tools listed', links.length === 9, `got ${links.length}`);
+  check('all 10 tools listed', links.length === 10, `got ${links.length}`);
   check('Career tool is listed', links.some((link) => link.textContent === 'Career' && link.getAttribute('href') === '/tools/career.html'));
   check('Finance tool is listed', links.some((link) => link.textContent === 'Finance' && link.getAttribute('href') === '/tools/finance.html'));
+  check('Behavior tool is listed', links.some((link) => link.textContent === 'Behavior' && link.getAttribute('href') === '/tools/behavior.html'));
   const active = strip.querySelector('a.ctn-active');
   check('Assets tab marked active', active && active.textContent === 'Assets', active && active.textContent);
   check('only one active tab', strip.querySelectorAll('a.ctn-active').length === 1);
+}
+
+// ------------------------------------------------------------------ Behavior tool entry + active tab
+{
+  const dom = loadPage('http://localhost:5173/tools/behavior.html', '<header>Behavior</header>');
+  const active = dom.window.document.querySelector('#condo-toolnav a.ctn-active');
+  check('Behavior tab marked active on behavior.html', active && active.textContent === 'Behavior', active && active.textContent);
 }
 
 // ------------------------------------------------------------------ another tool, different active tab
