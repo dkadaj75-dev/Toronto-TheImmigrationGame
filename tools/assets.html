@@ -557,16 +557,59 @@ function renderEditor() {
     root.appendChild(cardGarbage);
   }
 
-  // --- sound (ROADMAP_NEXT item 7): loops for as long as an action targets THIS placed instance
-  // (e.g. a TV's hum, a shower's running water) — wins over the target action's own `sound` if
-  // both are set. Sparse: absent = no asset-driven loop. See game/audio.ts's module doc comment.
+  // --- sound: stateful B6-12 assets loop while ON; legacy assets retain action-target lifetime.
   const cardSound = document.createElement('div');
   cardSound.className = 'card';
-  cardSound.innerHTML = '<h2>Sound</h2><div class="hint">Loops while an action targets this placed instance (e.g. TV hum, shower running water) — wins over the action\'s own sound field if both are set. Path under public/ (drop a file under public/sounds/). Leave blank for none.</div>';
+  cardSound.innerHTML = '<h2>Sound</h2><div class="hint">Assets offering Turn On/Off loop this sound while the placed instance is ON (e.g. TV). Other assets loop it only while targeted by an action (e.g. shower/stove). Path under public/; leave blank for none.</div>';
   const soundInput = textInput(() => a.sound, (v) => { if (v) a.sound = v; else delete a.sound; }, 'sound');
   soundInput.placeholder = '/sounds/tv_hum.wav';
   cardSound.appendChild(frow('loop sound path', soundInput));
   root.appendChild(cardSound);
+
+  // --- B6-12 light: block presence emits a PointLight; every setting is sparse.
+  const cardLight = document.createElement('div');
+  cardLight.className = 'card';
+  cardLight.innerHTML = '<h2>Light</h2><div class="hint">Enable to emit a PointLight. Turn On/Off actions drive it per placed instance. Fields are sparse; defaults are warm white, intensity 2, distance 5m, y offset 1.2m, initially off.</div>';
+  cardLight.appendChild(frow('emits light', checkInput(
+    () => !!a.light,
+    (v) => { if (v) a.light ??= {}; else delete a.light; },
+    'light.enabled',
+  )));
+  const ensureLight = () => (a.light ??= {});
+  cardLight.appendChild(frow('color (CSS color or hex)', textInput(
+    () => a.light?.color,
+    (v) => { if (v) ensureLight().color = v; else if (a.light) delete a.light.color; },
+    'light.color',
+  )));
+  for (const [label, key] of [['intensity', 'intensity'], ['distance (meters)', 'distance'], ['y offset (meters)', 'yOffset']]) {
+    cardLight.appendChild(frow(label, numInput(
+      () => a.light?.[key],
+      (v) => { if (v === undefined) { if (a.light) delete a.light[key]; } else ensureLight()[key] = v; },
+      `light.${key}`,
+    )));
+  }
+  cardLight.appendChild(frow('default ON', checkInput(
+    () => a.light?.defaultOn,
+    (v) => { if (v) ensureLight().defaultOn = true; else if (a.light) delete a.light.defaultOn; },
+    'light.defaultOn',
+  )));
+  root.appendChild(cardLight);
+
+  // --- B6-13 wall mount: an empty block is meaningful (enabled, default height 1.5m).
+  const cardWall = document.createElement('div');
+  cardWall.className = 'card';
+  cardWall.innerHTML = '<h2>Wall mounted</h2><div class="hint">Requires placement flush against a wall, automatically faces into the room, and renders at the anchor height. Blank height uses 1.5m.</div>';
+  cardWall.appendChild(frow('wall mounted', checkInput(
+    () => !!a.wallMounted,
+    (v) => { if (v) a.wallMounted ??= {}; else delete a.wallMounted; },
+    'wallMounted.enabled',
+  )));
+  cardWall.appendChild(frow('height y (blank = 1.5m)', numInput(
+    () => a.wallMounted?.heightY,
+    (v) => { if (v === undefined) { if (a.wallMounted) delete a.wallMounted.heightY; } else (a.wallMounted ??= {}).heightY = v; },
+    'wallMounted.heightY',
+  )));
+  root.appendChild(cardWall);
 
   // --- mesh & preview
   const card4 = document.createElement('div');

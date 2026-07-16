@@ -118,6 +118,25 @@ assert(soundInput.value === '', 'sound blank when absent');
 soundInput.value = '/sounds/couch_creak.wav';
 soundInput.dispatchEvent(new window.Event('input', { bubbles: true }));
 
+// --- B6-12 Light card: block-presence toggle + sparse fields/defaultOn
+const lightEnabled = doc.querySelector('input[data-path="light.enabled"]');
+assert(lightEnabled && !lightEnabled.checked, 'Light card rendered and disabled when block absent');
+lightEnabled.checked = true;
+lightEnabled.dispatchEvent(new window.Event('change', { bubbles: true }));
+const lightColor = doc.querySelector('input[data-path="light.color"]');
+lightColor.value = '#ffeeaa'; lightColor.dispatchEvent(new window.Event('input', { bubbles: true }));
+const lightIntensity = doc.querySelector('input[data-path="light.intensity"]');
+lightIntensity.value = '3.5'; lightIntensity.dispatchEvent(new window.Event('input', { bubbles: true }));
+const lightDefault = doc.querySelector('input[data-path="light.defaultOn"]');
+lightDefault.checked = true; lightDefault.dispatchEvent(new window.Event('change', { bubbles: true }));
+
+// --- B6-13 Wall-mounted card: empty block is enabled; height remains sparse
+const wallEnabled = doc.querySelector('input[data-path="wallMounted.enabled"]');
+assert(wallEnabled && !wallEnabled.checked, 'Wall-mounted card rendered and disabled when block absent');
+wallEnabled.checked = true; wallEnabled.dispatchEvent(new window.Event('change', { bubbles: true }));
+const wallHeight = doc.querySelector('input[data-path="wallMounted.heightY"]');
+wallHeight.value = '1.8'; wallHeight.dispatchEvent(new window.Event('input', { bubbles: true }));
+
 // --- usePose (§7.8, roadmap item 1): sparse per-pose sit/lie override, offset/y/facingDeg
 const sitOffsetX = doc.querySelector('input[data-path="usePose.sit.offsetX"]');
 assert(sitOffsetX, 'usePose.sit offset fields rendered');
@@ -368,6 +387,9 @@ assert(!('sit' in savedStoveUsePose.usePose), 'stove usePose.use set without eve
 assert(savedCouch.requiresQuestUnlock === true, 'PUT carries checked requiresQuestUnlock');
 assert(savedCouch.icon === '/models/icons/sofa.png', 'PUT carries edited icon path');
 assert(savedCouch.sound === '/sounds/couch_creak.wav', 'PUT carries edited sound path');
+assert(savedCouch.light.color === '#ffeeaa' && savedCouch.light.intensity === 3.5 && savedCouch.light.defaultOn === true, 'PUT carries sparse Light card fields');
+assert(!('distance' in savedCouch.light) && !('yOffset' in savedCouch.light), 'untouched Light fields stay absent');
+assert(savedCouch.wallMounted.heightY === 1.8, 'PUT carries wall-mounted height');
 const savedLamp = saved.assets.find((a) => a.id === 'lamp');
 assert(!('buyable' in savedLamp), 'new asset has no buyable key (defaults true)');
 assert(!('survivalImportance' in savedLamp), 'new asset has no survivalImportance key (defaults neutral)');
@@ -377,6 +399,8 @@ assert(!('usePose' in savedLamp), 'new asset has no usePose key (nothing set)');
 assert(!('requiresQuestUnlock' in savedLamp), 'new asset has no requiresQuestUnlock key (defaults unlocked)');
 assert(!('icon' in savedLamp), 'new asset has no icon key (falls back to initials tile)');
 assert(!('sound' in savedLamp), 'new asset has no sound key (no loop by default)');
+assert(!('light' in savedLamp), 'new asset has no light block unless enabled');
+assert(!('wallMounted' in savedLamp), 'new asset is not wall-mounted unless enabled');
 assert(!('combustibility' in savedLamp), 'new asset has no combustibility key (set-then-cleared, pruned to absent)');
 assert(savedLamp.category === 'door', 'PUT carries lamp\'s category change to door');
 assert(savedLamp.door.hingeOffset[0] === -0.5 && savedLamp.door.hingeOffset[1] === 0, 'PUT carries door.hingeOffset');

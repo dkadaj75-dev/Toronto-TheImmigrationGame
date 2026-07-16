@@ -9,13 +9,9 @@
 //   - ActionDef.sound: loops for as long as the SIM is performing that action (e.g. a generic
 //     "shower running" trickle tied to the "shower" action, independent of which asset it's used
 //     on). Started in main.ts's agent.onActionStart, stopped in onActionStop.
-//   - AssetDef.sound: loops for as long an action is in progress that TARGETS that asset instance
-//     (e.g. the TV's own hum while anything is happening at it) — keyed per placed-object instance
-//     (THREE.Object3D.uuid) so multiple TVs each get their own independent loop. This is the
-//     "asset is on" case from the ROADMAP_NEXT brief: since this repo has no explicit on/off toggle
-//     state on assets (unlike the Unreal prototype's Switch ON/OFF), "the asset is on" is read as
-//     "an action currently targets it" — the TV hums while being watched, the shower runs while
-//     showering, and both fall silent the instant the action stops. Picking ONE semantic per field
+//   - AssetDef.sound: assets offering Turn On/Off are stateful (B6-12) and loop while their stable
+//     per-instance state is ON; main.ts owns those channels. Non-stateful assets retain the legacy
+//     action-target lifetime (shower/stove), selected by loopSoundFor below. Picking one semantic
 //     (action vs asset) rather than layering both onto the same sound avoids doubled/duplicate
 //     loops when an action's own sound AND its target asset's sound would otherwise both fire for
 //     the same activity.
@@ -41,6 +37,7 @@
 //     as the "desired" state and applied the instant the gesture fires.
 
 import type { ActionDef, AssetDef, MapData, TuningData } from './data';
+import { isStatefulAsset } from './assetstate';
 
 // ==================================================================== pure logic (headless-tested)
 
@@ -285,6 +282,7 @@ export class AudioManager {
  *  onActionStart/onActionStop; see the module doc comment for the "one field wins" semantic. If
  *  BOTH happen to be set (designer set both action.sound and asset.sound), the asset's sound wins
  *  since it's the more specific "this particular object" cue — documented, not asserted elsewhere. */
-export function loopSoundFor(action: Pick<ActionDef, 'sound'>, asset: Pick<AssetDef, 'sound'> | undefined): string | undefined {
+export function loopSoundFor(action: Pick<ActionDef, 'sound'>, asset: Pick<AssetDef, 'sound' | 'interactions'> | undefined): string | undefined {
+  if (asset && isStatefulAsset(asset)) return action.sound;
   return asset?.sound ?? action.sound;
 }

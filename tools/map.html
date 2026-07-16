@@ -245,6 +245,13 @@ const snapStep = () => {
 const snapVal = (v) => (document.getElementById('snap').checked ? Math.round(v / snapStep()) * snapStep() : v);
 const snapPoint = (x, z) => [snapVal(x), snapVal(z)];
 
+// B6-13: delegate wall-mounted snapping to game/buymode.ts through the module bridge below.
+function snapWallObject(p, requested, maxDistance = Infinity) {
+  const def = assetById(p.asset);
+  if (!def?.wallMounted) return { pos: [requested[0], requested[1]], rotDeg: p.rotDeg };
+  return window.PlacementBridge?.snapWallMounted(requested, def, state.doc, maxDistance) ?? null;
+}
+
 function objectRect(p) {
   const def = assetById(p.asset);
   let [w, d] = def ? def.footprint : [1, 1];
@@ -344,7 +351,11 @@ function setStatus(msg, cls = '') { const s = document.getElementById('status');
 function addObjectFromPalette(assetId) {
   pushUndo();
   const [x, z] = snapPoint(state.doc.bounds.w / 2, state.doc.bounds.h / 2);
-  state.doc.placedObjects.push({ asset: assetId, pos: [x, z], rotDeg: 0 });
+  const p = { asset: assetId, pos: [x, z], rotDeg: 0 };
+  const snapped = snapWallObject(p, p.pos);
+  if (assetById(assetId)?.wallMounted && !snapped) { state.undoStack.pop(); setStatus('wall-mounted assets require a wall', 'err'); return; }
+  if (snapped) { p.pos = snapped.pos; p.rotDeg = snapped.rotDeg; }
+  state.doc.placedObjects.push(p);
   setMode('objects');
   state.sel = { kind: 'object', index: state.doc.placedObjects.length - 1 };
   markDirty(); renderInspector(); redraw();
@@ -352,8 +363,9 @@ function addObjectFromPalette(assetId) {
 
 function rotateSelected() {
   if (state.sel?.kind === 'object') {
-    pushUndo();
     const p = state.doc.placedObjects[state.sel.index];
+    if (assetById(p.asset)?.wallMounted) { setStatus('wall-mounted assets face into the room automatically'); return; }
+    pushUndo();
     p.rotDeg = normRot(p.rotDeg + 90);
   } else if (state.sel?.kind === 'door') {
     pushUndo();
@@ -630,7 +642,11 @@ function onPointerMove(e) {
   if (d.kind === 'move') {
     if (!d.moved) { pushUndo(); d.moved = true; }
     const [nx, nz] = snapPoint(x + d.dx, z + d.dz);
-    if (state.sel?.kind === 'object') state.doc.placedObjects[state.sel.index].pos = [nx, nz];
+    if (state.sel?.kind === 'object') {
+      const p = state.doc.placedObjects[state.sel.index];
+      const snapped = snapWallObject(p, [nx, nz], Math.max(state.doc.gridSize, 0.75));
+      if (snapped) { p.pos = snapped.pos; p.rotDeg = snapped.rotDeg; }
+    }
     if (state.sel?.kind === 'door') state.doc.doors[state.sel.index].at = [nx, nz];
     if (state.sel?.kind === 'window') state.doc.windows[state.sel.index].at = [nx, nz];
     markDirty(); renderInspector();
@@ -735,9 +751,14 @@ function renderInspector() {
   if (s.kind === 'object') {
     const p = doc.placedObjects[s.index];
     host.appendChild(Object.assign(document.createElement('h2'), { textContent: assetById(p.asset)?.name ?? p.asset }));
-    host.appendChild(field('x', p.pos[0], edit((v) => { p.pos[0] = v; }), { data: 'obj.x' }));
-    host.appendChild(field('z', p.pos[1], edit((v) => { p.pos[1] = v; }), { data: 'obj.z' }));
-    host.appendChild(field('rot °', p.rotDeg, edit((v) => { p.rotDeg = normRot(v); }), { data: 'obj.rot' }));
+    const setObjectAxis = (axis, v) => {
+      const requested = [...p.pos]; requested[axis] = v;
+      const snapped = snapWallObject(p, requested);
+      if (snapped) { p.pos = snapped.pos; p.rotDeg = snapped.rotDeg; }
+    };
+    host.appendChild(field('x', p.pos[0], edit((v) => setObjectAxis(0, v)), { data: 'obj.x' }));
+    host.appendChild(field('z', p.pos[1], edit((v) => setObjectAxis(1, v)), { data: 'obj.z' }));
+    host.appendChild(field('rot °', p.rotDeg, edit((v) => { if (!assetById(p.asset)?.wallMounted) p.rotDeg = normRot(v); }), { data: 'obj.rot' }));
     host.appendChild(del);
   } else if (s.kind === 'floor') {
     const f = doc.floors[s.index];
@@ -905,7 +926,7 @@ for (const [id, key] of [['underlay-opacity', 'opacity'], ['underlay-width', 'wi
 // exposed for the module script + headless tests
 window.MapEditor = {
   state, boot, selectMap, save, newMap, duplicateMap, deleteMap, playThisMap,
-  hitTest, nearestWall, snapPoint, normRot, objectRect,
+  hitTest, nearestWall, snapPoint, snapWallObject, normRot, objectRect,
   addObjectFromPalette, rotateSelected, deleteSelected, setMode, undo,
   fitView, redraw, pxToWorld, worldToPx,
   navBridgeReady: () => { state.navDirty = true; redraw(); },
@@ -917,6 +938,12 @@ boot();
 <script type="module">
 // Nav overlay — the game's own nav module via Vite (never a reimplementation).
 import { bakeNavGrid } from '/game/nav.ts';
+import { snapWallMountedPlacement } from '/game/buymode.ts';
+window.PlacementBridge = {
+  snapWallMounted(requested, def, map, maxDistance) {
+    return snapWallMountedPlacement(requested, def, map.walls, map.floors, map.gridSize, maxDistance);
+  },
+};
 window.NavBridge = {
   walkableCells(map, assets) {
     const g = bakeNavGrid(map, assets);

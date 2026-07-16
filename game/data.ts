@@ -153,12 +153,16 @@ export interface AssetDef {
    *  provided this object is within `tuning.fire.spreadRadius` of it — see game/accidents.ts's
    *  `spreadShouldRoll`. Absent = never catches fire from a nearby blaze. */
   combustibility?: { chancePercent: number; delaySeconds: number };
-  /** ROADMAP_NEXT item 7 (audio): path under public/sounds/ (or any /public path) that loops for
-   *  as long as an action targets THIS PLACED INSTANCE (e.g. a TV's hum, a shower's running-water
-   *  noise) — keyed per-instance in game/audio.ts so two placed TVs each get their own independent
-   *  loop. Wins over the target action's own `sound` if both are set (see game/audio.ts). Absent =
-   *  no asset-driven loop. */
+  /** Asset loop path. B6-12 assets offering Turn On/Off loop per-instance while ON; legacy assets
+   *  without power actions loop while targeted by an action. See audio.ts/assetstate.ts. */
   sound?: string;
+  /** B6-12: sparse point-light + per-instance power defaults. Presence emits a THREE.PointLight;
+   *  every subfield is optional so the Asset Editor can opt into useful defaults with an empty
+   *  object. `defaultOn` seeds AssetStateRegistry the first time an instance is seen. */
+  light?: { color?: string | number; intensity?: number; distance?: number; yOffset?: number; defaultOn?: boolean };
+  /** B6-13: presence makes placement wall-only. Buy Mode/Map Editor share buymode.ts's pure wall
+   *  snap, which faces the asset into the room. heightY is the visual anchor height (default 1.5m). */
+  wallMounted?: { heightY?: number };
   /** ROADMAP_NEXT item 10 (garbage/tidying): sparse, ships on the garbage-can asset only. Real
    *  capacity — once `capacity` waste units have been deposited (game/garbage.ts's GarbageRegistry
    *  fill count, keyed per placed instance), the can counts as full and is excluded from

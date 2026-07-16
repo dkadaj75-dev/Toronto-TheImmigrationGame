@@ -161,8 +161,10 @@ HUD `⌂ Cut` toggles ground-up wall/door visual scaling at auto-exposed `tuning
 Eight tiny generated WAV cues are live through auto-exposed `tuning.audio` paths: successful move orders, action-menu picks, quest start/completion, generic toasts, skill-ups, and money up/down.
 ## B6-11. Contextual action menu around click location (Sims-style radial, screen-space so walls/assets never hide it; replaces bottom menu; screenshot ref on record) — ✅ DONE 2026-07-16
 Canvas taps now carry CSS-pixel coordinates into a fixed HTML bubble menu: up to five options form a clamped radial ring, larger sets use a compact vertical arc, and safe-area-aware touch targets preserve costs/disabled state and Cancel.
-## B6-12. Asset light emission + ON/OFF state: assets can generate light; Turn ON/OFF actions flip asset state driving light and/or sound (e.g. TV)
-## B6-13. Wall-mounted assets (stick to wall: wall lights, canvas)
+## B6-12. Asset light emission + ON/OFF state: assets can generate light; Turn ON/OFF actions flip asset state driving light and/or sound (e.g. TV) — ✅ DONE 2026-07-16
+Serializable stable per-instance state now drives sparse asset PointLights and stateful sound; contextual Turn On/Off actions keep normal walk-up flow, and Watch TV auto-powers the TV on.
+## B6-13. Wall-mounted assets (stick to wall: wall lights, canvas) — ✅ DONE 2026-07-16
+Buy Mode and Map Editor share a pure floor-side wall snap/validity rule; wall assets sit flush, face into the room, render at authored/default 1.5m height, and ship as wall_lamp + canvas.
 ## B6-14. Energy 0 → collapse animation then sleep on ground (short tunable duration) — ✅ DONE 2026-07-16
 An armed survival event interrupts at zero energy, plays `collapse`, changes to ground `lie_sleep`, refills to the tuned value after the tuned sim-time sleep, then re-arms.
 ## B6-15. Hunger 0 → tunable countdown; if still starving → animation then GAME OVER — ✅ DONE 2026-07-16

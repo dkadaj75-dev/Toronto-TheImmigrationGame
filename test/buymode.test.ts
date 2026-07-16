@@ -3,10 +3,11 @@
 import {
   isPurchasable, isAffordable, purchasableCatalog, catalogCategories, filterCatalog,
   snapToStep, snapPos, normalizeRotDeg, rotateStep, wallRect, isValidPlacement, footprintOnFloor,
+  snapWallMountedPlacement, isWallMountedPlacement,
   BuyOverlay, effectiveInstances, effectivePlacedObjects, isSelectableForSell,
   attemptBuy, attemptSell, attemptMove, attemptDestroy,
   iconFallbackColor, iconFallbackInitials,
-  type OtherInstance, type PlacedLike, type EffectiveInstance, type FloorDef,
+  type OtherInstance, type PlacedLike, type EffectiveInstance, type FloorDef, type WallSeg,
 } from '../game/buymode';
 import { footprintRect } from '../game/accidents';
 import { readFileSync } from 'node:fs';
@@ -16,6 +17,29 @@ let failures = 0;
 function check(name: string, cond: boolean, detail = '') {
   if (cond) console.log(`  ok  ${name}`);
   else { failures++; console.error(`FAIL  ${name} ${detail}`); }
+}
+
+console.log('buymode.test — B6-13 wall-mounted snap + validity');
+{
+  const bounds = { w: 10, h: 10 };
+  const walls: WallSeg[] = [{ from: [0, 0], to: [10, 0] }];
+  const floors: FloorDef[] = [{ id: 'room', polygon: [[0, 0], [10, 0], [10, 10], [0, 10]] }];
+  const def: Pick<AssetDef, 'footprint' | 'facingDeg' | 'wallMounted'> = { footprint: [1, 0.2], wallMounted: {} };
+  const snapped = snapWallMountedPlacement([5, 0.4], def, walls, floors, 1);
+  check('wall-adjacent request snaps', !!snapped);
+  check('top-wall mount faces +Z into the room', snapped?.rotDeg === 0, JSON.stringify(snapped));
+  check('footprint snaps flush outside wall thickness', !!snapped && approx(snapped.pos[1], 0.16), JSON.stringify(snapped));
+  check('snapped wall placement passes pure wall rule', !!snapped && isWallMountedPlacement(snapped.pos, snapped.rotDeg, def, walls, floors, 1));
+  check('mid-room placement fails pure wall rule', !isWallMountedPlacement([5, 5], 0, def, walls, floors, 1));
+  check('wrong-facing placement fails pure wall rule', !!snapped && !isWallMountedPlacement(snapped.pos, 180, def, walls, floors, 1));
+  check('full placement validity accepts snapped wall mount', !!snapped && isValidPlacement({
+    pos: snapped.pos, rotDeg: snapped.rotDeg, footprint: def.footprint, def,
+    bounds, walls, floors, gridSize: 1, others: [],
+  }));
+  check('full placement validity rejects wall asset in mid-room', !isValidPlacement({
+    pos: [5, 5], rotDeg: 0, footprint: def.footprint, def,
+    bounds, walls, floors, gridSize: 1, others: [],
+  }));
 }
 function approx(a: number, b: number, eps = 1e-6) { return Math.abs(a - b) <= eps; }
 

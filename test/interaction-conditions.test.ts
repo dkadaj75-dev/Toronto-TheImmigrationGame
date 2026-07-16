@@ -4,6 +4,7 @@
 // disagree about what "available" means. Run: npx tsx test/interaction-conditions.test.ts
 
 import { isActionAvailable, type EvalContext } from '../game/quests';
+import { isAssetStateActionAvailable } from '../game/assetstate';
 
 let failures = 0;
 function check(name: string, cond: boolean, detail = '') {
@@ -78,6 +79,14 @@ console.log('interaction-conditions.test — menu-hide / autonomy-skip simulatio
     actions.filter((a) => isActionAvailable(a.conditions, c)).map((a) => a.id);
   check('autonomy candidate pool excludes gated action while unmet', !autonomyCandidates(ctx()).includes('leave_for_work'));
   check('autonomy candidate pool includes it once met', autonomyCandidates(ctx({ vars: { visaStatus: 'tourist', job: 'chef', income: 0 } })).includes('leave_for_work'));
+}
+
+console.log('interaction-conditions.test — B6-12 per-instance power availability');
+{
+  const powerActions = ['turn_on', 'turn_off', 'watch_tv'];
+  const visible = (on: boolean) => powerActions.filter((id) => isAssetStateActionAvailable(id, on));
+  check('OFF instance shows Turn On but hides Turn Off', JSON.stringify(visible(false)) === JSON.stringify(['turn_on', 'watch_tv']));
+  check('ON instance hides Turn On but shows Turn Off', JSON.stringify(visible(true)) === JSON.stringify(['turn_off', 'watch_tv']));
 }
 
 if (failures > 0) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }

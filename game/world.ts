@@ -10,6 +10,7 @@ import { classifyMeshPath, createSpriteInstance, preloadGif } from './sprites';
 import { retargetTrackName, stripPositionTracks, resolveClipName, fileStem } from './fbxclips';
 import { resolveWindowConfig, windowFacePositions, windowPaneRect } from './windows';
 import { wallCutShownHeight } from './wallview';
+import { resolveAssetLight } from './assetstate';
 
 // ------------------------------------------------------------------ GLB furniture
 // Templates are cached per URL and cloned per placement; clones share geometry/materials
@@ -104,8 +105,9 @@ export function attachMesh(group: THREE.Group, def: AssetDef, opts: { allowSprit
     const inst = createSpriteInstance(def, url);
     inst.ready
       .then(() => {
+        const persistent = group.children.filter((child) => child.userData.assetPersistent);
         group.clear();
-        group.add(inst.object);
+        group.add(inst.object, ...persistent);
         group.userData.spriteUpdate = (dt: number) => inst.update(dt);
       })
       .catch(() => console.warn(`Could not load sprite image for "${def.id}" (${url}) — keeping stand-in.`));
@@ -115,14 +117,47 @@ export function attachMesh(group: THREE.Group, def: AssetDef, opts: { allowSprit
     .then((template) => {
       const model = template.clone(true);
       normalizeModelToFootprint(model, def.footprint);
+      if (def.wallMounted) {
+        const box = new THREE.Box3().setFromObject(model);
+        model.position.y -= box.getCenter(new THREE.Vector3()).y;
+      }
       applyMeshFit(model, def.meshFit);
       model.traverse((o) => {
         if (o instanceof THREE.Mesh) { o.castShadow = true; o.userData.sharedResource = true; }
       });
+      const persistent = group.children.filter((child) => child.userData.assetPersistent);
       group.clear();
-      group.add(model);
+      group.add(model, ...persistent);
     })
     .catch(() => console.warn(`Could not load mesh for "${def.id}" (${url}) — keeping stand-in.`));
+}
+
+/** B6-12 thin THREE layer: runtime state lives in the pure AssetStateRegistry. */
+export function attachAssetLight(group: THREE.Group, def: AssetDef): THREE.PointLight | null {
+  const cfg = resolveAssetLight(def);
+  if (!cfg) return null;
+  const light = new THREE.PointLight(cfg.color, cfg.intensity, cfg.distance);
+  light.name = 'asset-point-light';
+  light.position.y = cfg.yOffset;
+  light.visible = cfg.defaultOn;
+  light.userData.assetPersistent = true;
+  light.userData.onIntensity = cfg.intensity;
+  group.add(light);
+  return light;
+}
+
+export function setAssetObjectOn(group: THREE.Object3D, on: boolean): void {
+  const light = group.getObjectByName('asset-point-light') as THREE.PointLight | undefined;
+  if (light) {
+    light.visible = on;
+    light.intensity = on ? ((light.userData.onIntensity as number | undefined) ?? light.intensity) : 0;
+  }
+  group.userData.assetOn = on;
+}
+
+export function applyAssetPlacement(group: THREE.Object3D, def: AssetDef, pos: [number, number], rotDeg: number): void {
+  group.position.set(pos[0], def.wallMounted ? (def.wallMounted.heightY ?? 1.5) : 0, pos[1]);
+  group.rotation.y = THREE.MathUtils.degToRad(rotDeg);
 }
 
 /**
@@ -268,9 +303,9 @@ export function buildWorld(data: GameData): THREE.Group {
     const def = byId.get(placed.asset);
     if (!def) { console.warn(`Unknown asset in map: ${placed.asset}`); return; }
     const obj = makeStandIn(def);
-    obj.position.set(placed.pos[0], 0, placed.pos[1]);
-    obj.rotation.y = THREE.MathUtils.degToRad(placed.rotDeg);
-    obj.userData = { assetId: def.id, interactions: def.interactions, placedIndex };
+    applyAssetPlacement(obj, def, placed.pos, placed.rotDeg);
+    obj.userData = { assetId: def.id, interactions: def.interactions, placedIndex, assetStateKey: `designer:${placedIndex}` };
+    attachAssetLight(obj, def);
     attachMesh(obj, def);
     root.add(obj);
   });
@@ -309,7 +344,7 @@ export function makeStandIn(def: AssetDef): THREE.Group {
   const height = def.category === 'beds' ? 0.6 : def.category === 'seating' ? 0.9 : 1.1;
   const mat = new THREE.MeshLambertMaterial({ color: CATEGORY_COLORS[def.category] ?? 0xaaaaaa });
   const body = new THREE.Mesh(new THREE.BoxGeometry(fw * 0.9, height, fd * 0.9), mat);
-  body.position.y = height / 2;
+  body.position.y = def.wallMounted ? 0 : height / 2;
   body.castShadow = true;
   g.add(body);
   return g;

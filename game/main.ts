@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { loadAll, watchData, type GameData } from './data';
 import { TouchCamera } from './camera';
-import { applyWallCutView, buildWorld, makeSimStandIn, makeLights, applyDayNight, loadRiggedCharacter, normalizeMeshUrl } from './world';
+import { applyWallCutView, buildWorld, makeSimStandIn, makeLights, applyDayNight, loadRiggedCharacter, normalizeMeshUrl, setAssetObjectOn } from './world';
 import { buildDoors } from './doors';
 import { AnimController } from './anim';
 import { bakeNavGrid } from './nav';
@@ -31,6 +31,7 @@ import { initBladderFailureState, checkBladderFailure, rearmBladderFailure } fro
 import { FoodRegistry, foodAssetForActionEvent } from './food';
 import { initEnergyCollapseState, StarvationTracker, tickEnergyCollapse } from './survival';
 import { formatMoneyChange, formatSkillUp, skillLevelUps } from './feedback';
+import { AssetStateRegistry, isAssetStateActionAvailable, isStatefulAsset, powerStateForAction } from './assetstate';
 
 /** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
  *  a seat-aware action with no eligible seat in range) plays the dedicated 'sit_ground' state
@@ -70,6 +71,7 @@ async function start() {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x2a3346);
 
+  const assetStates = new AssetStateRegistry();
   let wallCutActive = false; // in-page preference only; deliberately not serialized
   let world = buildWorld(data);
   let doors = buildDoors(data);
@@ -492,6 +494,30 @@ async function start() {
   // playback attempts behind the module's own pointerdown/keydown unlock listener), so it can be
   // built here unconditionally like every other subsystem.
   const audio = new AudioManager(data.tuning);
+  let stateSoundKeys = new Set<string>();
+  /** B6-12: one traversal synchronizes pure per-instance state into PointLights and persistent
+   * asset loops. Stable designer/player keys survive hot-reload world rebuilds and are save-ready. */
+  const syncAssetStates = () => {
+    const desiredSounds = new Set<string>();
+    const byId = assetsById(data);
+    world.traverse((obj) => {
+      const key = obj.userData.assetStateKey as string | undefined;
+      const assetId = obj.userData.assetId as string | undefined;
+      if (!key || !assetId) return;
+      const def = byId.get(assetId);
+      if (!def) return;
+      const on = assetStates.isOn(key, def);
+      setAssetObjectOn(obj, on);
+      if (obj.visible && on && isStatefulAsset(def) && def.sound) {
+        const soundKey = `asset-state:${key}`;
+        audio.startLoop(soundKey, def.sound);
+        desiredSounds.add(soundKey);
+      }
+    });
+    for (const key of stateSoundKeys) if (!desiredSounds.has(key)) audio.stopLoop(key);
+    stateSoundKeys = desiredSounds;
+  };
+  syncAssetStates();
   audio.setMusicContext('map', data.map); // starts (or queues, pre-gesture) the active map's playlist
   const playTunedSfx = (key: 'moveOrder' | 'actionSelect' | 'questStarted' | 'questCompleted' | 'notification' | 'skillUp' | 'moneyUp' | 'moneyDown') => {
     const path = data.tuning.audio?.[key];
@@ -644,6 +670,12 @@ async function start() {
     // (shared key — this single-sim game only ever has one action in flight at a time) applies.
     const startAssetId = a.target.userData?.assetId as string | undefined;
     const startAssetDef = startAssetId ? data.assets.assets.find((x) => x.id === startAssetId) : undefined;
+    const stateKey = a.target.userData?.assetStateKey as string | undefined;
+    const power = powerStateForAction(a.action.id);
+    if (stateKey && startAssetDef && isStatefulAsset(startAssetDef) && power !== null) {
+      assetStates.setOn(stateKey, power);
+      syncAssetStates();
+    }
     const loopPath = loopSoundFor(a.action, startAssetDef);
     if (loopPath) audio.startLoop(startAssetDef?.sound ? `asset:${a.target.uuid}` : `action:${a.action.id}`, loopPath);
     // ROADMAP_NEXT B3-1(a): a `duration`-timed action (e.g. "cook") rolls its accident risk RIGHT
@@ -853,6 +885,12 @@ async function start() {
           .map((id) => data.interactions.actions.find((x) => x.id === id))
           .filter((x): x is NonNullable<typeof x> => !!x)
           .filter((x) => isActionAvailable(x.conditions, evalCtx))
+          // B6-12 adds a second, orthogonal availability dimension: generic power actions read
+          // this placed instance's live state (Turn On only while OFF; Turn Off only while ON).
+          .filter((x) => {
+            const key = target.userData.assetStateKey as string | undefined;
+            return !key || isAssetStateActionAvailable(x.id, assetStates.isOn(key, asset));
+          })
           // leave_for_work keeps its data-side vars.job condition (§7.16) and adds this code-side
           // live JobDef-hours gate, including cross-midnight windows (pure math in game/work.ts).
           .filter((x) => x.id !== 'leave_for_work'
@@ -1095,6 +1133,7 @@ async function start() {
     // both back onto the new world. rebakeNav() (not a raw bakeNavGrid call) so the overlay keeps
     // feeding the nav grid across hot-reloads too.
     buyMode.reattach(world);
+    syncAssetStates();
     cam.retune(data.tuning.camera, data.map);
     rebakeNav();
     audio.retune(data.tuning); // ROADMAP_NEXT item 7: volumes/crossfade/buyModeMusic may have changed
@@ -1194,6 +1233,7 @@ async function start() {
     // pause button OR buy mode's own freeze); music is deliberately NOT touched here (see
     // audio.ts's module doc comment on the PAUSE decision).
     audio.setPaused(effectiveSpeed === 0 || buyMode.active || repoOverlayActive || gameOverActive);
+    syncAssetStates(); // picks up newly purchased/sold stateful instances; idempotent for steady state
 
     gameSeconds += sdt * clockScale();
     while (gameSeconds >= 86400) {

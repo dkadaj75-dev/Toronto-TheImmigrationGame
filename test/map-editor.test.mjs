@@ -119,6 +119,25 @@ console.log('map-editor.test — objects: hit test / snap / drag / rotate / dele
   check('palette adds at snapped center + selects', st.doc.placedObjects.at(-1).asset === 'armchair' && st.sel?.kind === 'object');
 }
 
+// B6-13: jsdom cannot execute the module import, so inject the same bridge surface and verify the
+// classic-script editor delegates add/drag/rotation instead of reimplementing wall math.
+console.log('map-editor.test — wall-mounted objects use PlacementBridge');
+{
+  let calls = 0;
+  window.PlacementBridge = {
+    snapWallMounted(requested) { calls++; return { pos: [requested[0], 0.16], rotDeg: 0, wallIndex: 0 }; },
+  };
+  const before = st.doc.placedObjects.length;
+  doc.querySelector('#palette .item[data-asset="wall_lamp"]').click();
+  const mounted = st.doc.placedObjects.at(-1);
+  check('palette wall asset delegates to bridge and is added', calls === 1 && mounted.asset === 'wall_lamp');
+  check('bridge snap position/facing are applied', mounted.pos[1] === 0.16 && mounted.rotDeg === 0, JSON.stringify(mounted));
+  ME.rotateSelected();
+  check('manual rotate is blocked for wall-mounted asset', mounted.rotDeg === 0);
+  ME.deleteSelected();
+  check('wall-mounted test cleanup restores object count', st.doc.placedObjects.length === before);
+}
+
 // ------------------------------------------------------------------ slice 2: floors
 console.log('map-editor.test — floors: draw rect / material / edit / delete');
 {

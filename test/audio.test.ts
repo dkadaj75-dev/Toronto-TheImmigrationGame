@@ -77,14 +77,17 @@ console.log('audio.test — loopSoundFor (ActionDef.sound vs AssetDef.sound prec
 {
   const actionWithSound: Pick<ActionDef, 'sound'> = { sound: 'sounds/action.wav' };
   const actionNoSound: Pick<ActionDef, 'sound'> = {};
-  const assetWithSound: Pick<AssetDef, 'sound'> = { sound: 'sounds/asset.wav' };
-  const assetNoSound: Pick<AssetDef, 'sound'> = {};
+  const assetWithSound: Pick<AssetDef, 'sound' | 'interactions'> = { sound: 'sounds/asset.wav', interactions: [] };
+  const assetNoSound: Pick<AssetDef, 'sound' | 'interactions'> = { interactions: [] };
+  const statefulAsset: Pick<AssetDef, 'sound' | 'interactions'> = { sound: 'sounds/tv.wav', interactions: ['turn_on', 'turn_off'] };
 
   check('asset sound wins when both are set', loopSoundFor(actionWithSound, assetWithSound) === 'sounds/asset.wav');
   check('falls back to action sound when asset has none', loopSoundFor(actionWithSound, assetNoSound) === 'sounds/action.wav');
   check('asset sound used even with undefined asset def object entirely (no asset targeted)', loopSoundFor(actionWithSound, undefined) === 'sounds/action.wav');
   check('neither set → undefined', loopSoundFor(actionNoSound, assetNoSound) === undefined);
   check('neither set, no asset at all → undefined', loopSoundFor(actionNoSound, undefined) === undefined);
+  check('stateful asset sound is not action-scoped', loopSoundFor(actionWithSound, statefulAsset) === 'sounds/action.wav');
+  check('stateful asset with no action sound returns undefined', loopSoundFor(actionNoSound, statefulAsset) === undefined);
 }
 
 if (failures) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }

@@ -34,7 +34,7 @@
 import * as THREE from 'three';
 import type { AssetDef, AssetsData, GameData } from './data';
 import { footprintRect, rectsOverlap, type Rect } from './accidents';
-import { attachMesh, makeStandIn } from './world';
+import { applyAssetPlacement, attachAssetLight, attachMesh, makeStandIn } from './world';
 
 // ==================================================================== catalog (pure)
 
@@ -137,6 +137,74 @@ function pointInPolygon(x: number, z: number, poly: [number, number][]): boolean
   return inside;
 }
 
+export interface WallMountPlacement { pos: [number, number]; rotDeg: number; wallIndex: number }
+
+function pointOnAnyFloor(x: number, z: number, floors: FloorDef[]): boolean {
+  return floors.some((f) => pointInPolygon(x, z, f.polygon));
+}
+
+/** B6-13 authoritative wall mount snap. Each wall's two normals are tested a short distance from
+ * the segment; only normals pointing onto authored floor are candidates. The closest candidate
+ * to the requested point wins, with the footprint edge flush against the rendered wall edge and
+ * local facing corrected so the asset faces along that inward normal. */
+export function snapWallMountedPlacement(
+  requested: [number, number],
+  def: Pick<AssetDef, 'footprint' | 'facingDeg' | 'wallMounted'>,
+  walls: WallSeg[],
+  floors: FloorDef[],
+  gridSize: number,
+  maxDistance = Infinity,
+): WallMountPlacement | null {
+  if (!def.wallMounted) return null;
+  let best: (WallMountPlacement & { distance: number }) | null = null;
+  walls.forEach((wall, wallIndex) => {
+    const dx = wall.to[0] - wall.from[0], dz = wall.to[1] - wall.from[1];
+    const len = Math.hypot(dx, dz);
+    if (len < 1e-6) return;
+    const tx = dx / len, tz = dz / len;
+    const rawAlong = (requested[0] - wall.from[0]) * tx + (requested[1] - wall.from[1]) * tz;
+    for (const sign of [-1, 1]) {
+      const nx = -tz * sign, nz = tx * sign;
+      const sample = Math.max(gridSize * 0.5, WALL_THICKNESS);
+      const midAlong = Math.min(len, Math.max(0, rawAlong));
+      const wx = wall.from[0] + tx * midAlong, wz = wall.from[1] + tz * midAlong;
+      if (!pointOnAnyFloor(wx + nx * sample, wz + nz * sample, floors)) continue;
+
+      const facingDeg = Math.atan2(nx, nz) * 180 / Math.PI;
+      const rotDeg = normalizeRotDeg(facingDeg - (def.facingDeg ?? 0));
+      const atOrigin = footprintRect([0, 0], rotDeg, def.footprint);
+      const halfX = (atOrigin.x1 - atOrigin.x0) / 2;
+      const halfZ = (atOrigin.z1 - atOrigin.z0) / 2;
+      const normalSupport = Math.abs(nx) * halfX + Math.abs(nz) * halfZ;
+      const tangentSupport = Math.abs(tx) * halfX + Math.abs(tz) * halfZ;
+      if (len + 1e-6 < tangentSupport * 2) continue;
+      const along = Math.min(len - tangentSupport, Math.max(tangentSupport, rawAlong));
+      const wallX = wall.from[0] + tx * along, wallZ = wall.from[1] + tz * along;
+      const pos: [number, number] = [
+        wallX + nx * (normalSupport + WALL_THICKNESS / 2),
+        wallZ + nz * (normalSupport + WALL_THICKNESS / 2),
+      ];
+      const distance = Math.hypot(requested[0] - pos[0], requested[1] - pos[1]);
+      if (distance <= maxDistance && (!best || distance < best.distance)) best = { pos, rotDeg, wallIndex, distance };
+    }
+  });
+  const result = best as (WallMountPlacement & { distance: number }) | null;
+  return result ? { pos: result.pos, rotDeg: result.rotDeg, wallIndex: result.wallIndex } : null;
+}
+
+/** True only when an already-authored placement is at the exact flush/inward-facing snap. */
+export function isWallMountedPlacement(
+  pos: [number, number], rotDeg: number,
+  def: Pick<AssetDef, 'footprint' | 'facingDeg' | 'wallMounted'>,
+  walls: WallSeg[], floors: FloorDef[], gridSize: number,
+): boolean {
+  if (!def.wallMounted) return true;
+  const snapped = snapWallMountedPlacement(pos, def, walls, floors, gridSize);
+  return !!snapped
+    && Math.hypot(pos[0] - snapped.pos[0], pos[1] - snapped.pos[1]) < 1e-4
+    && Math.abs(normalizeRotDeg(rotDeg) - normalizeRotDeg(snapped.rotDeg)) < 1e-4;
+}
+
 /**
  * True iff EVERY nav-grid cell the footprint rect covers has its center inside some floor polygon
  * — i.e. the whole footprint sits on floor, not merely its center point (ROADMAP_NEXT.md item 8:
@@ -169,6 +237,8 @@ export interface PlacementCheckInput {
   others: OtherInstance[];
   floors: FloorDef[];
   gridSize: number;
+  /** Asset definition is required for B6-13's wall-only rule; absent preserves old fixtures. */
+  def?: Pick<AssetDef, 'footprint' | 'facingDeg' | 'wallMounted'>;
   /** exclude this key from the overlap check — moving/rotating an instance shouldn't collide with itself */
   excludeKey?: string;
 }
@@ -183,6 +253,7 @@ export function isValidPlacement(input: PlacementCheckInput): boolean {
   const rect = footprintRect(input.pos, input.rotDeg, input.footprint);
   if (rect.x0 < 0 || rect.z0 < 0 || rect.x1 > input.bounds.w || rect.z1 > input.bounds.h) return false;
   if (!footprintOnFloor(rect, input.floors, input.gridSize)) return false;
+  if (input.def?.wallMounted && !isWallMountedPlacement(input.pos, input.rotDeg, input.def, input.walls, input.floors, input.gridSize)) return false;
   for (const w of input.walls) if (rectsOverlap(rect, wallRect(w))) return false;
   for (const o of input.others) {
     if (input.excludeKey && o.key === input.excludeKey) continue;
@@ -527,10 +598,10 @@ export class BuyModeController {
 
   // -------------------------------------------------------------- placement validity helper
 
-  private checkValidity(pos: [number, number], rotDeg: number, footprint: [number, number], excludeKey?: string): boolean {
+  private checkValidity(pos: [number, number], rotDeg: number, def: AssetDef, excludeKey?: string): boolean {
     const { map } = this.getData();
     const others = this.instances().map((i): OtherInstance => ({ key: i.key, pos: i.pos, rotDeg: i.rotDeg, footprint: i.footprint }));
-    return isValidPlacement({ pos, rotDeg, footprint, bounds: map.bounds, walls: map.walls, others, floors: map.floors, gridSize: map.gridSize, excludeKey });
+    return isValidPlacement({ pos, rotDeg, footprint: def.footprint, def, bounds: map.bounds, walls: map.walls, others, floors: map.floors, gridSize: map.gridSize, excludeKey });
   }
 
   // -------------------------------------------------------------- starting a purchase (ghost)
@@ -540,9 +611,12 @@ export class BuyModeController {
     const { map } = this.getData();
     const pos: [number, number] = [clampRect(map.bounds.w / 2, 0, map.bounds.w), clampRect(map.bounds.h / 2, 0, map.bounds.h)];
     const rotDeg = 0;
-    const valid = this.checkValidity(pos, rotDeg, def.footprint);
-    this.selection = { kind: 'placing', def, pos, rotDeg, valid };
-    this.buildGhost(def, pos, rotDeg, valid);
+    const mounted = def.wallMounted ? snapWallMountedPlacement(pos, def, map.walls, map.floors, map.gridSize) : null;
+    const startPos = mounted?.pos ?? pos;
+    const startRot = mounted?.rotDeg ?? rotDeg;
+    const valid = this.checkValidity(startPos, startRot, def);
+    this.selection = { kind: 'placing', def, pos: startPos, rotDeg: startRot, valid };
+    this.buildGhost(def, startPos, startRot, valid);
   }
 
   /** Ground tap while placing/moving repositions the ghost (snapped, revalidated). Mobile-first
@@ -552,20 +626,25 @@ export class BuyModeController {
   moveGhostTo(worldX: number, worldZ: number) {
     if (!this.selection || this.selection.kind === 'selected') return;
     const snapStep = this.getData().map.snapStep ?? DEFAULT_PLACEMENT_SNAP;
-    const pos = snapPos([worldX, worldZ], snapStep);
-    const footprint = this.selection.def.footprint;
+    let pos = snapPos([worldX, worldZ], snapStep);
+    let rotDeg = this.selection.rotDeg;
+    const { def } = this.selection;
+    const mounted = def.wallMounted
+      ? snapWallMountedPlacement([worldX, worldZ], def, this.getData().map.walls, this.getData().map.floors, this.getData().map.gridSize, Math.max(this.getData().map.gridSize, 0.75))
+      : null;
+    if (mounted) { pos = mounted.pos; rotDeg = mounted.rotDeg; }
     const excludeKey = this.selection.kind === 'moving' ? this.selection.inst.key : undefined;
-    const valid = this.checkValidity(pos, this.selection.rotDeg, footprint, excludeKey);
-    this.selection = { ...this.selection, pos, valid };
-    if (this.ghost) { this.ghost.position.set(pos[0], 0, pos[1]); tintGhost(this.ghost, valid); }
+    const valid = this.checkValidity(pos, rotDeg, def, excludeKey);
+    this.selection = { ...this.selection, pos, rotDeg, valid };
+    if (this.ghost) { applyAssetPlacement(this.ghost, def, pos, rotDeg); tintGhost(this.ghost, valid); }
   }
 
   rotateGhost() {
     if (!this.selection || this.selection.kind === 'selected') return;
     const rotDeg = rotateStep(this.selection.rotDeg);
-    const footprint = this.selection.def.footprint;
+    const def = this.selection.def;
     const excludeKey = this.selection.kind === 'moving' ? this.selection.inst.key : undefined;
-    const valid = this.checkValidity(this.selection.pos, rotDeg, footprint, excludeKey);
+    const valid = this.checkValidity(this.selection.pos, rotDeg, def, excludeKey);
     this.selection = { ...this.selection, rotDeg, valid };
     if (this.ghost) { this.ghost.rotation.y = THREE.MathUtils.degToRad(rotDeg); tintGhost(this.ghost, valid); }
   }
@@ -643,7 +722,7 @@ export class BuyModeController {
   beginMoveSelected() {
     if (this.selection?.kind !== 'selected') return;
     const { inst, def } = this.selection;
-    const valid = this.checkValidity(inst.pos, inst.rotDeg, def.footprint, inst.key);
+    const valid = this.checkValidity(inst.pos, inst.rotDeg, def, inst.key);
     this.selection = { kind: 'moving', inst, def, pos: inst.pos, rotDeg: inst.rotDeg, valid };
     this.buildGhost(def, inst.pos, inst.rotDeg, valid);
   }
@@ -656,7 +735,7 @@ export class BuyModeController {
     if (this.selection?.kind !== 'selected') return false;
     const { inst, def } = this.selection;
     const rotDeg = rotateStep(inst.rotDeg);
-    const valid = this.checkValidity(inst.pos, rotDeg, def.footprint, inst.key);
+    const valid = this.checkValidity(inst.pos, rotDeg, def, inst.key);
     if (!valid) return false;
     attemptMove(this.overlay, inst, inst.pos, rotDeg, true);
     this.selection = { kind: 'selected', inst: { ...inst, rotDeg }, def };
@@ -698,8 +777,7 @@ export class BuyModeController {
 
   private buildGhost(def: AssetDef, pos: [number, number], rotDeg: number, valid: boolean) {
     const ghost = makeStandIn(def);
-    ghost.position.set(pos[0], 0, pos[1]);
-    ghost.rotation.y = THREE.MathUtils.degToRad(rotDeg);
+    applyAssetPlacement(ghost, def, pos, rotDeg);
     tintGhost(ghost, valid);
     this.ghost = ghost;
     this.getWorld().add(ghost);
@@ -714,9 +792,9 @@ export class BuyModeController {
 
   private buildAdditionGroup(addition: OverlayAddition, def: AssetDef) {
     const group = makeStandIn(def);
-    group.position.set(addition.pos[0], 0, addition.pos[1]);
-    group.rotation.y = THREE.MathUtils.degToRad(addition.rotDeg);
-    group.userData = { assetId: def.id, interactions: def.interactions, buyKey: addition.key };
+    applyAssetPlacement(group, def, addition.pos, addition.rotDeg);
+    group.userData = { assetId: def.id, interactions: def.interactions, buyKey: addition.key, assetStateKey: `player:${addition.key}` };
+    attachAssetLight(group, def);
     attachMesh(group, def);
     this.additionGroups.set(addition.key, group);
     this.getWorld().add(group);
@@ -735,21 +813,22 @@ export class BuyModeController {
    *  called after a move/rotate/sell so the live scene matches the overlay without a full rebuild. */
   private applyOverridesToWorld() {
     const world = this.getWorld();
+    const byId = this.byId();
     for (const child of world.children) {
       const idx = child.userData?.placedIndex as number | undefined;
       if (idx === undefined) continue;
       const ov = this.overlay.overrideFor(idx);
       if (this.overlay.isRemoved(idx)) { child.visible = false; continue; }
       if (ov?.type === 'moved') {
-        child.position.set(ov.pos[0], 0, ov.pos[1]);
-        child.rotation.y = THREE.MathUtils.degToRad(ov.rotDeg);
+        const def = byId.get(child.userData.assetId as string);
+        if (def) applyAssetPlacement(child, def, ov.pos, ov.rotDeg);
       }
     }
     for (const [key, group] of this.additionGroups) {
       const a = this.overlay.allAdditions.find((x) => x.key === key);
       if (!a) continue;
-      group.position.set(a.pos[0], 0, a.pos[1]);
-      group.rotation.y = THREE.MathUtils.degToRad(a.rotDeg);
+      const def = byId.get(a.asset);
+      if (def) applyAssetPlacement(group, def, a.pos, a.rotDeg);
     }
   }
 
@@ -761,14 +840,15 @@ export class BuyModeController {
    * reposition moved) and re-parents every live player-addition group into the new world.
    */
   reattach(world: THREE.Group) {
+    const byId = this.byId();
     for (const child of world.children) {
       const idx = child.userData?.placedIndex as number | undefined;
       if (idx === undefined) continue;
       const ov = this.overlay.overrideFor(idx);
       if (this.overlay.isRemoved(idx)) child.visible = false;
       else if (ov?.type === 'moved') {
-        child.position.set(ov.pos[0], 0, ov.pos[1]);
-        child.rotation.y = THREE.MathUtils.degToRad(ov.rotDeg);
+        const def = byId.get(child.userData.assetId as string);
+        if (def) applyAssetPlacement(child, def, ov.pos, ov.rotDeg);
       }
     }
     for (const group of this.additionGroups.values()) world.add(group);

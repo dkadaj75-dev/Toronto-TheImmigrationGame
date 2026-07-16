@@ -337,6 +337,32 @@
           }
         ]
       }
+    },
+    {
+      "id": "turn_on",
+      "name": "Turn on",
+      "needGains": {},
+      "skillGains": {},
+      "animation": "stand_use",
+      "autonomyEligible": false,
+      "primaryNeed": null,
+      "duration": {
+        "baseSeconds": 0.2
+      },
+      "_note": "B6-12 generic power action. main.ts filters it to OFF instances and flips state on arrival; normal use-spot walking remains unchanged."
+    },
+    {
+      "id": "turn_off",
+      "name": "Turn off",
+      "needGains": {},
+      "skillGains": {},
+      "animation": "stand_use",
+      "autonomyEligible": false,
+      "primaryNeed": null,
+      "duration": {
+        "baseSeconds": 0.2
+      },
+      "_note": "B6-12 generic power action. main.ts filters it to ON instances and flips state on arrival; normal use-spot walking remains unchanged."
     }
   ]
 }

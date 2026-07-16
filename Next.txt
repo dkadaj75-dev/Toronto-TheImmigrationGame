@@ -1,2 +1,4 @@
+For this round, use a bit more claude agents and leave Codex for the more complex tasks.
+
 - How the food fulfills the hunder, when cooked, should be directly proportional to the cooking skill.
 - There is still an issue with loading bar, see screenshot.

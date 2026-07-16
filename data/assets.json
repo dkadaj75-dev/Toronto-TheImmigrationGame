@@ -338,12 +338,22 @@
         1
       ],
       "interactions": [
-        "watch_tv"
+        "watch_tv",
+        "turn_on",
+        "turn_off"
       ],
       "meshFit": {
         "yawOffsetDeg": 0
       },
-      "sound": "sounds/actions/TV.mp3"
+      "sound": "sounds/actions/TV.mp3",
+      "light": {
+        "color": "#b7d8ff",
+        "intensity": 1.5,
+        "distance": 3.5,
+        "yOffset": 1.1,
+        "defaultOn": false
+      },
+      "_powerNote": "B6-12: sound and screen-glow light persist while this placed TV is ON. Watch TV auto-turns it on and leaves it on."
     },
     {
       "id": "bookshelf",
@@ -389,6 +399,74 @@
         "talk_to",
         "play"
       ]
+    },
+    {
+      "id": "lamp",
+      "name": "Floor lamp",
+      "category": "decor",
+      "mesh": "",
+      "buyPrice": 120,
+      "sellPrice": 90,
+      "environmentScore": 2,
+      "footprint": [
+        0.5,
+        0.5
+      ],
+      "interactions": [
+        "turn_on",
+        "turn_off"
+      ],
+      "light": {
+        "color": "#fff0bf",
+        "intensity": 2.4,
+        "distance": 5,
+        "yOffset": 1.5,
+        "defaultOn": false
+      }
+    },
+    {
+      "id": "wall_lamp",
+      "name": "Wall lamp",
+      "category": "decor",
+      "mesh": "",
+      "buyPrice": 100,
+      "sellPrice": 75,
+      "environmentScore": 2,
+      "footprint": [
+        0.45,
+        0.16
+      ],
+      "interactions": [
+        "turn_on",
+        "turn_off"
+      ],
+      "wallMounted": {
+        "heightY": 1.7
+      },
+      "light": {
+        "color": "#fff0bf",
+        "intensity": 2,
+        "distance": 4.5,
+        "yOffset": 0,
+        "defaultOn": false
+      }
+    },
+    {
+      "id": "canvas",
+      "name": "Canvas",
+      "category": "decor",
+      "mesh": "",
+      "buyPrice": 80,
+      "sellPrice": 60,
+      "environmentScore": 3,
+      "footprint": [
+        1.2,
+        0.1
+      ],
+      "interactions": [],
+      "wallMounted": {
+        "heightY": 1.5
+      }
     },
     {
       "id": "door_basic",
