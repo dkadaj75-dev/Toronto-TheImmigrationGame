@@ -238,6 +238,19 @@ export interface VisaDef {
 }
 export interface VisasData { visas: VisaDef[]; }
 
+/** Smartphone job listings (PROJECT_CONTEXT.md §7.20 V2, data/jobs.json). Requirements reuse the
+ * quest condition namespace/evaluator; `grantsVisa`, when present, must go through VisaMachine. */
+export interface JobDef {
+  id: string;
+  name: string;
+  requirements?: Condition;
+  grantsVisa?: string;
+  hours: { startHour: number; endHour: number };
+  payPerShift: number;
+  maxSkips: number;
+}
+export interface JobsData { jobs: JobDef[]; }
+
 export interface MapData {
   id: string; name: string; gridSize: number;
   bounds: { w: number; h: number };
@@ -335,6 +348,8 @@ export interface TuningData {
    *  Optional so pre-existing tuning fixtures/tests stay valid (same precedent as `interaction?`/
    *  `doors?` above); game/main.ts falls back to "visitor" when absent. */
   visa?: { startStatus: string };
+  /** B3-7 phone job-search result count. Optional for old fixtures; game/phone.ts defaults to 3. */
+  phone?: { jobListSize?: number };
   /** Optional so pre-existing tuning fixtures/tests stay valid (same precedent as `interaction?`
    *  above). ROADMAP_NEXT item 6: burnSeconds = how long an unextinguished fire instance burns
    *  before destroying its base object; spreadRadius (meters) = how far a live fire scans for
@@ -384,6 +399,7 @@ export interface GameData {
   simstate: SimStateData;
   quests: QuestsData;
   visas: VisasData;
+  jobs: JobsData;
 }
 
 const FILES = {
@@ -394,6 +410,7 @@ const FILES = {
   simstate: '/data/simstate.json',
   quests: '/data/quests.json',
   visas: '/data/visas.json',
+  jobs: '/data/jobs.json',
 } as const;
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -406,7 +423,7 @@ export async function loadAll(): Promise<GameData> {
   // tuning first — it names the active map (tuning.map.active, default "condo")
   const tuning = await fetchJson<TuningData>(FILES.tuning);
   const mapFile = `/data/maps/${tuning.map?.active ?? 'condo'}.json`;
-  const [stats, interactions, assets, map, simstate, quests, visas] = await Promise.all([
+  const [stats, interactions, assets, map, simstate, quests, visas, jobs] = await Promise.all([
     fetchJson<StatsData>(FILES.stats),
     fetchJson<InteractionsData>(FILES.interactions),
     fetchJson<AssetsData>(FILES.assets),
@@ -414,8 +431,9 @@ export async function loadAll(): Promise<GameData> {
     fetchJson<SimStateData>(FILES.simstate),
     fetchJson<QuestsData>(FILES.quests),
     fetchJson<VisasData>(FILES.visas),
+    fetchJson<JobsData>(FILES.jobs),
   ]);
-  return { stats, interactions, assets, map, tuning, simstate, quests, visas };
+  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs };
 }
 
 /** Dev hot-reload: polls the data files and invokes callbacks when content changes. */

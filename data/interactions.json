@@ -142,6 +142,16 @@
       "primaryNeed": null
     },
     {
+      "id": "use_phone",
+      "name": "Use phone",
+      "needGains": {},
+      "skillGains": {},
+      "animation": "stand_use",
+      "autonomyEligible": false,
+      "primaryNeed": null,
+      "_note": "PROJECT_CONTEXT.md §7.20 V2 — opens the Jobs / Visas phone HUD when the sim reaches the phone."
+    },
+    {
       "id": "talk_to",
       "name": "Talk to",
       "needGains": {

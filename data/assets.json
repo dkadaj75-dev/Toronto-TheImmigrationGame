@@ -376,6 +376,7 @@
         1
       ],
       "interactions": [
+        "use_phone",
         "talk_to",
         "play"
       ]

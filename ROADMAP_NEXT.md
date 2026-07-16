@@ -99,7 +99,7 @@ Implemented: `game/main.ts`'s `onActionStop` routes the sim (bare `agent.goTo`, 
 ## B3-6. Visa status system (game core loop!) — V1 done
 `visaStatus` variable becomes a real system: start "visitor" with 15 in-game days (tunable). Statuses have expiry; failing to hold a valid status = GAME OVER screen. Upgrades via quests (quest rewards already setVar visaStatus) and/or applications (B3-7). Losable statuses (LMIA, temp worker) trigger a grace period (3 days, tunable) to find a new job/status. Status state machine data-driven (data/visas.json + editor or Tuning/Quest integration — design to lock in PROJECT_CONTEXT §7.20).
 
-## B3-7. Smartphone + jobs
+## B3-7. Smartphone + jobs — ✅ V2 DONE 2026-07-15, see PROJECT_CONTEXT.md §7.20 as-built
 Phone = UI overlay (modifiable icon) with actions incl. "Search a job": refreshes a random job list every in-game hour (tunable). data/jobs.json: each job has requirements (visa status, skills), grants access to statuses (e.g. cook job → LMIA, time-limited/tunable), work hours, pay. Apply-for-status takes in-game time (pending period — must keep current status valid meanwhile). Permanent residence = application requiring skills, not quests. Lose job if skipped too many times (tunable). Jobs Editor tool (or JSON + editor section).
 
 ## B3-8. Going to work

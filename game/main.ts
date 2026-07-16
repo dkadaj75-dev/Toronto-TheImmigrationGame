@@ -16,6 +16,7 @@ import { Hud } from './ui';
 import { Autonomy } from './autonomy';
 import { QuestRunner, isActionAvailable, type EvalContext } from './quests';
 import { VisaMachine } from './visas';
+import { PhoneJobSearch, applyForJob, applyForVisa, jobListingViews, pendingDaysRemaining, visaApplicationViews } from './phone';
 import { AccidentsController, resolveTapAssetId, shouldDespawnOnCleanup } from './accidents';
 import { GarbageController } from './garbage';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials } from './buymode';
@@ -264,6 +265,60 @@ async function start() {
     );
   };
 
+  // --- smartphone jobs + visa applications (PROJECT_CONTEXT.md §7.20 V2, B3-7) ---
+  const phoneJobs = new PhoneJobSearch(data.jobs, data.tuning.phone?.jobListSize);
+  let phoneTab: 'jobs' | 'visas' = 'jobs';
+  const refreshPhone = () => {
+    const ctx = buildEvalContext();
+    const pendingDays = pendingDaysRemaining(visaMachine.pending, gameDay);
+    hud.renderPhone({
+      tab: phoneTab,
+      currentStatusName: visaMachine.currentDef()?.name ?? visaMachine.statusId,
+      searchedJobs: phoneJobs.lastRolledHour !== null,
+      jobs: jobListingViews(phoneJobs.current(), ctx),
+      visas: visaApplicationViews(data.visas, ctx),
+      pending: visaMachine.pending && pendingDays !== null
+        ? { statusId: visaMachine.pending.statusId, daysRemaining: pendingDays }
+        : null,
+      currencyName: data.tuning.economy.currencyName,
+    });
+  };
+  const phoneToast = (text: string, completed = false) => hud.showQuestToast(
+    text,
+    completed ? 'completed' : 'started',
+    data.tuning.quests.toastDurationSeconds * 1000,
+  );
+  hud.onPhoneClose = () => {
+    if (agent.current?.action.id === 'use_phone') agent.stopAction();
+  };
+  hud.onPhoneTabPick = (tab) => { phoneTab = tab; refreshPhone(); };
+  hud.onPhoneSearchJobs = () => {
+    phoneJobs.search(buildEvalContext().time);
+    refreshPhone();
+  };
+  hud.onPhoneJobApply = (jobId) => {
+    const result = applyForJob(
+      jobId,
+      data.jobs,
+      buildEvalContext(),
+      quests.vars,
+      (statusId, day) => visaMachine.grantVisa(statusId, day),
+    );
+    const job = data.jobs.jobs.find((entry) => entry.id === jobId);
+    if (result.ok) phoneToast(`Job accepted: ${job?.name ?? jobId}`, true);
+    else if (result.reason === 'requirements_unmet') phoneToast('Job requirements are not met');
+    refreshVisaChip();
+    refreshPhone();
+  };
+  hud.onPhoneVisaApply = (statusId) => {
+    const result = applyForVisa(statusId, data.visas, buildEvalContext(), (id, day) => visaMachine.apply(id, day));
+    const visa = data.visas.visas.find((entry) => entry.id === statusId);
+    if (result.ok) phoneToast(`Application submitted: ${visa?.name ?? statusId}`, true);
+    else if (result.reason === 'requirements_unmet') phoneToast('Visa requirements are not met');
+    else if (result.reason === 'application_rejected') phoneToast('Another visa application is already pending');
+    refreshPhone();
+  };
+
   // --- object highlight: subtle box on hover (mouse), bright box while the menu is open ---
   const hoverBox = new THREE.BoxHelper(new THREE.Object3D(), 0x6fa0ff);
   const selectBox = new THREE.BoxHelper(new THREE.Object3D(), 0xffd166);
@@ -364,6 +419,11 @@ async function start() {
     if (a.action.duration && startAssetDef) {
       accidents.rollFor(a.target, startAssetDef, buildEvalContext(), simClockSeconds);
     }
+    if (a.action.id === 'use_phone') {
+      phoneTab = 'jobs';
+      refreshPhone();
+      hud.openPhone();
+    }
   };
   agent.onActionStop = (a, completed) => {
     hud.hideActivity();
@@ -373,6 +433,7 @@ async function start() {
     // both keys are harmless no-ops to stop if they weren't the one actually playing.
     audio.stopLoop(`asset:${a.target.uuid}`);
     audio.stopLoop(`action:${a.action.id}`);
+    if (a.action.id === 'use_phone') hud.closePhone();
     // ROADMAP_NEXT B3-4: every side effect below represents "the sim actually finished doing
     // this" (clearedBy despawn, an onUse accident roll, waste production, resetting every garbage
     // can) — none of them should fire on a CANCELLED action (player override, a fresh order, a
@@ -532,6 +593,7 @@ async function start() {
   hud.setFunds(quests.funds, currencyName());
 
   hud.onBuyOpen = () => {
+    if (agent.current?.action.id === 'use_phone') agent.stopAction();
     buyMode.enter();
     hud.setBuyModeActive(true);
     audio.setMusicContext('buymode', data.map); // ROADMAP_NEXT item 7: crossfade to the buy-mode track
@@ -711,7 +773,9 @@ async function start() {
     applyEnvironment();
     quests.retune(data.quests, data.simstate); // definitions only — runtime quest/var state is untouched
     visaMachine.retune(data.visas); // definitions only — runtime visa state is untouched (§7.20 B3-6)
+    phoneJobs.retune(data.jobs, data.tuning.phone?.jobListSize); // defs/tuning only; hourly cadence survives
     refreshVisaChip();
+    refreshPhone();
     refreshQuestLog();
     if (data.tuning.character) {
       anim?.retune(data.tuning.character);
@@ -788,6 +852,7 @@ async function start() {
       // a long pause + fast-forward) still evaluates each day in order, same as quests' time.day.
       visaMachine.tick(gameDay);
       refreshVisaChip();
+      refreshPhone();
     }
     const h = Math.floor(gameSeconds / 3600), m = Math.floor((gameSeconds % 3600) / 60);
     devClock.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;

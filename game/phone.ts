@@ -1,0 +1,177 @@
+// phone.ts — pure smartphone/job/application logic (PROJECT_CONTEXT.md §7.20 V2).
+// No DOM or three.js dependency: cadence, requirement gates, and state effects are headless-tested.
+
+import type { Condition, JobDef, JobsData, VisaDef, VisasData } from './data';
+import { evaluate, type EvalContext, type VarValue } from './quests';
+
+export const DEFAULT_PHONE_JOB_LIST_SIZE = 3;
+
+export interface RequirementView {
+  text: string;
+  met: boolean;
+}
+
+export interface JobListingView {
+  job: JobDef;
+  requirementsMet: boolean;
+  requirements: RequirementView[];
+}
+
+export interface VisaApplicationView {
+  visa: VisaDef;
+  requirementsMet: boolean;
+  requirements: RequirementView[];
+}
+
+export type PhoneApplyResult =
+  | { ok: true; id: string }
+  | { ok: false; reason: 'not_found' | 'requirements_unmet' | 'application_rejected' };
+
+/** A day-aware hour key: 08:00 on consecutive days must count as two distinct roll windows. */
+export function gameHourKey(time: { hour: number; day: number }): number {
+  return time.day * 24 + Math.floor(time.hour);
+}
+
+/** Random subset without replacement. Exported for deterministic headless coverage. */
+export function randomSubset<T>(items: readonly T[], requestedSize: number, rng: () => number = Math.random): T[] {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const raw = rng();
+    const bounded = Number.isFinite(raw) ? Math.min(Math.max(raw, 0), 0.9999999999999999) : 0;
+    const j = Math.floor(bounded * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, Math.min(copy.length, Math.max(0, Math.floor(requestedSize))));
+}
+
+/** Owns only the search-result roll and its once-per-in-game-hour cadence. */
+export class PhoneJobSearch {
+  private defs: JobDef[];
+  private listSize: number;
+  private resultIds: string[] = [];
+  private lastRollHour: number | null = null;
+
+  constructor(data: JobsData, listSize = DEFAULT_PHONE_JOB_LIST_SIZE, private rng: () => number = Math.random) {
+    this.defs = data.jobs;
+    this.listSize = listSize;
+  }
+
+  /** Hot-reload adopts definitions/tuning without manufacturing an extra roll in the same hour. */
+  retune(data: JobsData, listSize = DEFAULT_PHONE_JOB_LIST_SIZE) {
+    this.defs = data.jobs;
+    this.listSize = listSize;
+    const liveIds = new Set(this.defs.map((job) => job.id));
+    this.resultIds = this.resultIds.filter((id) => liveIds.has(id));
+  }
+
+  /** Clicking Search repeatedly in one game hour returns the exact same result. */
+  search(time: { hour: number; day: number }): readonly JobDef[] {
+    const hour = gameHourKey(time);
+    if (this.lastRollHour !== hour) {
+      this.resultIds = randomSubset(this.defs, this.listSize, this.rng).map((job) => job.id);
+      this.lastRollHour = hour;
+    }
+    return this.current();
+  }
+
+  current(): readonly JobDef[] {
+    const byId = new Map(this.defs.map((job) => [job.id, job]));
+    return this.resultIds.map((id) => byId.get(id)).filter((job): job is JobDef => !!job);
+  }
+
+  get lastRolledHour(): number | null { return this.lastRollHour; }
+}
+
+export function requirementsMet(requirements: Condition | undefined, ctx: EvalContext): boolean {
+  return !requirements || evaluate(requirements, ctx);
+}
+
+function titleCase(value: string): string {
+  return value.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function pathLabel(path: string): string {
+  if (path === 'funds') return 'Funds';
+  if (path === 'time.hour') return 'Current hour';
+  if (path === 'time.day') return 'Current day';
+  const dot = path.indexOf('.');
+  if (dot < 0) return titleCase(path);
+  const namespace = path.slice(0, dot);
+  const id = path.slice(dot + 1).replace(/\.state$/, '');
+  if (namespace === 'skills') return `${titleCase(id)} skill`;
+  if (namespace === 'needs') return `${titleCase(id)} need`;
+  if (namespace === 'vars') return titleCase(id);
+  if (namespace === 'quests') return `${titleCase(id)} quest`;
+  return titleCase(path);
+}
+
+function valueLabel(value: VarValue): string {
+  return typeof value === 'string' ? titleCase(value) : String(value);
+}
+
+/** Compact human-readable rendering of the same condition tree evaluate() consumes. */
+export function describeCondition(condition: Condition): string {
+  if ('all' in condition) return condition.all.map((entry) => describeCondition(entry)).join(' and ') || 'No requirements';
+  if ('any' in condition) return `(${condition.any.map((entry) => describeCondition(entry)).join(' or ') || 'no alternatives'})`;
+  if (condition.gte !== undefined) return `${pathLabel(condition.var)} ≥ ${condition.gte}`;
+  if (condition.lte !== undefined) return `${pathLabel(condition.var)} ≤ ${condition.lte}`;
+  if (condition.eq !== undefined) return `${pathLabel(condition.var)} is ${valueLabel(condition.eq)}`;
+  if (condition.neq !== undefined) return `${pathLabel(condition.var)} is not ${valueLabel(condition.neq)}`;
+  return `${pathLabel(condition.var)} has an invalid requirement`;
+}
+
+export function requirementViews(requirements: Condition | undefined, ctx: EvalContext): RequirementView[] {
+  if (!requirements) return [{ text: 'No requirements', met: true }];
+  return [{ text: describeCondition(requirements), met: evaluate(requirements, ctx) }];
+}
+
+export function jobListingViews(jobs: readonly JobDef[], ctx: EvalContext): JobListingView[] {
+  return jobs.map((job) => ({
+    job,
+    requirementsMet: requirementsMet(job.requirements, ctx),
+    requirements: requirementViews(job.requirements, ctx),
+  }));
+}
+
+/** Apply side effects are deliberately explicit/injected so this remains a pure-logic module. */
+export function applyForJob(
+  jobId: string,
+  data: JobsData,
+  ctx: EvalContext,
+  vars: Record<string, VarValue>,
+  grantVisa: (statusId: string, day: number) => void,
+): PhoneApplyResult {
+  const job = data.jobs.find((entry) => entry.id === jobId);
+  if (!job) return { ok: false, reason: 'not_found' };
+  if (!requirementsMet(job.requirements, ctx)) return { ok: false, reason: 'requirements_unmet' };
+  vars.job = job.id;
+  if (job.grantsVisa) grantVisa(job.grantsVisa, ctx.time.day);
+  return { ok: true, id: job.id };
+}
+
+export function visaApplicationViews(data: VisasData, ctx: EvalContext): VisaApplicationView[] {
+  return data.visas
+    .filter((visa) => visa.obtainedVia === 'application')
+    .map((visa) => ({
+      visa,
+      requirementsMet: requirementsMet(visa.requirements, ctx),
+      requirements: requirementViews(visa.requirements, ctx),
+    }));
+}
+
+export function applyForVisa(
+  statusId: string,
+  data: VisasData,
+  ctx: EvalContext,
+  apply: (statusId: string, day: number) => boolean,
+): PhoneApplyResult {
+  const visa = data.visas.find((entry) => entry.id === statusId && entry.obtainedVia === 'application');
+  if (!visa) return { ok: false, reason: 'not_found' };
+  if (!requirementsMet(visa.requirements, ctx)) return { ok: false, reason: 'requirements_unmet' };
+  if (!apply(statusId, ctx.time.day)) return { ok: false, reason: 'application_rejected' };
+  return { ok: true, id: statusId };
+}
+
+export function pendingDaysRemaining(pending: { resolvesAtDay: number } | null, day: number): number | null {
+  return pending ? Math.max(0, pending.resolvesAtDay - day) : null;
+}

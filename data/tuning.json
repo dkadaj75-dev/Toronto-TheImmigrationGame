@@ -35,6 +35,10 @@
     "startStatus": "visitor",
     "_source": "Visa system V1 (PROJECT_CONTEXT.md §7.20 B3-6) — must match an id in data/visas.json; game/visas.ts's VisaMachine falls back to \"visitor\" if this whole block is absent."
   },
+  "phone": {
+    "jobListSize": 3,
+    "_source": "Smartphone/jobs V2 (PROJECT_CONTEXT.md §7.20 B3-7) — number of random job listings returned by Search a job; a list can reroll at most once per in-game hour."
+  },
   "movement": {
     "walkSpeed": 2,
     "arrivalRadius": 0.35,

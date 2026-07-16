@@ -1,0 +1,50 @@
+{
+  "_comment": "Smartphone job definitions (PROJECT_CONTEXT.md §7.20 V2). Requirements use the quest evaluator namespace. grantsVisa is applied through VisaMachine when the job application succeeds. Work attendance/pay/skip behavior belongs to V3/V4 and is deliberately not implemented here.",
+  "jobs": [
+    {
+      "id": "dishwasher",
+      "name": "Dishwasher",
+      "grantsVisa": "lmia",
+      "hours": { "startHour": 9, "endHour": 17 },
+      "payPerShift": 120,
+      "maxSkips": 3
+    },
+    {
+      "id": "cook",
+      "name": "Line Cook",
+      "requirements": { "var": "skills.cooking", "gte": 3 },
+      "grantsVisa": "lmia",
+      "hours": { "startHour": 15, "endHour": 23 },
+      "payPerShift": 190,
+      "maxSkips": 2
+    },
+    {
+      "id": "barista",
+      "name": "Barista",
+      "requirements": { "var": "skills.charisma", "gte": 2 },
+      "grantsVisa": "lmia",
+      "hours": { "startHour": 6, "endHour": 14 },
+      "payPerShift": 150,
+      "maxSkips": 3
+    },
+    {
+      "id": "tutor",
+      "name": "English Tutor",
+      "requirements": {
+        "all": [
+          { "var": "skills.english", "gte": 6 },
+          {
+            "any": [
+              { "var": "vars.visaStatus", "eq": "temp_worker" },
+              { "var": "vars.visaStatus", "eq": "permanent_resident" },
+              { "var": "vars.visaStatus", "eq": "citizen" }
+            ]
+          }
+        ]
+      },
+      "hours": { "startHour": 10, "endHour": 18 },
+      "payPerShift": 260,
+      "maxSkips": 2
+    }
+  ]
+}

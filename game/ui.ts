@@ -3,7 +3,8 @@
 // needs no changes. Portrait-first, collapsible panels for small screens.
 // Bar colors/names come from stats.json; action names from interactions.json.
 
-import type { ActionDef, AssetDef } from './data';
+import type { ActionDef, AssetDef, JobDef, VisaDef } from './data';
+import type { RequirementView } from './phone';
 import type { SimStats } from './stats';
 
 const CSS = `
@@ -129,6 +130,48 @@ const CSS = `
 #game-over button { border: 0; border-radius: 999px; padding: 12px 26px; font-size: 14px;
   background: rgba(90,120,190,.55); color: #eaf0fb; cursor: pointer; touch-action: manipulation; }
 
+/* --- Smartphone overlay (PROJECT_CONTEXT.md §7.20 V2) -------------------------------------- */
+#phone-overlay { position: fixed; inset: 0; z-index: 18; display: none; align-items: center;
+  justify-content: center; padding: max(14px, env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-right, 0px))
+  max(14px, env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-left, 0px));
+  background: rgba(8,11,18,.58); pointer-events: none; }
+#phone-overlay.open { display: flex; pointer-events: auto; }
+.phone-shell { width: min(430px, 100%); max-height: min(760px, 92vh); overflow: hidden;
+  display: flex; flex-direction: column; border-radius: 24px; background: rgba(15,20,32,.98);
+  border: 1px solid #33415f; box-shadow: 0 22px 70px rgba(0,0,0,.55); color: #eaf0fb; }
+.phone-header { display: flex; align-items: center; gap: 10px; padding: 14px 16px 10px; }
+.phone-header .phone-title { font-size: 16px; font-weight: 700; flex: 1; }
+.phone-header .phone-status { font-size: 11px; color: #93a3c0; }
+.phone-close { width: 34px; height: 34px; border: 0; border-radius: 50%; background: #263149;
+  color: #dfe6f2; font-size: 18px; cursor: pointer; touch-action: manipulation; }
+.phone-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 14px 12px; }
+.phone-tabs button { border: 0; border-radius: 10px; padding: 10px; background: #1c2436;
+  color: #93a3c0; font-size: 13px; cursor: pointer; touch-action: manipulation; }
+.phone-tabs button.active { background: rgba(90,120,190,.55); color: #fff; }
+#phone-body { overflow-y: auto; padding: 0 14px 16px; overscroll-behavior: contain; }
+.phone-search { width: 100%; border: 0; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px;
+  background: #4466a5; color: white; font-size: 14px; font-weight: 650; cursor: pointer; touch-action: manipulation; }
+.phone-card { background: #1a2234; border: 1px solid #2a3853; border-radius: 14px; padding: 12px;
+  margin: 9px 0; }
+.phone-card-head { display: flex; align-items: flex-start; gap: 10px; }
+.phone-card-name { flex: 1; font-size: 14px; font-weight: 700; }
+.phone-card-pay { color: #e0c26f; font-size: 13px; white-space: nowrap; }
+.phone-meta { color: #9eabc2; font-size: 11px; margin: 5px 0 8px; }
+.phone-requirement { font-size: 11px; line-height: 1.35; margin: 3px 0; color: #e2a1a1; }
+.phone-requirement.met { color: #8ed19a; }
+.phone-card button.apply { width: 100%; margin-top: 10px; border: 0; border-radius: 10px; padding: 10px;
+  background: rgba(90,150,220,.5); color: #f2f6ff; font-size: 13px; cursor: pointer; touch-action: manipulation; }
+.phone-card button.apply:disabled { opacity: .4; cursor: default; }
+.phone-pending { display: inline-block; border-radius: 999px; padding: 4px 8px; background: rgba(224,176,95,.2);
+  color: #e0b05f; font-size: 10px; white-space: nowrap; }
+.phone-empty { color: #7886a1; font-size: 12px; text-align: center; padding: 28px 10px; }
+
+@media (max-width: 500px) {
+  #phone-overlay { padding: 0; align-items: flex-end; }
+  .phone-shell { width: 100%; max-height: 88vh; border-radius: 22px 22px 0 0; border-bottom: 0; }
+  .phone-header { padding-top: 12px; }
+}
+
 #buy-bar { position: absolute; left: 0; right: 0; bottom: 0; pointer-events: none;
   display: none; flex-direction: column; }
 #buy-bar.open { display: flex; }
@@ -191,6 +234,12 @@ export class Hud {
   private gameOverEl: HTMLElement;
   private gameOverText: HTMLElement;
 
+  // --- Smartphone/jobs/visas (§7.20 V2) ---
+  private phoneOverlay: HTMLElement;
+  private phoneBody: HTMLElement;
+  private phoneStatus: HTMLElement;
+  private phoneTabs: NodeListOf<HTMLButtonElement>;
+
   // --- Buy/Sell mode (§7.6) ---
   private fundsChip: HTMLElement;
   private buyButton: HTMLElement;
@@ -218,6 +267,12 @@ export class Hud {
   onSelectionRotate: (() => void) | null = null;
   onSelectionSell: (() => void) | null = null;
   onSelectionCancel: (() => void) | null = null;
+
+  onPhoneClose: (() => void) | null = null;
+  onPhoneTabPick: ((tab: 'jobs' | 'visas') => void) | null = null;
+  onPhoneSearchJobs: (() => void) | null = null;
+  onPhoneJobApply: ((jobId: string) => void) | null = null;
+  onPhoneVisaApply: ((statusId: string) => void) | null = null;
 
   onCancelAction: (() => void) | null = null;
   /** fires whenever the action menu closes (pick, cancel, or tap-away) */
@@ -257,6 +312,20 @@ export class Hud {
         <h2>Game Over</h2>
         <p id="game-over-text"></p>
         <button id="game-over-restart">Restart</button>
+      </div>
+      <div id="phone-overlay">
+        <div class="phone-shell" role="dialog" aria-modal="true" aria-label="Phone">
+          <div class="phone-header">
+            <span class="phone-title">Phone</span>
+            <span class="phone-status"></span>
+            <button class="phone-close" aria-label="Close phone">×</button>
+          </div>
+          <div class="phone-tabs">
+            <button data-phone-tab="jobs" class="active">Jobs</button>
+            <button data-phone-tab="visas">Visas</button>
+          </div>
+          <div id="phone-body"></div>
+        </div>
       </div>
       <div id="buy-bar">
         <div class="buy-inner">
@@ -299,6 +368,20 @@ export class Hud {
     this.gameOverEl = root.querySelector('#game-over')!;
     this.gameOverText = root.querySelector('#game-over-text')!;
     root.querySelector('#game-over-restart')!.addEventListener('click', () => location.reload());
+
+    // --- Smartphone/jobs/visas wiring (§7.20 V2) ---
+    this.phoneOverlay = root.querySelector('#phone-overlay')!;
+    this.phoneBody = root.querySelector('#phone-body')!;
+    this.phoneStatus = root.querySelector('.phone-status')!;
+    this.phoneTabs = root.querySelectorAll<HTMLButtonElement>('[data-phone-tab]');
+    root.querySelector('.phone-close')!.addEventListener('click', () => {
+      this.closePhone();
+      this.onPhoneClose?.();
+    });
+    this.phoneTabs.forEach((button) => button.addEventListener('click', () => {
+      const tab = button.dataset.phoneTab as 'jobs' | 'visas';
+      this.onPhoneTabPick?.(tab);
+    }));
 
     // --- Buy/Sell mode wiring (§7.6) ---
     this.fundsChip = root.querySelector('#funds-chip')!;
@@ -504,6 +587,91 @@ export class Hud {
     this.gameOverEl.classList.add('open');
   }
 
+  // ================================================================ Smartphone/jobs/visas (§7.20 V2)
+
+  openPhone() {
+    this.hideActionMenu();
+    this.phoneOverlay.classList.add('open');
+  }
+
+  closePhone() { this.phoneOverlay.classList.remove('open'); }
+
+  renderPhone(args: {
+    tab: 'jobs' | 'visas';
+    currentStatusName: string;
+    searchedJobs: boolean;
+    jobs: { job: JobDef; requirementsMet: boolean; requirements: RequirementView[] }[];
+    visas: { visa: VisaDef; requirementsMet: boolean; requirements: RequirementView[] }[];
+    pending: { statusId: string; daysRemaining: number } | null;
+    currencyName: string;
+  }) {
+    this.phoneStatus.textContent = args.currentStatusName;
+    this.phoneTabs.forEach((button) => button.classList.toggle('active', button.dataset.phoneTab === args.tab));
+    this.phoneBody.innerHTML = '';
+
+    if (args.tab === 'jobs') {
+      const search = document.createElement('button');
+      search.className = 'phone-search';
+      search.textContent = 'Search a job';
+      search.addEventListener('click', () => this.onPhoneSearchJobs?.());
+      this.phoneBody.appendChild(search);
+      if (!args.searchedJobs) {
+        this.phoneBody.appendChild(phoneEmpty('Search to see jobs available this hour.'));
+      } else if (args.jobs.length === 0) {
+        this.phoneBody.appendChild(phoneEmpty('No jobs are available.'));
+      } else {
+        for (const listing of args.jobs) {
+          const card = phoneCard(listing.job.name);
+          const pay = document.createElement('span');
+          pay.className = 'phone-card-pay';
+          pay.textContent = `${args.currencyName}${listing.job.payPerShift}/shift`;
+          card.head.appendChild(pay);
+          const meta = document.createElement('div');
+          meta.className = 'phone-meta';
+          meta.textContent = `${formatHour(listing.job.hours.startHour)}–${formatHour(listing.job.hours.endHour)}`;
+          card.el.appendChild(meta);
+          appendRequirements(card.el, listing.requirements);
+          const apply = document.createElement('button');
+          apply.className = 'apply';
+          apply.textContent = 'Apply';
+          apply.disabled = !listing.requirementsMet;
+          apply.addEventListener('click', () => this.onPhoneJobApply?.(listing.job.id));
+          card.el.appendChild(apply);
+          this.phoneBody.appendChild(card.el);
+        }
+      }
+      return;
+    }
+
+    if (args.visas.length === 0) {
+      this.phoneBody.appendChild(phoneEmpty('No statuses accept applications.'));
+      return;
+    }
+    for (const listing of args.visas) {
+      const card = phoneCard(listing.visa.name);
+      if (args.pending?.statusId === listing.visa.id) {
+        const pending = document.createElement('span');
+        pending.className = 'phone-pending';
+        pending.textContent = `Pending · ${args.pending.daysRemaining}d`;
+        card.head.appendChild(pending);
+      }
+      const meta = document.createElement('div');
+      meta.className = 'phone-meta';
+      const duration = listing.visa.durationDays === null ? 'Permanent status' : `${listing.visa.durationDays} day status`;
+      const wait = listing.visa.applicationDays ?? 0;
+      meta.textContent = `${duration} · Decision in ${wait}d`;
+      card.el.appendChild(meta);
+      appendRequirements(card.el, listing.requirements);
+      const apply = document.createElement('button');
+      apply.className = 'apply';
+      apply.textContent = args.pending?.statusId === listing.visa.id ? 'Pending' : 'Apply';
+      apply.disabled = !listing.requirementsMet || args.pending !== null;
+      apply.addEventListener('click', () => this.onPhoneVisaApply?.(listing.visa.id));
+      card.el.appendChild(apply);
+      this.phoneBody.appendChild(card.el);
+    }
+  }
+
   // ================================================================ Buy/Sell mode (§7.6)
 
   /** Persistent funds readout: always kept current so it's correct the instant buy mode opens
@@ -608,4 +776,40 @@ function makeEmptyRow(text: string): HTMLElement {
   el.className = 'quest-empty';
   el.textContent = text;
   return el;
+}
+
+function phoneEmpty(text: string): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'phone-empty';
+  el.textContent = text;
+  return el;
+}
+
+function phoneCard(name: string): { el: HTMLElement; head: HTMLElement } {
+  const el = document.createElement('div');
+  el.className = 'phone-card';
+  const head = document.createElement('div');
+  head.className = 'phone-card-head';
+  const title = document.createElement('span');
+  title.className = 'phone-card-name';
+  title.textContent = name;
+  head.appendChild(title);
+  el.appendChild(head);
+  return { el, head };
+}
+
+function appendRequirements(parent: HTMLElement, requirements: RequirementView[]) {
+  for (const requirement of requirements) {
+    const row = document.createElement('div');
+    row.className = `phone-requirement${requirement.met ? ' met' : ''}`;
+    row.textContent = `${requirement.met ? '✓' : '✕'} ${requirement.text}`;
+    parent.appendChild(row);
+  }
+}
+
+function formatHour(hour: number): string {
+  const normalized = ((Math.floor(hour) % 24) + 24) % 24;
+  const suffix = normalized >= 12 ? 'PM' : 'AM';
+  const display = normalized % 12 || 12;
+  return `${display} ${suffix}`;
 }
