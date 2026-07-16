@@ -13,6 +13,7 @@
   .stack{display:grid;gap:18px}.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}.card h2{font-size:15px;margin:0 0 14px}.grid{display:grid;grid-template-columns:minmax(150px,1fr) minmax(100px,160px);gap:10px 14px;align-items:center}
   label{color:#c5d0e4} input{width:100%;padding:7px 9px;border-radius:6px;border:1px solid #35425a;background:#0d131d;color:var(--text)} input:focus{outline:1px solid var(--accent)} input[readonly]{color:var(--muted)}
   .bill{padding-top:13px;margin-top:13px;border-top:1px solid var(--line)}.bill:first-of-type{padding-top:0;margin-top:0;border-top:0}.bill-title{font-weight:650;margin-bottom:10px}
+  .happiness-row{display:grid;grid-template-columns:minmax(150px,1.5fr) repeat(3,minmax(70px,.6fr)) auto;gap:8px;margin:8px 0;align-items:center}.happiness-row select{padding:7px 9px;border-radius:6px;border:1px solid #35425a;background:#0d131d;color:var(--text)}.happiness-head{font-size:11px;color:var(--muted)}
   .preview-meta{color:var(--muted);font-size:12px;margin-bottom:12px}.preview-row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #252e3f}.preview-row strong{color:#b9d2ff}.status{min-width:120px;text-align:right;color:var(--muted)}
   @media(max-width:780px){main{grid-template-columns:1fr}header{padding:12px}.status{display:none}}
 </style>
@@ -26,6 +27,7 @@
     <section class="card"><h2>Recurring bill formulas</h2><div id="billFields"></div></section>
     <section class="card"><h2>Debt thresholds</h2><div id="thresholdFields" class="grid"></div></section>
     <section class="card"><h2>Credit score</h2><div id="creditFields" class="grid"></div></section>
+    <section class="card"><h2>Happiness formula</h2><p class="preview-meta">Each selected variable is normalized from min to max, then combined by positive weight. Variables use the quest namespace.</p><div id="happinessFields"></div><button id="addHappiness">+ Add component</button><h2 style="margin-top:18px">Visa status ranks</h2><div id="visaRankFields" class="grid"></div></section>
   </div>
   <aside class="card"><h2>Live preview</h2><div id="previewMeta" class="preview-meta">Waiting for current map…</div><div id="preview"></div></aside>
 </main>
@@ -33,7 +35,7 @@
 (() => {
 'use strict';
 const PROPERTY_TYPES = ['condo','basement','townhouse','house','penthouse'];
-const state = { finance:null, tuning:null, map:null, assets:null, dirty:new Set(), compute:null };
+const state = { finance:null, tuning:null, happiness:null, stats:null, simstate:null, visas:null, map:null, assets:null, dirty:new Set(), compute:null };
 const $ = (id) => document.getElementById(id);
 function numberInput(value, path, onValue, options={}) {
   const input = document.createElement('input'); input.type = 'number'; input.value = String(value); input.dataset.path = path;
@@ -43,6 +45,32 @@ function numberInput(value, path, onValue, options={}) {
 }
 function appendField(root, labelText, input) { const label=document.createElement('label'); label.textContent=labelText; root.append(label,input); }
 function markDirty(file) { state.dirty.add(file); $('save').disabled=false; $('status').textContent='Unsaved changes'; }
+function happinessVarOptions(current) {
+  const groups=[
+    ['Needs',(state.stats.needs||[]).map((x)=>[`needs.${x.id}`,`Need: ${x.name}`])],
+    ['Skills',(state.stats.skills||[]).map((x)=>[`skills.${x.id}`,`Skill: ${x.name}`])],
+    ['Economy',[['funds','Funds'],['creditScore','Credit score']]],
+    ['Variables',(state.simstate.variables||[]).map((x)=>[`vars.${x.id}`,`Variable: ${x.name}`])],
+  ];
+  const select=document.createElement('select'),known=new Set();
+  for(const [label,rows] of groups){const group=document.createElement('optgroup');group.label=label;for(const [value,text] of rows){const option=document.createElement('option');option.value=value;option.textContent=text;group.appendChild(option);known.add(value);}if(rows.length)select.appendChild(group);}
+  if(current&&!known.has(current)){const option=document.createElement('option');option.value=current;option.textContent=`${current} (unknown)`;select.appendChild(option);}select.value=current;return select;
+}
+function renderHappiness() {
+  const root=$('happinessFields');root.innerHTML='';
+  const head=document.createElement('div');head.className='happiness-row happiness-head';head.innerHTML='<span>Variable</span><span>Weight</span><span>Min</span><span>Max</span><span></span>';root.appendChild(head);
+  state.happiness.components.forEach((component,index)=>{
+    const row=document.createElement('div');row.className='happiness-row';row.dataset.componentIndex=String(index);
+    const variable=happinessVarOptions(component.var);variable.dataset.path=`happiness.components.${index}.var`;variable.addEventListener('change',()=>{component.var=variable.value;markDirty('happiness.json');});
+    const weight=numberInput(component.weight,`happiness.components.${index}.weight`,(v)=>component.weight=v,{file:'happiness.json',min:0,step:'any'});
+    const min=numberInput(component.min??0,`happiness.components.${index}.min`,(v)=>component.min=v,{file:'happiness.json',step:'any'});
+    const max=numberInput(component.max??100,`happiness.components.${index}.max`,(v)=>component.max=v,{file:'happiness.json',step:'any'});
+    const remove=document.createElement('button');remove.textContent='Remove';remove.dataset.action='remove-happiness';remove.addEventListener('click',()=>{state.happiness.components.splice(index,1);renderHappiness();markDirty('happiness.json');});
+    row.append(variable,weight,min,max,remove);root.appendChild(row);
+  });
+  const ranks=$('visaRankFields');ranks.innerHTML='';
+  for(const visa of state.visas.visas){appendField(ranks,visa.name,numberInput(state.happiness.visaStatusRanks?.[visa.id]??0,`happiness.visaStatusRanks.${visa.id}`,(v)=>(state.happiness.visaStatusRanks||={})[visa.id]=v,{file:'happiness.json',step:'any'}));}
+}
 function render() {
   const rent=$('rentFields'); rent.innerHTML='';
   appendField(rent,'Base',numberInput(state.finance.rent.base,'rent.base',(v)=>state.finance.rent.base=v));
@@ -67,6 +95,7 @@ function render() {
     ['History entries','historyLimit'],
   ];
   for (const [label,key] of creditDefs) appendField(credit,label,numberInput(state.tuning.credit[key],`credit.${key}`,(v)=>state.tuning.credit[key]=v,{file:'tuning.json',step:'any'}));
+  renderHappiness();
   renderPreview();
 }
 function money(value) { return `§${Number(value).toLocaleString(undefined,{maximumFractionDigits:2})}`; }
@@ -80,13 +109,13 @@ function renderPreview() {
 async function load() {
   try {
     const get=async(path)=>{const response=await fetch('/api/data/'+path);if(!response.ok)throw new Error(`${path}: ${response.status}`);return response.json();};
-    const [finance,assets,tuning]=await Promise.all([get('finance.json'),get('assets.json'),get('tuning.json')]);
-    const map=await get(`maps/${tuning.map?.active || 'condo'}.json`); Object.assign(state,{finance,assets,tuning,map}); state.dirty.clear(); render(); $('status').textContent='Loaded';
+    const [finance,assets,tuning,happiness,stats,simstate,visas]=await Promise.all([get('finance.json'),get('assets.json'),get('tuning.json'),get('happiness.json'),get('stats.json'),get('simstate.json'),get('visas.json')]);
+    const map=await get(`maps/${tuning.map?.active || 'condo'}.json`); Object.assign(state,{finance,assets,tuning,happiness,stats,simstate,visas,map}); state.dirty.clear(); render(); $('status').textContent='Loaded';
   } catch(error) { $('status').textContent='Load failed'; console.error('[finance-editor]',error); }
 }
 async function save() {
   if (!state.dirty.size) return;
-  const files={'finance.json':state.finance,'tuning.json':state.tuning};
+  const files={'finance.json':state.finance,'tuning.json':state.tuning,'happiness.json':state.happiness};
   for (const file of [...state.dirty]) {
     const response=await fetch('/api/data/'+file,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(files[file],null,2)});
     if (!response.ok) { $('status').textContent='Save failed'; return; }
@@ -95,6 +124,7 @@ async function save() {
   $('save').disabled=true; $('status').textContent='Saved';
 }
 function setCompute(fn) { state.compute=fn; renderPreview(); }
+$('addHappiness').addEventListener('click',()=>{const first=happinessVarOptions('').querySelector('option')?.value||'funds';state.happiness.components.push({var:first,weight:1,min:0,max:100});renderHappiness();markDirty('happiness.json');});
 $('save').addEventListener('click',save); window.addEventListener('keydown',(event)=>{if((event.ctrlKey||event.metaKey)&&event.key==='s'){event.preventDefault();save();}}); window.addEventListener('beforeunload',(event)=>{if(state.dirty.size)event.preventDefault();});
 window.FinanceEditor={state,load,save,setCompute,renderPreview}; load();
 })();

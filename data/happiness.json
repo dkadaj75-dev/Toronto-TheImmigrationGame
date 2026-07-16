@@ -1,0 +1,24 @@
+{
+  "_comment": "B6-5 happiness formula. Each quest-namespace var is normalized from min..max to 0..1, multiplied by its positive weight, then divided by total usable weight and scaled to 0..100. Non-empty vars.job is 1 (employed), null is 0. Edit in tools/finance.html.",
+  "visaStatusRanks": {
+    "visitor": 0,
+    "lmia": 1,
+    "temp_worker": 2,
+    "permanent_resident": 3,
+    "citizen": 4
+  },
+  "components": [
+    { "var": "needs.hunger", "weight": 2, "min": 0, "max": 100 },
+    { "var": "needs.comfort", "weight": 2, "min": 0, "max": 100 },
+    { "var": "needs.energy", "weight": 2, "min": 0, "max": 100 },
+    { "var": "needs.hygiene", "weight": 2, "min": 0, "max": 100 },
+    { "var": "needs.bladder", "weight": 2, "min": 0, "max": 100 },
+    { "var": "needs.social", "weight": 2, "min": 0, "max": 100 },
+    { "var": "needs.fun", "weight": 2, "min": 0, "max": 100 },
+    { "var": "needs.environment", "weight": 2, "min": 0, "max": 100 },
+    { "var": "creditScore", "weight": 1, "min": 300, "max": 900 },
+    { "var": "funds", "weight": 1, "min": 0, "max": 5000 },
+    { "var": "vars.visaStatus", "weight": 1, "min": 0, "max": 4 },
+    { "var": "vars.job", "weight": 1, "min": 0, "max": 1 }
+  ]
+}

@@ -16,6 +16,7 @@ function ctx(overrides: Partial<EvalContext> = {}): EvalContext {
     skills: { english: 5, cooking: 0 },
     personality: { cleanliness: 4 },
     funds: 300,
+    creditScore: 650,
     time: { hour: 14, day: 3 },
     vars: { visaStatus: 'tourist', job: null, income: 0 },
     quests: { first_words: 'active', done_quest: 'done' },
@@ -53,6 +54,7 @@ console.log('quests.test — namespaces');
   check('needs.<id>', evaluate({ var: 'needs.hunger', gte: 50 }, c));
   check('skills.<id>', evaluate({ var: 'skills.english', gte: 5 }, c));
   check('funds', evaluate({ var: 'funds', gte: 300 }, c));
+  check('creditScore', evaluate({ var: 'creditScore', gte: 650 }, c));
   check('time.hour', evaluate({ var: 'time.hour', eq: 14 }, c));
   check('time.day', evaluate({ var: 'time.day', eq: 3 }, c));
   check('vars.<name>', evaluate({ var: 'vars.income', eq: 0 }, c));

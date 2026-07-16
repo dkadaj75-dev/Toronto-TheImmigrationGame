@@ -23,6 +23,7 @@ const jobs = {
   _comment: 'fixture jobs',
   jobs: [
     { id: 'dishwasher', name: 'Dishwasher', grantsVisa: 'lmia', hours: { startHour: 9, endHour: 17 }, payPerShift: 120, maxSkips: 3,
+      levels: [{ suffix: 'I', payPerShift: 120, promoteChancePercent: 20 }, { suffix: 'II', payPerShift: 150, promoteChancePercent: 0 }],
       needsCost: { energy: 35, hunger: 20 } },
     { id: 'cook', name: 'Line Cook', requirements: { var: 'skills.cooking', gte: 3 }, grantsVisa: 'lmia', hours: { startHour: 15, endHour: 23 }, payPerShift: 190, maxSkips: 2, minCreditScore: 520 },
     { id: 'broken_job', name: 'Broken Job', requirements: { any: [{ var: 'vars.missing_var', eq: 'x' }] }, grantsVisa: 'ghost_visa',
@@ -80,6 +81,7 @@ assert(doc.querySelector('input[data-path="visa.id"]').readOnly, 'visa id is fix
 assert(doc.querySelector('input[data-path="job.id"]').value === 'dishwasher', 'first job selected by default');
 assert(doc.querySelector('input[data-path="job.id"]').readOnly, 'job id is fixed/read-only');
 assert(doc.querySelectorAll('.need-cost-row').length === 2 && doc.querySelector('input[data-path="job.needsCost.energy.amount"]').value === '35', 'job needsCost rows render from sparse data');
+assert(doc.querySelectorAll('.level-row').length === 2 && doc.querySelector('input[data-path="job.levels.1.payPerShift"]').value === '150', 'job level rows render ordered pay and promotion data');
 assert(doc.querySelector('input[data-path="job.minCreditScore"]').value === '', 'sparse minCreditScore renders blank');
 assert(doc.querySelector('[data-visa-id="broken_visa"] .badge')?.textContent === 'permanent', 'permanent visa badge renders');
 
@@ -152,6 +154,11 @@ const end = doc.querySelector('input[data-path="job.endHour"]'); end.value = '15
 const pay = doc.querySelector('input[data-path="job.payPerShift"]'); pay.value = '210'; fire(pay, 'input');
 const skips = doc.querySelector('input[data-path="job.maxSkips"]'); skips.value = '4'; fire(skips, 'input');
 const credit = doc.querySelector('input[data-path="job.minCreditScore"]'); credit.value = '575'; fire(credit, 'input');
+let levelPay = doc.querySelector('input[data-path="job.levels.0.payPerShift"]'); levelPay.value = '215'; fire(levelPay, 'input');
+doc.getElementById('addJobLevel').click();
+let levelSuffix = doc.querySelector('input[data-path="job.levels.1.suffix"]'); levelSuffix.value = 'II'; fire(levelSuffix, 'input');
+let levelChance = doc.querySelector('input[data-path="job.levels.0.promoteChancePercent"]'); levelChance.value = '25'; fire(levelChance, 'input');
+assert(cashier.levels.length === 2 && cashier.levels[0].payPerShift === 215 && cashier.levels[0].promoteChancePercent === 25 && cashier.levels[1].suffix === 'II', 'Career Editor adds and edits ordered job levels');
 doc.getElementById('addNeedsCost').click();
 let costAmount = doc.querySelector('input[data-path="job.needsCost.hunger.amount"]'); costAmount.value = '18'; fire(costAmount, 'input');
 let costNeed = doc.querySelector('select[data-path="job.needsCost.hunger.need"]'); costNeed.value = 'energy'; fire(costNeed, 'change');
@@ -162,7 +169,7 @@ variable = doc.querySelector('[data-owner="job"][data-role="var"][data-cond-path
 operator = doc.querySelector('[data-owner="job"][data-role="op"][data-cond-path="requirements.0"]'); operator.value = 'gte'; fire(operator, 'change');
 value = doc.querySelector('[data-owner="job"][data-role="value"][data-cond-path="requirements.0"]'); value.value = '100'; fire(value, 'input');
 assert(JSON.stringify(cashier.requirements) === JSON.stringify({ all: [{ var: 'vars.income', gte: 100 }] }), 'job condition builder produces exact JSON');
-assert(cashier.grantsVisa === 'study_permit' && cashier.hours.startHour === 7 && cashier.hours.endHour === 15 && cashier.payPerShift === 210 && cashier.maxSkips === 4 && cashier.minCreditScore === 575, 'job fields update their schema values');
+assert(cashier.grantsVisa === 'study_permit' && cashier.hours.startHour === 7 && cashier.hours.endHour === 15 && cashier.payPerShift === 215 && cashier.maxSkips === 4 && cashier.minCreditScore === 575, 'job fields update their schema values');
 
 // ================================================================= referential integrity branches
 doc.querySelector('[data-visa-id="visitor"]').click();
@@ -207,6 +214,7 @@ const savedCashier = puts['jobs.json'].jobs.find((job) => job.id === 'cashier');
 assert(savedCashier.minCreditScore === 575, 'jobs PUT preserves optional minCreditScore');
 assert(JSON.stringify(savedCashier.requirements) === JSON.stringify({ all: [{ var: 'vars.income', gte: 100 }] }), 'jobs PUT preserves exact requirements JSON');
 assert(JSON.stringify(savedCashier.needsCost) === JSON.stringify({ energy: 18 }), 'jobs PUT preserves sparse needsCost JSON');
+assert(savedCashier.levels.length === 2 && savedCashier.levels[0].promoteChancePercent === 25 && savedCashier.levels[1].suffix === 'II', 'jobs PUT preserves ordered level JSON');
 assert(doc.getElementById('save').disabled, 'save button disables after both files save');
 
 if (failures) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }

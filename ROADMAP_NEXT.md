@@ -148,7 +148,8 @@ Jobs shows a current-job card (name/hours/pay/optional level/skips), omits it fr
 Snack creation is explicitly keyed to the fridge use-spot arrival callback before the carry-to-seat leg.
 ## B6-4. Transient spawn placement: dirty dishes/puddles must not spawn under assets; spawn AMOUNT correlated to need(s)/attribute(s) (tunable mapping) — ✅ DONE 2026-07-16
 Floor transients reject furniture/transient footprints with nearest-free fallback; `tuning.waste` adds a personality cleanliness chance for one extra item.
-## B6-5. Happiness gauge + job levels/promotions: happiness = complex tunable formula (needs, job, credit score, money, visa status — editable in tools); jobs get levels (Dishwasher I/II/III + % bonus chance); promotion chance scales with happiness
+## B6-5. Happiness gauge + job levels/promotions: happiness = complex tunable formula (needs, job, credit score, money, visa status — editable in tools); jobs get levels (Dishwasher I/II/III + % bonus chance); promotion chance scales with happiness — ✅ DONE 2026-07-16
+`data/happiness.json` drives the Finance Editor-authored weighted HUD gauge; serializable per-job levels set shift pay and roll completed-shift promotions using happiness and `tuning.work.promotionHappinessFactor`.
 ## B6-6. Map grid 0.5×0.5 tiles with 0.25 snap (map editor, nav, buymode) — ✅ DONE 2026-07-16
 Shipped `map.snapStep` as a placement-only field (0.25 fallback), changed the condo/new-map tile size to 0.5 without rescaling any meter-space geometry, and kept nav/floor validation on `gridSize`; tests cover snap independence, all existing footprints, and real-condo bake timing.
 ## B6-7. Asset Editor 3D preview grid must match the map grid — ✅ DONE 2026-07-16

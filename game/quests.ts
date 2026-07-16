@@ -25,6 +25,8 @@ export interface EvalContext {
   /** Static designer-authored traits. Optional for pre-personality fixtures/saves. */
   personality?: Record<string, number>;
   funds: number;
+  /** Current FinanceState score. Optional so older quest/test contexts remain valid. */
+  creditScore?: number;
   time: { hour: number; day: number };
   vars: Record<string, VarValue>;
   quests: Record<string, QuestState>;
@@ -36,6 +38,7 @@ export interface EvalContext {
  *  (funds/time/vars/quests) can be passed as safe defaults; only needs/skills paths matter there. */
 export function resolveVar(path: string, ctx: EvalContext): number | VarValue | undefined {
   if (path === 'funds') return ctx.funds;
+  if (path === 'creditScore') return ctx.creditScore;
   if (path === 'time.hour') return ctx.time.hour;
   if (path === 'time.day') return ctx.time.day;
   if (path.startsWith('needs.')) return ctx.needs[path.slice('needs.'.length)];

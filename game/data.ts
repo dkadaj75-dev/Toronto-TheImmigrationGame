@@ -260,14 +260,27 @@ export interface JobDef {
   hours: { startHour: number; endHour: number };
   payPerShift: number;
   maxSkips: number;
-  /** Sparse forward-compatible display value; B6-5 may author job levels later. */
+  /** B6-5 ordered career ladder. Index 0 is the base level; each row's promotion chance advances
+   *  to the following row and its pay is snapshotted when a shift starts. */
+  levels?: JobLevelDef[];
+  /** Deprecated display-only compatibility for old fixtures; runtime progression uses levels[]. */
   level?: string | number;
   /** F3 sparse credit gate. Absent means the job has no credit-score requirement. */
   minCreditScore?: number;
   /** Positive amounts subtracted from matching needs when the sim returns from a completed shift. */
   needsCost?: Record<string, number>;
 }
+export interface JobLevelDef { suffix: string; payPerShift: number; promoteChancePercent: number; }
 export interface JobsData { jobs: JobDef[]; }
+
+/** B6-5 happiness formula. Every component resolves through quests.ts's namespace, is normalized
+ *  between its optional min/max (numeric defaults are 0/100), then contributes to a weighted mean. */
+export interface HappinessComponent { var: string; weight: number; min?: number; max?: number; }
+export interface HappinessData {
+  components: HappinessComponent[];
+  /** Numeric mapping used only when a component resolves vars.visaStatus's string id. */
+  visaStatusRanks?: Record<string, number>;
+}
 
 /** Recurring household bill identity/display list (PROJECT_CONTEXT.md §7.24 F1, data/bills.json).
  *  Amounts are snapshotted from FinanceData formulas when a bill cycle arrives. */
@@ -415,7 +428,7 @@ export interface TuningData {
   phone?: { jobListSize?: number; icon?: string };
   /** B3-8 going-to-work speed override. Optional for old fixtures; main.ts defaults to 5. This is
    *  an effective simulation multiplier while away, not a mutation of the player's HUD selection. */
-  work?: { autoSpeed?: number };
+  work?: { autoSpeed?: number; promotionHappinessFactor?: number };
   /** B4-1 recurring bill arrival cadence in in-game days. */
   bills?: { intervalDays?: number };
   /** Optional so pre-existing tuning fixtures/tests stay valid (same precedent as `interaction?`
@@ -481,6 +494,7 @@ export interface GameData {
   jobs: JobsData;
   bills: BillsData;
   finance: FinanceData;
+  happiness: HappinessData;
 }
 
 const FILES = {
@@ -494,6 +508,7 @@ const FILES = {
   jobs: '/data/jobs.json',
   bills: '/data/bills.json',
   finance: '/data/finance.json',
+  happiness: '/data/happiness.json',
 } as const;
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -506,7 +521,7 @@ export async function loadAll(): Promise<GameData> {
   // tuning first — it names the active map (tuning.map.active, default "condo")
   const tuning = await fetchJson<TuningData>(FILES.tuning);
   const mapFile = `/data/maps/${tuning.map?.active ?? 'condo'}.json`;
-  const [stats, interactions, assets, map, simstate, quests, visas, jobs, bills, finance] = await Promise.all([
+  const [stats, interactions, assets, map, simstate, quests, visas, jobs, bills, finance, happiness] = await Promise.all([
     fetchJson<StatsData>(FILES.stats),
     fetchJson<InteractionsData>(FILES.interactions),
     fetchJson<AssetsData>(FILES.assets),
@@ -517,8 +532,9 @@ export async function loadAll(): Promise<GameData> {
     fetchJson<JobsData>(FILES.jobs),
     fetchJson<BillsData>(FILES.bills),
     fetchJson<FinanceData>(FILES.finance),
+    fetchJson<HappinessData>(FILES.happiness),
   ]);
-  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills, finance };
+  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills, finance, happiness };
 }
 
 /** Dev hot-reload: polls the data files and invokes callbacks when content changes. */

@@ -41,6 +41,9 @@
   .frow input[readonly] { color: #6f7fa3; }
   .inline-control { display: flex; align-items: center; gap: 8px; }
   .inline-control input[type=number] { flex: 1; }
+  .level-row { display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:8px; align-items:end; margin:8px 0; }
+  .level-field label { display:block; margin-bottom:4px; font-size:11px; color:#8fa3c8; }
+  .level-field input { width:100%; padding:6px 8px; color:#dfe6f2; background:#10182a; border:1px solid #2c3a58; border-radius:6px; }
   .hint-line { margin-top: 4px; font-size: 11px; color: #6f7fa3; }
   .cond-group { margin: 6px 0; padding: 8px 10px; background: #10182a; border: 1px solid #2c3a58; border-radius: 10px; }
   .cond-group-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -364,6 +367,24 @@ function renderJobEditor() {
   }, 'job.minCreditScore', { min: 0, emptyValue: null })));
   details.appendChild(frow('max skips', numberInput(job.maxSkips, (v) => { job.maxSkips = v; markDirty('jobs.json'); }, 'job.maxSkips', { min: 0 })));
   root.appendChild(details);
+  const levels = card('Levels and promotions');
+  (job.levels || []).forEach((level, index) => {
+    const row = document.createElement('div'); row.className = 'level-row'; row.dataset.levelIndex = String(index);
+    const field = (label, input) => { const wrap = document.createElement('div'); wrap.className = 'level-field'; const lab = document.createElement('label'); lab.textContent = label; wrap.append(lab, input); return wrap; };
+    const suffix = textInput(level.suffix, (v) => { level.suffix = v; markDirty('jobs.json'); renderValidation(); }, `job.levels.${index}.suffix`);
+    const pay = numberInput(level.payPerShift, (v) => { level.payPerShift = v; if (index === 0) job.payPerShift = v; markDirty('jobs.json'); renderValidation(); }, `job.levels.${index}.payPerShift`, { min: 0 });
+    const chance = numberInput(level.promoteChancePercent, (v) => { level.promoteChancePercent = v; markDirty('jobs.json'); renderValidation(); }, `job.levels.${index}.promoteChancePercent`, { min: 0, max: 100 });
+    const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove'; remove.dataset.action = 'remove-level';
+    remove.addEventListener('click', () => { job.levels.splice(index, 1); if (!job.levels.length) delete job.levels; if (job.levels?.length) job.payPerShift = job.levels[0].payPerShift; markDirty('jobs.json'); renderJobEditor(); renderValidation(); });
+    row.append(field('Suffix', suffix), field('Pay / shift', pay), field('Promotion %', chance), remove); levels.appendChild(row);
+  });
+  const addLevel = document.createElement('button'); addLevel.type = 'button'; addLevel.id = 'addJobLevel'; addLevel.textContent = '+ Add level';
+  addLevel.addEventListener('click', () => {
+    const rows = (job.levels ||= []), previous = rows[rows.length - 1];
+    rows.push({ suffix: String(rows.length + 1), payPerShift: previous?.payPerShift ?? job.payPerShift, promoteChancePercent: 0 });
+    markDirty('jobs.json'); renderJobEditor(); renderValidation();
+  });
+  levels.appendChild(addLevel); root.appendChild(levels);
   const needsCost = card('Needs cost on return');
   const costs = job.needsCost || {};
   for (const [needId, amount] of Object.entries(costs)) {
@@ -409,7 +430,7 @@ function addVisa() {
 function addJob() {
   const raw = window.prompt('New job name:', ''); if (!raw || !raw.trim()) return;
   const name = raw.trim(), id = uniqueId(slugify(name), state.jobs.jobs.map((j) => j.id), 'job');
-  state.jobs.jobs.push({ id, name, requirements: { all: [] }, hours: { startHour: 9, endHour: 17 }, payPerShift: 0, maxSkips: 0 });
+  state.jobs.jobs.push({ id, name, requirements: { all: [] }, hours: { startHour: 9, endHour: 17 }, payPerShift: 0, levels: [{ suffix: 'I', payPerShift: 0, promoteChancePercent: 0 }], maxSkips: 0 });
   state.selectedJob = id; markDirty('jobs.json'); renderAll();
 }
 function removeVisa(id) {
@@ -465,6 +486,11 @@ function collectValidationIssues() {
     if (job.hours && job.hours.startHour === job.hours.endHour) issues.push(`Job "${job.name || job.id}" — endHour equals startHour (${job.hours.startHour}).`);
     if (typeof job.payPerShift === 'number' && job.payPerShift < 0) issues.push(`Job "${job.name || job.id}" — payPerShift is negative (${job.payPerShift}).`);
     if (typeof job.minCreditScore === 'number' && job.minCreditScore < 0) issues.push(`Job "${job.name || job.id}" — minCreditScore is negative (${job.minCreditScore}).`);
+    for (const [index, level] of (job.levels || []).entries()) {
+      if (!String(level.suffix || '').trim()) issues.push(`Job "${job.name || job.id}" - level ${index + 1} has an empty suffix.`);
+      if (typeof level.payPerShift !== 'number' || level.payPerShift < 0) issues.push(`Job "${job.name || job.id}" - level ${index + 1} pay is invalid.`);
+      if (typeof level.promoteChancePercent !== 'number' || level.promoteChancePercent < 0 || level.promoteChancePercent > 100) issues.push(`Job "${job.name || job.id}" - level ${index + 1} promotion chance must be 0..100.`);
+    }
     for (const [needId, amount] of Object.entries(job.needsCost || {})) {
       if (!needIds.has(needId)) issues.push(`Job "${job.name || job.id}" — needsCost references unknown need id "${needId}".`);
       if (typeof amount === 'number' && amount < 0) issues.push(`Job "${job.name || job.id}" — needsCost.${needId} is negative (${amount}).`);

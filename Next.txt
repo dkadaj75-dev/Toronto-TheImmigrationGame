@@ -1,4 +1,7 @@
-For this round, use a bit more claude agents and leave Codex for the more complex tasks.
+For this round, use a bit more claude agents and leave Codex for the more complex tasks. At the end, update handoff json.
 
 - How the food fulfills the hunder, when cooked, should be directly proportional to the cooking skill.
 - There is still an issue with loading bar, see screenshot.
+- The Sim still does not go all the way to the fridge before eating a snack.
+- Work schedule: You have approx 2 hours (tunable) to leave for work, otherwise it is missed.
+- Depending on the happiness / energy, the Sim may go to work by himself, even if it was sleeping.

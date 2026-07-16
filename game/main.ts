@@ -18,7 +18,8 @@ import { QuestRunner, isActionAvailable, type EvalContext } from './quests';
 import { VisaMachine } from './visas';
 import { PhoneJobSearch, applyForJob, applyForVisa, jobListingViews, jobSwitchPrompt, pendingDaysRemaining, visaApplicationViews } from './phone';
 import { FinanceState, decideRepoSeizure } from './bills';
-import { WorkTracker, applyNeedsCost, isLeaveForWorkAvailable, shouldStartVisaGrace, type WorkTickEvent } from './work';
+import { WorkTracker, applyNeedsCost, isLeaveForWorkAvailable, jobLevelPay, jobLevelTitle, shouldStartVisaGrace, type WorkTickEvent } from './work';
+import { computeHappiness } from './happiness';
 import { AccidentsController, resolveTapAssetId, shouldDespawnOnCleanup } from './accidents';
 import { GarbageController, wasteItemCount } from './garbage';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials, isSelectableForSell } from './buymode';
@@ -236,6 +237,7 @@ async function start() {
   // effects. The current game-time/job helpers close over clock variables declared below, like the
   // existing buildEvalContext callback; they are only invoked after initialization is complete.
   const work = new WorkTracker();
+  let happiness = 0;
   const currentJob = () => data.jobs.jobs.find((job) => job.id === quests.vars.job) ?? null;
   const completedQuestLog: { name: string }[] = [];
   const refreshQuestLog = () => {
@@ -313,6 +315,15 @@ async function start() {
         'completed',
         data.tuning.quests.toastDurationSeconds * 1000,
       );
+      const job = data.jobs.jobs.find((entry) => entry.id === event.jobId);
+      if (job) {
+        const promotion = work.rollPromotion(job, happiness, data.tuning.work?.promotionHappinessFactor ?? 1);
+        if (promotion.promoted) {
+          const pay = `${promotion.payIncrease >= 0 ? '+' : ''}${data.tuning.economy.currencyName}${promotion.payIncrease}`;
+          hud.showQuestToast(`Promoted to ${promotion.title}! ${pay}`, 'completed', data.tuning.quests.toastDurationSeconds * 1000);
+        }
+      }
+      refreshPhone();
       return;
     }
 
@@ -351,7 +362,15 @@ async function start() {
       currentStatusName: visaMachine.currentDef()?.name ?? visaMachine.statusId,
       searchedJobs: phoneJobs.lastRolledHour !== null,
       jobs: jobListingViews(phoneJobs.current().filter((job) => job.id !== currentJob()?.id), ctx, bills.creditScore),
-      currentJob: currentJob() ? { job: currentJob()!, skips: work.skips } : null,
+      currentJob: currentJob() ? (() => {
+        const job = currentJob()!;
+        const levelIndex = work.getJobLevel(job.id);
+        return {
+          job: { ...job, name: jobLevelTitle(job, levelIndex), payPerShift: jobLevelPay(job, levelIndex), levels: undefined },
+          skips: work.skips,
+          levelIndex,
+        };
+      })() : null,
       visas: visaApplicationViews(data.visas, ctx),
       pending: visaMachine.pending && pendingDays !== null
         ? { statusId: visaMachine.pending.statusId, daysRemaining: pendingDays }
@@ -1051,6 +1070,8 @@ async function start() {
       decayAcc -= decayEvery;
       stats.decayTick();
       applyEnvironment();
+      happiness = computeHappiness(data.happiness, buildEvalContext());
+      hud.setHappiness(happiness);
       // ROADMAP_NEXT B2-4: zero-crossing check happens right after decay, on the same tick bladder
       // could have just hit 0 — BEFORE autonomy.maybeAct() below, so a fresh failure preempts
       // whatever free will would otherwise have picked this tick (matches "the event preempts
@@ -1154,6 +1175,8 @@ async function start() {
     visaMachine.retune(data.visas); // definitions only — runtime visa state is untouched (§7.20 B3-6)
     phoneJobs.retune(data.jobs, data.tuning.phone?.jobListSize); // defs/tuning only; hourly cadence survives
     bills.retune(data.bills, data.finance, data.tuning.bills?.intervalDays, data.tuning.credit); // formulas/defs/cadence/credit tuning only; runtime state survives
+    happiness = computeHappiness(data.happiness, buildEvalContext());
+    hud.setHappiness(happiness);
     hud.setPhoneIcon(data.tuning.phone?.icon ?? '/icons/Smartphone.png');
     refreshVisaChip();
     refreshPhone();
@@ -1181,6 +1204,8 @@ async function start() {
   let gameSeconds = 8 * 3600; // start the day at 08:00
   let gameDay = 1;
   refreshVisaChip(); // now that gameDay exists, show the starting visa chip immediately
+  happiness = computeHappiness(data.happiness, buildEvalContext());
+  hud.setHappiness(happiness);
   // ROADMAP_NEXT B2-1: single builder for the EvalContext the quest evaluator (`evaluate` from
   // game/quests.ts) runs against — reused by the accident-roll call below (was already inlined
   // here), the tap-menu action-visibility filter, and Autonomy's condition check (passed in as a
@@ -1193,6 +1218,7 @@ async function start() {
       skills: Object.fromEntries(stats.skills),
       personality: Object.fromEntries(stats.personality),
       funds: quests.funds,
+      creditScore: bills.creditScore,
       time: { hour: Math.floor(gameSeconds / 3600), day: gameDay },
       vars: quests.vars,
       quests: quests.quests,

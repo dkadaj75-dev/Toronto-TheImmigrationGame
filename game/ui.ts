@@ -6,6 +6,7 @@
 import type { ActionDef, AssetDef, JobDef, VisaDef } from './data';
 import type { RequirementView } from './phone';
 import type { SimStats } from './stats';
+import { jobLevelPay, jobLevelTitle } from './work';
 
 export interface ScreenPoint { x: number; y: number }
 export interface ScreenInsets { top: number; right: number; bottom: number; left: number }
@@ -109,7 +110,11 @@ const CSS = `
   color: #93a3c0; cursor: pointer; user-select: none; }
 .hud-panel h3::after { content: ' ▾'; }
 .hud-panel.collapsed h3::after { content: ' ▸'; }
-.hud-panel.collapsed .bars { display: none; }
+.hud-panel.collapsed .bars, .hud-panel.collapsed .happiness-gauge { display: none; }
+.happiness-gauge { display:grid; grid-template-columns:58px 1fr 24px; gap:6px; align-items:center; margin:0 0 5px; }
+.happiness-gauge label, .happiness-gauge output { font-size:10px; }
+.happiness-gauge output { text-align:right; color:#f0b9e7; font-variant-numeric:tabular-nums; }
+.happiness-gauge .bar-fill { background:linear-gradient(90deg,#8e62cf,#e475b9); }
 .bar-row { display: grid; grid-template-columns: 58px 1fr; gap: 6px; align-items: center; margin: 3px 0; }
 .bar-row label { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bar-track { height: 8px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; }
@@ -372,6 +377,8 @@ export class Hud {
   private feedbackRoot: HTMLElement;
   private feedbackItems: { el: HTMLElement; elapsed: number }[] = [];
   private fills = new Map<string, HTMLElement>();
+  private happinessFill: HTMLElement;
+  private happinessValue: HTMLOutputElement;
 
   // --- Visa chip + game over (§7.20 B3-6) ---
   private visaChip: HTMLElement;
@@ -451,7 +458,7 @@ export class Hud {
     const root = document.createElement('div');
     root.id = 'hud';
     root.innerHTML = `
-      <div class="hud-panel" id="needs-panel"><h3>Needs</h3><div class="bars"></div></div>
+      <div class="hud-panel" id="needs-panel"><h3>Needs</h3><div class="happiness-gauge"><label>Happy</label><div class="bar-track"><div class="bar-fill"></div></div><output>0</output></div><div class="bars"></div></div>
       <div class="hud-panel" id="skills-panel"><h3>Skills</h3><div class="bars"></div></div>
       <div class="hud-panel" id="quest-panel"><h3>Quests</h3><div class="bars" id="quest-body"></div></div>
       <div id="time-bar">
@@ -525,6 +532,8 @@ export class Hud {
     document.body.appendChild(root);
 
     this.needsPanel = root.querySelector('#needs-panel')!;
+    this.happinessFill = root.querySelector('.happiness-gauge .bar-fill')!;
+    this.happinessValue = root.querySelector('.happiness-gauge output')!;
     this.skillsPanel = root.querySelector('#skills-panel')!;
     this.menu = root.querySelector('#action-menu')!;
     this.chip = root.querySelector('#activity-chip')!;
@@ -655,6 +664,13 @@ export class Hud {
       const v = this.stats.skills.get(def.id) ?? 0;
       fill.style.width = `${(v / (def.max || 100)) * 100}%`;
     }
+  }
+
+  setHappiness(value: number) {
+    const safe = Math.min(100, Math.max(0, Number.isFinite(value) ? value : 0));
+    this.happinessFill.style.width = `${safe}%`;
+    this.happinessValue.value = String(Math.round(safe));
+    this.happinessValue.textContent = String(Math.round(safe));
   }
 
   setSpeed(s: number) {
@@ -878,7 +894,7 @@ export class Hud {
     currentStatusName: string;
     searchedJobs: boolean;
     jobs: { job: JobDef; requirementsMet: boolean; requirements: RequirementView[] }[];
-    currentJob: { job: JobDef; skips: number } | null;
+    currentJob: { job: JobDef; skips: number; levelIndex: number } | null;
     visas: { visa: VisaDef; requirementsMet: boolean; requirements: RequirementView[] }[];
     pending: { statusId: string; daysRemaining: number } | null;
     currencyName: string;
@@ -921,7 +937,7 @@ export class Hud {
 
     if (args.tab === 'jobs') {
       if (args.currentJob) {
-        const current = phoneCard(args.currentJob.job.name);
+        const current = phoneCard(jobLevelTitle(args.currentJob.job, args.currentJob.levelIndex));
         const badge = document.createElement('span');
         badge.className = 'phone-pending';
         badge.textContent = 'Current job';
@@ -944,10 +960,10 @@ export class Hud {
         this.phoneBody.appendChild(phoneEmpty('No jobs are available.'));
       } else {
         for (const listing of args.jobs) {
-          const card = phoneCard(listing.job.name);
+          const card = phoneCard(jobLevelTitle(listing.job, 0));
           const pay = document.createElement('span');
           pay.className = 'phone-card-pay';
-          pay.textContent = `${args.currencyName}${listing.job.payPerShift}/shift`;
+          pay.textContent = `${args.currencyName}${jobLevelPay(listing.job, 0)}/shift`;
           card.head.appendChild(pay);
           const meta = document.createElement('div');
           meta.className = 'phone-meta';

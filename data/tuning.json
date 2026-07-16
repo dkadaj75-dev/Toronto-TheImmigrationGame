@@ -60,7 +60,8 @@
   },
   "work": {
     "autoSpeed": 5,
-    "_source": "Going to work V3 (PROJECT_CONTEXT.md §7.20 B3-8) — effective simulation speed multiplier while the sim is away at work. The player's selected HUD speed is preserved and restored on return."
+    "promotionHappinessFactor": 1,
+    "_source": "Going to work V3 + B6-5 (§7.20/§7.28). autoSpeed applies while away. Promotion chance = level promoteChancePercent × happiness/100 × promotionHappinessFactor, clamped to 0..100."
   },
   "bills": {
     "intervalDays": 7,

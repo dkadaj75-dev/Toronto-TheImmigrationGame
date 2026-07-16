@@ -12,6 +12,7 @@ export interface WorkReturnPoint { pos: [number, number]; facingDeg: number }
 
 export interface ActiveWorkShift extends WorkWindow {
   jobId: string;
+  levelIndex: number;
   payPerShift: number;
   needsCost: Record<string, number>;
   returnPoint: WorkReturnPoint;
@@ -24,6 +25,16 @@ export interface WorkSaveState {
   attendedShiftStartAbsHour: number | null;
   notifiedShiftStartAbsHour: number | null;
   activeShift: ActiveWorkShift | null;
+  jobLevels: Record<string, number>;
+}
+
+export interface PromotionResult {
+  promoted: boolean;
+  chancePercent: number;
+  fromLevel: number;
+  toLevel: number;
+  title: string;
+  payIncrease: number;
 }
 
 export type StartWorkResult =
@@ -37,6 +48,47 @@ export type WorkTickEvent =
   | { type: 'job_lost'; jobId: string; skips: number };
 
 const EPSILON = 1e-9;
+
+export function jobLevelIndex(job: JobDef, rawLevel: number): number {
+  const max = Math.max(0, (job.levels?.length ?? 1) - 1);
+  return Math.min(max, Math.max(0, Math.floor(Number.isFinite(rawLevel) ? rawLevel : 0)));
+}
+
+export function jobLevelTitle(job: JobDef, rawLevel = 0): string {
+  const suffix = job.levels?.[jobLevelIndex(job, rawLevel)]?.suffix?.trim();
+  return suffix ? `${job.name} ${suffix}` : job.name;
+}
+
+export function jobLevelPay(job: JobDef, rawLevel = 0): number {
+  const authored = job.levels?.[jobLevelIndex(job, rawLevel)]?.payPerShift;
+  return Number.isFinite(authored) ? authored! : job.payPerShift;
+}
+
+/** Exact B6-5 formula: current level chance × happiness/100 × promotionHappinessFactor. */
+export function promotionChancePercent(job: JobDef, rawLevel: number, happiness: number, factor = 1): number {
+  const level = jobLevelIndex(job, rawLevel);
+  if (!job.levels || level >= job.levels.length - 1) return 0;
+  const base = Number.isFinite(job.levels[level].promoteChancePercent) ? job.levels[level].promoteChancePercent : 0;
+  const happyScale = Math.min(100, Math.max(0, Number.isFinite(happiness) ? happiness : 0)) / 100;
+  const tunedFactor = Math.max(0, Number.isFinite(factor) ? factor : 1);
+  return Math.min(100, Math.max(0, base * happyScale * tunedFactor));
+}
+
+export function rollForPromotion(
+  job: JobDef, rawLevel: number, happiness: number, factor = 1, rng: () => number = Math.random,
+): PromotionResult {
+  const fromLevel = jobLevelIndex(job, rawLevel);
+  const chancePercent = promotionChancePercent(job, fromLevel, happiness, factor);
+  const rawRoll = rng();
+  const roll = Number.isFinite(rawRoll) ? Math.min(0.999999999999, Math.max(0, rawRoll)) : 1;
+  const promoted = chancePercent > 0 && roll * 100 < chancePercent;
+  const toLevel = promoted ? fromLevel + 1 : fromLevel;
+  return {
+    promoted, chancePercent, fromLevel, toLevel,
+    title: jobLevelTitle(job, toLevel),
+    payIncrease: promoted ? jobLevelPay(job, toLevel) - jobLevelPay(job, fromLevel) : 0,
+  };
+}
 
 export function normalizeGameHour(hour: number): number {
   return ((hour % 24) + 24) % 24;
@@ -148,12 +200,14 @@ export class WorkTracker {
     attendedShiftStartAbsHour: null,
     notifiedShiftStartAbsHour: null,
     activeShift: null,
+    jobLevels: {},
   };
 
   get jobId(): string | null { return this.state.jobId; }
   get skips(): number { return this.state.skips; }
   get isAtWork(): boolean { return this.state.activeShift !== null; }
   get activeShift(): ActiveWorkShift | null { return cloneActive(this.state.activeShift); }
+  getJobLevel(jobId: string): number { return Math.max(0, Math.floor(this.state.jobLevels[jobId] ?? 0)); }
 
   /** Changing jobs starts fresh attendance. Runtime state for the same job is left untouched. */
   syncJob(job: JobDef | null, time: WorkTime) {
@@ -166,6 +220,7 @@ export class WorkTracker {
       attendedShiftStartAbsHour: null,
       notifiedShiftStartAbsHour: null,
       activeShift: null,
+      jobLevels: this.state.jobLevels,
     };
   }
 
@@ -177,13 +232,21 @@ export class WorkTracker {
     const shift: ActiveWorkShift = {
       ...window,
       jobId: job.id,
-      payPerShift: job.payPerShift,
+      levelIndex: jobLevelIndex(job, this.getJobLevel(job.id)),
+      payPerShift: jobLevelPay(job, this.getJobLevel(job.id)),
       needsCost: { ...(job.needsCost ?? {}) },
       returnPoint: { pos: [...returnPoint.pos] as [number, number], facingDeg: returnPoint.facingDeg },
     };
     this.state.activeShift = shift;
     this.state.attendedShiftStartAbsHour = window.startAbsHour;
     return { ok: true, shift: cloneActive(shift)! };
+  }
+
+  /** Called only by main.ts after a returned/completed shift; updates the serializable per-job map. */
+  rollPromotion(job: JobDef, happiness: number, factor = 1, rng: () => number = Math.random): PromotionResult {
+    const result = rollForPromotion(job, this.getJobLevel(job.id), happiness, factor, rng);
+    if (result.promoted) this.state.jobLevels[job.id] = result.toLevel;
+    return result;
   }
 
   /**
@@ -245,6 +308,7 @@ export class WorkTracker {
     return {
       ...this.state,
       activeShift: cloneActive(this.state.activeShift),
+      jobLevels: { ...this.state.jobLevels },
     };
   }
 
@@ -256,6 +320,7 @@ export class WorkTracker {
       attendedShiftStartAbsHour: saved.attendedShiftStartAbsHour,
       notifiedShiftStartAbsHour: saved.notifiedShiftStartAbsHour ?? null,
       activeShift: cloneActive(saved.activeShift),
+      jobLevels: { ...(saved.jobLevels ?? {}) },
     };
   }
 }
