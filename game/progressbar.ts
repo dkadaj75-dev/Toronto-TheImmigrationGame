@@ -22,10 +22,20 @@
 // marker.ts's image kind — no manual look-at math), plain-color SpriteMaterials (no texture, no
 // asset/mesh pipeline needed for a procedural HUD-style bar). The background track is a fixed-size
 // sprite; the fill sprite is LEFT-anchored (`sprite.center.set(0, 0.5)`) with its x-scale set to
-// `progress * widthMeters`, so it grows rightward from a fixed left edge — the conventional
+// `progress * innerWidth`, so it grows rightward from a fixed left edge — the conventional
 // "progress bar" visual. `depthTest: false` + a high `renderOrder` (same convention as censor.ts)
 // so the bar reliably reads above nearby furniture it may be co-located with (e.g. extinguishing a
 // fire right next to the stove).
+//
+// ROADMAP_NEXT B6-1 root cause: the fill's height was inset 30% inside the bg track
+// (`heightMeters * 0.7`, a fixed margin of `heightMeters * 0.15` per side) but its WIDTH was not
+// inset at all — `fill.position.x` sat exactly on the bg's left edge and, at progress 1, the fill's
+// right edge landed exactly on the bg's right edge (flush, zero margin). The result: a border
+// visible above/below the fill but none left/right — an asymmetric inset that reads as "the fill
+// doesn't sit inside the track" even though the underlying sprite anchor math (center/scale) was
+// internally consistent. Fix: derive a single `fillMargin` (15% of heightMeters) and apply it
+// symmetrically to BOTH axes via `fillInnerWidth`/`fillLeftEdge`/`fillScaleX` below, so the fill
+// keeps a matching margin on all four sides of the bg track at every progress value.
 
 import * as THREE from 'three';
 
@@ -59,6 +69,39 @@ export function clampProgress01(p: number): number {
   return Math.min(Math.max(p, 0), 1);
 }
 
+/** Margin (meters) kept between the fill and the bg track's edges, applied symmetrically to BOTH
+ *  axes (see B6-1 root-cause note above) — 15% of the bar's height per side, which reproduces the
+ *  original shipped vertical inset exactly (`heightMeters - 2*margin === heightMeters * 0.7`) while
+ *  giving the horizontal axis the matching margin it was previously missing. */
+export function fillMargin(heightMeters: number): number {
+  return heightMeters * 0.15;
+}
+
+/** Width available to the fill once the symmetric margin is subtracted from both sides. Clamped to
+ *  0 so a pathologically small/negative widthMeters (misconfigured caller) can't go negative. */
+export function fillInnerWidth(widthMeters: number, heightMeters: number): number {
+  return Math.max(0, widthMeters - fillMargin(heightMeters) * 2);
+}
+
+/** Height available to the fill once the same symmetric margin is subtracted top/bottom. */
+export function fillInnerHeight(heightMeters: number): number {
+  return Math.max(0, heightMeters - fillMargin(heightMeters) * 2);
+}
+
+/** Fill sprite's fixed local x-offset from the pivot (= the bg track's center), i.e. its
+ *  left-anchored transform origin (`sprite.center.set(0, 0.5)`) — the inset left edge of the track,
+ *  not the bg's own left edge. Constant across progress; only `fillScaleX` changes per frame. */
+export function fillLeftEdge(widthMeters: number, heightMeters: number): number {
+  return -fillInnerWidth(widthMeters, heightMeters) / 2;
+}
+
+/** Fill sprite's x-scale (world width) at a given progress: the inset inner width times clamped
+ *  progress, so the fill's right edge sweeps from the inset left edge (progress 0) to the inset
+ *  right edge (progress 1) — never past it, matching the bg track's inset bounds exactly. */
+export function fillScaleX(widthMeters: number, heightMeters: number, progress: number): number {
+  return fillInnerWidth(widthMeters, heightMeters) * clampProgress01(progress);
+}
+
 export interface ProgressBarInstance {
   /** `active` = whether the current action has a duration in progress (game/main.ts's
    *  `durationState !== null`); when false the bar is hidden and position/scale aren't touched.
@@ -83,8 +126,8 @@ export function createProgressBarInstance(scene: THREE.Object3D, config: Progres
   const fill = new THREE.Sprite(fillMat);
   fill.renderOrder = 999;
   fill.center.set(0, 0.5); // left-anchored — grows rightward, see module doc comment's RENDERING note
-  fill.position.x = -config.widthMeters / 2; // fixed left edge, aligned to the bg track's left edge
-  fill.scale.set(0, config.heightMeters * 0.7, 1); // slightly inset vs. the bg track; starts empty
+  fill.position.x = fillLeftEdge(config.widthMeters, config.heightMeters); // inset left edge (B6-1 fix)
+  fill.scale.set(0, fillInnerHeight(config.heightMeters), 1); // inset on all sides, symmetric with X; starts empty
 
   pivot.add(bg, fill);
   scene.add(pivot);
@@ -94,7 +137,7 @@ export function createProgressBarInstance(scene: THREE.Object3D, config: Progres
       pivot.visible = active;
       if (!active) return;
       pivot.position.set(characterRoot.position.x, progressBarAnchorHeight(heightMeters, config.yOffset), characterRoot.position.z);
-      fill.scale.x = config.widthMeters * clampProgress01(progress);
+      fill.scale.x = fillScaleX(config.widthMeters, config.heightMeters, progress);
     },
     dispose() {
       scene.remove(pivot);
