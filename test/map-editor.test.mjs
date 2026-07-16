@@ -197,17 +197,34 @@ console.log('map-editor.test — floor texture dropdown (texture round-trip)');
 {
   ME.setMode('floors');
   const f0 = st.doc.floors[0];
+  delete f0.texture; delete f0.textureScale; // fixture may carry a live designer texture; test the picker's own default (in-memory only, never written back)
   const cx = f0.polygon.reduce((s, [x]) => s + x, 0) / f0.polygon.length;
   const cz = f0.polygon.reduce((s, [, z]) => s + z, 0) / f0.polygon.length;
   pointer('pointerdown', cx, cz);
   const sel = doc.querySelector('select[data-field="floor.texture"]');
   check('floor texture dropdown renders, defaulting to (none)', !!sel && sel.value === '');
+  check('scale input hidden while no texture is selected', doc.querySelector('input[data-field="floor.textureScale"]')?.style.display === 'none');
   const offered = [...sel.options].slice(1).map((o) => o.value); // skip "(none)"
   check('dropdown offers the listed textures', offered.includes('textures/oak.jpg') && offered.includes('textures/tile.png'), offered.join(','));
   sel.value = 'textures/oak.jpg';
   sel.dispatchEvent(new window.Event('change', { bubbles: true }));
   check('picking a texture sets floors[].texture', st.doc.floors[st.sel.index].texture === 'textures/oak.jpg');
   check('preview swatch reflects the selection', doc.querySelector('img[data-field="floor.texture.swatch"]')?.getAttribute('src') === '/textures/oak.jpg');
+  // texture scale follow-up (PROJECT_CONTEXT §7.32): sparse — only written when != 1
+  const scaleInput = doc.querySelector('input[data-field="floor.textureScale"]');
+  check('scale input visible once a texture is selected', scaleInput?.style.display !== 'none');
+  check('scale input renders next to a selected texture, defaulting to 1', !!scaleInput && scaleInput.value == 1);
+  scaleInput.value = '2';
+  scaleInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('setting scale to 2 writes floors[].textureScale', st.doc.floors[st.sel.index].textureScale === 2);
+  scaleInput.value = '1';
+  scaleInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('setting scale back to 1 deletes the key (sparse)', !('textureScale' in st.doc.floors[st.sel.index]));
+  scaleInput.value = '3';
+  scaleInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+  scaleInput.value = '';
+  scaleInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('clearing scale deletes the key (sparse)', !('textureScale' in st.doc.floors[st.sel.index]));
   sel.value = '';
   sel.dispatchEvent(new window.Event('change', { bubbles: true }));
   check('picking (none) removes texture — back to color material', !('texture' in st.doc.floors[st.sel.index]));
@@ -254,6 +271,15 @@ console.log('map-editor.test — wall texture dropdown (texture round-trip)');
   sel.value = 'textures/tile.png';
   sel.dispatchEvent(new window.Event('change', { bubbles: true }));
   check('picking a texture sets walls[].texture', st.doc.walls[st.sel.index].texture === 'textures/tile.png');
+  // texture scale follow-up (PROJECT_CONTEXT §7.32): sparse round-trip, mirrors the floor test
+  const wallScaleInput = doc.querySelector('input[data-field="wall.textureScale"]');
+  check('wall scale input visible once a texture is selected', wallScaleInput?.style.display !== 'none');
+  wallScaleInput.value = '0.5';
+  wallScaleInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('setting wall scale to 0.5 writes walls[].textureScale', st.doc.walls[st.sel.index].textureScale === 0.5);
+  wallScaleInput.value = '1';
+  wallScaleInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('setting wall scale back to 1 deletes the key (sparse)', !('textureScale' in st.doc.walls[st.sel.index]));
   sel.value = '';
   sel.dispatchEvent(new window.Event('change', { bubbles: true }));
   check('picking (none) removes wall texture', !('texture' in st.doc.walls[st.sel.index]));

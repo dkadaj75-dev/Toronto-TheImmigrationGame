@@ -11,7 +11,7 @@ import { retargetTrackName, stripPositionTracks, resolveClipName, fileStem } fro
 import { resolveWindowConfig, windowFacePositions, windowPaneRect } from './windows';
 import { wallCutShownHeight } from './wallview';
 import { resolveAssetLight } from './assetstate';
-import { resolveMetersPerTile, textureRepeat, polygonBounds } from './textures';
+import { resolveMetersPerTile, effectiveMetersPerTile, textureRepeat, polygonBounds } from './textures';
 
 // ------------------------------------------------------------------ GLB furniture
 // Templates are cached per URL and cloned per placement; clones share geometry/materials
@@ -279,8 +279,9 @@ export function buildWorld(data: GameData, trackInitialLoad?: TrackInitialLoad):
     mesh.receiveShadow = true;
     if (floor.texture) {
       const b = polygonBounds(floor.polygon);
+      const mpt = effectiveMetersPerTile(metersPerTile, floor.textureScale); // per-surface scale follow-up
       normalizeFloorUVs(geo, b); // ShapeGeometry UVs are raw meters → 0..1 so repeat sizes physically
-      applySurfaceTexture(mesh, normalizeMeshUrl(floor.texture), [textureRepeat(b.w, metersPerTile), textureRepeat(b.h, metersPerTile)], trackInitialLoad);
+      applySurfaceTexture(mesh, normalizeMeshUrl(floor.texture), [textureRepeat(b.w, mpt), textureRepeat(b.h, mpt)], trackInitialLoad);
     }
     root.add(mesh);
   }
@@ -303,7 +304,8 @@ export function buildWorld(data: GameData, trackInitialLoad?: TrackInitialLoad):
     if (wall.texture) {
       // v-repeat from FULL height (WALL_H); the wall-cut view scales the geometry down, which just
       // compresses the texture vertically with it — acceptable per B9-1 (documented, not re-mapped).
-      applySurfaceTexture(mesh, normalizeMeshUrl(wall.texture), [textureRepeat(len, metersPerTile), textureRepeat(WALL_H, metersPerTile)], trackInitialLoad);
+      const mpt = effectiveMetersPerTile(metersPerTile, wall.textureScale); // per-surface scale follow-up
+      applySurfaceTexture(mesh, normalizeMeshUrl(wall.texture), [textureRepeat(len, mpt), textureRepeat(WALL_H, mpt)], trackInitialLoad);
     }
     root.add(mesh);
   }

@@ -11,6 +11,15 @@ export function resolveMetersPerTile(tuning: Pick<TuningData, 'textures'>): numb
   return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 1;
 }
 
+/** Follow-up to B9-1 (PROJECT_CONTEXT §7.32): per-surface texture scale. A floor/wall's optional
+ *  `textureScale` multiplies the tuning-wide `metersPerTile` for that one surface (2 = texture
+ *  reads twice as big / half as many repeats). Guards non-finite / non-positive → 1 (no scaling)
+ *  so a bad value never propagates a NaN/zero repeat. */
+export function effectiveMetersPerTile(metersPerTile: number, textureScale?: number): number {
+  const s = typeof textureScale === 'number' && Number.isFinite(textureScale) && textureScale > 0 ? textureScale : 1;
+  return metersPerTile * s;
+}
+
 /** How many times the texture repeats across `surfaceMeters` of surface, given the physical
  *  tile size. This is the value fed straight into a THREE.Texture's `.repeat` component when the
  *  surface's UVs run 0..1 across that dimension (walls: BoxGeometry face UVs; floors: normalized

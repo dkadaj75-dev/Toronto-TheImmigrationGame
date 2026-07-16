@@ -1,6 +1,6 @@
 // textures.test — game/textures.ts pure sizing math (ROADMAP_NEXT B9-1).
 // Run: npx tsx test/textures.test.ts
-import { resolveMetersPerTile, textureRepeat, polygonBounds } from '../game/textures';
+import { resolveMetersPerTile, effectiveMetersPerTile, textureRepeat, polygonBounds } from '../game/textures';
 import type { TuningData } from '../game/data';
 
 let failures = 0;
@@ -33,6 +33,20 @@ console.log('textures.test — textureRepeat (tiles across a surface span)');
   check('non-finite tile → treated as 1m', textureRepeat(4, Number.POSITIVE_INFINITY) === 4);
   check('zero surface → no tiling (0, not NaN)', textureRepeat(0, 1) === 0);
   check('negative surface → 0', textureRepeat(-5, 1) === 0);
+}
+
+console.log('textures.test — effectiveMetersPerTile (per-surface textureScale follow-up)');
+{
+  check('absent scale → unchanged', effectiveMetersPerTile(2) === 2);
+  check('scale 1 → unchanged', effectiveMetersPerTile(2, 1) === 2);
+  check('scale 2 → doubles', effectiveMetersPerTile(2, 2) === 4);
+  check('fractional scale → shrinks', approx(effectiveMetersPerTile(2, 0.5), 1));
+  check('zero scale → guarded to 1x', effectiveMetersPerTile(2, 0) === 2);
+  check('negative scale → guarded to 1x', effectiveMetersPerTile(2, -3) === 2);
+  check('NaN scale → guarded to 1x', effectiveMetersPerTile(2, Number.NaN) === 2);
+  check('non-finite scale → guarded to 1x', effectiveMetersPerTile(2, Number.POSITIVE_INFINITY) === 2);
+  // end-to-end: base 1m tile, scale 2 → repeat halves
+  check('scaled repeat end-to-end', textureRepeat(6, effectiveMetersPerTile(1, 2)) === 3);
 }
 
 console.log('textures.test — polygonBounds');

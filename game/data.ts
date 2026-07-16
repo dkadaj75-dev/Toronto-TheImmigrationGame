@@ -380,10 +380,13 @@ export interface MapData {
    *  normalizeMeshUrl adds the leading slash). Absent → the material's flat `material` color
    *  (FLOOR_COLORS in world.ts). On load the texture swaps in tiled at
    *  tuning.textures.metersPerTile; a load failure keeps the color (keep-stand-in philosophy). */
-  floors: { id: string; polygon: [number, number][]; material: string; texture?: string }[];
+  /** Follow-up to B9-1 (PROJECT_CONTEXT §7.32): optional per-surface tiling multiplier on top of
+   *  tuning.textures.metersPerTile (2 = texture twice as big / fewer repeats). Absent/1 → default
+   *  size; only meaningful alongside `texture`. See game/textures.ts effectiveMetersPerTile. */
+  floors: { id: string; polygon: [number, number][]; material: string; texture?: string; textureScale?: number }[];
   /** ROADMAP_NEXT B9-1: optional image texture on the wall material (both faces), same drop-in
    *  convention + color fallback as a floor's `texture`. */
-  walls: { from: [number, number]; to: [number, number]; texture?: string }[];
+  walls: { from: [number, number]; to: [number, number]; texture?: string; textureScale?: number }[];
   doors: { at: [number, number]; orientation: 'vertical' | 'horizontal'; width?: number; assetId?: string }[];
   /** ROADMAP_NEXT item 9: wall openings that are purely visual — a window never affects the nav
    *  grid or wall collision (the wall segment it sits on stays a single unbroken box, unlike a

@@ -718,7 +718,9 @@ function field(labelText, value, onChange, opts = {}) {
 
 // B9-1: floor/wall texture picker — '(none)' = color material; a path writes floors[]/walls[].texture.
 // Preview swatch mirrors the selection (public/ served at root → '/'+path).
-function textureRow(kind, current, onChange) {
+// Follow-up (PROJECT_CONTEXT §7.32): a sparse per-surface scale number sits next to the dropdown,
+// shown only while a texture is selected; typing 1 or clearing it deletes the key (default size).
+function textureRow(kind, current, onChange, currentScale, onScaleChange) {
   const row = document.createElement('div'); row.className = 'field';
   const lab = document.createElement('label'); lab.textContent = 'texture';
   const wrap = document.createElement('div');
@@ -732,13 +734,30 @@ function textureRow(kind, current, onChange) {
   const swatch = document.createElement('img'); swatch.dataset.field = kind + '.texture.swatch';
   swatch.style.width = '22px'; swatch.style.height = '22px'; swatch.style.objectFit = 'cover';
   swatch.style.borderRadius = '4px'; swatch.style.border = '1px solid #2c3a58';
+  const scale = document.createElement('input'); scale.type = 'number'; scale.step = 'any'; scale.min = '0';
+  scale.dataset.field = kind + '.textureScale'; scale.title = 'texture scale (tile size multiplier)';
+  scale.style.width = '52px';
+  scale.value = currentScale ?? 1;
+  const updateVisibility = () => {
+    const on = !!sel.value;
+    swatch.style.visibility = on ? 'visible' : 'hidden';
+    scale.style.display = on ? '' : 'none';
+  };
   const updateSwatch = () => {
-    if (sel.value) { swatch.src = '/' + sel.value; swatch.style.visibility = 'visible'; }
-    else { swatch.removeAttribute('src'); swatch.style.visibility = 'hidden'; }
+    if (sel.value) swatch.src = '/' + sel.value;
+    else swatch.removeAttribute('src');
+    updateVisibility();
   };
   updateSwatch();
   sel.addEventListener('change', () => { pushUndo(); onChange(sel.value); markDirty(); updateSwatch(); redraw(); });
-  wrap.append(sel, swatch);
+  scale.addEventListener('change', () => {
+    pushUndo();
+    const v = Number(scale.value);
+    if (!Number.isFinite(v) || v <= 0 || v === 1) { onScaleChange(undefined); scale.value = 1; }
+    else onScaleChange(v);
+    markDirty(); redraw();
+  });
+  wrap.append(sel, swatch, scale);
   row.append(lab, wrap);
   return row;
 }
@@ -796,7 +815,7 @@ function renderInspector() {
     host.appendChild(Object.assign(document.createElement('h2'), { textContent: 'Floor' }));
     host.appendChild(field('id', f.id, edit((v) => { f.id = v; }), { text: true, data: 'floor.id' }));
     host.appendChild(field('material', f.material, edit((v) => { f.material = v; }), { options: [...FLOOR_MATERIALS], data: 'floor.material' }));
-    host.appendChild(textureRow('floor', f.texture, (v) => { if (v) f.texture = v; else delete f.texture; }));
+    host.appendChild(textureRow('floor', f.texture, (v) => { if (v) f.texture = v; else delete f.texture; }, f.textureScale, (v) => { if (v) f.textureScale = v; else delete f.textureScale; }));
     const poly = document.createElement('div'); poly.className = 'hint';
     poly.textContent = 'polygon: ' + JSON.stringify(f.polygon);
     host.appendChild(poly);
@@ -808,7 +827,7 @@ function renderInspector() {
     host.appendChild(field('from z', w.from[1], edit((v) => { w.from[1] = v; }), { data: 'wall.fz' }));
     host.appendChild(field('to x', w.to[0], edit((v) => { w.to[0] = v; }), { data: 'wall.tx' }));
     host.appendChild(field('to z', w.to[1], edit((v) => { w.to[1] = v; }), { data: 'wall.tz' }));
-    host.appendChild(textureRow('wall', w.texture, (v) => { if (v) w.texture = v; else delete w.texture; }));
+    host.appendChild(textureRow('wall', w.texture, (v) => { if (v) w.texture = v; else delete w.texture; }, w.textureScale, (v) => { if (v) w.textureScale = v; else delete w.textureScale; }));
     host.appendChild(del);
   } else if (s.kind === 'door') {
     const d = doc.doors[s.index];
