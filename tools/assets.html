@@ -66,7 +66,12 @@
 <script>
 // ------------------------------------------------------------------ state
 const API = '/api/data/';
-const state = { assets: null, interactions: null, map: null, stats: null, selected: null, dirty: false };
+const state = {
+  assets: null, interactions: null, map: null, stats: null, tuning: null,
+  selected: null, dirty: false,
+  // Preview-only state: never written to assets.json. Character starts hidden on every load.
+  showCharacter: false, previewPose: null,
+};
 const previewGridSize = () => {
   const size = Number(state.map?.gridSize);
   return Number.isFinite(size) && size > 0 ? size : 0.5;
@@ -76,18 +81,47 @@ const previewGridSpec = () => {
   const divisions = Math.max(1, Math.ceil(4 / tileSize));
   return { tileSize, divisions, size: divisions * tileSize };
 };
-window.AssetEditor = { state, previewGridSize, previewGridSpec };
+/** Sit/lie always have game/facing.ts computed transforms, even on a completely sparse asset.
+ * `use` deliberately has no runtime default, so it is offered only when usePose.use explicitly
+ * exists (matching SimAgent.applyPose). */
+function availablePreviewPoses(asset) {
+  if (!asset) return [];
+  const poses = ['sit', 'lie'];
+  if (asset.usePose?.use) poses.push('use');
+  return poses;
+}
+
+/** Resolve a preview pose to the game's logical animation vocabulary and configured clip name.
+ * The module still passes the logical state to AnimController, which owns the real clip lookup. */
+function resolvePoseAnimation(pose, asset, actions = state.interactions?.actions ?? [], clipMap = state.tuning?.character?.clipMap ?? {}) {
+  const actionStates = actions
+    .filter((action) => asset?.interactions?.includes(action.id))
+    .map((action) => action.animation)
+    .filter(Boolean);
+  const matching = actionStates.filter((name) => (
+    pose === 'sit' ? name.startsWith('sit')
+      : pose === 'lie' ? name.startsWith('lie')
+      : !name.startsWith('sit') && !name.startsWith('lie')
+  ));
+  const fallbacks = pose === 'use' ? ['stand_use', 'use', 'idle'] : [pose];
+  const candidates = [...new Set([...matching, ...fallbacks])];
+  const logicalState = candidates.find((name) => clipMap[name]) ?? candidates[0] ?? 'idle';
+  return { logicalState, clipName: clipMap[logicalState] ?? null };
+}
+
+window.AssetEditor = { state, previewGridSize, previewGridSpec, availablePreviewPoses, resolvePoseAnimation };
 
 async function load() {
   setStatus('loading…');
   try {
-    const [a, i, m, s] = await Promise.all([
+    const [a, i, m, s, t] = await Promise.all([
       fetch(API + 'assets.json').then((r) => { if (!r.ok) throw new Error('assets.json HTTP ' + r.status); return r.json(); }),
       fetch(API + 'interactions.json').then((r) => { if (!r.ok) throw new Error('interactions.json HTTP ' + r.status); return r.json(); }),
       fetch(API + 'maps/condo.json').then((r) => (r.ok ? r.json() : null)).catch(() => null),
       fetch(API + 'stats.json').then((r) => (r.ok ? r.json() : { needs: [], skills: [] })).catch(() => ({ needs: [], skills: [] })),
+      fetch(API + 'tuning.json').then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ]);
-    state.assets = a; state.interactions = i; state.map = m; state.stats = s;
+    state.assets = a; state.interactions = i; state.map = m; state.stats = s; state.tuning = t;
     state.dirty = false;
     if (!state.selected && a.assets.length) state.selected = a.assets[0].id;
     renderAll();
@@ -619,7 +653,39 @@ function renderEditor() {
   const mesh = textInput(() => a.mesh, (v) => { a.mesh = v; schedulePreview(); }, 'mesh');
   mesh.placeholder = '/models/furniture/couch.glb — or an image: /models/fire.gif';
   card4.appendChild(frow('GLB or image path (under public/) — png/jpg/webp/gif render as sprites', mesh));
+  const poses = availablePreviewPoses(a);
+  if (!poses.includes(state.previewPose)) state.previewPose = poses[0] ?? null;
+  const previewControls = document.createElement('div');
+  previewControls.className = 'pair';
+  const showCharacter = document.createElement('input');
+  showCharacter.type = 'checkbox';
+  showCharacter.dataset.path = 'preview.showCharacter';
+  showCharacter.checked = state.showCharacter;
+  const hasCharacterTuning = !!state.tuning?.character?.meshPath;
+  showCharacter.disabled = !hasCharacterTuning || poses.length === 0;
+  const showLabel = document.createElement('label');
+  showLabel.append(showCharacter, document.createTextNode(' Show character'));
+  const poseSelect = document.createElement('select');
+  poseSelect.dataset.path = 'preview.pose';
+  for (const pose of poses) {
+    const option = document.createElement('option');
+    option.value = pose; option.textContent = pose;
+    poseSelect.appendChild(option);
+  }
+  poseSelect.value = state.previewPose ?? '';
+  poseSelect.disabled = !state.showCharacter;
+  showCharacter.addEventListener('change', () => {
+    state.showCharacter = showCharacter.checked;
+    poseSelect.disabled = !showCharacter.checked;
+    schedulePreview();
+  });
+  poseSelect.addEventListener('change', () => { state.previewPose = poseSelect.value; schedulePreview(); });
+  previewControls.append(showLabel, poseSelect);
+  card4.appendChild(frow('Pose preview', previewControls));
   card4.insertAdjacentHTML('beforeend', '<canvas id="preview"></canvas><div id="preview-msg"></div>');
+  if (!hasCharacterTuning) {
+    card4.querySelector('#preview-msg').textContent = 'Character preview unavailable: tuning.character is not configured.';
+  }
   root.appendChild(card4);
 
   // --- mesh fit (§7.1/§7.2: sparse — meshFit / meshFit.scale keys only exist if the designer sets them)
@@ -803,13 +869,102 @@ load();
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { AnimController } from '/game/anim.ts';
+import { usePoseFor } from '/game/facing.ts';
 import { classifyMeshPath, createSpriteInstance } from '/game/sprites.ts';
-import { normalizeModelToFootprint, applyMeshFit, loadMeshTemplate } from '/game/world.ts';
+import { normalizeModelToFootprint, applyMeshFit, loadMeshTemplate, loadRiggedCharacter } from '/game/world.ts';
 
 let renderer = null, scene, camera, controls, current = null, raf = 0;
 let activeSprite = null; // §7.5: SpriteInstance being previewed — its update() drives GIF frames (real time here, sim time in-game)
 let previewSeq = 0; // staleness token: a slow decode must not clobber a newer show()
+let characterPromise = null, characterRoot = null, characterAnim = null;
+let assetStatus = '', characterStatus = '';
 const previewClock = new THREE.Clock();
+
+function previewMessage() {
+  const msg = document.getElementById('preview-msg');
+  if (msg) msg.textContent = [assetStatus, characterStatus].filter(Boolean).join(' · ');
+}
+
+function framePreview() {
+  const visible = [current, characterRoot?.visible ? characterRoot : null].filter(Boolean);
+  if (!visible.length) return;
+  const box = new THREE.Box3();
+  for (const object of visible) box.expandByObject(object);
+  const worldSize = box.getSize(new THREE.Vector3());
+  const size = worldSize.length() || 1;
+  const center = box.getCenter(new THREE.Vector3());
+  camera.near = Math.max(size / 100, 0.001);
+  camera.far = size * 20;
+  camera.updateProjectionMatrix();
+  camera.position.copy(center).add(new THREE.Vector3(1, 0.7, 1.2).setLength(size * 1.2));
+  controls.target.copy(center);
+  controls.update();
+}
+
+function ensureCharacter(character) {
+  if (!characterPromise) {
+    characterStatus = 'loading character…'; previewMessage();
+    characterPromise = loadRiggedCharacter(character).then(({ model, clips }) => {
+      characterRoot = new THREE.Group();
+      characterRoot.name = 'asset-editor-character-preview';
+      characterRoot.add(model);
+      characterAnim = new AnimController(model, clips, character);
+      characterRoot.visible = false;
+      scene.add(characterRoot);
+      return { clips };
+    }).catch((error) => {
+      characterPromise = null;
+      throw error;
+    });
+  }
+  return characterPromise;
+}
+
+function updateCharacter(seq, assetDef) {
+  const editor = window.AssetEditor;
+  const character = editor?.state?.tuning?.character;
+  if (!character?.meshPath) {
+    if (characterRoot) characterRoot.visible = false;
+    characterStatus = 'Character preview unavailable: tuning.character is not configured.';
+    previewMessage();
+    return;
+  }
+  const poses = editor.availablePreviewPoses(assetDef);
+  const pose = editor.state.previewPose;
+  if (!editor.state.showCharacter) {
+    if (characterRoot) characterRoot.visible = false;
+    characterStatus = poses.length ? '' : 'No sit/lie/use pose is relevant to this asset.';
+    previewMessage();
+    return;
+  }
+  if (!pose || !poses.includes(pose)) {
+    if (characterRoot) characterRoot.visible = false;
+    characterStatus = 'No sit/lie/use pose is relevant to this asset.';
+    previewMessage();
+    return;
+  }
+  ensureCharacter(character).then(() => {
+    if (seq !== previewSeq) return;
+    const transform = usePoseFor(pose, { pos: [0, 0], rotDeg: 0 }, assetDef, editor.state.tuning);
+    characterRoot.position.set(transform.pos[0], transform.y, transform.pos[1]);
+    characterRoot.rotation.set(0, THREE.MathUtils.degToRad(transform.facingDeg), 0);
+    characterRoot.visible = true;
+    const resolved = editor.resolvePoseAnimation(pose, assetDef);
+    characterAnim.retune(character);
+    characterAnim.play(resolved.logicalState);
+    characterStatus = resolved.clipName
+      ? `${pose} character animation: ${resolved.logicalState} → ${resolved.clipName}`
+      : `${pose} character animation "${resolved.logicalState}" is unmapped; game fallback applies`;
+    previewMessage();
+    framePreview();
+  }).catch(() => {
+    if (seq !== previewSeq) return;
+    if (characterRoot) characterRoot.visible = false;
+    characterStatus = `Could not load character ${character.meshPath}.`;
+    previewMessage();
+  });
+}
 
 function ensure(canvas) {
   if (renderer && renderer.domElement === canvas) return true;
@@ -818,6 +973,9 @@ function ensure(canvas) {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   } catch { renderer = null; return false; }
   scene = new THREE.Scene();
+  // renderEditor replaces the canvas when selecting another asset. Reattach the one cached rig
+  // to the new preview scene instead of loading the character again.
+  if (characterRoot) scene.add(characterRoot);
   camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100);
   camera.position.set(2, 1.6, 2.6);
   controls = new OrbitControls(camera, canvas);
@@ -838,7 +996,9 @@ function ensure(canvas) {
       camera.updateProjectionMatrix();
     }
     controls.update();
-    activeSprite?.update(previewClock.getDelta()); // advance GIF frames while previewing
+    const dt = previewClock.getDelta();
+    activeSprite?.update(dt); // advance GIF frames while previewing
+    characterAnim?.update(dt); // preview has no sim clock/pause, so animate in real time
     renderer.render(scene, camera);
   };
   loop();
@@ -848,47 +1008,43 @@ function ensure(canvas) {
 window.AssetPreview = {
   show(meshPath, assetDef) {
     const canvas = document.getElementById('preview');
-    const msg = document.getElementById('preview-msg');
     if (!canvas || !ensure(canvas)) return;
     previewSeq++; // invalidate any in-flight async load from a previous show()
+    const seq = previewSeq;
     if (current) { scene.remove(current); current = null; }
     if (activeSprite) { activeSprite.dispose(); activeSprite = null; }
-    if (!meshPath) { if (msg) msg.textContent = 'No mesh assigned — set a GLB or image path to preview it.'; return; }
+    if (characterRoot) characterRoot.visible = false;
+    assetStatus = meshPath ? '' : 'No mesh assigned — set a GLB or image path to preview it.';
+    characterStatus = '';
+    previewMessage();
+    updateCharacter(seq, assetDef);
+    if (!meshPath) return;
     // public/ is served at the site root — normalize "models/bed.glb" → "/models/bed.glb"
     const url = /^(\/|https?:)/.test(meshPath) ? meshPath : '/' + meshPath;
-    if (msg) msg.textContent = 'loading ' + url + ' …';
+    assetStatus = 'loading ' + url + ' …'; previewMessage();
     // §7.5: image mesh (png/jpg/webp/gif) — preview through the game's OWN sprite pipeline
     // (game/sprites.ts), so what the designer sees here (billboard vs flat, GIF animation) is
     // exactly what spawns in-game. Frame advance runs on real time in this preview.
     if (classifyMeshPath(url) === 'image') {
       const def = assetDef && Array.isArray(assetDef.footprint) ? assetDef : { ...(assetDef || {}), footprint: [1, 1] };
       const inst = createSpriteInstance(def, url);
-      const seq = previewSeq;
       inst.ready
         .then(() => {
           if (seq !== previewSeq) { inst.dispose(); return; } // superseded by a newer show()
           if (current) scene.remove(current);
           current = inst.object;
           activeSprite = inst;
-          const [w, h] = [Math.max(def.footprint[0], 0.5), Math.max(def.footprint[1], 0.5)];
-          const size = Math.max(w, h) * 2;
-          camera.near = Math.max(size / 100, 0.001);
-          camera.far = size * 20;
-          camera.updateProjectionMatrix();
-          camera.position.set(1, 0.7, 1.2).setLength(size * 1.2);
-          controls.target.set(0, h / 2, 0);
-          controls.update();
           scene.add(current);
-          if (msg) msg.textContent = `${url} — image sprite (${def.sprite?.orientation ?? 'billboard'}${url.toLowerCase().includes('.gif') ? ', animated' : ''})`;
+          assetStatus = `${url} — image sprite (${def.sprite?.orientation ?? 'billboard'}${url.toLowerCase().includes('.gif') ? ', animated' : ''})`;
+          previewMessage(); framePreview();
         })
-        .catch(() => { inst.dispose(); if (msg) msg.textContent = `Could not load ${url} — the file should be at public${url}.`; });
+        .catch(() => { inst.dispose(); assetStatus = `Could not load ${url} — the file should be at public${url}.`; previewMessage(); });
       return;
     }
     // GLB furniture — apply the SAME transforms the game applies (game/world.ts), so the
     // designer sees the model at its real in-game size, grounded at y=0 on the grid, rather
     // than the raw GLB centered by its own bounds. loadMeshTemplate caches per URL, so
     // footprint/meshFit live-edits re-clone cheaply instead of re-fetching.
-    const seq = previewSeq;
     const def = assetDef && Array.isArray(assetDef.footprint) ? assetDef : { ...(assetDef || {}), footprint: [1, 1] };
     loadMeshTemplate(url)
       .then((template) => {
@@ -906,17 +1062,10 @@ window.AssetPreview = {
         // frame the grounded model: orbit its center, keep the y=0 grid in view
         const box = new THREE.Box3().setFromObject(model);
         const worldSize = box.getSize(new THREE.Vector3());
-        const size = worldSize.length() || 1;
-        const center = box.getCenter(new THREE.Vector3());
-        camera.near = Math.max(size / 100, 0.001);
-        camera.far = size * 20;
-        camera.updateProjectionMatrix();
-        camera.position.copy(center).add(new THREE.Vector3(1, 0.7, 1.2).setLength(size * 1.2));
-        controls.target.copy(center);
-        controls.update();
-        if (msg) msg.textContent = `${url} — in-game size ${worldSize.toArray().map((v) => v.toFixed(2)).join(' × ')} m · grounded at y=0`;
+        assetStatus = `${url} — in-game size ${worldSize.toArray().map((v) => v.toFixed(2)).join(' × ')} m · grounded at y=0`;
+        previewMessage(); framePreview();
       })
-      .catch(() => { if (msg) msg.textContent = `Could not load ${url} — the file should be at public${url} (e.g. public/models/bed.glb → "/models/bed.glb").`; });
+      .catch(() => { assetStatus = `Could not load ${url} — the file should be at public${url} (e.g. public/models/bed.glb → "/models/bed.glb").`; previewMessage(); });
   },
 };
 </script>

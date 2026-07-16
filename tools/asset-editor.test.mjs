@@ -29,6 +29,13 @@ const stats = {
   needs: [{ id: 'hunger', name: 'Hunger', color: '#e74c3c', default: 70, decayPerTick: 0.1, autonomy: true }],
   skills: [{ id: 'cooking', name: 'Cooking', color: '#d35400', default: 0, max: 10 }],
 };
+const tuning = {
+  character: {
+    meshPath: '/models/character.glb', heightMeters: 1.55, crossFadeSeconds: 0.25,
+    walkClipSpeedReference: 2, sitHeight: 0.25, lieHeight: 0.55,
+    clipMap: { idle: 'Idle', sit: 'Sitting', lie: 'Sleeping', sit_idle: 'SittingIdle', stand_use: 'Using' },
+  },
+};
 
 const puts = {};
 const fetchMock = async (url, opts = {}) => {
@@ -37,7 +44,7 @@ const fetchMock = async (url, opts = {}) => {
     puts[path] = JSON.parse(opts.body);
     return { ok: true, status: 200, json: async () => ({}) };
   }
-  const body = { 'assets.json': assets, 'interactions.json': interactions, 'maps/condo.json': condo, 'stats.json': stats }[path];
+  const body = { 'assets.json': assets, 'interactions.json': interactions, 'maps/condo.json': condo, 'stats.json': stats, 'tuning.json': tuning }[path];
   return { ok: !!body, status: body ? 200 : 404, json: async () => structuredClone(body) };
 };
 
@@ -60,6 +67,39 @@ await new Promise((r) => setTimeout(r, 50));
 // (via markDirty) must trigger a refresh so footprint/meshFit changes update the grounded preview.
 const previewCalls = [];
 window.AssetPreview = { show: (mesh, asset) => previewCalls.push({ mesh, asset }) };
+
+// --- character pose preview: view-only checkbox defaults off; pure helpers stay jsdom-testable.
+const characterCheckbox = doc.querySelector('input[data-path="preview.showCharacter"]');
+assert(characterCheckbox && !characterCheckbox.checked, 'Show character defaults unchecked');
+assert(!characterCheckbox.disabled, 'Show character is enabled when tuning.character exists');
+assert(JSON.stringify(window.AssetEditor.availablePreviewPoses(assets.assets[0])) === JSON.stringify(['sit', 'lie']), 'sit/lie preview poses exist from computed defaults');
+assert(JSON.stringify(window.AssetEditor.availablePreviewPoses({ ...assets.assets[0], usePose: { use: {} } })) === JSON.stringify(['sit', 'lie', 'use']), 'use preview pose appears only when explicitly defined');
+const sitAnim = window.AssetEditor.resolvePoseAnimation(
+  'sit', { ...assets.assets[0], interactions: ['custom_sit'] },
+  [{ id: 'custom_sit', animation: 'sit_unmapped' }], tuning.character.clipMap,
+);
+assert(sitAnim.logicalState === 'sit' && sitAnim.clipName === 'Sitting', 'pose animation falls back to mapped core sit state when the action state is unmapped');
+const useAnim = window.AssetEditor.resolvePoseAnimation('use', assets.assets[2], interactions.actions, tuning.character.clipMap);
+assert(useAnim.logicalState === 'stand_use' && useAnim.clipName === 'Using', 'use pose resolves the asset action through clipMap');
+
+const noCharacterDom = new JSDOM(html, {
+  url: 'http://localhost:5173/tools/assets.html',
+  runScripts: 'dangerously',
+  beforeParse(noCharacterWindow) {
+    noCharacterWindow.fetch = async (url, opts = {}) => {
+      if (String(url).endsWith('/tuning.json')) return { ok: false, status: 404, json: async () => ({}) };
+      return fetchMock(url, opts);
+    };
+    noCharacterWindow.confirm = () => true;
+    noCharacterWindow.prompt = () => null;
+    noCharacterWindow.alert = () => {};
+  },
+});
+await new Promise((r) => setTimeout(r, 50));
+const noCharacterCheckbox = noCharacterDom.window.document.querySelector('input[data-path="preview.showCharacter"]');
+assert(noCharacterCheckbox?.disabled, 'Show character is disabled when tuning.character is unavailable');
+assert(noCharacterDom.window.document.getElementById('preview-msg')?.textContent.includes('Character preview unavailable'), 'missing character tuning is explained in the preview message');
+noCharacterDom.window.close();
 
 assert(window.AssetEditor.previewGridSize() === 0.5, 'preview grid reads the map tile size');
 const previewGrid = window.AssetEditor.previewGridSpec();
