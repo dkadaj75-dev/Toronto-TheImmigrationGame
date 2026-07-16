@@ -149,6 +149,17 @@ const CSS = `
 #game-over button { border: 0; border-radius: 999px; padding: 12px 26px; font-size: 14px;
   background: rgba(90,120,190,.55); color: #eaf0fb; cursor: pointer; touch-action: manipulation; }
 
+/* F2 repo notice deliberately shares the visa game-over visual language, but is non-terminal. */
+#repo-overlay { position: fixed; inset: 0; z-index: 19; display: none; align-items: center;
+  justify-content: center; flex-direction: column; gap: 16px; background: rgba(8,10,16,.88);
+  color: #eaf0fb; text-align: center; padding: 24px; pointer-events: none; }
+#repo-overlay.open { display: flex; pointer-events: auto; }
+#repo-overlay h2 { margin: 0; font-size: 20px; letter-spacing: .04em; color: #e0b05f; }
+#repo-overlay p { margin: 0; font-size: 15px; max-width: 460px; color: #c3cde3; }
+#repo-overlay ul { margin: 0; padding-left: 22px; max-height: 42vh; overflow: auto; text-align: left; color: #eaf0fb; }
+#repo-overlay button { border: 0; border-radius: 999px; padding: 12px 26px; font-size: 14px;
+  background: rgba(90,120,190,.55); color: #eaf0fb; cursor: pointer; touch-action: manipulation; }
+
 /* --- Smartphone overlay (PROJECT_CONTEXT.md §7.20 V2) -------------------------------------- */
 #phone-overlay { position: fixed; inset: 0; z-index: 18; display: none; align-items: center;
   justify-content: center; padding: max(14px, env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-right, 0px))
@@ -259,6 +270,8 @@ export class Hud {
   private visaChip: HTMLElement;
   private gameOverEl: HTMLElement;
   private gameOverText: HTMLElement;
+  private repoOverlay: HTMLElement;
+  private repoList: HTMLElement;
 
   // --- Smartphone/jobs/visas (§7.20 V2) ---
   private phoneOverlay: HTMLElement;
@@ -305,6 +318,7 @@ export class Hud {
   onPhoneVisaApply: ((statusId: string) => void) | null = null;
   onPhoneBillPay: ((key: string) => void) | null = null;
   onPhoneBillsPayAll: (() => void) | null = null;
+  onRepoClose: (() => void) | null = null;
 
   onCancelAction: (() => void) | null = null;
   /** fires whenever the action menu closes (pick, cancel, or tap-away) */
@@ -347,6 +361,12 @@ export class Hud {
         <h2>Game Over</h2>
         <p id="game-over-text"></p>
         <button id="game-over-restart">Restart</button>
+      </div>
+      <div id="repo-overlay">
+        <h2>Repossession notice</h2>
+        <p>The repo company seized these assets and credited their resale value against your debt:</p>
+        <ul id="repo-list"></ul>
+        <button id="repo-close">Continue</button>
       </div>
       <div id="phone-overlay">
         <div class="phone-shell" role="dialog" aria-modal="true" aria-label="Phone">
@@ -405,6 +425,12 @@ export class Hud {
     this.gameOverEl = root.querySelector('#game-over')!;
     this.gameOverText = root.querySelector('#game-over-text')!;
     root.querySelector('#game-over-restart')!.addEventListener('click', () => location.reload());
+    this.repoOverlay = root.querySelector('#repo-overlay')!;
+    this.repoList = root.querySelector('#repo-list')!;
+    root.querySelector('#repo-close')!.addEventListener('click', () => {
+      this.repoOverlay.classList.remove('open');
+      this.onRepoClose?.();
+    });
 
     // --- Smartphone/jobs/visas wiring (§7.20 V2) ---
     this.phoneOverlay = root.querySelector('#phone-overlay')!;
@@ -644,6 +670,24 @@ export class Hud {
     this.phoneButton.classList.add('hidden');
     this.gameOverText.textContent = description;
     this.gameOverEl.classList.add('open');
+  }
+
+  /** F2 non-terminal notice. The caller decides whether closing it resumes or reveals game over. */
+  showRepoNotice(seized: { name: string; sellPrice: number }[], currencyName: string) {
+    this.closePhone();
+    this.repoList.innerHTML = '';
+    if (seized.length === 0) {
+      const item = document.createElement('li');
+      item.textContent = 'Nothing remained to seize.';
+      this.repoList.appendChild(item);
+    } else {
+      for (const asset of seized) {
+        const item = document.createElement('li');
+        item.textContent = `${asset.name} (${currencyName}${asset.sellPrice.toLocaleString()})`;
+        this.repoList.appendChild(item);
+      }
+    }
+    this.repoOverlay.classList.add('open');
   }
 
   // ================================================================ Smartphone/jobs/visas (§7.20 V2)

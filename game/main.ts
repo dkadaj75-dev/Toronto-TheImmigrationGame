@@ -17,11 +17,11 @@ import { Autonomy } from './autonomy';
 import { QuestRunner, isActionAvailable, type EvalContext } from './quests';
 import { VisaMachine } from './visas';
 import { PhoneJobSearch, applyForJob, applyForVisa, jobListingViews, pendingDaysRemaining, visaApplicationViews } from './phone';
-import { BillState } from './bills';
+import { FinanceState, decideRepoSeizure } from './bills';
 import { WorkTracker, applyNeedsCost, isLeaveForWorkAvailable, shouldStartVisaGrace, type WorkTickEvent } from './work';
 import { AccidentsController, resolveTapAssetId, shouldDespawnOnCleanup } from './accidents';
 import { GarbageController } from './garbage';
-import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials } from './buymode';
+import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials, isSelectableForSell } from './buymode';
 import { createMarkerInstance, type MarkerInstance } from './marker';
 import { createCensorInstance, type CensorInstance } from './censor';
 import { createProgressBarInstance, type ProgressBarInstance } from './progressbar';
@@ -249,6 +249,8 @@ async function start() {
   // this same function and would be a TDZ error to read this early) — matches gameDay's own initial
   // value, so the visa's day-1 expiry math lines up with the clock the render loop later drives.
   let gameOverActive = false; // read by the render loop's sdt freeze (same pattern as buyMode.active)
+  let repoOverlayActive = false;
+  let debtGameOverPending = false;
   const visaMachine = new VisaMachine(data.visas, data.tuning.visa?.startStatus ?? 'visitor', 1);
   // §7.20: "vars.visaStatus mirrors statusId so quests/conditions keep working" — mirrored once up
   // front (simstate.json's own default may not match tuning.visa.startStatus) and again on every
@@ -328,7 +330,7 @@ async function start() {
 
   // --- smartphone jobs + visa applications (PROJECT_CONTEXT.md §7.20 V2, B3-7) ---
   const phoneJobs = new PhoneJobSearch(data.jobs, data.tuning.phone?.jobListSize);
-  const bills = new BillState(data.bills, data.finance, data.tuning.bills?.intervalDays, 1);
+  const bills = new FinanceState(data.bills, data.finance, data.tuning.bills?.intervalDays, 1);
   let phoneTab: 'jobs' | 'visas' | 'bills' = 'jobs';
   const refreshPhone = () => {
     const ctx = buildEvalContext();
@@ -357,7 +359,7 @@ async function start() {
     if (agent.current?.action.id === 'use_phone') agent.stopAction();
   };
   hud.onPhoneOpen = () => {
-    if (buyMode.active || gameOverActive) return;
+    if (buyMode.active || repoOverlayActive || gameOverActive) return;
     phoneTab = 'jobs';
     refreshPhone();
     hud.openPhone();
@@ -389,18 +391,63 @@ async function start() {
     else if (result.reason === 'application_rejected') phoneToast('Another visa application is already pending');
     refreshPhone();
   };
-  const applyBillPayment = (result: ReturnType<BillState['pay']>) => {
-    if (!result.ok) {
-      if (result.reason === 'insufficient_funds') phoneToast('Not enough funds to pay bills');
-      return;
-    }
+  const applyBillPayment = (result: ReturnType<FinanceState['pay']>) => {
+    if (!result.ok) return;
     quests.funds = result.remainingFunds;
     hud.setFunds(quests.funds, data.tuning.economy.currencyName);
     phoneToast(`Bills paid: §${result.paid.toLocaleString()}`, true);
     refreshPhone();
   };
-  hud.onPhoneBillPay = (key) => applyBillPayment(bills.pay(key, quests.funds));
-  hud.onPhoneBillsPayAll = () => applyBillPayment(bills.payAll(quests.funds));
+  hud.onPhoneBillPay = (key) => applyBillPayment(bills.pay(key, quests.funds, gameDay));
+  hud.onPhoneBillsPayAll = () => applyBillPayment(bills.payAll(quests.funds, gameDay));
+
+  hud.onRepoClose = () => {
+    repoOverlayActive = false;
+    if (!debtGameOverPending) return;
+    debtGameOverPending = false;
+    gameOverActive = true;
+    hud.showGameOver('Your debt remained unpaid after everything seizable was repossessed.');
+  };
+
+  const handleRepoIfDue = () => {
+    if (repoOverlayActive || gameOverActive || !bills.isRepoDue(gameDay)) return;
+    if (bills.outstanding.length > 0) {
+      const collection = bills.payAll(quests.funds, gameDay);
+      if (collection.ok) quests.funds = collection.remainingFunds;
+    }
+    bills.observeFunds(gameDay, quests.funds);
+    if (quests.funds >= 0) {
+      hud.setFunds(quests.funds, currencyName());
+      refreshPhone();
+      return;
+    }
+
+    const byId = new Map(data.assets.assets.map((asset) => [asset.id, asset]));
+    const instances = buyMode.instances();
+    const instanceByKey = new Map(instances.map((instance) => [instance.key, instance]));
+    const decision = decideRepoSeizure(quests.funds, instances.flatMap((instance) => {
+      const def = byId.get(instance.asset);
+      return def && isSelectableForSell(def) ? [{
+        key: instance.key,
+        name: def.name,
+        sellPrice: def.sellPrice,
+        survivalImportance: def.survivalImportance,
+      }] : [];
+    }));
+    for (const seized of decision.seized) {
+      const instance = instanceByKey.get(seized.key);
+      const def = instance ? byId.get(instance.asset) : undefined;
+      if (instance && def) buyMode.sellInstance(instance, def);
+    }
+    quests.funds = decision.remainingFunds;
+    bills.observeFunds(gameDay, quests.funds);
+    if (decision.seized.length > 0) rebakeNav();
+    hud.setFunds(quests.funds, currencyName());
+    refreshPhone();
+    repoOverlayActive = true;
+    debtGameOverPending = decision.gameOver;
+    hud.showRepoNotice(decision.seized, currencyName());
+  };
 
   // --- object highlight: subtle box on hover (mouse), bright box while the menu is open ---
   const hoverBox = new THREE.BoxHelper(new THREE.Object3D(), 0x6fa0ff);
@@ -699,7 +746,7 @@ async function start() {
   };
 
   const tapInput = new TapInput(renderer.domElement, cam.camera, () => world, (hit) => {
-    if (gameOverActive || work.isAtWork) return; // no on-lot input while terminal or away at work
+    if (repoOverlayActive || gameOverActive || work.isAtWork) return; // no on-lot input under modal/terminal or away
     if (buyMode.active) { handleBuyModeTap(hit); return; }
     if (hit.object) {
       const assetId = hit.object.userData.assetId as string;
@@ -791,7 +838,7 @@ async function start() {
   hud.setFunds(quests.funds, currencyName());
 
   hud.onBuyOpen = () => {
-    if (work.isAtWork) return;
+    if (repoOverlayActive || gameOverActive || work.isAtWork) return;
     if (agent.current?.action.id === 'use_phone') agent.stopAction();
     buyMode.enter();
     hud.setBuyModeActive(true);
@@ -1046,12 +1093,12 @@ async function start() {
     // selection is locked/preserved while away and becomes effective again on return.
     const selectedSpeed = work.isAtWork ? (data.tuning.work?.autoSpeed ?? 5) : hud.speed;
     const effectiveSpeed = Number.isFinite(selectedSpeed) ? Math.max(0, selectedSpeed) : 0;
-    const sdt = (buyMode.active || gameOverActive) ? 0 : dt * effectiveSpeed;
+    const sdt = (buyMode.active || repoOverlayActive || gameOverActive) ? 0 : dt * effectiveSpeed;
     simClockSeconds += sdt;
     // ROADMAP_NEXT item 7: sfx/action/asset loops pause whenever sim time isn't advancing (the
     // pause button OR buy mode's own freeze); music is deliberately NOT touched here (see
     // audio.ts's module doc comment on the PAUSE decision).
-    audio.setPaused(effectiveSpeed === 0 || buyMode.active || gameOverActive);
+    audio.setPaused(effectiveSpeed === 0 || buyMode.active || repoOverlayActive || gameOverActive);
 
     gameSeconds += sdt * clockScale();
     while (gameSeconds >= 86400) {
@@ -1073,6 +1120,8 @@ async function start() {
           data.tuning.quests.toastDurationSeconds * 1000,
         );
       }
+      bills.observeFunds(gameDay, quests.funds);
+      handleRepoIfDue();
       refreshVisaChip();
       refreshPhone();
     }

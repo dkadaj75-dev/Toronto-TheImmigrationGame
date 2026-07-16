@@ -666,13 +666,19 @@ export class BuyModeController {
   sellSelected(): number {
     if (this.selection?.kind !== 'selected') return 0;
     const { inst, def } = this.selection;
-    const result = attemptSell(this.overlay, inst, def);
-    if (result.ok) {
-      if (inst.source === 'player') this.removeAdditionGroup(inst.key);
-      else this.applyOverridesToWorld();
-    }
+    const refund = this.sellInstance(inst, def);
     this.selection = null;
-    return result.ok ? result.refund : 0;
+    return refund;
+  }
+
+  /** F2 repo seam: removes an arbitrary effective instance through the exact player-sale overlay
+   * path. The caller owns applying the returned credit and rebaking nav after a seizure batch. */
+  sellInstance(inst: EffectiveInstance, def: AssetDef): number {
+    const result = attemptSell(this.overlay, inst, def);
+    if (!result.ok) return 0;
+    if (inst.source === 'player') this.removeAdditionGroup(inst.key);
+    else this.applyOverridesToWorld();
+    return result.refund;
   }
 
   /** ROADMAP_NEXT item 6: destroys an effective instance outright (no refund, no selection state

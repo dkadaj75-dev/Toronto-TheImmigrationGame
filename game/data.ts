@@ -94,6 +94,8 @@ export interface AssetDef {
    *  asset is only purchasable once `QuestRunner.isAssetUnlocked(id)` is true (absent/false =
    *  no quest gate, purchasable as normal subject to `buyable`). See game/buymode.ts. */
   requiresQuestUnlock?: boolean;
+  /** F2 repossession priority. Sparse/absent = 0; higher values are seized later. */
+  survivalImportance?: number;
   /** Mesh authoring corrections applied by world.ts AFTER normalizeModelToFootprint (§7.1/§7.2).
    *  scale multiplies on top of the automatic footprint-fit scale (uniform or per-axis);
    *  yawOffsetDeg rotates the loaded model in place (fixes a mesh not authored facing the

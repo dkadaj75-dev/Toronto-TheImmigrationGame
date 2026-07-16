@@ -111,7 +111,7 @@ Leave via suite door during job hours → sim disappears, game speed auto-set (5
 
 ## B4-1. Bills — ✅ DONE 2026-07-15 (see PROJECT_CONTEXT.md §7.22)
 
-Implemented: serializable pure `BillState`, `data/bills.json` definitions, `tuning.bills.intervalDays`, day-boundary arrival, phone Bills tab with individual/atomic Pay all actions through QuestRunner funds, arrival/refusal/payment toasts, and a red unpaid-count launcher badge. Bill amounts are `bills.json`-only for now; non-payment consequences remain explicitly deferred.
+Implemented initially with serializable pure bill state, day-boundary arrival, phone Bills tab, individual/Pay all actions, and an unpaid-count badge. B5-2 F1 later replaced flat amounts with formulas; F2 replaced insufficient-funds refusal with negative balances plus overdue/repo/game-over consequences (PROJECT_CONTEXT §7.24).
 Every N days (tunable, default 3): bills arrive (rent, phone, hydro — amounts tunable, data-driven list). Received + paid via the phone (new Bills tab/section). HUD notification when unpaid (toast + badge on the smartphone icon — placeholder badge, designer may supply an icon). Consequences of non-payment: later (record only).
 
 ## B4-2. Food as carried transients + action costs — ✅ DONE 2026-07-15 (see PROJECT_CONTEXT.md §7.23)
@@ -130,7 +130,9 @@ Skill gains currently ~linear. Make higher levels slower: gain scales down as th
 
 Implemented at the single `SimStats.applyGains` chokepoint with pure/tested `scaleSkillGain`: positive deltas use the global hot-reloadable `tuning.skills.growthCurveExp` (default 1.5), exponent 0 preserves linear gains, max blocks gains, and negative deltas remain untouched.
 
-## B5-2. Finance system + tool + credit score (BIG — F1 ✅ DONE 2026-07-16; F2/F3 open; locked design in PROJECT_CONTEXT §7.24)
+## B5-2. Finance system + tool + credit score (BIG — F1/F2 ✅ DONE 2026-07-16; F3 open; locked design in PROJECT_CONTEXT §7.24)
 Finance Editor tool + formula-driven bills/rent, debt/negative-balance grace, repo-man asset seizure (message-only), game-over on unpayable debt, credit score (phone-checkable, gates jobs/rentals, higher score = longer debt tolerance but decays). See §7.24.
 
-F1 shipped: formula constants and thresholds in `data/finance.json`, arrival-time rent/bill computation against floor tiles + live effective asset value, map property type, shared pure calculator, and Finance Editor with current-map live preview. F2/F3 are out of scope for this slice.
+F1 shipped: formula constants and thresholds in `data/finance.json`, arrival-time rent/bill computation against floor tiles + live effective asset value, map property type, shared pure calculator, and Finance Editor with current-map live preview. F2/F3 were out of scope for that slice.
+
+F2 done: negative bill payments + serializable overdue/debt timing, pure importance-ordered repo decisions, Buy Mode sold-removal/nav rebake, repo notice, and debt game over. F3 remains open.

@@ -334,6 +334,11 @@ function renderEditor() {
   card1.appendChild(frow('buy price', numInput(() => a.buyPrice, (v) => { a.buyPrice = v ?? 0; }, 'buyPrice')));
   card1.appendChild(frow('sell price', numInput(() => a.sellPrice, (v) => { a.sellPrice = v ?? 0; }, 'sellPrice')));
   card1.appendChild(frow('environment score', numInput(() => a.environmentScore, (v) => { a.environmentScore = v ?? 0; }, 'environmentScore')));
+  card1.appendChild(frow('survival importance (higher = repossessed later)', numInput(
+    () => a.survivalImportance,
+    (v) => { if (v === undefined) delete a.survivalImportance; else a.survivalImportance = v; },
+    'survivalImportance',
+  )));
   const buyableCb = document.createElement('input');
   buyableCb.type = 'checkbox';
   buyableCb.dataset.path = 'buyable';

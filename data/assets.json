@@ -113,6 +113,7 @@
       "buyPrice": 900,
       "sellPrice": 675,
       "environmentScore": 3,
+      "survivalImportance": 100,
       "footprint": [
         2,
         3
@@ -152,6 +153,7 @@
       "buyPrice": 600,
       "sellPrice": 450,
       "environmentScore": 1,
+      "survivalImportance": 90,
       "footprint": [
         1,
         1
@@ -171,6 +173,7 @@
       "buyPrice": 400,
       "sellPrice": 300,
       "environmentScore": 1,
+      "survivalImportance": 90,
       "footprint": [
         0.7,
         0.7
@@ -329,6 +332,7 @@
       "buyPrice": 800,
       "sellPrice": 600,
       "environmentScore": 2,
+      "survivalImportance": -10,
       "footprint": [
         2,
         1
@@ -349,6 +353,7 @@
       "buyPrice": 350,
       "sellPrice": 260,
       "environmentScore": 3,
+      "survivalImportance": -10,
       "footprint": [
         2,
         1

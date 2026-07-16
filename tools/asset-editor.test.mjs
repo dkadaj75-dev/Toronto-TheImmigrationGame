@@ -68,6 +68,12 @@ price.value = '650';
 price.dispatchEvent(new window.Event('input', { bubbles: true }));
 assert(!doc.getElementById('save').disabled, 'save enabled after edit');
 
+// --- F2 repo priority: sparse number, higher values are seized later
+const survivalImportance = doc.querySelector('input[data-path="survivalImportance"]');
+assert(survivalImportance.value === '', 'survivalImportance blank when absent');
+survivalImportance.value = '75';
+survivalImportance.dispatchEvent(new window.Event('input', { bubbles: true }));
+
 // --- toggle an interaction on the couch
 const napCb = doc.querySelector('input[data-path="interaction:nap"]');
 napCb.checked = true;
@@ -338,6 +344,7 @@ assert(!saved.assets.some((a) => a.id === 'tv'), 'PUT reflects deletion');
 assert(saved.assets.some((a) => a.id === 'lamp'), 'PUT includes new asset');
 assert(doc.getElementById('save').disabled, 'save disabled after saving');
 assert(savedCouch.buyable === false, 'PUT carries explicit buyable:false');
+assert(savedCouch.survivalImportance === 75, 'PUT carries sparse survivalImportance');
 assert(savedCouch.facingDeg === 90, 'PUT carries edited facingDeg');
 assert(savedCouch.meshFit.scale === 1.2, 'PUT carries sparse meshFit.scale');
 assert(savedCouch.meshFit.yawOffsetDeg === 45, 'PUT carries sparse meshFit.yawOffsetDeg');
@@ -356,6 +363,7 @@ assert(savedCouch.icon === '/models/icons/sofa.png', 'PUT carries edited icon pa
 assert(savedCouch.sound === '/sounds/couch_creak.wav', 'PUT carries edited sound path');
 const savedLamp = saved.assets.find((a) => a.id === 'lamp');
 assert(!('buyable' in savedLamp), 'new asset has no buyable key (defaults true)');
+assert(!('survivalImportance' in savedLamp), 'new asset has no survivalImportance key (defaults neutral)');
 assert(!('facingDeg' in savedLamp), 'new asset has no facingDeg key (defaults 0)');
 assert(!('meshFit' in savedLamp), 'new asset has no meshFit key (nothing set)');
 assert(!('usePose' in savedLamp), 'new asset has no usePose key (nothing set)');
