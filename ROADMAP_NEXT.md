@@ -227,3 +227,11 @@ Designer-editable UI: fonts, colors, shapes (radius/outline/shadow) of notificat
 ## B10-2. Easier sit/lie/use setup on assets: see the character posed on the asset, with the proper animation, directly in the Asset Editor's 3D preview (checkbox, off by default).
 
 **DONE (2026-07-16, see PROJECT_CONTEXT §7.33):** Asset Editor preview card gained a view-only "Show character" checkbox (unchecked on every load) + pose selector (sit/lie always; use only when `usePose.use` exists). The rigged character loads through the game's own `loadRiggedCharacter`, is positioned by the real `usePoseFor` (virtual origin instance), and plays the clip resolved through the asset's interactions + `tuning.character.clipMap` via the real `AnimController` — editing usePose offset/y/facing updates the character live. Missing tuning.character disables the checkbox with an explanation; unmapped clips fall back to idle with a message.
+
+## B10-3. BUG: sitting directly on the sofa/chair placed the sim on the floor beside it (Asset Editor preview was right, in-game was wrong; watch TV was right).
+
+**DONE (2026-07-16):** `findSeatFor` excluded the target from its own seat search, so a seat-aware "Sit" on a `seatTarget` resolved no seat and fell into the sit-on-ground fallback at the walk-up spot. A `seatTarget` target is now its own seat; TV/fridge-style searches unchanged. Regression coverage in `test/seatground.test.ts`.
+
+## B10-4. Follow-up: after sitting, the sim faced the bookshelf when reading a book.
+
+**DONE (2026-07-16):** the post-perch "face the target" rotation (right for Watch TV) is now per-action: sparse `ActionDef.faceTarget?: boolean` (absent/true = rotate to the target, `false` = keep the seat's own usePose facing). `read_book` ships with `faceTarget: false`; Interaction Editor gained a sparse "face target after sitting" checkbox (untick for fetch-style actions like eat, if desired). New `tools/interaction-editor.test.mjs` jsdom suite covers the round-trip.
