@@ -1,10 +1,21 @@
 // progressbar.test.ts — game/progressbar.ts pure logic (ROADMAP_NEXT B2-5 progress bar slice,
-// B6-1 fill/bg alignment fix). Covers anchor height, progress clamping, and the fill-vs-bg
-// alignment math (fillMargin/fillInnerWidth/fillLeftEdge/fillScaleX). The three.js layer
-// (createProgressBarInstance) is browser-only, not headless-testable — same precedent as
-// marker.ts's createMarkerInstance / censor.ts's createCensorInstance (see those modules' doc
-// comments).
+// B6-1 fill/bg alignment fix, B7-3 re-verification). Covers anchor height, progress clamping, and
+// the fill-vs-bg alignment math (fillMargin/fillInnerWidth/fillLeftEdge/fillScaleX). The
+// three.js RENDER layer (createProgressBarInstance itself) still isn't exercised here — it needs a
+// live characterRoot/scene — but ROADMAP_NEXT B7-3 asked specifically whether the pure-number
+// checks below actually reflect real THREE.Sprite geometry (`sprite.center` changes what a given
+// `position`/`scale` mean) rather than just re-deriving the same arithmetic by hand. The
+// "THREE.Sprite real-geometry" block does that: it builds actual THREE.Sprite/Group objects with
+// the exact center/position/scale createProgressBarInstance uses, updates their world matrices,
+// and reconstructs the on-screen rect from the real vertex-shader formula (three's
+// sprite.glsl.js: `alignedPosition = (position.xy - (center - vec2(0.5))) * scale`, then added to
+// the sprite's own translation) — instead of assuming the hand-derived left/right formulas match.
+// Result (see below): they do — bg (center 0.5,0.5) and fill (center 0,0.5) nest with an identical
+// margin on all four sides at progress 0/0.1/0.5/1, so B7-3's "fill detached below-left of the
+// track" is NOT reproducible from this module's math; if it's still seen live, suspect a stale
+// bundle/cache rather than progressbar.ts's formulas.
 // Run: npx tsx test/progressbar.test.ts
+import * as THREE from 'three';
 import {
   PROGRESS_BAR_DEFAULTS, progressBarAnchorHeight, clampProgress01,
   fillMargin, fillInnerWidth, fillInnerHeight, fillLeftEdge, fillScaleX,
@@ -87,6 +98,68 @@ console.log('progressbar.test — fill/bg alignment (B6-1)');
   {
     const scaleX = fillScaleX(W, H, 1.7);
     check('progress > 1 clamps to the full inner width, no overshoot past the track', Math.abs(scaleX - innerW) < 1e-9, String(scaleX));
+  }
+}
+
+console.log('progressbar.test — THREE.Sprite real-geometry nesting (B7-3)');
+{
+  // Reconstructs createProgressBarInstance's exact bg/fill sprite setup (same center/position/
+  // scale calls) and computes each sprite's true on-screen rect via three's actual vertex-shader
+  // formula, rather than trusting the hand-derived left/right numbers above to match reality.
+  function spriteWorldRect(sprite: THREE.Sprite) {
+    sprite.updateMatrixWorld(true);
+    const basePos = new THREE.Vector3().setFromMatrixPosition(sprite.matrixWorld);
+    const worldScale = new THREE.Vector3();
+    new THREE.Matrix4().copy(sprite.matrixWorld).decompose(new THREE.Vector3(), new THREE.Quaternion(), worldScale);
+    const cx = sprite.center.x, cy = sprite.center.y;
+    // three.js sprite.glsl.js: alignedPosition = (position.xy - (center - vec2(0.5))) * scale,
+    // where position.xy is the quad vertex attribute, ranging -0.5..0.5 (Sprite.js geometry).
+    const alignedX = (v: number) => (v - (cx - 0.5)) * worldScale.x;
+    const alignedY = (v: number) => (v - (cy - 0.5)) * worldScale.y;
+    return {
+      left: basePos.x + alignedX(-0.5), right: basePos.x + alignedX(0.5),
+      bottom: basePos.y + alignedY(-0.5), top: basePos.y + alignedY(0.5),
+    };
+  }
+
+  const { widthMeters: W, heightMeters: H } = PROGRESS_BAR_DEFAULTS;
+  const pivot = new THREE.Group();
+  const bg = new THREE.Sprite(new THREE.SpriteMaterial({ color: PROGRESS_BAR_DEFAULTS.bgColor }));
+  bg.scale.set(W, H, 1);
+  const fill = new THREE.Sprite(new THREE.SpriteMaterial({ color: PROGRESS_BAR_DEFAULTS.fillColor }));
+  fill.center.set(0, 0.5);
+  fill.position.x = fillLeftEdge(W, H);
+  fill.scale.set(0, fillInnerHeight(H), 1);
+  pivot.add(bg, fill);
+  pivot.position.set(3.7, 5.2, -1.4); // arbitrary, non-origin — a real characterRoot position
+
+  const margin = fillMargin(H);
+  for (const progress of [0, 0.1, 0.5, 1]) {
+    fill.scale.x = fillScaleX(W, H, progress);
+    const bgRect = spriteWorldRect(bg);
+    const fillRect = spriteWorldRect(fill);
+
+    check(`p=${progress}: fill stays fully inside bg horizontally`,
+      fillRect.left >= bgRect.left - 1e-9 && fillRect.right <= bgRect.right + 1e-9,
+      JSON.stringify({ bgRect, fillRect }));
+    check(`p=${progress}: fill stays fully inside bg vertically`,
+      fillRect.bottom >= bgRect.bottom - 1e-9 && fillRect.top <= bgRect.top + 1e-9,
+      JSON.stringify({ bgRect, fillRect }));
+    check(`p=${progress}: left margin matches the designed fillMargin (no anchor-mismatch gap/overhang)`,
+      Math.abs((fillRect.left - bgRect.left) - margin) < 1e-9,
+      `leftMargin=${fillRect.left - bgRect.left} expected=${margin}`);
+    check(`p=${progress}: top/bottom margins match the designed fillMargin`,
+      Math.abs((fillRect.top - bgRect.top) + margin) < 1e-9 && Math.abs((fillRect.bottom - bgRect.bottom) - margin) < 1e-9,
+      `topGap=${bgRect.top - fillRect.top} bottomGap=${fillRect.bottom - bgRect.bottom} expected=${margin}`);
+  }
+  // progress 1's right margin should also equal the same margin (symmetric on the growing edge too)
+  {
+    fill.scale.x = fillScaleX(W, H, 1);
+    const bgRect = spriteWorldRect(bg);
+    const fillRect = spriteWorldRect(fill);
+    check('p=1: right margin matches the designed fillMargin too (fully symmetric inset)',
+      Math.abs((bgRect.right - fillRect.right) - margin) < 1e-9,
+      `rightMargin=${bgRect.right - fillRect.right} expected=${margin}`);
   }
 }
 
