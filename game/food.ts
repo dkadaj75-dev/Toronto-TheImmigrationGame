@@ -37,10 +37,26 @@ export function actionSpawnsCarriedFood(actionId: string): boolean {
 
 /** ROADMAP_NEXT B7-4: the two-leg order decision — whether the FIRST leg of ordering `action` should
  *  resolve a seat (walk to the seat) rather than to the target asset. Food-source actions defer their
- *  seat to the carry/eat second leg; every other seat-aware action keeps sitting in front of its
- *  target as before. Used at both order sites (main.ts tap menu + autonomy). */
-export function firstLegSeatAware(action: { id: string; seatAware?: boolean }): boolean {
-  return !!action.seatAware && !actionSpawnsCarriedFood(action.id);
+ *  seat to the carry/eat second leg; generic fetchBeforeSeat actions use the same source-first
+ *  decision. Every other seat-aware action keeps sitting in front of its target as before. Used
+ *  at both order sites (main.ts tap menu + autonomy). */
+export interface TwoLegSeatAction { id: string; seatAware?: boolean; fetchBeforeSeat?: boolean; }
+
+/** Whether a seat-aware action deliberately visits its source before resolving a seat. Food
+ *  sources imply this from their lifecycle; other actions opt in sparsely through ActionDef. */
+export function defersSeatToSecondLeg(action: TwoLegSeatAction): boolean {
+  return action.fetchBeforeSeat === true || actionSpawnsCarriedFood(action.id);
+}
+
+export function firstLegSeatAware(action: TwoLegSeatAction): boolean {
+  return !!action.seatAware && !defersSeatToSecondLeg(action);
+}
+
+/** Clone used after a generic source fetch. Clearing the flag prevents the arrival callback from
+ *  starting a third leg while retaining the action id, gains, duration, animation, and facing. */
+export function actionAfterSourceFetch<T extends TwoLegSeatAction>(action: T): T {
+  const { fetchBeforeSeat: _completedFetch, ...secondLeg } = action;
+  return secondLeg as T;
 }
 
 export interface CookHungerTuning { cookHungerAtSkill0: number; cookHungerAtSkillMax: number; }

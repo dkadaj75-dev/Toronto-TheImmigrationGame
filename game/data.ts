@@ -57,6 +57,11 @@ export interface ActionDef {
   autonomyEligible: boolean;
   primaryNeed: string | null;
   seatAware?: boolean;
+  /** B10-6: sparse source-first flag for seat-aware fetch actions. The first leg walks to the
+   *  action's target/source; only after arrival does main.ts resolve and route to a seat for the
+   *  actual activity. This generalizes the carried-food fridge/stove two-leg precedent to
+   *  non-food sources such as a bookshelf. Absent = ordinary one-leg seat-aware behavior. */
+  fetchBeforeSeat?: boolean;
   /** B4-2: sparse action-start charge. The tap menu shows and disables this action against the
    *  live QuestRunner funds balance; QuestRunner.spend performs the authoritative deduction. */
   cost?: number;

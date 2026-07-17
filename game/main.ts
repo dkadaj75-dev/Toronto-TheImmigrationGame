@@ -29,7 +29,7 @@ import { createProgressBarInstance, type ProgressBarInstance } from './progressb
 import { computeDurationSeconds, isDurationComplete } from './duration';
 import { AudioManager, loopSoundFor } from './audio';
 import { initBladderFailureState, checkBladderFailure, rearmBladderFailure } from './bladder';
-import { FoodRegistry, foodAssetForActionEvent, firstLegSeatAware, cookedMealHungerGain } from './food';
+import { FoodRegistry, foodAssetForActionEvent, firstLegSeatAware, actionAfterSourceFetch, cookedMealHungerGain } from './food';
 import { initEnergyCollapseState, StarvationTracker, tickEnergyCollapse } from './survival';
 import { formatMoneyChange, formatSkillUp, skillLevelUps } from './feedback';
 import { AssetStateRegistry, isAssetStateActionAvailable, isStatefulAsset, powerStateForAction } from './assetstate';
@@ -730,6 +730,20 @@ async function start() {
   };
 
   agent.onActionStart = (a) => {
+    // B10-6: generic source-first seated action. This callback fires only after the first route
+    // reaches the source's use spot. Replace that just-started action with a flag-cleared second
+    // leg to the resolved seat; ordinary start effects (cost, duration, gains/audio) therefore
+    // begin once, at the seat, not briefly at the source and not twice.
+    if (a.action.fetchBeforeSeat) {
+      const sourceAssetId = a.target.userData?.assetId as string | undefined;
+      const sourceDef = sourceAssetId ? data.assets.assets.find((x) => x.id === sourceAssetId) : undefined;
+      const seat = findSeatFor(world, data, a.target);
+      const secondLeg = actionAfterSourceFetch(a.action);
+      if (!agent.orderAction(secondLeg, a.target, seat, sourceDef, true)) {
+        console.log('no path from source to seat', sourceAssetId ?? a.action.id);
+      }
+      return;
+    }
     if (a.action.id !== FOOD_EATING_ACTION_ID && !quests.spend(a.action.cost ?? 0)) {
       hud.showQuestToast('Not enough funds for that action', 'started', 2500);
       agent.stopAction();

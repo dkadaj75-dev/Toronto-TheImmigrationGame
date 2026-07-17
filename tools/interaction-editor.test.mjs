@@ -10,7 +10,8 @@ const html = readFileSync(new URL('../tools/interactions.html', import.meta.url)
 const interactions = { actions: [
   {
     id: 'read_book', name: 'Read a book', needGains: { fun: 1 }, skillGains: { english: 0.04 },
-    animation: 'sit_idle', autonomyEligible: true, primaryNeed: 'fun', seatAware: true, faceTarget: false,
+    animation: 'sit_idle', autonomyEligible: true, primaryNeed: 'fun', seatAware: true,
+    fetchBeforeSeat: true, faceTarget: false,
   },
   {
     id: 'watch_tv', name: 'Watch TV', needGains: { fun: 2.5 }, skillGains: {},
@@ -61,6 +62,9 @@ assert(doc.querySelector('input[data-path="id"]').value === 'read_book', 'read_b
 const faceCb = doc.querySelector('input[data-path="faceTarget"]');
 assert(faceCb, 'faceTarget checkbox rendered');
 assert(faceCb.checked === false, 'faceTarget unchecked when explicitly false');
+const fetchCb = doc.querySelector('input[data-path="fetchBeforeSeat"]');
+assert(fetchCb, 'fetchBeforeSeat checkbox rendered');
+assert(fetchCb.checked === true, 'fetchBeforeSeat checked when explicitly true');
 
 // re-check it (back to default true) → key should be deleted on save
 faceCb.checked = true;
@@ -70,8 +74,12 @@ faceCb.dispatchEvent(new window.Event('change', { bubbles: true }));
 doc.querySelector('[data-action-id="watch_tv"]').click();
 const faceCb2 = doc.querySelector('input[data-path="faceTarget"]');
 assert(faceCb2.checked === true, 'faceTarget defaults checked when absent');
+const fetchCb2 = doc.querySelector('input[data-path="fetchBeforeSeat"]');
+assert(fetchCb2.checked === false, 'fetchBeforeSeat defaults unchecked when absent');
 faceCb2.checked = false;
 faceCb2.dispatchEvent(new window.Event('change', { bubbles: true }));
+fetchCb2.checked = true;
+fetchCb2.dispatchEvent(new window.Event('change', { bubbles: true }));
 
 // --- save: PUT reflects both round-trips
 doc.getElementById('save').click();
@@ -80,8 +88,10 @@ const saved = puts['interactions.json'];
 assert(saved, 'PUT sent to interactions.json');
 const savedReadBook = saved.actions.find((a) => a.id === 'read_book');
 assert(!('faceTarget' in savedReadBook), 're-checking faceTarget deletes the key (back to default true)');
+assert(savedReadBook.fetchBeforeSeat === true, 'untouched fetchBeforeSeat:true survives save');
 const savedWatchTv = saved.actions.find((a) => a.id === 'watch_tv');
 assert(savedWatchTv.faceTarget === false, 'unchecking faceTarget on watch_tv writes faceTarget:false');
+assert(savedWatchTv.fetchBeforeSeat === true, 'checking fetchBeforeSeat writes sparse true');
 
 console.log('ALL INTERACTION-EDITOR TESTS PASSED');
 

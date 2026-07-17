@@ -1,4 +1,4 @@
-import { FoodRegistry, foodAssetForActionEvent, actionSpawnsCarriedFood, firstLegSeatAware, cookedMealHungerGain } from '../game/food';
+import { FoodRegistry, foodAssetForActionEvent, actionSpawnsCarriedFood, defersSeatToSecondLeg, firstLegSeatAware, actionAfterSourceFetch, cookedMealHungerGain } from '../game/food';
 
 let passed = 0;
 function check(name: string, ok: boolean) {
@@ -49,6 +49,15 @@ check('stove Cook first leg walks to the source, not a seat', firstLegSeatAware(
 check('watch TV first leg stays seat-aware', firstLegSeatAware({ id: 'watch_tv', seatAware: true }) === true);
 check('sit first leg stays seat-aware', firstLegSeatAware({ id: 'sit', seatAware: true }) === true);
 check('a non-seat-aware action never becomes seat-aware', firstLegSeatAware({ id: 'shower', seatAware: false }) === false);
+
+console.log('food.test — B10-6 generic source-first seated actions');
+const readBook = { id: 'read_book', seatAware: true, fetchBeforeSeat: true, faceTarget: false };
+check('data-driven fetch action defers its seat like carried food', defersSeatToSecondLeg(readBook));
+check('read_book first leg walks to its bookshelf source', firstLegSeatAware(readBook) === false);
+const fetchedReadBook = actionAfterSourceFetch(readBook);
+check('post-fetch clone clears only the recursion flag', !('fetchBeforeSeat' in fetchedReadBook)
+  && fetchedReadBook.id === 'read_book' && fetchedReadBook.seatAware === true && fetchedReadBook.faceTarget === false);
+check('post-fetch read_book leg is seat-aware', firstLegSeatAware(fetchedReadBook) === true);
 
 console.log('food.test — B7-2 cooked-meal hunger scales with cooking skill');
 const ct = { cookHungerAtSkill0: 0.6, cookHungerAtSkillMax: 1.5 };

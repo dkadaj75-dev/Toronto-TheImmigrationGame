@@ -134,6 +134,7 @@
       "autonomyEligible": true,
       "primaryNeed": "fun",
       "seatAware": true,
+      "fetchBeforeSeat": true,
       "faceTarget": false
     },
     {
@@ -146,7 +147,9 @@
       "animation": "sit_idle",
       "autonomyEligible": false,
       "primaryNeed": null,
-      "seatAware": true
+      "seatAware": true,
+      "fetchBeforeSeat": true,
+      "faceTarget": false
     },
     {
       "id": "use_phone",

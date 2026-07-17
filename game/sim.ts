@@ -341,6 +341,11 @@ export class SimAgent {
       const isLast = this.pathIndex === this.path.length - 1;
 
       if (dist <= (isLast ? Math.max(arrive, 1e-3) : 1e-3)) {
+        // B10-8: every route endpoint is a known-walkable cell center. Action approaches must
+        // reach it exactly before applyPose captures savedPose; stopping merely within the
+        // arrival radius can leave that saved stand position inside adjacent furniture, making
+        // the next route start from a blocked/possibly disconnected cell after pose restoration.
+        if (isLast) { p.x = tx; p.z = tz; }
         this.pathIndex++;
         continue;
       }

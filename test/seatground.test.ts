@@ -2,9 +2,10 @@
 // (typically "Watch TV") when no eligible seat is within tuning.interaction.seatSearchRadius.
 // Run: npx tsx test/seatground.test.ts
 import * as THREE from 'three';
-import { bakeNavGrid } from '../game/nav';
+import { bakeNavGrid, isWalkable, worldToCell } from '../game/nav';
 import { SimAgent, findSeatFor } from '../game/sim';
 import { usePoseFor } from '../game/facing';
+import { actionAfterSourceFetch, firstLegSeatAware } from '../game/food';
 import type { MapData, TuningData, GameData, AssetDef, ActionDef } from '../game/data';
 
 let failures = 0;
@@ -244,6 +245,20 @@ console.log('seatground.test — blocked furniture pivot routes to the seat fron
   check('direct Sit keeps the authored usePose facing instead of turning back toward its own pivot',
     Math.abs(sitObj.rotation.y - THREE.MathUtils.degToRad(expectedPerch.facingDeg)) < 1e-6,
     `${THREE.MathUtils.radToDeg(sitObj.rotation.y)}° vs ${expectedPerch.facingDeg}°`);
+
+  // B10-8 regression: B10-5 routes to a walkable seat-front cell, then snaps inside the blocked
+  // sofa footprint. The saved pre-perch pose must be the exact walkable endpoint (not merely
+  // within arrivalRadius on the furniture side). Stopping restores it, and an unrelated far move
+  // order must route successfully instead of getting trapped by an arbitrary normalized start.
+  sitAgent.stopAction();
+  check('stopping a blocked-footprint seat restores a walkable stand cell',
+    isWalkable(routedGrid, worldToCell(routedGrid, sitObj.position.x, sitObj.position.z)),
+    `${sitObj.position.x},${sitObj.position.z}`);
+  check('far goTo succeeds after stopping the seated action', sitAgent.goTo(1, 5));
+  for (let i = 0; i < 600 && sitAgent.isMoving; i++) sitAgent.update(1 / 30);
+  check('far goTo completes after the seated action', !sitAgent.isMoving
+    && Math.hypot(sitObj.position.x - 1.25, sitObj.position.z - 5.25) < 1e-6,
+    `${sitObj.position.x},${sitObj.position.z}`);
 }
 
 console.log('seatground.test — faceTarget (B9-1 follow-up): per-action opt-out of the post-arrival face-the-target rotation');
@@ -282,6 +297,51 @@ console.log('seatground.test — faceTarget (B9-1 follow-up): per-action opt-out
   const dx = tv.position.x - obj.position.x, dz = tv.position.z - obj.position.z;
   const expectedYaw = Math.atan2(dx, dz);
   check('faceTarget absent → sim still rotates to face the target (unchanged default)', Math.abs(obj.rotation.y - expectedYaw) < 1e-3, `${obj.rotation.y} vs ${expectedYaw}`);
+}
+
+console.log('seatground.test — B10-6 bookshelf source leg followed by seat leg');
+{
+  const bookshelfDef = asset({ id: 'bookshelf', name: 'Bookshelf', interactions: ['read_book'] });
+  const readingSofaDef = asset({ id: 'reading_sofa', name: 'Reading sofa', seatTarget: true, interactions: ['sit'] });
+  const readingData: GameData = {
+    ...gameData(),
+    assets: { categories: [], assets: [bookshelfDef, readingSofaDef] },
+  };
+  const readingWorld = new THREE.Group();
+  const bookshelf = new THREE.Group();
+  bookshelf.position.set(4, 0, 4); bookshelf.userData.assetId = 'bookshelf';
+  const readingSofa = new THREE.Group();
+  readingSofa.position.set(4, 0, 6); readingSofa.rotation.y = Math.PI; readingSofa.userData.assetId = 'reading_sofa';
+  readingWorld.add(bookshelf, readingSofa);
+  const readerObj = new THREE.Group(); readerObj.position.set(1, 0, 1);
+  const reader = new SimAgent(readerObj, bakeNavGrid(map), tuning,
+    new Map<string, AssetDef>([['bookshelf', bookshelfDef], ['reading_sofa', readingSofaDef]]));
+  const readBookAction: ActionDef = {
+    id: 'read_book', name: 'Read a book', needGains: { fun: 1 }, skillGains: { english: 0.04 },
+    animation: 'sit_idle', autonomyEligible: true, primaryNeed: 'fun', seatAware: true,
+    fetchBeforeSeat: true, faceTarget: false,
+  };
+  const arrivals: string[] = [];
+  reader.onActionStart = (active) => {
+    if (active.action.fetchBeforeSeat) {
+      arrivals.push('bookshelf');
+      const seat = findSeatFor(readingWorld, readingData, active.target);
+      reader.orderAction(actionAfterSourceFetch(active.action), active.target, seat, bookshelfDef, true);
+    } else {
+      arrivals.push('seat');
+    }
+  };
+  const firstLegIsSeatAware = firstLegSeatAware(readBookAction);
+  check('read_book initial order targets the bookshelf rather than resolving a seat', !firstLegIsSeatAware
+    && reader.orderAction(readBookAction, bookshelf, null, bookshelfDef, firstLegIsSeatAware));
+  for (let i = 0; i < 1200 && arrivals.length < 2; i++) reader.update(1 / 30);
+  check('read_book arrives at bookshelf before its seat', arrivals.join('>') === 'bookshelf>seat', arrivals.join('>'));
+  check('read_book second leg finishes perched on the resolved sofa', reader.current?.seat === readingSofa
+    && Math.abs(readerObj.position.x - readingSofa.position.x) < 1e-6
+    && Math.abs(readerObj.position.z - readingSofa.position.z) < 1e-6,
+    `${readerObj.position.x},${readerObj.position.z}`);
+  check('read_book keeps the sofa authored facing after the fetch', Math.abs(readerObj.rotation.y - Math.PI) < 1e-6,
+    `${readerObj.rotation.y}`);
 }
 
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }
