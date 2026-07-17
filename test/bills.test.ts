@@ -42,6 +42,12 @@ const credit: CreditTuning = {
 console.log('bills.test — formula math');
 {
   check('floor-tile count uses unique grid cells across polygons', countFloorTiles(map) === 6);
+  // ROADMAP_APT D3 (§6.3): outdoor floors (balconies) are excluded from the rent tile count.
+  const withOutdoor: MapData = { ...map, floors: [map.floors[0], { ...map.floors[1], outdoor: true }] };
+  check('outdoor floor excluded from rent tile count (indoor-only)', countFloorTiles(withOutdoor) === 4);
+  check('outdoor exclusion lowers rent via the formula',
+    computeFinancePreview(finance, { ...context, map: withOutdoor }).rent
+      === finance.rent.base + finance.rent.perFloorTile * 4 + finance.rent.byPropertyType.condo);
   const preview = computeFinancePreview(finance, context);
   check('placed asset value sums buyPrice once per instance', preview.totalAssetValue === 150);
   check('rent = base + per tile + condo property adjustment', preview.rent === 150, String(preview.rent));

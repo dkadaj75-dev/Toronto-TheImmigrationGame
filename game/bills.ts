@@ -142,7 +142,11 @@ function pointInPolygon(x: number, z: number, polygon: [number, number][]): bool
   return inside;
 }
 
-/** Counts unique map-grid cells whose centres lie on any floor polygon. */
+/** Counts unique map-grid cells whose centres lie on any INDOOR floor polygon. ROADMAP_APT D3
+ *  (§6.3 RESOLVED): floors flagged `outdoor: true` (balconies/terraces) are excluded from the rent
+ *  tile count. A cell counts when ANY indoor floor covers it (`!outdoor` predicate), so an outdoor
+ *  balcony overlapping an indoor floor still counts via that indoor floor. Absent flag = indoor,
+ *  so every pre-D3 map is unchanged. */
 export function countFloorTiles(map: MapData): number {
   const size = Number.isFinite(map.gridSize) && map.gridSize > 0 ? map.gridSize : 1;
   const columns = Math.max(0, Math.ceil(map.bounds.w / size));
@@ -152,7 +156,7 @@ export function countFloorTiles(map: MapData): number {
     for (let column = 0; column < columns; column++) {
       const x = (column + 0.5) * size;
       const z = (row + 0.5) * size;
-      if (map.floors.some((floor) => pointInPolygon(x, z, floor.polygon))) count++;
+      if (map.floors.some((floor) => !floor.outdoor && pointInPolygon(x, z, floor.polygon))) count++;
     }
   }
   return count;

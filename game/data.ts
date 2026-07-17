@@ -475,7 +475,11 @@ export interface MapData {
   /** Follow-up to B9-1 (PROJECT_CONTEXT §7.32): optional per-surface tiling multiplier on top of
    *  tuning.textures.metersPerTile (2 = texture twice as big / fewer repeats). Absent/1 → default
    *  size; only meaningful alongside `texture`. See game/textures.ts effectiveMetersPerTile. */
-  floors: { id: string; polygon: [number, number][]; material: string; texture?: string; textureScale?: number }[];
+  /** ROADMAP_APT D3: sparse `outdoor: true` marks a balcony/terrace floor. Nav treats it as an
+   *  ordinary walkable floor (bakeNavGrid ignores the flag); FINANCE excludes it from the rent
+   *  tile count (§6.3 RESOLVED — countFloorTiles in game/bills.ts skips outdoor floors). Absent =
+   *  indoor (counted), so every pre-D3 map is unchanged. */
+  floors: { id: string; polygon: [number, number][]; material: string; texture?: string; textureScale?: number; outdoor?: boolean }[];
   /** ROADMAP_NEXT B9-1: optional image texture on the wall material (both faces unless `textureB`
    *  is set — see below), same drop-in convention + color fallback as a floor's `texture`. */
   /** Follow-up to B9-1 (PROJECT_CONTEXT §7.32): optional texture for the wall's OTHER large face,
@@ -487,7 +491,14 @@ export interface MapData {
    *  face. A wall running mostly along the Z axis ("vertical") has faces pointing +X/-X — side A
    *  is whichever faces WORLD +X ("east"), side B is -X ("west"). See world.ts buildWorld()'s wall
    *  loop for the face-assignment math. `textureScale` applies to both sides equally. */
-  walls: { from: [number, number]; to: [number, number]; texture?: string; textureB?: string | null; textureScale?: number }[];
+  /** ROADMAP_APT D3: sparse `kind` — absent/'solid' = an opaque wall (default, unchanged);
+   *  'curtainWall' = a transparent glazed façade rendered as translucent panes + vertical mullion
+   *  boxes at tuning.facade.mullionSpacingMeters. KIND WINS OVER TEXTURE: glazing has no texture,
+   *  so `texture`/`textureB`/`textureScale` are IGNORED on a curtainWall (the Map Editor hides the
+   *  texture pickers for it). It still composes with everything: D1 door apertures cut it (a
+   *  balcony door is a normal door on a curtainWall, no special casing), the B10-1 black top face
+   *  still applies, and the wall-cut view still scales it. See game/world.ts's wall loop. */
+  walls: { from: [number, number]; to: [number, number]; kind?: 'solid' | 'curtainWall'; texture?: string; textureB?: string | null; textureScale?: number }[];
   /** TWO placement forms coexist (ROADMAP_APT D1 — both stay valid forever, no auto-migration):
    *  - GAP-ENCODED (legacy): the doorway is a real gap between two separate `walls[]` segments;
    *    the door's `at` sits in that gap, on no wall. Rendering/nav are exactly pre-D1.
@@ -591,6 +602,12 @@ export interface TuningData {
    *  plan look), independent of that wall's per-side texture/textureB. Optional for old fixtures;
    *  world.ts falls back to '#000000'. */
   view?: { wallCutHeight?: number; wallTopColor?: string };
+  /** ROADMAP_APT D3: curtain-wall façade tuning. `mullionSpacingMeters` = the spacing (meters)
+   *  between the vertical mullion boxes drawn across a `walls[].kind === 'curtainWall'` glazed
+   *  façade. Sparse/optional so pre-existing tuning fixtures/tests stay valid (same precedent as
+   *  `interaction?`/`doors?` above); game/wallaperture.ts's resolveMullionSpacing falls back to
+   *  DEFAULT_MULLION_SPACING (1.2m) when absent/non-positive. */
+  facade?: { mullionSpacingMeters?: number };
   /** rotate* fields optional so pre-existing tuning fixtures/tests stay valid (same precedent as
    *  `interaction?`/`doors?` above) — camera.ts falls back to sane defaults when absent.
    *  rotateSpeedDegPerPx: desktop right-drag mouse sensitivity (yaw degrees per pixel of drag).

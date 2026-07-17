@@ -1039,6 +1039,11 @@ function renderInspector() {
     host.appendChild(field('id', f.id, edit((v) => { f.id = v; }), { text: true, data: 'floor.id' }));
     host.appendChild(field('material', f.material, edit((v) => { f.material = v; }), { options: [...FLOOR_MATERIALS], data: 'floor.material' }));
     host.appendChild(textureRow('floor', f.texture, (v) => { if (v) f.texture = v; else delete f.texture; }, f.textureScale, (v) => { if (v) f.textureScale = v; else delete f.textureScale; }));
+    // ROADMAP_APT D3: outdoor (balcony/terrace). Walkable in-game like any floor, but excluded from
+    // the rent tile count (finance). Sparse — unchecked deletes the key (indoor default).
+    host.appendChild(checkboxField('outdoor (balcony — excluded from rent)', f.outdoor === true, (checked) => {
+      pushUndo(); if (checked) f.outdoor = true; else delete f.outdoor; markDirty(); renderInspector(); redraw();
+    }, 'floor.outdoor'));
     const poly = document.createElement('div'); poly.className = 'hint';
     poly.textContent = 'polygon: ' + JSON.stringify(f.polygon);
     host.appendChild(poly);
@@ -1050,8 +1055,16 @@ function renderInspector() {
     host.appendChild(field('from z', w.from[1], edit((v) => { w.from[1] = v; }), { data: 'wall.fz' }));
     host.appendChild(field('to x', w.to[0], edit((v) => { w.to[0] = v; }), { data: 'wall.tx' }));
     host.appendChild(field('to z', w.to[1], edit((v) => { w.to[1] = v; }), { data: 'wall.tz' }));
-    host.appendChild(textureRow('wall', w.texture, (v) => { if (v) w.texture = v; else delete w.texture; }, w.textureScale, (v) => { if (v) w.textureScale = v; else delete w.textureScale; }, 'Texture (side A / both)'));
-    host.appendChild(textureSideBRow(w.textureB, (v) => { if (v === '__none__') w.textureB = null; else if (v) w.textureB = v; else delete w.textureB; }));
+    // ROADMAP_APT D3: wall kind. 'solid' (default) = an opaque wall; 'curtain wall' = transparent
+    // glazing + mullions. Glazing has no texture (kind wins over texture), so the texture pickers
+    // are HIDDEN while curtainWall is selected — sparse: solid deletes the key.
+    host.appendChild(field('kind', w.kind === 'curtainWall' ? 'curtain wall' : 'solid', edit((v) => {
+      if (v === 'curtain wall') w.kind = 'curtainWall'; else delete w.kind;
+    }), { options: ['solid', 'curtain wall'], data: 'wall.kind' }));
+    if (w.kind !== 'curtainWall') {
+      host.appendChild(textureRow('wall', w.texture, (v) => { if (v) w.texture = v; else delete w.texture; }, w.textureScale, (v) => { if (v) w.textureScale = v; else delete w.textureScale; }, 'Texture (side A / both)'));
+      host.appendChild(textureSideBRow(w.textureB, (v) => { if (v === '__none__') w.textureB = null; else if (v) w.textureB = v; else delete w.textureB; }));
+    }
     host.appendChild(del);
   } else if (s.kind === 'door') {
     const d = doc.doors[s.index];

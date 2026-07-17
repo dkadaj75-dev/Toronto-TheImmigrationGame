@@ -224,6 +224,55 @@ export function walkableSpans(apertures: Aperture[]): { start: number; end: numb
   return apertures.map((a) => ({ start: a.start, end: a.end }));
 }
 
+// ---------------------------------------------------------------------------------------------
+// D3 — curtain-wall façade mullion layout (pure math; world.ts owns the glazing/mullion meshes).
+// ---------------------------------------------------------------------------------------------
+
+/** Default spacing (meters) between a curtain wall's vertical mullions when tuning omits it. */
+export const DEFAULT_MULLION_SPACING = 1.2;
+
+/** True when a wall renders as a transparent glazed façade (D3). Absent/'solid' = opaque wall. */
+export function isCurtainWall(wall: { kind?: 'solid' | 'curtainWall' }): boolean {
+  return wall.kind === 'curtainWall';
+}
+
+/** Resolve the mullion spacing from tuning.facade.mullionSpacingMeters, guarding
+ *  absent/0/negative/NaN → DEFAULT_MULLION_SPACING. */
+export function resolveMullionSpacing(spacing: number | undefined): number {
+  return finitePositive(spacing) ? spacing : DEFAULT_MULLION_SPACING;
+}
+
+/**
+ * Where (meters along the wall from its `from` endpoint) a curtain wall's vertical mullions sit:
+ * evenly spaced at `spacing` from 0 up to the wall length (both ends included as jamb posts),
+ * SKIPPING any position that falls inside a door aperture span (so a mullion never crosses a
+ * balcony doorway — the door frame owns that gap). Degenerate walls (len <= 0) or non-positive
+ * spacing → no mullions. Positions inside `[start, end]` of any aperture (edges inclusive within
+ * EPS) are dropped; an aperture edge that coincides with a grid position still counts as skipped
+ * because the door frame already stands there.
+ */
+export function mullionPositions(
+  wallLen: number,
+  spacing: number,
+  apertures: { start: number; end: number }[] = [],
+): number[] {
+  if (!(wallLen > 0) || !(spacing > 0)) return [];
+  const insideAperture = (p: number) =>
+    apertures.some((a) => p >= a.start - EPS && p <= a.end + EPS);
+  const out: number[] = [];
+  const count = Math.floor(wallLen / spacing + EPS);
+  for (let i = 0; i <= count; i++) {
+    const p = Math.min(i * spacing, wallLen);
+    if (!insideAperture(p)) out.push(p);
+  }
+  // Always cap the far end with a jamb post (unless the last grid step already landed there, or it
+  // sits in an aperture) so a wall whose length isn't a whole multiple of the spacing still reads
+  // as a framed façade edge-to-edge.
+  const last = out[out.length - 1];
+  if ((last === undefined || wallLen - last > EPS) && !insideAperture(wallLen)) out.push(wallLen);
+  return out;
+}
+
 /**
  * Wall-cut view behavior for lintel segments (D1 decision, documented here as the pure resolver):
  * a lintel hangs entirely ABOVE the aperture (above walk height, like a window pane), so scaling

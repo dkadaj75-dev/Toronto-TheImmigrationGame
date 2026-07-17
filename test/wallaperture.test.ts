@@ -4,6 +4,7 @@ import {
   DEFAULT_APERTURE_HEIGHT, DEFAULT_APERTURE_WIDTH, ON_WALL_TOLERANCE,
   doorCutsWall, apertureSizeFor, doorAlongWall, aperturesForWall, wallSegments,
   walkableSpans, lintelVisibleUnderCut,
+  DEFAULT_MULLION_SPACING, isCurtainWall, resolveMullionSpacing, mullionPositions,
   type ApertureDoorEntry, type WallLike, type Aperture,
 } from '../game/wallaperture';
 import { textureRepeat } from '../game/textures';
@@ -260,6 +261,77 @@ console.log('wallaperture.test — live condo.json segment structure is aperture
   }
   check(`every shipped wall's segments are aperture-consistent (${wallsChecked} walls)`, mismatches === 0, `${mismatches} mismatched`);
   check('shipped map has at least one wall', wallsChecked > 0);
+}
+
+// ------------------------------------------------------------------ D3 curtain wall + mullions
+console.log('wallaperture.test — isCurtainWall / resolveMullionSpacing');
+{
+  check('absent kind = not a curtain wall', isCurtainWall({}) === false);
+  check("kind 'solid' = not a curtain wall", isCurtainWall({ kind: 'solid' }) === false);
+  check("kind 'curtainWall' = curtain wall", isCurtainWall({ kind: 'curtainWall' }) === true);
+
+  check('resolveMullionSpacing uses a positive value', resolveMullionSpacing(1.5) === 1.5);
+  check('absent → default', resolveMullionSpacing(undefined) === DEFAULT_MULLION_SPACING);
+  check('zero → default', resolveMullionSpacing(0) === DEFAULT_MULLION_SPACING);
+  check('negative → default', resolveMullionSpacing(-2) === DEFAULT_MULLION_SPACING);
+  check('NaN → default', resolveMullionSpacing(Number.NaN) === DEFAULT_MULLION_SPACING);
+}
+
+console.log('wallaperture.test — mullionPositions (spacing / aperture skip / degenerate)');
+{
+  // Even spacing across a length that's a whole multiple: posts at 0,2,4,6 (both ends included).
+  const even = mullionPositions(6, 2, []);
+  check('evenly spaced posts include both ends', even.length === 4 &&
+    approx(even[0], 0) && approx(even[1], 2) && approx(even[2], 4) && approx(even[3], 6));
+
+  // Non-multiple length: grid posts 0,2,4 then a capped far-end post at the wall length.
+  const capped = mullionPositions(5, 2, []);
+  check('non-multiple length caps a post at the far end', capped.length === 4 &&
+    approx(capped[0], 0) && approx(capped[1], 2) && approx(capped[2], 4) && approx(capped[3], 5));
+
+  // Aperture at [2.4, 3.6] skips the grid post at 4? No — 4 is outside; but a door at [1.5,2.5]
+  // covering the post at 2 removes it.
+  const skip = mullionPositions(6, 2, [{ start: 1.5, end: 2.5 }]);
+  check('a post inside a door aperture span is skipped',
+    !skip.some((p) => approx(p, 2)) && skip.some((p) => approx(p, 0)) && skip.some((p) => approx(p, 4)),
+    skip.join(','));
+
+  // A post exactly at an aperture edge is skipped (the door frame owns that jamb).
+  const edge = mullionPositions(6, 2, [{ start: 2, end: 3 }]);
+  check('a post at an aperture edge is skipped', !edge.some((p) => approx(p, 2)), edge.join(','));
+
+  // The far-end cap is also suppressed when the wall end sits inside an aperture.
+  const endInAp = mullionPositions(5, 2, [{ start: 4.5, end: 5 }]);
+  check('far-end cap suppressed when the end is inside an aperture', !endInAp.some((p) => approx(p, 5)), endInAp.join(','));
+
+  // Degenerate inputs.
+  check('zero-length wall → no mullions', mullionPositions(0, 1.2, []).length === 0);
+  check('non-positive spacing → no mullions', mullionPositions(6, 0, []).length === 0);
+  check('shorter than one spacing still frames both edges', (() => {
+    const m = mullionPositions(1, 2, []);
+    return m.length === 2 && approx(m[0], 0) && approx(m[1], 1);
+  })());
+}
+
+console.log('wallaperture.test — a balcony door on a curtain wall uses the SAME aperture math (no special casing)');
+{
+  // A curtain wall is just walls[].kind === 'curtainWall'; aperturesForWall/wallSegments never
+  // receive the wall kind, so a door cuts a curtain wall byte-identically to a solid one. world.ts
+  // renders the SAME segments as glazing instead of opaque boxes — D1 apertures compose for free.
+  const solidWall: WallLike = { from: [0, 5], to: [8, 5] };
+  const curtainWall = { ...solidWall, kind: 'curtainWall' as const };
+  const door: ApertureDoorEntry = { at: [3, 5], orientation: 'horizontal', assetId: 'door_test' };
+  const defs = new Map([['door_test', makeDoorAsset()]]);
+  const defFor = (id: string | undefined) => (id ? defs.get(id) : undefined);
+  const apsSolid = aperturesForWall(solidWall, [door], defFor, WALL_H);
+  const apsCurtain = aperturesForWall(curtainWall, [door], defFor, WALL_H);
+  check('curtain wall gets the same aperture as a solid wall',
+    apsCurtain.length === apsSolid.length && approx(apsCurtain[0].start, apsSolid[0].start) &&
+    approx(apsCurtain[0].end, apsSolid[0].end) && approx(apsCurtain[0].height, apsSolid[0].height));
+  check('curtain wall is flagged, solid is not', isCurtainWall(curtainWall) && !isCurtainWall(solidWall));
+  const mulls = mullionPositions(8, 1.2, apsCurtain);
+  check('mullions never fall inside the balcony doorway',
+    !mulls.some((p) => p > apsCurtain[0].start - 1e-6 && p < apsCurtain[0].end + 1e-6), mulls.join(','));
 }
 
 if (failures) { console.error(`${failures} failure(s)`); process.exit(1); }

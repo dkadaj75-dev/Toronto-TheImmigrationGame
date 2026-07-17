@@ -126,6 +126,10 @@
     "wallTopColor": "#000000",
     "_source": "ROADMAP_NEXT B6-9. Height in meters used by the player's in-page wall-cut toggle; view-only and never serialized. wallTopColor (B9-1 follow-up): flat unlit color for every wall's top face, giving the wall-cut view an architecture-plan look regardless of per-wall textures."
   },
+  "facade": {
+    "mullionSpacingMeters": 1.2,
+    "_source": "ROADMAP_APT D3. Spacing in meters between the vertical mullion posts drawn across a curtain-wall (walls[].kind === 'curtainWall') glazed facade. See game/wallaperture.ts resolveMullionSpacing (falls back to 1.2m when absent/non-positive)."
+  },
   "character": {
     "meshPath": "/models/character.glb",
     "heightMeters": 1.55,

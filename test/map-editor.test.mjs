@@ -345,6 +345,56 @@ console.log('map-editor.test — wall texture dropdown (texture round-trip)');
   check('cleanup: wall count restored', st.doc.walls.length === before);
 }
 
+// ------------------------------------------------------------------ D3: wall kind (curtain wall)
+console.log('map-editor.test — wall kind dropdown (solid / curtain wall, texture pickers hidden)');
+{
+  ME.setMode('walls');
+  const before = st.doc.walls.length;
+  pointer('pointerdown', 1.2, 11.2); // fresh wall in the empty new-floor zone (auto-selected)
+  pointer('pointermove', 3.7, 11.5);
+  pointer('pointerup', 3.7, 11.5);
+  check('wall selected for kind edit', st.sel?.kind === 'wall' && st.doc.walls.length === before + 1);
+  const kindSel = doc.querySelector('select[data-field="wall.kind"]');
+  check('wall kind dropdown renders, defaulting to solid', !!kindSel && kindSel.value === 'solid');
+  check('solid wall shows the texture pickers', !!doc.querySelector('select[data-field="wall.texture"]'));
+  kindSel.value = 'curtain wall';
+  kindSel.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('picking curtain wall sets walls[].kind', st.doc.walls[st.sel.index].kind === 'curtainWall');
+  check('curtain wall hides the texture picker (kind wins over texture)', !doc.querySelector('select[data-field="wall.texture"]'));
+  check('curtain wall hides the side-B texture picker', !doc.querySelector('select[data-field="wall.textureB"]'));
+  const kindSel2 = doc.querySelector('select[data-field="wall.kind"]');
+  kindSel2.value = 'solid';
+  kindSel2.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('picking solid removes walls[].kind (sparse)', !('kind' in st.doc.walls[st.sel.index]));
+  check('solid restores the texture pickers', !!doc.querySelector('select[data-field="wall.texture"]'));
+  ME.deleteSelected(); // clean up the test wall
+  check('cleanup: wall count restored after kind test', st.doc.walls.length === before);
+}
+
+// ------------------------------------------------------------------ D3: floor outdoor checkbox
+console.log('map-editor.test — floor outdoor checkbox (balcony, sparse)');
+{
+  ME.setMode('floors');
+  const f0 = st.doc.floors[0];
+  const hadOutdoor = 'outdoor' in f0;
+  delete f0.outdoor; // test the checkbox's own default (in-memory only, never written back)
+  const cx = f0.polygon.reduce((s, [x]) => s + x, 0) / f0.polygon.length;
+  const cz = f0.polygon.reduce((s, [, z]) => s + z, 0) / f0.polygon.length;
+  pointer('pointerdown', cx, cz); // select the floor → renders its inspector
+  check('click selects the floor for outdoor edit', st.sel?.kind === 'floor');
+  const chk = doc.querySelector('input[data-field="floor.outdoor"]');
+  check('floor inspector shows the outdoor checkbox', !!chk);
+  check('outdoor checkbox defaults unchecked on an indoor floor', chk && chk.checked === false);
+  chk.checked = true;
+  chk.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('checking outdoor sets floors[].outdoor = true', st.doc.floors[st.sel.index].outdoor === true);
+  const chk2 = doc.querySelector('input[data-field="floor.outdoor"]');
+  chk2.checked = false;
+  chk2.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('unchecking outdoor removes the key (sparse)', !('outdoor' in st.doc.floors[st.sel.index]));
+  if (hadOutdoor) f0.outdoor = true; // restore any live designer value
+}
+
 // ------------------------------------------------------------------ slice 2: doors
 console.log('map-editor.test — doors: place on wall / inferred orientation / move / delete');
 {

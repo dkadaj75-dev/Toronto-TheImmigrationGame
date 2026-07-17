@@ -12,7 +12,7 @@ import { resolveWindowConfig, windowFacePositions, windowPaneRect } from './wind
 import { wallCutShownHeight } from './wallview';
 import { resolveAssetLight } from './assetstate';
 import { resolveMetersPerTile, effectiveMetersPerTile, textureRepeat, polygonBounds } from './textures';
-import { aperturesForWall, wallSegments, lintelVisibleUnderCut } from './wallaperture';
+import { aperturesForWall, wallSegments, lintelVisibleUnderCut, isCurtainWall, resolveMullionSpacing, mullionPositions } from './wallaperture';
 
 // ------------------------------------------------------------------ GLB furniture
 // Templates are cached per URL and cloned per placement; clones share geometry/materials
@@ -302,13 +302,23 @@ export function buildWorld(data: GameData, trackInitialLoad?: TrackInitialLoad):
   // lighting shading — for an "architecture plan" look in the wall-cut view. MeshBasicMaterial is
   // unlit so it can't be shaded; one shared instance across all walls (never mutated per-wall).
   const wallTopMat = new THREE.MeshBasicMaterial({ color: data.tuning.view?.wallTopColor ?? '#000000' });
+  // D3 curtain-wall façade: a translucent glazed pane (windowPane material precedent) plus vertical
+  // mullion boxes. Both shared across all curtain walls (never mutated per-wall). KIND WINS OVER
+  // TEXTURE — a curtainWall's texture/textureB/textureScale are ignored (glazing has no texture);
+  // its top face still gets the shared black wallTopMat (B10-1), and it still composes with D1 door
+  // apertures (wallSegments below cuts it) and the wall-cut view (same 'wall' userData tags).
+  const curtainGlazingMat = new THREE.MeshPhysicalMaterial({ color: 0x9edff4, transparent: true, opacity: 0.34, roughness: 0.05, metalness: 0.05, side: THREE.DoubleSide, depthWrite: false });
+  const mullionMat = new THREE.MeshLambertMaterial({ color: 0x555a60 });
   const WALL_H = 2.5, WALL_T = 0.12;
+  const MULLION_W = 0.06, MULLION_D = WALL_T + 0.02; // slightly proud of the glazing so it reads
+  const mullionSpacing = resolveMullionSpacing(data.tuning.facade?.mullionSpacingMeters);
   const doorDefFor = (assetId: string | undefined) => (assetId ? byId.get(assetId) : undefined);
   for (const wall of map.walls) {
     const [x1, z1] = wall.from, [x2, z2] = wall.to;
     const len = Math.hypot(x2 - x1, z2 - z1);
     const dx = x2 - x1, dz = z2 - z1;
     const ux = len > 0 ? dx / len : 0, uz = len > 0 ? dz / len : 0;
+    const curtain = isCurtainWall(wall);
     const mpt = effectiveMetersPerTile(metersPerTile, wall.textureScale); // per-surface scale follow-up
     // Which local face (+z or -z) is "side A" depends on the wall's actual placement, not on
     // from/to point order: local +z's world-space outward normal, after mesh.rotation.y below,
@@ -321,6 +331,20 @@ export function buildWorld(data: GameData, trackInitialLoad?: TrackInitialLoad):
     const apertures = aperturesForWall(wall, map.doors, doorDefFor, WALL_H);
     for (const seg of wallSegments(len, WALL_H, apertures)) {
       const geo = new THREE.BoxGeometry(seg.alongLength, seg.height, WALL_T);
+      if (curtain) {
+        // D3: glazed segment — translucent panes on the four side faces, the shared black top
+        // (index 2), plain glazing bottom. Texture fields are deliberately NOT read (kind wins).
+        // Tagged exactly like a solid/lintel wall segment so the wall-cut view scales/hides it the
+        // same way (D1 lintels above a balcony door still HIDE under the cut).
+        const glassMats: THREE.Material[] = [curtainGlazingMat, curtainGlazingMat, wallTopMat, curtainGlazingMat, curtainGlazingMat, curtainGlazingMat];
+        const glassMesh = new THREE.Mesh(geo, glassMats);
+        glassMesh.position.set(x1 + ux * seg.alongCenter, seg.yCenter, z1 + uz * seg.alongCenter);
+        glassMesh.rotation.y = -Math.atan2(dz, dx);
+        glassMesh.userData.wallCutVisual = seg.kind === 'lintel' ? 'lintel' : 'wall';
+        glassMesh.userData.wallCutFullHeight = WALL_H;
+        root.add(glassMesh);
+        continue;
+      }
       // A textured segment gets its own material so the swap doesn't hit the shared color wallMat
       // (and each segment's repeat differs with its dimensions, so materials are per-SEGMENT).
       // Every segment always gets a 6-entry material array — BoxGeometry's default face groups are
@@ -365,6 +389,20 @@ export function buildWorld(data: GameData, trackInitialLoad?: TrackInitialLoad):
         if (wall.textureB && matB) applySurfaceTexture(matB, normalizeMeshUrl(wall.textureB), repeat, trackInitialLoad);
       }
       root.add(mesh);
+    }
+    if (curtain) {
+      // D3: vertical mullion posts at the tuned spacing, skipping door-aperture spans (pure
+      // mullionPositions). Full-height boxes tagged as ordinary wall so the wall-cut view scales
+      // them with the glazing.
+      for (const along of mullionPositions(len, mullionSpacing, apertures)) {
+        const mullion = new THREE.Mesh(new THREE.BoxGeometry(MULLION_W, WALL_H, MULLION_D), mullionMat);
+        mullion.position.set(x1 + ux * along, WALL_H / 2, z1 + uz * along);
+        mullion.rotation.y = -Math.atan2(dz, dx);
+        mullion.userData.wallCutVisual = 'wall';
+        mullion.userData.wallCutFullHeight = WALL_H;
+        mullion.castShadow = true;
+        root.add(mullion);
+      }
     }
   }
 
