@@ -460,6 +460,32 @@ export interface RentalConfig {
   moveInHours?: number;
 }
 
+/** ROADMAP_APT D4 — per-map simplified 3D exterior environment (a Sims-style city backdrop, but
+ *  SIMPLIFIED: no simulation, no LOD). The WHOLE block is sparse (absent = today's void — nothing
+ *  is rendered outside the apartment), and every field inside it is sparse too, so pre-existing
+ *  maps stay valid untouched. Resolved by the pure helper game/exterior.ts (defaults + guards for
+ *  non-finite distances / fog ranges); rendered by game/world.ts OUTSIDE the apartment.
+ *
+ *  - `skyColor`: scene background / sky color (CSS/hex string, e.g. "#87b7e0"). Absent = the default
+ *     sky (0x2a3346). Tinted day↔night by applyDayNight exactly like the sun/ambient lights.
+ *  - `groundColor`: a large ground plane rendered far below/around the map bounds. Absent = no plane.
+ *     Also day/night tinted.
+ *  - `backdrop`: optional path under public/ — a GLB (`.glb`/`.gltf`) renders as a single distant
+ *     mesh; any other image path renders as a large wraparound billboard ring. A load failure keeps
+ *     the sky/ground colors and warns once (keep-stand-in precedent). Never blocks nav; excluded
+ *     from the wall-cut view.
+ *  - `backdropDistance`: meters from the map center to the backdrop (default 60; non-finite/≤0 →
+ *     default).
+ *  - `fog`: optional cheap depth cue (THREE.Fog). `color` defaults to skyColor (then a neutral
+ *     grey); `near`/`far` are guarded (non-finite/negative near → 40; far ≤ near → near + span). */
+export interface ExteriorConfig {
+  skyColor?: string;
+  groundColor?: string;
+  backdrop?: string;
+  backdropDistance?: number;
+  fog?: { color?: string; near?: number; far?: number };
+}
+
 export interface MapData {
   id: string; name: string; gridSize: number;
   /** Designer placement increment in meters. Independent from nav/tile cell size; absent maps
@@ -532,6 +558,9 @@ export interface MapData {
   /** ROADMAP_APT R1: sparse per-map rental/ad metadata for the future Kijiji phone tab. Absent =
    *  this map is not a rental listing. See RentalConfig's doc comment above for every field. */
   rental?: RentalConfig;
+  /** ROADMAP_APT D4: sparse simplified 3D exterior environment (sky/ground/backdrop/fog). Absent =
+   *  today's void (nothing rendered outside the apartment). See ExteriorConfig's doc comment. */
+  exterior?: ExteriorConfig;
 }
 
 /** Rigged character setup — all of it data, so a different GLB export is a JSON edit. */

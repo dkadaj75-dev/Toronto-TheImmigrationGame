@@ -854,6 +854,28 @@ function checkboxField(labelText, checked, onChange, dataField) {
   return row;
 }
 
+// ROADMAP_APT D4: a color picker paired with a text box (the text box is the source of truth so the
+// field can be CLEARED — a native <input type=color> can't be empty). onChange receives the string
+// value; a blank string means "clear this key" (the caller deletes it, keeping the block sparse).
+function colorField(labelText, value, onChange, dataField) {
+  const row = document.createElement('div'); row.className = 'field';
+  const lab = document.createElement('label'); lab.textContent = labelText;
+  const wrap = document.createElement('div');
+  wrap.style.display = 'flex'; wrap.style.gap = '6px'; wrap.style.alignItems = 'center';
+  const isHex = (v) => /^#[0-9a-fA-F]{6}$/.test(v ?? '');
+  const picker = document.createElement('input'); picker.type = 'color';
+  picker.value = isHex(value) ? value : '#888888';
+  if (dataField) picker.dataset.field = dataField + '.picker';
+  const text = document.createElement('input'); text.type = 'text'; text.value = value ?? '';
+  text.placeholder = '(none)'; text.style.width = '92px';
+  if (dataField) text.dataset.field = dataField;
+  picker.addEventListener('input', () => { text.value = picker.value; onChange(picker.value); });
+  text.addEventListener('change', () => { const v = text.value.trim(); if (isHex(v)) picker.value = v; onChange(v); });
+  wrap.append(picker, text);
+  row.append(lab, wrap);
+  return row;
+}
+
 // A designer may paste a Windows filesystem path for the ad photo; normalize it to a served URL
 // under public/ exactly like the Animation Mapper's normalizeSourcePath (AGENTS.md pitfall). Best
 // effort: a path containing a "public" segment keeps everything after it; otherwise the drive
@@ -984,6 +1006,85 @@ function renderRentalCard(host, doc) {
   host.appendChild(removeBtn);
 }
 
+// ---------------------------------------------------------------- Exterior card (ROADMAP_APT D4)
+// Renders the sparse per-map `exterior` block (sky/ground colors, backdrop path+distance, fog). The
+// whole block is optional (absent = void outside the apartment); every field inside is optional too.
+// Guards/defaults live in the GAME (game/exterior.ts) — the tool just writes/clears sparse values.
+function renderExteriorCard(host, doc) {
+  host.appendChild(Object.assign(document.createElement('h2'), { textContent: 'Exterior (3D environment)' }));
+  const ensure = () => (doc.exterior ??= {});
+
+  if (!doc.exterior) {
+    const btn = document.createElement('button');
+    btn.textContent = 'Add a 3D exterior';
+    btn.dataset.action = 'exterior-create';
+    btn.addEventListener('click', () => { pushUndo(); doc.exterior = {}; markDirty(); renderInspector(); });
+    host.appendChild(btn);
+    const hint = document.createElement('div'); hint.className = 'hint';
+    hint.textContent = 'Absent = nothing rendered outside the apartment (today\'s void).';
+    host.appendChild(hint);
+    return;
+  }
+  const e = doc.exterior;
+
+  host.appendChild(colorField('sky color', e.skyColor ?? '', (v) => {
+    pushUndo(); const ee = ensure(); if (v.trim()) ee.skyColor = v.trim(); else delete ee.skyColor; markDirty();
+  }, 'exterior.skyColor'));
+
+  host.appendChild(colorField('ground color', e.groundColor ?? '', (v) => {
+    pushUndo(); const ee = ensure(); if (v.trim()) ee.groundColor = v.trim(); else delete ee.groundColor; markDirty();
+  }, 'exterior.groundColor'));
+
+  // backdrop path — Windows paths normalized to a served URL under public/ (same as the ad image).
+  host.appendChild(field('backdrop (GLB or image)', e.backdrop ?? '', (v) => {
+    pushUndo(); const ee = ensure(); const n = normalizeAdImagePath(v);
+    if (n) ee.backdrop = n; else delete ee.backdrop; markDirty();
+  }, { text: true, data: 'exterior.backdrop' }));
+  const bHint = document.createElement('div'); bHint.className = 'hint';
+  bHint.textContent = '.glb/.gltf → single distant mesh; any image → wraparound billboard ring. Absent = none.';
+  host.appendChild(bHint);
+
+  // backdrop distance — blank/0 clears the key (default 60m applied in-game).
+  host.appendChild(field('backdrop distance (m)', e.backdropDistance ?? '', (v) => {
+    pushUndo(); const ee = ensure(); if (Number.isFinite(v) && v > 0) ee.backdropDistance = v; else delete ee.backdropDistance; markDirty();
+  }, { data: 'exterior.backdropDistance' }));
+
+  // fog sub-block (sparse). Absent = no fog; present (even empty) = fog with guarded default ranges.
+  host.appendChild(Object.assign(document.createElement('h2'), { textContent: 'Fog (optional)' }));
+  if (!e.fog) {
+    const addFog = document.createElement('button');
+    addFog.textContent = '+ Add fog';
+    addFog.dataset.action = 'exterior-fog-add';
+    addFog.addEventListener('click', () => { pushUndo(); ensure().fog = {}; markDirty(); renderInspector(); });
+    host.appendChild(addFog);
+    const fHint = document.createElement('div'); fHint.className = 'hint';
+    fHint.textContent = 'None = no fog. Empty fields default to color=sky, near 40, far 120 in-game.';
+    host.appendChild(fHint);
+  } else {
+    const f = e.fog;
+    host.appendChild(colorField('fog color', f.color ?? '', (v) => {
+      pushUndo(); if (v.trim()) f.color = v.trim(); else delete f.color; markDirty();
+    }, 'exterior.fog.color'));
+    host.appendChild(field('fog near (m)', f.near ?? '', (v) => {
+      pushUndo(); if (Number.isFinite(v) && v >= 0) f.near = v; else delete f.near; markDirty();
+    }, { data: 'exterior.fog.near' }));
+    host.appendChild(field('fog far (m)', f.far ?? '', (v) => {
+      pushUndo(); if (Number.isFinite(v) && v > 0) f.far = v; else delete f.far; markDirty();
+    }, { data: 'exterior.fog.far' }));
+    const rmFog = document.createElement('button');
+    rmFog.className = 'danger'; rmFog.textContent = 'Remove fog';
+    rmFog.dataset.action = 'exterior-fog-remove';
+    rmFog.addEventListener('click', () => { pushUndo(); delete ensure().fog; markDirty(); renderInspector(); });
+    host.appendChild(rmFog);
+  }
+
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'danger'; removeBtn.textContent = 'Remove exterior'; removeBtn.style.marginTop = '8px';
+  removeBtn.dataset.action = 'exterior-remove';
+  removeBtn.addEventListener('click', () => { pushUndo(); delete doc.exterior; markDirty(); renderInspector(); });
+  host.appendChild(removeBtn);
+}
+
 function renderInspector() {
   const host = document.getElementById('inspector');
   host.innerHTML = '';
@@ -1007,6 +1108,7 @@ function renderInspector() {
       if (list.length) doc.music = list; else delete doc.music;
     }), { text: true, data: 'map.music' }));
     renderRentalCard(host, doc);
+    renderExteriorCard(host, doc);
     if (state.mode === 'floors') {
       host.appendChild(Object.assign(document.createElement('h2'), { textContent: 'New floors' }));
       host.appendChild(field('material', state.newFloorMaterial, (v) => { state.newFloorMaterial = v; }, { options: [...FLOOR_MATERIALS], id: 'floor-material' }));

@@ -5,7 +5,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
-import type { GameData, AssetDef, CharacterTuning } from './data';
+import type { GameData, AssetDef, CharacterTuning, MapData } from './data';
+import { resolveExterior, DEFAULT_BACKDROP_DISTANCE, type ResolvedBackdrop } from './exterior';
 import { classifyMeshPath, createSpriteInstance, preloadGif } from './sprites';
 import { retargetTrackName, stripPositionTracks, resolveClipName, fileStem } from './fbxclips';
 import { resolveWindowConfig, windowFacePositions, windowPaneRect } from './windows';
@@ -483,7 +484,119 @@ export function buildWorld(data: GameData, trackInitialLoad?: TrackInitialLoad):
     root.add(obj);
   });
 
+  // --- D4 simplified exterior: a ground plane + optional distant backdrop, built INTO the world so
+  // a map switch / hot-reload rebuilds & disposes it with everything else. These carry NO
+  // wallCutVisual userData (excluded from the wall-cut view) and NO nav footprint (bakeNavGrid reads
+  // map data, never the world group), and their `raycast` is disabled so they are never tap/hover
+  // targets. Sky color + fog live on the SCENE (applyExteriorScene, called from main.ts) since they
+  // are scene-level; the day/night tint of sky + this ground is applied by applyDayNight.
+  buildExteriorInto(root, map, trackInitialLoad);
+
   return root;
+}
+
+// D4 constants: how dark the custom sky / ground go at night (multiplied into the day color, the
+// same "lerp between a dim and a bright value by the daylight factor" idea the sun/ambient use).
+const EXTERIOR_SKY_NIGHT_SCALE = 0.32;
+const EXTERIOR_GROUND_NIGHT_SCALE = 0.4;
+
+/** Build the D4 exterior visuals (ground plane + backdrop) into the world root. No-op when the map
+ *  has no exterior block (today's void). Pure config resolution is game/exterior.ts. */
+function buildExteriorInto(root: THREE.Group, map: MapData, trackInitialLoad?: TrackInitialLoad) {
+  const resolved = resolveExterior(map.exterior);
+  if (!resolved.present) return;
+  const cx = map.bounds.w / 2, cz = map.bounds.h / 2; // map center in world XZ
+  const distance = resolved.backdrop?.distance ?? DEFAULT_BACKDROP_DISTANCE;
+
+  if (resolved.groundColor) {
+    // One big plane, well beyond the backdrop distance so the horizon reads as solid ground.
+    const size = Math.max(2 * distance + Math.max(map.bounds.w, map.bounds.h) + 40, 200);
+    const geo = new THREE.PlaneGeometry(size, size);
+    geo.rotateX(-Math.PI / 2);
+    const day = new THREE.Color(resolved.groundColor);
+    const mat = new THREE.MeshLambertMaterial({ color: day.clone() });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.name = 'exteriorGround';
+    mesh.position.set(cx, -0.05, cz); // just below the floor so it never z-fights the interior
+    mesh.receiveShadow = true;
+    mesh.userData.exteriorDayColor = day; // applyDayNight tints the material from this base color
+    mesh.raycast = () => {}; // cosmetic environment — never a tap/hover target
+    root.add(mesh);
+  }
+
+  if (resolved.backdrop) buildBackdropInto(root, resolved.backdrop, cx, cz, trackInitialLoad);
+}
+
+/** A single distant backdrop: a GLB mesh, or (for an image path) a large wraparound billboard ring
+ *  (open cylinder textured on the inside). Keep-stand-in: the ring/GLB group is added immediately;
+ *  a load failure warns ONCE and leaves the sky/ground colors intact. */
+function buildBackdropInto(root: THREE.Group, backdrop: ResolvedBackdrop, cx: number, cz: number, trackInitialLoad?: TrackInitialLoad) {
+  const url = normalizeMeshUrl(backdrop.path);
+  if (backdrop.kind === 'mesh') {
+    const group = new THREE.Group();
+    group.name = 'exteriorBackdrop';
+    group.position.set(cx, 0, cz);
+    group.raycast = () => {};
+    root.add(group);
+    const ready = loadMeshTemplate(url)
+      .then((tpl) => {
+        const clone = tpl.clone(true);
+        clone.traverse((o) => {
+          o.raycast = () => {};
+          if (o instanceof THREE.Mesh) {
+            o.userData.sharedResource = true; // shares the cached template's buffers — skip disposal
+            const m = o.material as THREE.Material | THREE.Material[];
+            (Array.isArray(m) ? m : [m]).forEach((mm) => { if (mm) (mm as { fog?: boolean }).fog = false; });
+          }
+        });
+        group.add(clone);
+      })
+      .catch(() => console.warn(`Could not load exterior backdrop "${backdrop.path}" — keeping sky/ground colors.`));
+    void (trackInitialLoad ? trackInitialLoad(ready) : ready);
+    return;
+  }
+  // image → wraparound billboard ring surrounding the map at the backdrop distance.
+  const r = backdrop.distance;
+  const h = Math.max(r * 0.85, 8);
+  const geo = new THREE.CylinderGeometry(r, r, h, 48, 1, true);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide, fog: false });
+  const ring = new THREE.Mesh(geo, mat);
+  ring.name = 'exteriorBackdrop';
+  ring.position.set(cx, h * 0.28, cz); // centered a little above the horizon
+  ring.raycast = () => {};
+  root.add(ring);
+  const ready = loadTexture(url)
+    .then((base) => {
+      const tex = base.clone();
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.needsUpdate = true;
+      mat.map = tex;
+      mat.needsUpdate = true;
+    })
+    .catch(() => console.warn(`Could not load exterior backdrop image "${backdrop.path}" — keeping sky/ground colors.`));
+  void (trackInitialLoad ? trackInitialLoad(ready) : ready);
+}
+
+/** Apply the SCENE-level parts of the D4 exterior: sky background color, fog, and a cached ground
+ *  reference for the per-frame day/night tint. Called at boot and on every hot-reload / map switch
+ *  (after buildWorld rebuilds the world), so the exterior swaps with the map. The ground plane and
+ *  backdrop themselves live in the world (buildExteriorInto). Absent sky/fog reverts to the default
+ *  sky and no fog, so switching from an exterior map back to a void map cleans up. */
+export function applyExteriorScene(scene: THREE.Scene, world: THREE.Group, map: MapData) {
+  const resolved = resolveExterior(map.exterior);
+  if (resolved.skyColor) {
+    const day = new THREE.Color(resolved.skyColor);
+    scene.userData.exteriorSky = { day, night: day.clone().multiplyScalar(EXTERIOR_SKY_NIGHT_SCALE) };
+    if (scene.background instanceof THREE.Color) scene.background.copy(day);
+    else scene.background = day.clone();
+  } else {
+    delete scene.userData.exteriorSky;
+    if (scene.background instanceof THREE.Color) scene.background.setHex(0x2a3346);
+  }
+  scene.fog = resolved.fog ? new THREE.Fog(new THREE.Color(resolved.fog.color).getHex(), resolved.fog.near, resolved.fog.far) : null;
+  // O(1) ground handle for applyDayNight (avoids a full scene traversal every frame).
+  scene.userData.exteriorGround = resolved.groundColor ? (world.getObjectByName('exteriorGround') ?? null) : null;
 }
 
 /** Apply the Sims-style wall-cut presentation without rebuilding nav or changing map data.
@@ -756,5 +869,19 @@ export function applyDayNight(lights: THREE.Group, scene: THREE.Scene, hour: num
     sun.color.lerpColors(SUN_NIGHT, SUN_DAY, f);
   }
   if (ambient) ambient.intensity = THREE.MathUtils.lerp(0.4, 0.9, f);
-  if (scene.background instanceof THREE.Color) scene.background.lerpColors(SKY_NIGHT, SKY_DAY, f);
+  // Sky: a D4 exterior map supplies its own day/night pair (applyExteriorScene); otherwise the
+  // default interior sky pair is used — same lerp-by-daylight-factor as the lights above.
+  const exSky = scene.userData.exteriorSky as { day: THREE.Color; night: THREE.Color } | undefined;
+  if (scene.background instanceof THREE.Color) {
+    if (exSky) scene.background.lerpColors(exSky.night, exSky.day, f);
+    else scene.background.lerpColors(SKY_NIGHT, SKY_DAY, f);
+  }
+  // D4 ground plane: tint its material between a dimmed night value and its authored day color,
+  // exactly like the sky. The handle is cached on the scene so this stays O(1) per frame.
+  const ground = scene.userData.exteriorGround as THREE.Mesh | null | undefined;
+  if (ground) {
+    const day = ground.userData.exteriorDayColor as THREE.Color | undefined;
+    const mat = ground.material as THREE.MeshLambertMaterial | undefined;
+    if (day && mat && mat.color) mat.color.copy(day).multiplyScalar(THREE.MathUtils.lerp(EXTERIOR_GROUND_NIGHT_SCALE, 1, f));
+  }
 }

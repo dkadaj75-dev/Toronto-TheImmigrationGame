@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { loadAll, loadAllMaps, watchData, type ActionDef, type GameData, type MapData } from './data';
 import { TouchCamera } from './camera';
-import { applyWallCutView, buildWorld, makeSimStandIn, makeLights, applyDayNight, loadRiggedCharacter, normalizeMeshUrl, setAssetObjectOn } from './world';
+import { applyWallCutView, buildWorld, makeSimStandIn, makeLights, applyDayNight, applyExteriorScene, loadRiggedCharacter, normalizeMeshUrl, setAssetObjectOn } from './world';
 import { buildDoors } from './doors';
 import { AnimController } from './anim';
 import { bakeNavGrid } from './nav';
@@ -118,6 +118,7 @@ async function start() {
   applyWallCutView(world, wallCutActive, data.tuning.view?.wallCutHeight ?? 1);
   const lights = makeLights();
   scene.add(world, lights);
+  applyExteriorScene(scene, world, data.map); // D4: sky/ground/backdrop/fog for this map (sparse — no-op on a void map)
 
   const sim = makeSimStandIn();
   sim.position.set(data.map.spawn.pos[0], 0, data.map.spawn.pos[1]);
@@ -1439,6 +1440,10 @@ async function start() {
     world.add(doors.group);
     applyWallCutView(world, wallCutActive, data.tuning.view?.wallCutHeight ?? 1);
     scene.add(world);
+    // D4: re-apply the scene-level exterior (sky/fog + ground handle) for the freshly-built world —
+    // this is also what swaps the exterior on an R4 runtime map switch (the ground/backdrop meshes
+    // were already rebuilt inside buildWorld above; a void map clears sky/fog back to the default).
+    applyExteriorScene(scene, world, data.map);
     // §7.3: buildWorld() has no notion of runtime accident instances (never in map data) —
     // re-parent every LIVE fire/puddle into the freshly-built world so hot-reload never wipes them.
     accidents.reattach(world);

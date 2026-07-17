@@ -708,6 +708,64 @@ console.log('map-editor.test — rental ad card (schema round-trip + reused cond
   check('removing the listing deletes rental entirely (sparse)', !('rental' in st.doc));
 }
 
+// ------------------------------------------------------------------ ROADMAP_APT D4: Exterior card
+console.log('map-editor.test — exterior card (sparse sky/ground/backdrop/fog round-trip)');
+{
+  ME.setMode('objects'); // Map properties panel shows the Exterior card
+  check('map has no exterior block initially', !('exterior' in st.doc));
+  const createBtn = doc.querySelector('button[data-action="exterior-create"]');
+  check('exterior-create button offered when absent', !!createBtn);
+  createBtn.click();
+  check('creating writes an empty exterior block (sparse)', st.doc.exterior && Object.keys(st.doc.exterior).length === 0);
+
+  // sky/ground colors — the text box is the source of truth (blank clears the key)
+  const sky = doc.querySelector('input[data-field="exterior.skyColor"]');
+  sky.value = '#87b7e0'; sky.dispatchEvent(new window.Event('change'));
+  check('sky color round-trips', st.doc.exterior.skyColor === '#87b7e0');
+  const ground = doc.querySelector('input[data-field="exterior.groundColor"]');
+  ground.value = '#4a7c46'; ground.dispatchEvent(new window.Event('change'));
+  check('ground color round-trips', st.doc.exterior.groundColor === '#4a7c46');
+
+  // backdrop path — a pasted Windows path normalizes to a served URL under public/
+  const backdrop = doc.querySelector('input[data-field="exterior.backdrop"]');
+  backdrop.value = 'D:\\dev\\public\\models\\city.glb'; backdrop.dispatchEvent(new window.Event('change'));
+  check('backdrop Windows path normalized under public/', st.doc.exterior.backdrop === '/models/city.glb', st.doc.exterior.backdrop);
+  const dist = doc.querySelector('input[data-field="exterior.backdropDistance"]');
+  dist.value = '80'; dist.dispatchEvent(new window.Event('change'));
+  check('backdrop distance settable', st.doc.exterior.backdropDistance === 80);
+  const dist2 = doc.querySelector('input[data-field="exterior.backdropDistance"]');
+  dist2.value = ''; dist2.dispatchEvent(new window.Event('change'));
+  check('blanking backdrop distance deletes the key (sparse)', !('backdropDistance' in st.doc.exterior));
+
+  // fog sub-block: sparse, toggled on/off
+  check('no fog until added (sparse)', !('fog' in st.doc.exterior));
+  doc.querySelector('button[data-action="exterior-fog-add"]').click();
+  check('adding fog seeds an empty sub-block', st.doc.exterior.fog && Object.keys(st.doc.exterior.fog).length === 0);
+  const fogColor = doc.querySelector('input[data-field="exterior.fog.color"]');
+  fogColor.value = '#cfd8e3'; fogColor.dispatchEvent(new window.Event('change'));
+  const fogNear = doc.querySelector('input[data-field="exterior.fog.near"]');
+  fogNear.value = '40'; fogNear.dispatchEvent(new window.Event('change'));
+  const fogFar = doc.querySelector('input[data-field="exterior.fog.far"]');
+  fogFar.value = '120'; fogFar.dispatchEvent(new window.Event('change'));
+  check('fog fields round-trip', st.doc.exterior.fog.color === '#cfd8e3' && st.doc.exterior.fog.near === 40 && st.doc.exterior.fog.far === 120);
+
+  // save + verify the whole exterior block round-trips through the PUT payload
+  await ME.save();
+  const put = puts['/api/data/maps/condo.json'];
+  check('PUT includes the exterior block', !!put?.exterior);
+  check('PUT exterior carries sky/ground/backdrop', put.exterior.skyColor === '#87b7e0'
+    && put.exterior.groundColor === '#4a7c46' && put.exterior.backdrop === '/models/city.glb');
+  check('PUT exterior stays sparse (no cleared backdropDistance)', !('backdropDistance' in put.exterior));
+  check('PUT exterior fog is a sub-block', put.exterior.fog?.near === 40 && put.exterior.fog?.far === 120);
+
+  doc.querySelector('button[data-action="exterior-fog-remove"]').click();
+  check('removing fog deletes the sub-block (sparse)', !('fog' in st.doc.exterior));
+
+  // remove the whole exterior (restores the map for the following save test)
+  doc.querySelector('button[data-action="exterior-remove"]').click();
+  check('removing exterior deletes the block entirely (sparse)', !('exterior' in st.doc));
+}
+
 // ------------------------------------------------------------------ save payload
 console.log('map-editor.test — save PUT payload');
 {
