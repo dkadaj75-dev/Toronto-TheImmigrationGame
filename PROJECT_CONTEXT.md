@@ -741,3 +741,8 @@ Debt-window scaling is exact and pure/headless-tested: normalize the clamped sco
 - **Nav**: pass-through carve unchanged from gap doors; skips `cutsWall:false`.
 - **Map Editor**: doors tool places ON a continuous wall (click wall, drag to move), cutsWall checkbox, read-only aperture readout through `window.ApertureBridge.apertureSizeFor` (real game math, module bridge). Fixtures stay self-deriving.
 - Suites: test/wallaperture.test.ts (sizing/merging/segments/spans/lintel), doors, nav, wallview, windows, map-editor, asset-editor.
+
+## 7.40 Rental system (APT R1-R4) + bars/trash polish — as-built (2026-07-17)
+
+- **Rental**: see ROADMAP_APT.md SHIPPED notes (R1 schema+Map Editor card+shared tools/condition-builder.js; R2 pure game/rental.ts listRentals; R3 Kijiji phone tab (tuning.phone.rentalTabName) via loadAllMaps over existing /api/maps; R4 PendingMoveTracker + runtime map switch via applyFreshData, homeMap simstate var + sanctioned runtime PUT, finance re-reads live map). Designer authors rental blocks per map (R5).
+- **B10-19..21**: garbage fill-bar occlusion raycast (tuning.garbage.fillBar.hideWhenOccluded); skill progress bar above the action bar (pure skillPointProgress, tuning.feedback.skillBar); put-trash-out fullest-can-first (chooseFullestCan) then exterior door, orderable on a can once the designer adds empty_garbage to garbage_can's interactions.
