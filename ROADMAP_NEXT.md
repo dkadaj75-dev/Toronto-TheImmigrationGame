@@ -271,3 +271,7 @@ Designer report: after reading/studying, many floor clicks and subsequent action
 ## B10-10. BUG: designer-placed puddles never disappear after mopping (runtime-spawned ones did).
 
 **DONE (2026-07-16):** a COMPLETED clearing action now also removes a map-placed instance of a clearedBy-matching asset: main.ts's completed-only onActionStop branch falls back from the AccidentRegistry despawn to buy-mode's destroyInstance runtime override (+ nav rebake if the asset blocked). Interrupted/cancelled mopping leaves the puddle (side_effect_rule); the map file is never written, so a full data rebuild legitimately restores authored puddles. Pure helper `shouldRemovePlacedOnCleanup` covered in test/accidents.test.ts.
+
+## B10-11. Environment must be a pure aggregate of the assets currently present — a cleaned puddle's impact disappears; no drift over time.
+
+**DONE (2026-07-16):** `environmentScore()` (game/main.ts) now sums buy-mode's runtime-aware `effectivePlacedObjectsList()` (destroyed instances excluded, purchases included) instead of the raw authored map list, plus live registry accidents as before — extracted as pure `computeEnvironmentScore` in game/stats.ts. `applyEnvironment()` additionally fires on fire destruction, completed-mop removal (B10-10), repo seizure, buy confirm, and sell. Covered in test/stats.test.ts (destroyed excluded / purchase included / accident included / present puddle still counts).
