@@ -11,6 +11,10 @@ import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(here, '../tools/quests.html'), 'utf8');
+// ROADMAP_APT R1: the condition builder now lives in the shared tools/condition-builder.js, loaded
+// on the real page via <script src>. jsdom does not fetch external scripts, so we evaluate its
+// source into the window before the page's inline script runs (same pattern as toolnav.test.mjs).
+const condBuilderSrc = readFileSync(join(here, '../tools/condition-builder.js'), 'utf8');
 
 const simstate = {
   variables: [
@@ -78,6 +82,7 @@ const dom = new JSDOM(html, {
     window.confirm = () => true;
     window.prompt = () => '';
     window.alert = () => {};
+    window.eval(condBuilderSrc); // define window.ConditionBuilder before the inline script runs
   },
 });
 const { window } = dom;

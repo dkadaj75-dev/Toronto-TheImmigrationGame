@@ -45,3 +45,30 @@ export function polygonBounds(polygon: [number, number][]): { minX: number; minY
   if (!Number.isFinite(minX)) return { minX: 0, minY: 0, w: 0, h: 0 };
   return { minX, minY, w: maxX - minX, h: maxY - minY };
 }
+
+/** ROADMAP_APT R1: absolute area (m²) of a single floor polygon via the shoelace formula. Winding
+ *  order does not matter (result is always non-negative); a degenerate polygon (fewer than 3
+ *  vertices, or any non-finite coordinate) yields 0. Coordinates are in map meters — the same
+ *  world units the floor polygons are authored in (game/world.ts / bills.ts's pointInPolygon). Pure
+ *  and headless: the Map Editor reaches it through a bridge; R2's game/rental.ts sums it per map. */
+export function polygonArea(polygon: [number, number][]): number {
+  if (!Array.isArray(polygon) || polygon.length < 3) return 0;
+  let twiceArea = 0;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i];
+    const [xj, yj] = polygon[j];
+    if (!Number.isFinite(xi) || !Number.isFinite(yi) || !Number.isFinite(xj) || !Number.isFinite(yj)) return 0;
+    twiceArea += xj * yi - xi * yj;
+  }
+  return Math.abs(twiceArea) / 2;
+}
+
+/** ROADMAP_APT R1: a map's total floor area (m²) — the DEFAULT shown in every Kijiji ad when a map
+ *  has no `rental.areaM2Override`. Sums each floor polygon's shoelace area. NOTE this is a naive sum
+ *  (overlapping floor polygons would be double-counted); today's maps author non-overlapping floor
+ *  rectangles, matching how the designer builds rooms, and an override exists for any exception. The
+ *  `floors` param is typed structurally so both MapData['floors'] and lighter fixtures satisfy it. */
+export function floorsAreaM2(floors: { polygon: [number, number][] }[]): number {
+  if (!Array.isArray(floors)) return 0;
+  return floors.reduce((sum, f) => sum + polygonArea(f?.polygon ?? []), 0);
+}

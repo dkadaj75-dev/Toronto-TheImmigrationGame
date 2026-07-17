@@ -411,6 +411,41 @@ export interface CreditTuning {
   historyLimit: number;
 }
 
+/** ROADMAP_APT R1 — per-map rental/ad metadata for the future "Kijiji" phone tab (Track R). The
+ *  WHOLE block is sparse (absent = this map is not a rental listing at all), and every field inside
+ *  it is sparse too, so pre-existing maps stay valid untouched.
+ *
+ *  Consumed later by R2's pure listing/availability logic (game/rental.ts) + R3's phone tab; R1
+ *  only defines the schema and the Map Editor "Rental ad" card that authors it.
+ *
+ *  - `listed`: whether this map shows up in Kijiji at all.
+ *  - `adTitle`/`adText`: designer-authored fake-ad copy, shown verbatim.
+ *  - `adImage`: optional path under public/ (drop-in like textures/icons — the Map Editor
+ *     normalizes pasted Windows paths to a leading-slash URL, same convention as every other tool).
+ *  - `areaM2Override`: sparse m² override. DEFAULT (absent/null) = computed from the map's floor
+ *     polygons via the pure shoelace helper game/textures.ts's `floorsAreaM2`. Shown on EVERY ad.
+ *  - `rentPriceOverride`: sparse rent override. DEFAULT (absent/null) = the existing finance rent
+ *     formula (game/bills.ts's computeFinancePreview → `rent`, driven by data/finance.json's
+ *     rent.base + perFloorTile*tiles + byPropertyType) — R2 calls that single source of truth so
+ *     Kijiji and the bills system can never disagree; do NOT duplicate the formula. Shown ONLY when
+ *     the listing is available.
+ *  - `availability`: a standard quest Condition tree (the SAME schema/evaluator the Quest Editor
+ *     builds and game/quests.ts evaluates — needs/skills/funds/time/vars/quests namespaces, which
+ *     already cover the designer's job/income/creditScore/visaStatus vars). The ad NEVER displays
+ *     these conditions; an unavailable listing renders the ad + a "Not available yet" label instead
+ *     of the price/Rent button (R2/R3 supply that label). Absent = always available.
+ *  - `moveInHours`: sim-time hours between renting and the actual move-in (R4 consumes it). */
+export interface RentalConfig {
+  listed: boolean;
+  adTitle?: string;
+  adText?: string;
+  adImage?: string;
+  areaM2Override?: number | null;
+  rentPriceOverride?: number | null;
+  availability?: Condition;
+  moveInHours?: number;
+}
+
 export interface MapData {
   id: string; name: string; gridSize: number;
   /** Designer placement increment in meters. Independent from nav/tile cell size; absent maps
@@ -469,6 +504,9 @@ export interface MapData {
    *  this map's music context cycles through (advances to the next entry when one finishes — see
    *  game/audio.ts's module doc comment). Absent/empty = silence while this map is active. */
   music?: string[];
+  /** ROADMAP_APT R1: sparse per-map rental/ad metadata for the future Kijiji phone tab. Absent =
+   *  this map is not a rental listing. See RentalConfig's doc comment above for every field. */
+  rental?: RentalConfig;
 }
 
 /** Rigged character setup — all of it data, so a different GLB export is a JSON edit. */
@@ -555,8 +593,12 @@ export interface TuningData {
    *  Optional so pre-existing tuning fixtures/tests stay valid (same precedent as `interaction?`/
    *  `doors?` above); game/main.ts falls back to "visitor" when absent. */
   visa?: { startStatus: string };
-  /** B3-7 phone job-search result count. Optional for old fixtures; game/phone.ts defaults to 3. */
-  phone?: { jobListSize?: number; icon?: string };
+  /** B3-7 phone job-search result count. Optional for old fixtures; game/phone.ts defaults to 3.
+   *  ROADMAP_APT R1 (§6.4 RESOLVED): `rentalTabName` is the in-game brand string for the future
+   *  Kijiji rental tab — kept in DATA (phone config), not hardcoded, so the designer can rename the
+   *  tab. Sparse; R3 (the phone tab UI) consumes it and falls back to "Kijiji" when absent. R1 only
+   *  adds the field + typing + the data/tuning.json default. */
+  phone?: { jobListSize?: number; icon?: string; rentalTabName?: string };
   /** B3-8/B7-5/B7-6 work tuning. Optional for old fixtures. `departureWindowHours` limits how
    *  long after startHour the sim may leave; the two auto-depart floors are inclusive and must
    *  both pass. Runtime fallbacks live in main.ts (5 / 2 / 40 / 25 respectively). */

@@ -109,6 +109,7 @@
   </section>
 </main>
 
+<script src="/tools/condition-builder.js"></script>
 <script>
 // ------------------------------------------------------------------ state
 // Quest Editor: CRUD data/simstate.json (designer variables) and data/quests.json (quests +
@@ -194,233 +195,17 @@ function checkInput(get, set, path, opts = {}) {
   return i;
 }
 
-// isLeaf(cond): a condition node is a leaf iff it has neither `all` nor `any` (Condition union,
-// game/data.ts / game/quests.ts).
-function isLeafCond(c) { return c != null && typeof c === 'object' && !('all' in c) && !('any' in c); }
-function getLeafOp(leaf) { for (const op of ['gte', 'lte', 'eq', 'neq']) if (op in leaf) return op; return null; }
-
-/** Recursively test whether any leaf in `cond` satisfies `predicate`. */
-function anyLeaf(cond, predicate) {
-  if (!cond) return false;
-  if (isLeafCond(cond)) return predicate(cond);
-  const key = 'all' in cond ? 'all' : 'any';
-  return (cond[key] || []).some((c) => anyLeaf(c, predicate));
-}
-
-/**
- * Recursively strip leaves matching `predicate` out of a condition tree, mutating combinator
- * arrays in place (keeps the same object identity for the group, even if it ends up empty —
- * an emptied `all` is vacuously TRUE, an emptied `any` is FALSE per game/quests.ts's evaluator;
- * the referential-integrity confirm dialogs warn about this before the strip happens).
- * Returns null only in the (pathological, hand-edited-JSON) case where the root itself is a
- * matching leaf — callers fall back to `{ all: [] }` in that case.
- */
-function stripCondition(node, predicate) {
-  if (!node) return node;
-  if (isLeafCond(node)) return predicate(node) ? null : node;
-  const key = 'all' in node ? 'all' : 'any';
-  node[key] = (node[key] || []).map((c) => stripCondition(c, predicate)).filter((c) => c !== null);
-  return node;
-}
-
-// ------------------------------------------------------------------ var-path namespace helpers
-// Condition namespace (PROJECT_CONTEXT.md §3.2 / game/quests.ts resolveVar): needs.<id>,
-// skills.<id>, funds, time.hour, time.day, vars.<name>, quests.<id>.state.
-function describeVarPath(path) {
-  if (path === 'funds' || path === 'time.hour' || path === 'time.day') return { kind: 'number' };
-  if (path.startsWith('needs.') || path.startsWith('skills.')) return { kind: 'number' };
-  if (path.startsWith('vars.')) {
-    const v = state.simstate.variables.find((x) => x.id === path.slice(5));
-    return { kind: 'var', varType: v ? v.type : 'string' };
-  }
-  const m = /^quests\.(.+)\.state$/.exec(path);
-  if (m) return { kind: 'queststate', questId: m[1] };
-  return { kind: 'unknown' };
-}
-function defaultVarPath() {
-  if (state.stats.needs.length) return 'needs.' + state.stats.needs[0].id;
-  return 'funds';
-}
-function defaultValueFor(path, op, oldVal) {
-  const info = describeVarPath(path);
-  if (op === 'gte' || op === 'lte') return typeof oldVal === 'number' ? oldVal : 0;
-  // eq / neq — any type
-  if (info.kind === 'queststate') return ['locked', 'active', 'done'].includes(oldVal) ? oldVal : 'locked';
-  if (info.kind === 'var') {
-    if (info.varType === 'boolean') return typeof oldVal === 'boolean' ? oldVal : false;
-    if (info.varType === 'number') return typeof oldVal === 'number' ? oldVal : 0;
-    return typeof oldVal === 'string' ? oldVal : '';
-  }
-  return typeof oldVal === 'number' ? oldVal : 0;
-}
-function resetLeafOperatorAndValue(leaf, op) {
-  const oldOp = getLeafOp(leaf);
-  const oldVal = oldOp ? leaf[oldOp] : undefined;
-  delete leaf.gte; delete leaf.lte; delete leaf.eq; delete leaf.neq;
-  leaf[op] = defaultValueFor(leaf.var, op, oldVal);
-}
-function appendVarOptions(sel, currentValue) {
-  sel.innerHTML = '';
-  const groups = [
-    ['Needs', state.stats.needs.map((n) => ({ value: 'needs.' + n.id, label: n.name }))],
-    ['Skills', state.stats.skills.map((s) => ({ value: 'skills.' + s.id, label: s.name }))],
-    ['Economy', [{ value: 'funds', label: 'Funds' }]],
-    ['Time', [{ value: 'time.hour', label: 'Hour of day' }, { value: 'time.day', label: 'Day' }]],
-    ['Variables', state.simstate.variables.map((v) => ({ value: 'vars.' + v.id, label: v.name }))],
-    ['Quests', state.quests.quests.map((q) => ({ value: 'quests.' + q.id + '.state', label: q.name + ' (state)' }))],
-  ];
-  const known = new Set();
-  for (const [label, opts] of groups) {
-    if (!opts.length) continue;
-    const og = document.createElement('optgroup'); og.label = label;
-    for (const o of opts) {
-      const opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.label;
-      og.appendChild(opt); known.add(o.value);
-    }
-    sel.appendChild(og);
-  }
-  if (currentValue && !known.has(currentValue)) {
-    const og = document.createElement('optgroup'); og.label = 'Unknown (stale id)';
-    const opt = document.createElement('option'); opt.value = currentValue; opt.textContent = currentValue;
-    og.appendChild(opt); sel.appendChild(og);
-  }
-  sel.value = currentValue;
-}
-function valueInputFor(path, value, onChange, condPath) {
-  const info = describeVarPath(path);
-  let input;
-  if (info.kind === 'queststate') {
-    input = document.createElement('select');
-    for (const s of ['locked', 'active', 'done']) { const o = document.createElement('option'); o.value = s; o.textContent = s; input.appendChild(o); }
-    input.value = ['locked', 'active', 'done'].includes(value) ? value : 'locked';
-    input.addEventListener('change', () => onChange(input.value));
-  } else if (info.kind === 'var' && info.varType === 'boolean') {
-    input = document.createElement('select');
-    for (const b of ['true', 'false']) { const o = document.createElement('option'); o.value = b; o.textContent = b; input.appendChild(o); }
-    input.value = String(!!value);
-    input.addEventListener('change', () => onChange(input.value === 'true'));
-  } else if (info.kind === 'number' || (info.kind === 'var' && info.varType === 'number')) {
-    input = document.createElement('input'); input.type = 'number'; input.step = 'any';
-    input.value = value === undefined || value === null ? '' : value;
-    input.addEventListener('input', () => onChange(input.value === '' ? 0 : Number(input.value)));
-  } else {
-    input = document.createElement('input'); input.type = 'text';
-    input.value = value === undefined || value === null ? '' : value;
-    input.addEventListener('input', () => onChange(input.value));
-  }
-  input.dataset.role = 'value';
-  input.dataset.condPath = condPath;
-  return input;
-}
-
-// ------------------------------------------------------------------ condition builder
-function renderConditionNode(node, path) {
-  return isLeafCond(node) ? renderLeafRow(node, path) : renderGroupBox(node, path);
-}
-function renderGroupBox(node, path) {
-  const key = 'all' in node ? 'all' : 'any';
-  const box = document.createElement('div');
-  box.className = 'cond-group';
-  box.dataset.condPath = path;
-
-  const head = document.createElement('div');
-  head.className = 'cond-group-head';
-  const sel = document.createElement('select');
-  sel.dataset.role = 'combinator'; sel.dataset.condPath = path;
-  for (const opt of ['all', 'any']) { const o = document.createElement('option'); o.value = opt; o.textContent = opt.toUpperCase(); sel.appendChild(o); }
-  sel.value = key;
-  sel.addEventListener('change', () => {
-    const arr = node[key];
-    delete node.all; delete node.any;
-    node[sel.value] = arr;
-    markDirty('quests.json');
-    renderQuestEditor();
-  });
-  head.appendChild(sel);
-  const hint = document.createElement('span');
-  hint.className = 'cond-hint';
-  hint.textContent = key === 'all' ? '(every child must hold; empty = vacuously TRUE)' : '(any child must hold; empty = FALSE — nothing to satisfy)';
-  head.appendChild(hint);
-  box.appendChild(head);
-
-  const children = document.createElement('div');
-  children.className = 'cond-children';
-  node[key].forEach((child, i) => {
-    const childPath = path + '.' + i;
-    const wrap = document.createElement('div');
-    wrap.className = 'cond-child';
-    wrap.appendChild(renderConditionNode(child, childPath));
-    const rm = document.createElement('button');
-    rm.className = 'cond-remove'; rm.textContent = '× remove';
-    rm.dataset.action = 'remove-cond'; rm.dataset.condPath = childPath;
-    rm.addEventListener('click', () => {
-      node[key].splice(i, 1);
-      markDirty('quests.json');
-      renderQuestEditor();
-    });
-    wrap.appendChild(rm);
-    children.appendChild(wrap);
-  });
-  box.appendChild(children);
-
-  const addRow = document.createElement('div');
-  addRow.className = 'cond-add-row';
-  const addLeaf = document.createElement('button');
-  addLeaf.textContent = '+ Condition'; addLeaf.dataset.action = 'add-leaf'; addLeaf.dataset.condPath = path;
-  addLeaf.addEventListener('click', () => {
-    node[key].push({ var: defaultVarPath(), gte: 0 });
-    markDirty('quests.json');
-    renderQuestEditor();
-  });
-  const addGroup = document.createElement('button');
-  addGroup.textContent = '+ Group'; addGroup.dataset.action = 'add-group'; addGroup.dataset.condPath = path;
-  addGroup.addEventListener('click', () => {
-    node[key].push({ all: [] });
-    markDirty('quests.json');
-    renderQuestEditor();
-  });
-  addRow.append(addLeaf, addGroup);
-  box.appendChild(addRow);
-  return box;
-}
-function renderLeafRow(leaf, path) {
-  const row = document.createElement('div');
-  row.className = 'cond-leaf';
-  row.dataset.condPath = path;
-
-  const varSel = document.createElement('select');
-  varSel.className = 'cond-var-select';
-  varSel.dataset.role = 'var'; varSel.dataset.condPath = path;
-  appendVarOptions(varSel, leaf.var);
-  varSel.addEventListener('change', () => {
-    const op = getLeafOp(leaf) || 'gte';
-    leaf.var = varSel.value;
-    resetLeafOperatorAndValue(leaf, op);
-    markDirty('quests.json');
-    renderQuestEditor();
-  });
-  row.appendChild(varSel);
-
-  const opSel = document.createElement('select');
-  opSel.dataset.role = 'op'; opSel.dataset.condPath = path;
-  for (const op of ['gte', 'lte', 'eq', 'neq']) { const o = document.createElement('option'); o.value = op; o.textContent = op; opSel.appendChild(o); }
-  const currentOp = getLeafOp(leaf) || 'gte';
-  opSel.value = currentOp;
-  opSel.addEventListener('change', () => {
-    resetLeafOperatorAndValue(leaf, opSel.value);
-    markDirty('quests.json');
-    renderQuestEditor();
-  });
-  row.appendChild(opSel);
-
-  const valueWrap = document.createElement('div');
-  valueWrap.appendChild(valueInputFor(leaf.var, leaf[currentOp], (v) => { leaf[currentOp] = v; markDirty('quests.json'); renderValidation(); }, path));
-  row.appendChild(valueWrap);
-
-  // The remove button for this leaf is rendered by the parent group (renderGroupBox), which
-  // knows the leaf's index in the combinator array and can splice it out.
-  return row;
-}
+// ROADMAP_APT R1: the condition-tree helpers + builder now live in the SHARED
+// tools/condition-builder.js (window.ConditionBuilder), reused verbatim by the Map Editor Rental
+// availability card. These aliases keep the Quest Editor referential-integrity code
+// (anyLeaf/stripCondition on quest+var deletion) and validation (isLeafCond/getLeafOp) reading
+// exactly as before; condBuilder.render(node, path) draws the same DOM the inline builder did.
+const { isLeafCond, getLeafOp, anyLeaf, stripCondition } = window.ConditionBuilder;
+const condBuilder = window.ConditionBuilder.create({
+  data: () => ({ stats: state.stats, simstate: state.simstate, quests: state.quests }),
+  onStructuralChange: () => { markDirty("quests.json"); renderQuestEditor(); },
+  onValueChange: () => { markDirty("quests.json"); renderValidation(); },
+});
 
 // ------------------------------------------------------------------ rewards builder
 function defaultForRewardVar(varId) {
@@ -586,14 +371,14 @@ function renderQuestEditor() {
   const card2 = document.createElement('div'); card2.className = 'card';
   card2.innerHTML = '<h2>Trigger — locked → active</h2>';
   const triggerRoot = document.createElement('div'); triggerRoot.dataset.condRoot = 'trigger';
-  triggerRoot.appendChild(renderConditionNode(quest.trigger, 'trigger'));
+  triggerRoot.appendChild(condBuilder.render(quest.trigger, 'trigger'));
   card2.appendChild(triggerRoot);
   root.appendChild(card2);
 
   const card3 = document.createElement('div'); card3.className = 'card';
   card3.innerHTML = '<h2>Completion — active → done (applies rewards)</h2>';
   const completionRoot = document.createElement('div'); completionRoot.dataset.condRoot = 'completion';
-  completionRoot.appendChild(renderConditionNode(quest.completion, 'completion'));
+  completionRoot.appendChild(condBuilder.render(quest.completion, 'completion'));
   card3.appendChild(completionRoot);
   root.appendChild(card3);
 

@@ -44,6 +44,22 @@
   .muted { color: #5f6f93; font-size: 12px; }
   input[type=range] { width: 100%; }
   input[type=file] { font-size: 11px; width: 100%; color: #93a3c0; }
+  /* ROADMAP_APT R1: shared condition-builder styles (Rental "availability" card). Kept in sync
+     with tools/quests.html — the builder DOM (tools/condition-builder.js) is identical. */
+  .cond-group { border: 1px solid #2c3a58; border-radius: 10px; padding: 8px 10px; margin: 6px 0; background: #10182a; }
+  .cond-group-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .cond-group-head select { background: #1c2436; border: 1px solid #2c3a58; color: #dfe6f2; border-radius: 6px; padding: 4px 8px; font-size: 12px; }
+  .cond-hint { font-size: 11px; color: #8fa3c8; }
+  .cond-children { display: flex; flex-direction: column; gap: 6px; }
+  .cond-child { display: flex; align-items: flex-start; gap: 8px; }
+  .cond-child > *:first-child { flex: 1; }
+  .cond-leaf { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: #1a2133; border: 1px solid #26304a;
+    border-radius: 8px; padding: 6px 8px; flex: 1; }
+  .cond-leaf select, .cond-leaf input { background: #10182a; border: 1px solid #2c3a58; color: #dfe6f2; border-radius: 6px; padding: 5px 7px; font-size: 12px; }
+  .cond-var-select { min-width: 150px; }
+  .cond-add-row { display: flex; gap: 6px; margin-top: 6px; }
+  .cond-add-row button, .cond-remove { font-size: 11px; padding: 5px 9px; }
+  .cond-remove { background: #7a3040; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -97,6 +113,7 @@
   </div>
 </main>
 
+<script src="/tools/condition-builder.js"></script>
 <script>
 // =============================================================== Map Editor
 // Slice 1 (objects, snap, nav overlay, inspector) + Slice 2 (draw floors/walls/
@@ -118,6 +135,9 @@ const FLOOR_COLORS = { wood: '#8a6b46', tile: '#9aa3ad', carpet: '#6f7f97' };
 const state = {
   maps: [], mapId: null, doc: null,
   assets: null, tuning: null, textures: [],
+  // ROADMAP_APT R1: read-only reference data feeding the Rental card's availability condition
+  // builder (same namespaces the Quest Editor offers). Never PUT by the Map Editor.
+  stats: { needs: [], skills: [] }, simstate: { variables: [] }, quests: { quests: [] },
   dirty: false, mode: 'objects', sel: null,       // sel: {kind, index} | {kind:'spawn'}
   undoStack: [],
   navCells: null, navDirty: true,
@@ -132,14 +152,21 @@ async function getJson(u) { const r = await fetch(u); if (!r.ok) throw new Error
 async function boot() {
   setStatus('loading…');
   try {
-    const [list, assets, tuning, textures] = await Promise.all([
+    const [list, assets, tuning, textures, stats, simstate, quests] = await Promise.all([
       getJson('/api/maps'), getJson(API + 'assets.json'), getJson(API + 'tuning.json'),
       getJson('/api/textures').catch(() => []), // B9-1: texture pickers; resilient if unlisted
+      // R1: reference data for the Rental availability condition builder; resilient if unavailable.
+      getJson(API + 'stats.json').catch(() => ({ needs: [], skills: [] })),
+      getJson(API + 'simstate.json').catch(() => ({ variables: [] })),
+      getJson(API + 'quests.json').catch(() => ({ quests: [] })),
     ]);
     state.maps = list.maps;
     state.assets = assets;
     state.tuning = tuning;
     state.textures = Array.isArray(textures) ? textures : [];
+    state.stats = stats && stats.needs ? stats : { needs: [], skills: [] };
+    state.simstate = simstate && simstate.variables ? simstate : { variables: [] };
+    state.quests = quests && quests.quests ? quests : { quests: [] };
     const active = tuning.map?.active;
     await selectMap(state.maps.includes(active) ? active : state.maps[0]);
     renderPalette();
@@ -815,6 +842,148 @@ function textureSideBRow(current, onChange) {
   return row;
 }
 
+// ---------------------------------------------------------------- Rental ad card (ROADMAP_APT R1)
+// A simple checkbox row (field() only builds number/text/select). Writes a boolean field.
+function checkboxField(labelText, checked, onChange, dataField) {
+  const row = document.createElement('div'); row.className = 'field';
+  const lab = document.createElement('label'); lab.textContent = labelText;
+  const input = document.createElement('input'); input.type = 'checkbox'; input.checked = !!checked;
+  if (dataField) input.dataset.field = dataField;
+  input.addEventListener('change', () => onChange(input.checked));
+  row.append(lab, input);
+  return row;
+}
+
+// A designer may paste a Windows filesystem path for the ad photo; normalize it to a served URL
+// under public/ exactly like the Animation Mapper's normalizeSourcePath (AGENTS.md pitfall). Best
+// effort: a path containing a "public" segment keeps everything after it; otherwise the drive
+// letter is dropped and a leading slash added, so we never save an unfetchable "D:\..." string.
+function normalizeAdImagePath(raw) {
+  let p = String(raw ?? '').trim();
+  if (!p) return '';
+  const looksWindows = /^\/?[a-zA-Z]:[\\/]/.test(p) || p.includes('\\');
+  if (looksWindows) {
+    const unified = p.replace(/\\/g, '/');
+    const m = /\/public(\/.+)$/i.exec(unified);
+    p = m ? m[1] : unified.replace(/^\/?[a-zA-Z]:\//, '');
+  }
+  if (!/^(\/|https?:)/.test(p)) p = '/' + p;
+  return p;
+}
+
+// The DEFAULT m² shown when there is no areaM2Override — the real value comes from the game's own
+// pure shoelace helper (game/textures.ts floorsAreaM2) via the module bridge, never reimplemented.
+// Without the bridge (headless jsdom) we still describe the source so the readout is never blank.
+function computedAreaText(doc) {
+  const a = window.AreaBridge?.floorsAreaM2?.(doc.floors);
+  return (typeof a === 'number' && Number.isFinite(a))
+    ? `default (computed from floor polygons): ${a.toFixed(1)} m²`
+    : 'default = computed from floor polygons (shoelace area)';
+}
+
+// One shared availability condition builder instance (tools/condition-builder.js), reused verbatim
+// from the Quest Editor. Structural edits re-render the whole card; value edits just mark dirty.
+let availabilityBuilder = null;
+function getAvailabilityBuilder() {
+  if (!availabilityBuilder) {
+    availabilityBuilder = window.ConditionBuilder.create({
+      data: () => ({ stats: state.stats, simstate: state.simstate, quests: state.quests }),
+      onStructuralChange: () => { markDirty(); renderInspector(); },
+      onValueChange: () => { markDirty(); },
+    });
+  }
+  return availabilityBuilder;
+}
+
+// Renders the "Rental ad" card into `host` for the current map's sparse `rental` block.
+function renderRentalCard(host, doc) {
+  host.appendChild(Object.assign(document.createElement('h2'), { textContent: 'Rental ad (Kijiji)' }));
+  const ensureRental = () => (doc.rental ??= { listed: false });
+
+  if (!doc.rental) {
+    const btn = document.createElement('button');
+    btn.textContent = 'Make this map a rental listing';
+    btn.dataset.action = 'rental-create';
+    btn.addEventListener('click', () => { pushUndo(); doc.rental = { listed: true }; markDirty(); renderInspector(); });
+    host.appendChild(btn);
+    const hint = document.createElement('div'); hint.className = 'hint';
+    hint.textContent = 'Absent = this map never appears in the Kijiji tab.';
+    host.appendChild(hint);
+    return;
+  }
+  const r = doc.rental;
+
+  host.appendChild(checkboxField('listed in Kijiji', r.listed === true, (checked) => {
+    pushUndo(); ensureRental().listed = checked; markDirty();
+  }, 'rental.listed'));
+
+  host.appendChild(field('ad title', r.adTitle ?? '', (v) => {
+    pushUndo(); const rr = ensureRental(); if (v.trim()) rr.adTitle = v; else delete rr.adTitle; markDirty();
+  }, { text: true, data: 'rental.adTitle' }));
+
+  host.appendChild(field('ad text', r.adText ?? '', (v) => {
+    pushUndo(); const rr = ensureRental(); if (v.trim()) rr.adText = v; else delete rr.adText; markDirty();
+  }, { text: true, data: 'rental.adText' }));
+
+  host.appendChild(field('ad image', r.adImage ?? '', (v) => {
+    pushUndo(); const rr = ensureRental(); const n = normalizeAdImagePath(v);
+    if (n) rr.adImage = n; else delete rr.adImage; markDirty(); renderInspector();
+  }, { text: true, data: 'rental.adImage' }));
+
+  // areaM2Override — blank clears the key (default = computed floor area, shown below).
+  host.appendChild(field('m² override', r.areaM2Override ?? '', (v) => {
+    pushUndo(); const rr = ensureRental();
+    if (Number.isFinite(v) && v > 0) rr.areaM2Override = v; else delete rr.areaM2Override; markDirty();
+  }, { data: 'rental.areaM2Override' }));
+  const areaHint = document.createElement('div'); areaHint.className = 'hint';
+  areaHint.dataset.field = 'rental.areaComputed';
+  areaHint.textContent = computedAreaText(doc);
+  host.appendChild(areaHint);
+
+  // rentPriceOverride — blank clears the key (default = data/finance.json rent formula, applied by
+  // R2's game/rental.ts via game/bills.ts computeFinancePreview; not duplicated here).
+  host.appendChild(field('rent override', r.rentPriceOverride ?? '', (v) => {
+    pushUndo(); const rr = ensureRental();
+    if (Number.isFinite(v) && v > 0) rr.rentPriceOverride = v; else delete rr.rentPriceOverride; markDirty();
+  }, { data: 'rental.rentPriceOverride' }));
+  const rentHint = document.createElement('div'); rentHint.className = 'hint';
+  rentHint.textContent = 'default = finance.json rent formula (propertyType + floor tiles). Shown in Kijiji only when available.';
+  host.appendChild(rentHint);
+
+  // moveInHours — blank clears the key (R4 consumes it as the sim-time move-in delay).
+  host.appendChild(field('move-in hours', r.moveInHours ?? '', (v) => {
+    pushUndo(); const rr = ensureRental();
+    if (Number.isFinite(v) && v >= 0) rr.moveInHours = v; else delete rr.moveInHours; markDirty();
+  }, { data: 'rental.moveInHours' }));
+
+  // Availability condition tree (reused Quest Editor builder). Sparse: absent = always available;
+  // the ad never displays these conditions (R2/R3 show "Not available yet" instead).
+  host.appendChild(Object.assign(document.createElement('h2'), { textContent: 'Availability conditions' }));
+  if (!r.availability) {
+    const addBtn = document.createElement('button');
+    addBtn.textContent = '+ Add availability conditions';
+    addBtn.dataset.action = 'rental-availability-add';
+    addBtn.addEventListener('click', () => { pushUndo(); ensureRental().availability = { all: [] }; markDirty(); renderInspector(); });
+    host.appendChild(addBtn);
+    const availHint = document.createElement('div'); availHint.className = 'hint';
+    availHint.textContent = 'None = always available to rent.';
+    host.appendChild(availHint);
+  } else {
+    host.appendChild(getAvailabilityBuilder().render(r.availability, 'availability'));
+    const rmBtn = document.createElement('button');
+    rmBtn.className = 'danger'; rmBtn.textContent = 'Remove conditions (always available)';
+    rmBtn.dataset.action = 'rental-availability-remove';
+    rmBtn.addEventListener('click', () => { pushUndo(); delete ensureRental().availability; markDirty(); renderInspector(); });
+    host.appendChild(rmBtn);
+  }
+
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'danger'; removeBtn.textContent = 'Remove rental listing'; removeBtn.style.marginTop = '8px';
+  removeBtn.dataset.action = 'rental-remove';
+  removeBtn.addEventListener('click', () => { pushUndo(); delete doc.rental; markDirty(); renderInspector(); });
+  host.appendChild(removeBtn);
+}
+
 function renderInspector() {
   const host = document.getElementById('inspector');
   host.innerHTML = '';
@@ -837,6 +1006,7 @@ function renderInspector() {
       const list = v.split(',').map((s) => s.trim()).filter(Boolean);
       if (list.length) doc.music = list; else delete doc.music;
     }), { text: true, data: 'map.music' }));
+    renderRentalCard(host, doc);
     if (state.mode === 'floors') {
       host.appendChild(Object.assign(document.createElement('h2'), { textContent: 'New floors' }));
       host.appendChild(field('material', state.newFloorMaterial, (v) => { state.newFloorMaterial = v; }, { options: [...FLOOR_MATERIALS], id: 'floor-material' }));
@@ -1071,8 +1241,11 @@ boot();
 import { bakeNavGrid } from '/game/nav.ts';
 import { snapWallMountedPlacement } from '/game/buymode.ts';
 import { apertureSizeFor } from '/game/wallaperture.ts';
+import { floorsAreaM2 } from '/game/textures.ts';
 // D1: the door inspector's aperture readout resolves through the game's own sizing math.
 window.ApertureBridge = { apertureSizeFor };
+// R1: the Rental card's computed m² readout resolves through the game's own shoelace area math.
+window.AreaBridge = { floorsAreaM2 };
 window.PlacementBridge = {
   snapWallMounted(requested, def, map, maxDistance) {
     return snapWallMountedPlacement(requested, def, map.walls, map.floors, map.gridSize, maxDistance);

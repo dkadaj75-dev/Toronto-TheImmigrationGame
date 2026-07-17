@@ -12,6 +12,12 @@ const html = readFileSync(new URL('../tools/map.html', import.meta.url), 'utf8')
 const condo = JSON.parse(readFileSync(new URL('../data/maps/condo.json', import.meta.url), 'utf8'));
 const assets = JSON.parse(readFileSync(new URL('../data/assets.json', import.meta.url), 'utf8'));
 const tuning = { time: { secondsPerGameDay: 60 }, map: { active: 'condo' }, movement: { walkSpeed: 2 } };
+// ROADMAP_APT R1: live reference data for the Rental card's availability condition builder + the
+// shared builder source (jsdom does not fetch <script src>, so we eval it in beforeParse).
+const stats = JSON.parse(readFileSync(new URL('../data/stats.json', import.meta.url), 'utf8'));
+const simstate = JSON.parse(readFileSync(new URL('../data/simstate.json', import.meta.url), 'utf8'));
+const quests = JSON.parse(readFileSync(new URL('../data/quests.json', import.meta.url), 'utf8'));
+const condBuilderSrc = readFileSync(new URL('../tools/condition-builder.js', import.meta.url), 'utf8');
 
 const puts = {};
 const deletes = [];
@@ -25,6 +31,9 @@ const fetchMock = async (url, opts = {}) => {
     '/api/data/maps/condo.json': condo,
     '/api/data/assets.json': assets,
     '/api/data/tuning.json': tuning,
+    '/api/data/stats.json': stats,
+    '/api/data/simstate.json': simstate,
+    '/api/data/quests.json': quests,
   }[u] ?? (u.startsWith('/api/data/maps/') && puts[u] ? puts[u] : null);
   return { ok: !!body, status: body ? 200 : 404, json: async () => structuredClone(body) };
 };
@@ -36,6 +45,7 @@ const dom = new JSDOM(html, {
   beforeParse(window) {
     window.fetch = fetchMock;
     window.confirm = () => true;
+    window.eval(condBuilderSrc); // define window.ConditionBuilder before the inline script runs
   },
 });
 const { window } = dom;
@@ -544,6 +554,108 @@ console.log('map-editor.test — undo');
   check('object added', st.doc.placedObjects.length === objCount + 1);
   ME.undo();
   check('Ctrl+Z restores previous doc', st.doc.placedObjects.length === objCount);
+}
+
+// ------------------------------------------------------------------ ROADMAP_APT R1: Rental ad card
+console.log('map-editor.test — rental ad card (schema round-trip + reused condition builder)');
+{
+  ME.setMode('objects'); // deselect -> the Map properties panel shows the Rental card
+  check('map has no rental block initially', !('rental' in st.doc));
+  const createBtn = doc.querySelector('button[data-action="rental-create"]');
+  check('rental-create button offered when absent', !!createBtn);
+  createBtn.click();
+  check('creating a listing writes rental.listed = true', st.doc.rental?.listed === true);
+
+  // listed toggle
+  const listed = doc.querySelector('input[data-field="rental.listed"]');
+  check('listed checkbox reflects true', !!listed && listed.checked === true);
+  listed.checked = false; listed.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('unchecking writes rental.listed = false', st.doc.rental.listed === false);
+  const listed2 = doc.querySelector('input[data-field="rental.listed"]');
+  listed2.checked = true; listed2.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('re-checking writes rental.listed = true', st.doc.rental.listed === true);
+
+  // text fields
+  const title = doc.querySelector('input[data-field="rental.adTitle"]');
+  title.value = 'Cozy studio near the docks'; title.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('ad title round-trips', st.doc.rental.adTitle === 'Cozy studio near the docks');
+  const text = doc.querySelector('input[data-field="rental.adText"]');
+  text.value = 'Fake-ad flavor text.'; text.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('ad text round-trips', st.doc.rental.adText === 'Fake-ad flavor text.');
+
+  // image path normalization — a pasted Windows path with a public/ segment becomes a served URL
+  const img = doc.querySelector('input[data-field="rental.adImage"]');
+  img.value = 'D:\\WebCreation\\condo-life-web\\public\\ads\\studio.jpg';
+  img.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('Windows image path normalized to a served URL under public/', st.doc.rental.adImage === '/ads/studio.jpg', st.doc.rental.adImage);
+
+  // computed m² readout + sparse override
+  check('computed area readout renders', (doc.querySelector('[data-field="rental.areaComputed"]')?.textContent ?? '').length > 0);
+  const area = doc.querySelector('input[data-field="rental.areaM2Override"]');
+  check('area override blank by default (sparse)', !!area && area.value === '');
+  area.value = '42'; area.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('area override settable', st.doc.rental.areaM2Override === 42);
+  const area2 = doc.querySelector('input[data-field="rental.areaM2Override"]');
+  area2.value = ''; area2.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('blanking area override deletes the key (sparse)', !('areaM2Override' in st.doc.rental));
+
+  // rent override (sparse)
+  const rent = doc.querySelector('input[data-field="rental.rentPriceOverride"]');
+  rent.value = '1500'; rent.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('rent override settable', st.doc.rental.rentPriceOverride === 1500);
+  const rent2 = doc.querySelector('input[data-field="rental.rentPriceOverride"]');
+  rent2.value = ''; rent2.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('blanking rent override deletes the key (sparse)', !('rentPriceOverride' in st.doc.rental));
+
+  // move-in hours (sparse)
+  const moveIn = doc.querySelector('input[data-field="rental.moveInHours"]');
+  moveIn.value = '48'; moveIn.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('move-in hours settable', st.doc.rental.moveInHours === 48);
+
+  // availability: the REUSED Quest Editor condition builder (shared tools/condition-builder.js)
+  check('no availability tree until added (sparse)', !('availability' in st.doc.rental));
+  const addAvail = doc.querySelector('button[data-action="rental-availability-add"]');
+  check('add-availability button offered', !!addAvail);
+  addAvail.click();
+  check('adding availability seeds an empty ALL group', JSON.stringify(st.doc.rental.availability) === JSON.stringify({ all: [] }));
+
+  // exercise the SHARED builder via the same data-action/data-cond-path contract the Quest Editor uses
+  const addLeaf = doc.querySelector('[data-action="add-leaf"][data-cond-path="availability"]');
+  check('shared condition builder renders the availability group', !!addLeaf);
+  addLeaf.click();
+  check('builder pushed a leaf into the tree', st.doc.rental.availability.all.length === 1);
+  const varSel = doc.querySelector('[data-role="var"][data-cond-path="availability.0"]');
+  check('leaf renders a var selector', !!varSel);
+  const varOptions = [...varSel.querySelectorAll('option')].map((o) => o.value);
+  // The builder must offer the simstate/quest namespaces (fed from the live reference data).
+  check('builder offers simstate/quest namespaces from the live reference data',
+    varOptions.some((v) => v.startsWith('vars.')) || varOptions.some((v) => v.startsWith('quests.')),
+    varOptions.join(','));
+  const chosen = varOptions.find((v) => v.startsWith('vars.')) ?? varOptions.find((v) => v.startsWith('quests.')) ?? varOptions[0];
+  varSel.value = chosen; varSel.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('leaf var editable through the shared builder', st.doc.rental.availability.all[0].var === chosen, st.doc.rental.availability.all[0].var);
+  const valInput = doc.querySelector('[data-role="value"][data-cond-path="availability.0"]');
+  check('leaf value input renders', !!valInput);
+  valInput.value = '5'; valInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+
+  // remove-then-restore the availability tree (sparse remove path)
+  doc.querySelector('button[data-action="rental-availability-remove"]').click();
+  check('removing availability deletes the key (sparse — always available)', !('availability' in st.doc.rental));
+  doc.querySelector('button[data-action="rental-availability-add"]').click();
+  doc.querySelector('[data-action="add-leaf"][data-cond-path="availability"]').click();
+
+  // save + verify the whole rental block round-trips through the PUT payload
+  await ME.save();
+  const put = puts['/api/data/maps/condo.json'];
+  check('PUT includes the rental block', !!put?.rental && put.rental.listed === true);
+  check('PUT rental carries title/text/image/moveInHours', put.rental.adTitle === 'Cozy studio near the docks'
+    && put.rental.adText === 'Fake-ad flavor text.' && put.rental.adImage === '/ads/studio.jpg' && put.rental.moveInHours === 48);
+  check('PUT rental stays sparse (no null overrides)', !('areaM2Override' in put.rental) && !('rentPriceOverride' in put.rental));
+  check('PUT rental availability is a valid condition tree', Array.isArray(put.rental.availability?.all) && put.rental.availability.all.length === 1);
+
+  // remove the whole listing (restores the map to un-listed for the following save test)
+  doc.querySelector('button[data-action="rental-remove"]').click();
+  check('removing the listing deletes rental entirely (sparse)', !('rental' in st.doc));
 }
 
 // ------------------------------------------------------------------ save payload
