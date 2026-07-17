@@ -112,14 +112,10 @@ Tests: phone/hud jsdom smoke extension.
   (accidents, placed-transient overrides, carried-food target refs), rebake nav, re-apply
   environment score, restart map music.
 - **Which map is "home":** must NOT write `data/maps/*` and must not silently rewrite
-  `tuning.map.active` (that is designer configuration). Decision to make at build time — two
-  candidates, pick one during R4 design review:
-  (a) a `simstate.json` designer-visible var (`homeMap`) the engine reads at boot with
-      `tuning.map.active` as fallback — survives reloads TODAY without a save system;
-  (b) in-memory only until the save system lands — simplest, but a browser refresh returns to
-      the authored map (acceptable per "no saving yet"?). **Default recommendation: (a)** —
-      it uses an existing designer-editable surface and degrades cleanly into the future save
-      system.
+  `tuning.map.active` (that is designer configuration). **DECIDED (§6.1):** a `simstate.json`
+  designer-visible var (`homeMap`) the engine reads at boot, with `tuning.map.active` as
+  fallback — survives reloads today without a save system and degrades cleanly into the future
+  save system.
 - Rent becomes the bills system's rent basis for the new home (finance formula already reads
   propertyType + floor tiles — verify it re-reads after the switch).
 - Tests: pure countdown/completion logic; map-switch smoke (nav rebaked, spawn applied,
@@ -210,12 +206,43 @@ interaction turns out hairy.
 
 ---
 
+### D5 — 3D map builder (designer addition, 2026-07-16)
+**What:** the Map Editor gains a real 3D view of the map being built, in two stages so value
+lands early and risk stays contained:
+
+- **D5a — live 3D preview pane (read-only).** A second canvas in `tools/map.html` rendering the
+  CURRENT map through the game's OWN builders (`buildWorld`, `buildDoors`, wall/floor textures,
+  D1 door apertures, D3 curtain walls, D4 exterior when present — imported, never reimplemented,
+  same rule as the Asset Editor preview). Orbit/pan/zoom (OrbitControls precedent), wall-cut
+  toggle mirroring the in-game view, selection sync: clicking an object/wall/floor in the 2D
+  editor highlights it in 3D. Every 2D edit re-renders (schedulePreview debounce precedent).
+  This alone removes most of the guess-save-reload loop from map authoring.
+- **D5b — 3D editing.** Direct manipulation in the 3D pane: click-select, grid-snapped drag to
+  move placed objects (0.5 grid / 0.25 snap via existing snapping logic), rotate hotkey/gizmo,
+  wall drawing on the ground plane, door/window placement onto walls (D1's on-wall form),
+  floor-rect painting. All edits write through the SAME inline-script editor state and undo
+  stack as the 2D tools (`window.MapEditor` remains the single source of truth — the 3D pane is
+  another view, never a second data path). jsdom-testable logic stays in the inline script
+  (picking math, snap conversions as pure helpers); three.js raycasting lives in the module
+  script.
+- Keeps the 2D editor fully functional — the designer chooses per task; nothing is removed.
+
+Ships after D1 (door apertures must render truthfully) and ideally after D3/D4 so the preview
+shows façades/exteriors; D5a can start as soon as D1 lands.
+
+**Agents: D5a Claude (Opus)** (read-only render pane on strong precedents — Asset Editor
+preview did exactly this pattern); **D5b Codex** (3D picking/drag/undo integration across two
+views is the same regression-prone territory as the door geometry work).
+
+
 ## 4. Execution order & dependency graph
 
 ```
 R1 (Opus)  ──►  R2 (Sonnet) ──►  R3 (Opus) ──►  R4 (Codex) ──► R5 (designer)
 D1 (Codex) ──►  D2 (Codex[+Sonnet]) ──►  D3 (Opus) ──►  D4 (Opus)
-                (D1 also unblocks designer map-building for R5)
+     │          (D1 also unblocks designer map-building for R5)
+     └────►  D5a 3D preview pane (Opus) ──►  D5b 3D editing (Codex)
+             (D5a best AFTER D3/D4 so façades/exteriors render, but only REQUIRES D1)
 ```
 - Start in parallel: **R1 + D1** (disjoint files: maps-schema/tool card vs walls/doors/nav).
 - Never run two agents in the same files concurrently; docs (PROJECT_CONTEXT/ROADMAP/handoff)
@@ -236,6 +263,8 @@ D1 (Codex) ──►  D2 (Codex[+Sonnet]) ──►  D3 (Opus) ──►  D4 (Op
 | D2 | Frame/pane split, pane-only swing | **Codex** (tool UI may split to Sonnet) | GLB node/pivot math |
 | D3 | Curtain wall + balcony provisions | Claude Opus | Schema/material on precedents; needs D1 |
 | D4 | Simplified 3D exterior | Claude Opus (Codex fallback) | Render-layer visuals |
+| D5a | Map Editor 3D preview pane (read-only) | Claude Opus | Asset-Editor-preview pattern on the map |
+| D5b | 3D map editing (pick/drag/draw) | **Codex** | Two-view editing + undo integration, regression-prone |
 
 ## 6. Decisions — RESOLVED (designer approved the recommendations, 2026-07-16)
 
