@@ -25,7 +25,10 @@
 
 import * as THREE from 'three';
 import type { AssetDef, GameData, TuningData } from './data';
-import { attachMesh, type TrackInitialLoad } from './world';
+import {
+  attachMesh, loadMeshTemplate, normalizeModelToFootprint, applyMeshFit, normalizeMeshUrl,
+  type TrackInitialLoad,
+} from './world';
 import { DEFAULT_APERTURE_HEIGHT } from './wallaperture';
 
 /** Marker height for the stand-in panel — matches the pre-existing plain door marker in world.ts.
@@ -180,6 +183,63 @@ export function stepDoorAngle(currentAngle: number, targetOpen: boolean, config:
   return currentAngle;
 }
 
+// ------------------------------------------------------------------ D2 frame/pane split (pure)
+
+/** The two sparse forms of a frame/pane split (AssetDef.door.paneNode / paneMesh, see game/data.ts).
+ *  Resolved so the three.js layer never re-reads the raw fields. */
+export interface PaneConfig {
+  /** Name of the pane node inside the asset's single `mesh` GLB. */
+  paneNode?: string;
+  /** Path to a separate pane GLB combined with the frame `mesh`. */
+  paneMesh?: string;
+}
+
+/**
+ * The frame/pane split config for a door asset, or null when none is configured (whole asset
+ * pivots — today's behavior). paneNode wins if BOTH are set (a single GLB is the simpler, cheaper
+ * path — never load a redundant second GLB). Blank strings are treated as absent.
+ */
+export function resolvePaneConfig(def: AssetDef | undefined): PaneConfig | null {
+  const node = def?.door?.paneNode?.trim();
+  const mesh = def?.door?.paneMesh?.trim();
+  if (node) return { paneNode: node };
+  if (mesh) return { paneMesh: mesh };
+  return null;
+}
+
+/** Axis-aligned XZ bounds of the pane in the door's CANONICAL model-local frame (local +X = swing
+ *  axis, +Z = thickness) — what world.ts's Box3 yields for the pane sub-object before base yaw. */
+export interface PaneBounds {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
+
+/**
+ * The hinge point (canonical model-local XZ) for a pane split: the pane pivots about its OWN
+ * swing-side EDGE, not the whole asset's center. The edge is chosen by the SIGN of the authored
+ * hingeOffset[0] — positive → the pane's +X (max) edge, otherwise its -X (min) edge (0 defaults
+ * left, matching the shipped door_basic's left-edge hinge). The hinge sits at the pane's thickness
+ * center in Z. Derived from the pane's real bounds, so pane size/placement inside the model never
+ * needs a re-authored hingeOffset.
+ */
+export function paneHingeLocal(bounds: PaneBounds, hingeOffset: [number, number]): [number, number] {
+  const x = hingeOffset[0] > 0 ? bounds.maxX : bounds.minX;
+  const z = (bounds.minZ + bounds.maxZ) / 2;
+  return [x, z];
+}
+
+/**
+ * The pane's center offset FROM its hinge (same canonical frame) — the pane object's local
+ * position under the hinge pivot so that at swing angle 0 it sits exactly where it lives inside
+ * the model. Composes with paneHingeLocal: hinge + this = the pane's canonical center.
+ */
+export function paneLocalOffsetFromHinge(bounds: PaneBounds, hingeOffset: [number, number]): [number, number] {
+  const [hx, hz] = paneHingeLocal(bounds, hingeOffset);
+  return [(bounds.minX + bounds.maxX) / 2 - hx, (bounds.minZ + bounds.maxZ) / 2 - hz];
+}
+
 /** True when a map door links to an asset with a resolvable `door` block — i.e. it's rendered
  *  and animated by buildDoors()/DoorInstance below rather than world.ts's plain frame marker. */
 export function isAnimatedDoor(door: DoorEntry, byId: Map<string, AssetDef>, tuning: TuningData): boolean {
@@ -202,55 +262,211 @@ export interface DoorInstance {
  * footprint[1] = thickness) and swaps to a GLB clone if/when `def.mesh` loads — same "instant
  * box, async swap, keep the box on failure" philosophy as world.ts's attachMesh for furniture.
  */
+/** Tag cloned GLB meshes exactly as world.ts's attachMesh does: cast shadows, and mark
+ *  sharedResource so the disposal sweep skips template-shared geometry/materials. */
+function tagClonedMeshes(obj: THREE.Object3D): void {
+  obj.traverse((o) => {
+    if (o instanceof THREE.Mesh) { o.castShadow = true; o.userData.sharedResource = true; }
+  });
+}
+
 export function createDoorInstance(door: DoorEntry, def: AssetDef, tuning: TuningData, trackInitialLoad?: TrackInitialLoad): DoorInstance | null {
   const config = resolveDoorConfig(def, tuning);
   if (!config) return null;
-
-  const [hx, hz] = hingeWorldPos(door, config.hingeOffset);
-  const [px, pz] = panelLocalOffset(config.hingeOffset);
   const baseYaw = doorBaseYawDeg(door.orientation);
-
-  const pivot = new THREE.Group();
-  pivot.name = `door-hinge:${def.id}`;
-  pivot.position.set(hx, 0, hz);
-  pivot.userData.wallCutVisual = 'animated-door';
-  pivot.userData.wallCutFullHeight = DOOR_HEIGHT;
-  // ROADMAP_NEXT item 9: exterior doors are tappable interactables (their own AssetDef.interactions
-  // surface in the tap menu, e.g. a future "go to work") — same userData.assetId convention
-  // world.ts uses for furniture, so input.ts's existing raycast-and-climb-to-userData.assetId tap
-  // resolution picks this up with zero changes elsewhere. Interior doors get no userData at all,
-  // exactly as before this field existed — they stay non-tappable.
-  if (config.exterior) Object.assign(pivot.userData, { assetId: def.id, interactions: def.interactions });
-
-  const panel = new THREE.Group();
-  panel.position.set(px, 0, pz);
-  pivot.add(panel);
-
+  const pane = resolvePaneConfig(def);
+  const [px, pz] = panelLocalOffset(config.hingeOffset);
   const [length, thickness] = def.footprint;
-  const box = new THREE.Mesh(
+
+  // ---- No pane configured: today's whole-asset swing, byte-for-byte unchanged (zero breakage) ----
+  if (!pane) {
+    const [hx, hz] = hingeWorldPos(door, config.hingeOffset);
+    const pivot = new THREE.Group();
+    pivot.name = `door-hinge:${def.id}`;
+    pivot.position.set(hx, 0, hz);
+    pivot.userData.wallCutVisual = 'animated-door';
+    pivot.userData.wallCutFullHeight = DOOR_HEIGHT;
+    // ROADMAP_NEXT item 9: exterior doors are tappable interactables (their own AssetDef.interactions
+    // surface in the tap menu, e.g. a future "go to work") — same userData.assetId convention
+    // world.ts uses for furniture, so input.ts's existing raycast-and-climb-to-userData.assetId tap
+    // resolution picks this up with zero changes elsewhere. Interior doors get no userData at all,
+    // exactly as before this field existed — they stay non-tappable.
+    if (config.exterior) Object.assign(pivot.userData, { assetId: def.id, interactions: def.interactions });
+
+    const panel = new THREE.Group();
+    panel.position.set(px, 0, pz);
+    pivot.add(panel);
+
+    const box = new THREE.Mesh(
+      new THREE.BoxGeometry(length, DOOR_HEIGHT, thickness),
+      new THREE.MeshLambertMaterial({ color: 0x8a5a2b }),
+    );
+    box.position.y = DOOR_HEIGHT / 2;
+    box.castShadow = true;
+    panel.add(box);
+
+    // §7.5: door panels explicitly reject the image/sprite path (allowSprite: false) — see
+    // world.ts's attachMesh doc comment for why a billboard or floor-flat plane can't represent a
+    // swinging hinge panel. GLB behavior is completely unchanged (shared with furniture/accidents).
+    attachMesh(panel, def, { allowSprite: false, trackInitialLoad });
+
+    let angle = 0; // 0 = closed, degrees of swing added on top of baseYaw
+    let open = false; // current target state (not the mid-swing angle)
+
+    return {
+      pivot,
+      update(dt, simPos, simPath) {
+        const within = distanceToDoor(simPos, door) < config.triggerDistance;
+        const crosses = within && pathCrossesDoorway(simPath, door);
+        open = doorShouldBeOpenExt(config.exterior, within, crosses, open);
+        angle = stepDoorAngle(angle, open, config, dt);
+        pivot.rotation.y = THREE.MathUtils.degToRad(baseYaw + angle);
+      },
+    };
+  }
+
+  // ---- D2 frame/pane split: ONLY the pane swings, the frame stays static ----
+  // `root` maps the door's CANONICAL model-local frame (local +X = swing axis, +Z = thickness)
+  // into the world: positioned at door.at, rotated by the door's base yaw. `frameGroup` holds the
+  // static frame at the door position; `paneGroup` is the hinge pivot and carries ONLY the swing
+  // angle (base yaw lives on root, so composing the two stays a pair of plain Y rotations, exactly
+  // like the whole-asset path). Until the GLB(s) load, a stand-in box swings from the AUTHORED
+  // hinge — the same box the whole-asset path shows — so a load failure degrades to today's look.
+  const root = new THREE.Group();
+  root.name = `door-hinge:${def.id}`;
+  root.position.set(door.at[0], 0, door.at[1]);
+  root.rotation.y = THREE.MathUtils.degToRad(baseYaw);
+  root.userData.wallCutVisual = 'animated-door';
+  root.userData.wallCutFullHeight = DOOR_HEIGHT;
+  if (config.exterior) Object.assign(root.userData, { assetId: def.id, interactions: def.interactions });
+
+  const frameGroup = new THREE.Group();
+  frameGroup.name = 'door-frame';
+  root.add(frameGroup);
+
+  const paneGroup = new THREE.Group(); // hinge pivot — swing angle only
+  paneGroup.name = 'door-pane';
+  paneGroup.position.set(config.hingeOffset[0], 0, config.hingeOffset[1]); // authored hinge (stand-in)
+  root.add(paneGroup);
+
+  const standIn = new THREE.Mesh(
     new THREE.BoxGeometry(length, DOOR_HEIGHT, thickness),
     new THREE.MeshLambertMaterial({ color: 0x8a5a2b }),
   );
-  box.position.y = DOOR_HEIGHT / 2;
-  box.castShadow = true;
-  panel.add(box);
+  standIn.position.set(px, DOOR_HEIGHT / 2, pz); // -hingeOffset from the hinge → closed center on the doorway
+  standIn.castShadow = true;
+  paneGroup.add(standIn);
+  let standInLive = true;
+  const dropStandIn = () => {
+    if (!standInLive) return;
+    paneGroup.remove(standIn);
+    standIn.geometry.dispose();
+    (standIn.material as THREE.Material).dispose();
+    standInLive = false;
+  };
 
-  // §7.5: door panels explicitly reject the image/sprite path (allowSprite: false) — see
-  // world.ts's attachMesh doc comment for why a billboard or floor-flat plane can't represent a
-  // swinging hinge panel. GLB behavior is completely unchanged (shared with furniture/accidents).
-  attachMesh(panel, def, { allowSprite: false, trackInitialLoad });
+  // Reparent a canonical-frame `paneObj` (a descendant of `model`) onto the hinge pivot, deriving
+  // the hinge from the PANE's own bounds, and drop `model` (now pane-less) in as the static frame.
+  // The reparent must happen in CANONICAL space (root's world transform temporarily neutralized) so
+  // THREE.attach preserves the pane's real position rather than folding in door.at/base yaw.
+  const performSplit = (model: THREE.Object3D, paneObj: THREE.Object3D) => {
+    tagClonedMeshes(model);
+    model.updateMatrixWorld(true);
+    const b = new THREE.Box3().setFromObject(paneObj); // canonical (model is standalone here)
+    const bounds: PaneBounds = { minX: b.min.x, maxX: b.max.x, minZ: b.min.z, maxZ: b.max.z };
+    const [hx, hz] = paneHingeLocal(bounds, config.hingeOffset);
 
-  let angle = 0; // 0 = closed, degrees of swing added on top of baseYaw
-  let open = false; // current target state (not the mid-swing angle)
+    const savedPos = root.position.clone();
+    const savedRotY = root.rotation.y;
+    root.position.set(0, 0, 0);
+    root.rotation.y = 0;
+    root.updateMatrixWorld(true);
+    paneGroup.position.set(hx, 0, hz);
+    paneGroup.rotation.y = 0;
+    paneGroup.updateMatrixWorld(true);
+    paneGroup.attach(paneObj); // removes paneObj from model, keeps its canonical world → local offset from hinge
+    frameGroup.add(model);
+    dropStandIn();
+    root.position.copy(savedPos);
+    root.rotation.y = savedRotY;
+    root.updateMatrixWorld(true);
+  };
 
+  // Whole-asset fallback (paneNode not found): swing the entire loaded model from the AUTHORED
+  // hinge — exactly today's behavior — instead of a lone stand-in box.
+  const swingWholeModel = (model: THREE.Object3D) => {
+    tagClonedMeshes(model);
+    model.position.x += px; // shift centered model so its center sits -hingeOffset from the hinge
+    model.position.z += pz;
+    paneGroup.add(model);
+    dropStandIn();
+  };
+
+  let ready: Promise<unknown>;
+  if (pane.paneNode) {
+    // Single GLB carrying both frame and pane: load the CLONE, find the pane node by name.
+    const url = normalizeMeshUrl(def.mesh);
+    ready = loadMeshTemplate(url)
+      .then((template) => {
+        const model = template.clone(true); // never mutate the cached template
+        normalizeModelToFootprint(model, def.footprint);
+        applyMeshFit(model, def.meshFit);
+        const paneObj = model.getObjectByName(pane.paneNode!);
+        if (!paneObj) {
+          console.warn(`Door "${def.id}": pane node "${pane.paneNode}" not found in ${url} — swinging the whole asset instead.`);
+          swingWholeModel(model);
+          return;
+        }
+        performSplit(model, paneObj);
+      })
+      .catch(() => console.warn(`Could not load mesh for door "${def.id}" (${url}) — keeping the stand-in pane.`));
+  } else {
+    // Two GLBs "combined in one viewer": frame = def.mesh, pane = def.door.paneMesh. Both are fitted
+    // to the footprint TOGETHER (shared authored coordinate space) so their relative placement holds.
+    const frameUrl = normalizeMeshUrl(def.mesh);
+    const paneUrl = normalizeMeshUrl(pane.paneMesh!);
+    ready = Promise.all([
+      loadMeshTemplate(frameUrl).catch(() => null),
+      loadMeshTemplate(paneUrl).catch(() => null),
+    ]).then(([frameT, paneT]) => {
+      if (!paneT) {
+        // Documented fallback: keep the frame + let the stand-in pane box swing.
+        console.warn(`Door "${def.id}": pane mesh "${paneUrl}" failed to load — keeping frame + stand-in pane swing.`);
+        if (frameT) {
+          const fm = frameT.clone(true);
+          normalizeModelToFootprint(fm, def.footprint);
+          applyMeshFit(fm, def.meshFit);
+          tagClonedMeshes(fm);
+          frameGroup.add(fm);
+        } else {
+          console.warn(`Door "${def.id}": frame mesh "${frameUrl}" also failed — keeping the stand-in pane.`);
+        }
+        return; // stand-in keeps swinging
+      }
+      if (!frameT) {
+        console.warn(`Door "${def.id}": frame mesh "${frameUrl}" failed to load — keeping the stand-in pane swing.`);
+        return;
+      }
+      const combined = new THREE.Group();
+      combined.add(frameT.clone(true), paneT.clone(true));
+      const paneModel = combined.children[1];
+      normalizeModelToFootprint(combined, def.footprint);
+      applyMeshFit(combined, def.meshFit);
+      performSplit(combined, paneModel);
+    });
+  }
+  void (trackInitialLoad ? trackInitialLoad(ready) : ready);
+
+  let angle = 0; // 0 = closed
+  let open = false;
   return {
-    pivot,
+    pivot: root,
     update(dt, simPos, simPath) {
       const within = distanceToDoor(simPos, door) < config.triggerDistance;
       const crosses = within && pathCrossesDoorway(simPath, door);
       open = doorShouldBeOpenExt(config.exterior, within, crosses, open);
       angle = stepDoorAngle(angle, open, config, dt);
-      pivot.rotation.y = THREE.MathUtils.degToRad(baseYaw + angle);
+      paneGroup.rotation.y = THREE.MathUtils.degToRad(angle); // ONLY the pane swings; frame stays put
     },
   };
 }

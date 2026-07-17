@@ -354,6 +354,15 @@ apW.value = '0.9';
 apW.dispatchEvent(new window.Event('input', { bubbles: true }));
 // apertureHeight deliberately left blank — must stay absent in the PUT payload (sparse)
 
+// --- D2 frame/pane split fields (ROADMAP_APT D2): sparse text inputs, blank self-prunes
+const paneNode = doc.querySelector('input[data-path="door.paneNode"]');
+const paneMesh = doc.querySelector('input[data-path="door.paneMesh"]');
+assert(paneNode && paneMesh, 'paneNode/paneMesh fields rendered on the door card');
+assert(paneNode.value === '' && paneMesh.value === '', 'pane fields blank by default (whole asset swings)');
+paneNode.value = 'Door_Pane';
+paneNode.dispatchEvent(new window.Event('input', { bubbles: true }));
+// paneMesh deliberately left blank — must stay absent in the PUT payload (sparse)
+
 // --- accidents (§7.3): normal (non-accident) asset gets the risk-config section
 doc.querySelector('[data-asset-id="stove"]').click();
 assert(doc.querySelector('.card h2')?.textContent !== undefined, 'stove editor rendered');
@@ -525,6 +534,8 @@ assert(!('triggerDistance' in savedLamp.door), 'untouched door.triggerDistance s
 assert(savedLamp.door.exterior === true, 'PUT carries checked door.exterior (ROADMAP_NEXT item 9)');
 assert(savedLamp.door.apertureWidth === 0.9, 'PUT carries explicit door.apertureWidth (D1)');
 assert(!('apertureHeight' in savedLamp.door), 'untouched door.apertureHeight stays absent (sparse, derived default)');
+assert(savedLamp.door.paneNode === 'Door_Pane', 'PUT carries door.paneNode (D2)');
+assert(!('paneMesh' in savedLamp.door), 'untouched door.paneMesh stays absent (sparse)');
 
 // --- accidents (§7.3): stove's risk config round-trips exactly
 const savedStove = saved.assets.find((a) => a.id === 'stove');

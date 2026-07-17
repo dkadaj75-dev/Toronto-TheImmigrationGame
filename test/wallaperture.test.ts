@@ -227,23 +227,39 @@ console.log('wallaperture.test — lintelVisibleUnderCut');
 }
 
 // ------------------------------------------------------------------ live-data smoke: condo.json
-console.log('wallaperture.test — live condo.json stays byte-identical (all doors are gap-form)');
+console.log('wallaperture.test — live condo.json segment structure is aperture-consistent');
 {
-  // Self-deriving from the shipped map: every existing door must match NO wall (they are all
-  // gap-encoded today), so every wall renders as exactly one full solid segment.
+  // Self-deriving from the shipped map — NEVER hardcode counts here: the designer freely mixes
+  // gap-form and D1 on-wall doors. For every wall, wallSegments' output must structurally match
+  // aperturesForWall's output: solid spans around/between apertures (degenerate < EPS spans
+  // dropped) plus one lintel per aperture shorter than the wall.
   const { readFileSync } = await import('node:fs');
   const condo = JSON.parse(readFileSync(new URL('../data/maps/condo.json', import.meta.url), 'utf8'));
   const assets = JSON.parse(readFileSync(new URL('../data/assets.json', import.meta.url), 'utf8'));
   const byId = new Map<string, AssetDef>(assets.assets.map((a: AssetDef) => [a.id, a]));
-  let cutWalls = 0, totalSegs = 0;
+  const EPS = 1e-6;
+  let wallsChecked = 0, mismatches = 0;
   for (const wall of condo.walls) {
+    const len = Math.hypot(wall.to[0] - wall.from[0], wall.to[1] - wall.from[1]);
     const aps = aperturesForWall(wall, condo.doors, (id) => (id ? byId.get(id) : undefined), WALL_H);
-    if (aps.length > 0) cutWalls++;
-    totalSegs += wallSegments(Math.hypot(wall.to[0] - wall.from[0], wall.to[1] - wall.from[1]), WALL_H, aps).length;
+    const segs = wallSegments(len, WALL_H, aps);
+    let expectedSolids = 0, cursor = 0;
+    for (const a of aps) {
+      if (a.start - cursor > EPS) expectedSolids++;
+      cursor = a.end;
+    }
+    if (len - cursor > EPS) expectedSolids++;
+    const expectedLintels = aps.filter((a) => WALL_H - a.height > EPS).length;
+    const solids = segs.filter((s) => s.kind === 'solid').length;
+    const lintels = segs.filter((s) => s.kind === 'lintel').length;
+    if (solids !== expectedSolids || lintels !== expectedLintels) {
+      mismatches++;
+      console.error(`  wall ${JSON.stringify(wall.from)}->${JSON.stringify(wall.to)}: solids ${solids} vs ${expectedSolids}, lintels ${lintels} vs ${expectedLintels}`);
+    }
+    wallsChecked++;
   }
-  check('no shipped wall is cut by the shipped gap doors', cutWalls === 0, `cutWalls=${cutWalls}`);
-  check('segment count equals wall count (one solid box each)', totalSegs === condo.walls.length,
-    `${totalSegs} vs ${condo.walls.length}`);
+  check(`every shipped wall's segments are aperture-consistent (${wallsChecked} walls)`, mismatches === 0, `${mismatches} mismatched`);
+  check('shipped map has at least one wall', wallsChecked > 0);
 }
 
 if (failures) { console.error(`${failures} failure(s)`); process.exit(1); }

@@ -867,6 +867,21 @@ function renderEditor() {
       (v) => { if (v === undefined) { if (a.door) delete a.door.apertureHeight; } else ensureDoor().apertureHeight = v; },
       'door.apertureHeight',
     )));
+    // ROADMAP_APT D2 (frame/pane split): make ONLY the door PANE swing (game/doors.ts). BOTH sparse,
+    // both optional — absent = the whole asset pivots (today's behavior). paneNode names a node
+    // INSIDE this asset's own `mesh` GLB; paneMesh is a SEPARATE GLB combined with the frame in one
+    // 3D at runtime. Blank = absent (self-prunes). If both are set the game uses paneNode.
+    const setPaneField = (key) => (v) => {
+      const s = (v ?? '').trim();
+      if (s) ensureDoor()[key] = s;
+      else if (a.door) delete a.door[key];
+    };
+    card4c.appendChild(frow('pane node name (inside this asset\'s GLB — blank = whole asset swings)', textInput(
+      () => a.door?.paneNode, setPaneField('paneNode'), 'door.paneNode',
+    )));
+    card4c.appendChild(frow('pane mesh GLB (separate pane combined with the frame — blank = none)', textInput(
+      () => a.door?.paneMesh, setPaneField('paneMesh'), 'door.paneMesh',
+    )));
     // ROADMAP_NEXT item 9: exterior doors never open/close on path-crossing (game/doors.ts skips
     // them in the tick) — they're tappable interactables instead. Sparse: absent = false/interior.
     card4c.appendChild(frow('exterior (tappable interactable, never opens/closes automatically)', checkInput(
@@ -1131,6 +1146,37 @@ window.AssetPreview = {
     // than the raw GLB centered by its own bounds. loadMeshTemplate caches per URL, so
     // footprint/meshFit live-edits re-clone cheaply instead of re-fetching.
     const def = assetDef && Array.isArray(assetDef.footprint) ? assetDef : { ...(assetDef || {}), footprint: [1, 1] };
+    // D2: names of the loaded GLB's named nodes — surfaced for door assets so the designer can find
+    // the right door.paneNode without guessing (nice-to-have per ROADMAP_APT D2).
+    const nodeNames = (tpl) => {
+      const names = [];
+      tpl.traverse((o) => { if (o.name) names.push(o.name); });
+      return [...new Set(names)];
+    };
+    // D2: a separate pane GLB (door.paneMesh) is combined with the frame mesh in ONE 3D — fitted to
+    // the footprint TOGETHER, exactly as game/doors.ts combines them at runtime — so the preview
+    // shows what actually spawns. loadMeshTemplate caches both per URL (cheap re-clone on edits).
+    const paneRaw = def.door?.paneMesh;
+    const paneUrl = paneRaw ? (/^(\/|https?:)/.test(paneRaw) ? paneRaw : '/' + paneRaw) : null;
+    if (paneUrl) {
+      Promise.all([loadMeshTemplate(url), loadMeshTemplate(paneUrl)])
+        .then(([frameT, paneT]) => {
+          if (seq !== previewSeq) return; // superseded by a newer show()
+          const combined = new THREE.Group();
+          combined.add(frameT.clone(true), paneT.clone(true));
+          normalizeModelToFootprint(combined, def.footprint);
+          applyMeshFit(combined, def.meshFit);
+          if (current) scene.remove(current);
+          current = combined;
+          scene.add(current);
+          const box = new THREE.Box3().setFromObject(combined);
+          const ws = box.getSize(new THREE.Vector3());
+          assetStatus = `${url} + pane ${paneUrl} — combined in-game size ${ws.toArray().map((v) => v.toFixed(2)).join(' × ')} m · grounded at y=0`;
+          previewMessage(); framePreview();
+        })
+        .catch(() => { assetStatus = `Could not load frame ${url} or pane ${paneUrl} — both files should be under public/.`; previewMessage(); });
+      return;
+    }
     loadMeshTemplate(url)
       .then((template) => {
         if (seq !== previewSeq) return; // superseded by a newer show()
@@ -1148,6 +1194,10 @@ window.AssetPreview = {
         const box = new THREE.Box3().setFromObject(model);
         const worldSize = box.getSize(new THREE.Vector3());
         assetStatus = `${url} — in-game size ${worldSize.toArray().map((v) => v.toFixed(2)).join(' × ')} m · grounded at y=0`;
+        if (def.category === 'door') {
+          const names = nodeNames(template);
+          if (names.length) assetStatus += ` · GLB nodes (for pane node name): ${names.slice(0, 12).join(', ')}${names.length > 12 ? ' …' : ''}`;
+        }
         previewMessage(); framePreview();
       })
       .catch(() => { assetStatus = `Could not load ${url} — the file should be at public${url} (e.g. public/models/bed.glb → "/models/bed.glb").`; previewMessage(); });

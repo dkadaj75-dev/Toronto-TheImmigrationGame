@@ -194,7 +194,21 @@ export interface AssetDef {
    *  back to footprint/meshFit-derived defaults (width: footprint[0] x meshFit x-scale; height:
    *  the 2.1m stand-in panel height x meshFit y-scale — see game/wallaperture.ts's
    *  apertureSizeFor), so the designer can fix a badly-sized GLB without re-exporting. */
-  door?: { hingeOffset: [number, number]; openAngleDeg?: number; openSeconds?: number; closeSeconds?: number; triggerDistance?: number; exterior?: boolean; apertureWidth?: number; apertureHeight?: number };
+  /** paneNode/paneMesh (ROADMAP_APT D2, frame/pane split): make ONLY the door PANE swing while the
+   *  frame stays static (game/doors.ts). BOTH sparse, both optional — absent = today's behavior
+   *  (the whole asset pivots on the authored hingeOffset, zero breakage):
+   *   - paneNode: the NAME of the pane node INSIDE this asset's single `mesh` GLB. After the GLB
+   *     loads (on the cached-template CLONE — never the cached template itself), the game finds that
+   *     node by name, leaves the rest of the model as the static frame, and swings only the pane. If
+   *     the name isn't found it warns once and swings the whole asset (today's behavior).
+   *   - paneMesh: a SEPARATE GLB (path under public/, drop-in like `mesh`) combined with the frame
+   *     `mesh` in one 3D at runtime ("two assets combined in one viewer") — frame + pane are fitted
+   *     to the footprint TOGETHER (shared authored coordinate space), then the pane swings. On load
+   *     failure the frame stays + a stand-in pane box swings (documented fallback, warns once).
+   *  When a pane is configured the hinge is derived from the PANE's own bounds (its swing-side edge,
+   *  chosen by the sign of hingeOffset[0]), not the whole asset's center — so the pane pivots about
+   *  its real edge regardless of the pane's size/placement inside the model. */
+  door?: { hingeOffset: [number, number]; openAngleDeg?: number; openSeconds?: number; closeSeconds?: number; triggerDistance?: number; exterior?: boolean; apertureWidth?: number; apertureHeight?: number; paneNode?: string; paneMesh?: string };
   /** Accident-category assets ONLY (§7.3): action ids whose completion on the accident
    *  instance despawns it (e.g. fire's clearedBy: ["extinguish"]). See game/accidents.ts. */
   clearedBy?: string[];

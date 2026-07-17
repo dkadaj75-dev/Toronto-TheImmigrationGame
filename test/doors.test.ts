@@ -3,7 +3,8 @@
 import {
   resolveDoorConfig, doorBaseYawDeg, hingeWorldPos, panelLocalOffset,
   segmentCrossesDoorway, pathCrossesDoorway, distanceToDoor, doorShouldBeOpen, doorShouldBeOpenExt,
-  stepDoorAngle, isAnimatedDoor, type DoorEntry, type DoorConfig,
+  stepDoorAngle, isAnimatedDoor, resolvePaneConfig, paneHingeLocal, paneLocalOffsetFromHinge,
+  type DoorEntry, type DoorConfig, type PaneBounds,
 } from '../game/doors';
 import type { AssetDef, TuningData } from '../game/data';
 
@@ -206,6 +207,55 @@ console.log('doors.test — D1 on-wall form: door behavior is placement-form-agn
       segmentCrossesDoorway([3, 4], [3, 6], entry) === segmentCrossesDoorway([3, 4], [3, 6], gapForm));
     check(`${label}: distanceToDoor matches the gap form`, distanceToDoor([0, 0], entry) === distanceToDoor([0, 0], gapForm));
   }
+}
+
+console.log('doors.test — D2 resolvePaneConfig (frame/pane split target selection)');
+{
+  check('no asset → null', resolvePaneConfig(undefined) === null);
+  check('no door block → null', resolvePaneConfig(asset()) === null);
+  check('door block without pane fields → null', resolvePaneConfig(asset({ door: { hingeOffset: [-0.5, 0] } })) === null);
+
+  const nodeOnly = resolvePaneConfig(asset({ door: { hingeOffset: [-0.5, 0], paneNode: 'Door_Pane' } }))!;
+  check('paneNode resolves', nodeOnly.paneNode === 'Door_Pane' && nodeOnly.paneMesh === undefined);
+
+  const meshOnly = resolvePaneConfig(asset({ door: { hingeOffset: [-0.5, 0], paneMesh: 'models/pane.glb' } }))!;
+  check('paneMesh resolves', meshOnly.paneMesh === 'models/pane.glb' && meshOnly.paneNode === undefined);
+
+  const both = resolvePaneConfig(asset({ door: { hingeOffset: [-0.5, 0], paneNode: 'Pane', paneMesh: 'models/pane.glb' } }))!;
+  check('paneNode wins when both set (single-GLB path is cheaper)', both.paneNode === 'Pane' && both.paneMesh === undefined);
+
+  check('blank paneNode treated as absent', resolvePaneConfig(asset({ door: { hingeOffset: [-0.5, 0], paneNode: '   ' } })) === null);
+  check('blank paneMesh treated as absent', resolvePaneConfig(asset({ door: { hingeOffset: [-0.5, 0], paneMesh: '' } })) === null);
+}
+
+console.log('doors.test — D2 paneHingeLocal / paneLocalOffsetFromHinge (hinge from the pane bounds)');
+{
+  // A 1m-wide pane spanning local X ∈ [-0.5, 0.5], thickness Z ∈ [-0.05, 0.05], centered on origin.
+  const centered: PaneBounds = { minX: -0.5, maxX: 0.5, minZ: -0.05, maxZ: 0.05 };
+  const left = paneHingeLocal(centered, [-0.5, 0]);
+  check('negative hingeOffset[0] → hinge on the pane -X (min) edge', approx(left[0], -0.5) && approx(left[1], 0), String(left));
+  const right = paneHingeLocal(centered, [0.5, 0]);
+  check('positive hingeOffset[0] → hinge on the pane +X (max) edge', approx(right[0], 0.5) && approx(right[1], 0), String(right));
+  const zero = paneHingeLocal(centered, [0, 0]);
+  check('zero hingeOffset[0] defaults to the -X (left) edge', approx(zero[0], -0.5), String(zero));
+
+  // Hinge sits at the pane's thickness center regardless of authored hingeOffset[1].
+  const offZ: PaneBounds = { minX: -0.5, maxX: 0.5, minZ: 0, maxZ: 0.1 };
+  check('hinge Z is the pane thickness center', approx(paneHingeLocal(offZ, [-0.5, 0.7])[1], 0.05));
+
+  // Composition invariant: hinge + offset-from-hinge == the pane's real center, for ANY bounds/side.
+  const offset = paneLocalOffsetFromHinge(centered, [-0.5, 0]);
+  check('centered pane: closed-pane center reproduced (hinge+offset == center 0,0)',
+    approx(left[0] + offset[0], 0) && approx(left[1] + offset[1], 0), String(offset));
+
+  // An OFF-CENTER pane (its geometry doesn't straddle the model origin): the hinge follows the real
+  // edge, and the composition still lands on the pane's true center — the whole point of deriving
+  // the hinge from bounds rather than the asset center.
+  const offCenter: PaneBounds = { minX: 0.2, maxX: 1.2, minZ: -0.05, maxZ: 0.05 };
+  const h = paneHingeLocal(offCenter, [-0.5, 0]);
+  const o = paneLocalOffsetFromHinge(offCenter, [-0.5, 0]);
+  check('off-center pane: hinge on real min edge', approx(h[0], 0.2), String(h));
+  check('off-center pane: hinge+offset == real center (0.7, 0)', approx(h[0] + o[0], 0.7) && approx(h[1] + o[1], 0), String(o));
 }
 
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }
