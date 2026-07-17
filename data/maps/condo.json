@@ -54,7 +54,8 @@
         ]
       ],
       "material": "carpet",
-      "texture": "textures/ShittyFloor.jpg"
+      "texture": "textures/Carpet1.jpg",
+      "textureScale": 0.67
     },
     {
       "id": "floor_1",
@@ -107,12 +108,13 @@
     {
       "from": [
         0,
-        9
+        6
       ],
       "to": [
         0,
         2.5
-      ]
+      ],
+      "texture": "textures/wallpaint.jpg"
     },
     {
       "from": [
@@ -122,7 +124,9 @@
       "to": [
         0,
         0
-      ]
+      ],
+      "textureB": "textures/wallrough.jpg",
+      "texture": "textures/wallpaint.jpg"
     },
     {
       "from": [
@@ -132,7 +136,9 @@
       "to": [
         3,
         6
-      ]
+      ],
+      "textureB": "textures/wallpaint.jpg",
+      "texture": "textures/wallpaper.jpg"
     },
     {
       "from": [
@@ -142,7 +148,9 @@
       "to": [
         6,
         5
-      ]
+      ],
+      "texture": "textures/ShittyTiling2.jpg",
+      "textureB": "textures/wallpaint.jpg"
     },
     {
       "from": [
@@ -152,7 +160,9 @@
       "to": [
         6,
         6
-      ]
+      ],
+      "textureB": "textures/wallpaint.jpg",
+      "texture": "textures/wallpaper.jpg"
     },
     {
       "from": [
@@ -163,38 +173,41 @@
         6,
         5
       ],
-      "textureB": null,
+      "textureB": "textures/ShittyTiling2.jpg",
       "texture": "textures/Tiling.jpg"
     },
     {
       "from": [
         9,
-        9
+        5
       ],
       "to": [
         9,
         0
-      ]
+      ],
+      "texture": "textures/ShittyTiling2.jpg"
     },
     {
       "from": [
-        9,
+        6,
         0
       ],
       "to": [
         0,
         0
-      ]
+      ],
+      "texture": "textures/wallpaint.jpg"
     },
     {
       "from": [
-        9,
+        6,
         9
       ],
       "to": [
         0,
         9
-      ]
+      ],
+      "texture": "textures/wallpaper.jpg"
     },
     {
       "from": [
@@ -204,7 +217,9 @@
       "to": [
         6,
         8
-      ]
+      ],
+      "textureB": "textures/wallpaper.jpg",
+      "texture": "textures/Tiling.jpg"
     },
     {
       "from": [
@@ -214,7 +229,9 @@
       "to": [
         6,
         6
-      ]
+      ],
+      "textureB": "textures/wallpaper.jpg",
+      "texture": "textures/Tiling.jpg"
     },
     {
       "from": [
@@ -224,7 +241,9 @@
       "to": [
         6,
         0
-      ]
+      ],
+      "texture": "textures/ShittyTiling2.jpg",
+      "textureB": "textures/wallpaint.jpg"
     },
     {
       "from": [
@@ -234,7 +253,53 @@
       "to": [
         6,
         5
-      ]
+      ],
+      "texture": "textures/Tiling.jpg",
+      "textureB": "textures/wallpaint.jpg"
+    },
+    {
+      "from": [
+        0,
+        6
+      ],
+      "to": [
+        0,
+        9
+      ],
+      "texture": "textures/wallpaper.jpg"
+    },
+    {
+      "from": [
+        9,
+        5
+      ],
+      "to": [
+        9,
+        9
+      ],
+      "texture": "textures/Tiling.jpg"
+    },
+    {
+      "from": [
+        6,
+        0
+      ],
+      "to": [
+        9,
+        0
+      ],
+      "texture": "textures/ShittyTiling2.jpg"
+    },
+    {
+      "from": [
+        6,
+        9
+      ],
+      "to": [
+        9,
+        9
+      ],
+      "texture": "textures/Tiling.jpg"
     }
   ],
   "doors": [
