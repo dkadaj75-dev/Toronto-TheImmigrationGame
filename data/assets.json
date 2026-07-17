@@ -52,7 +52,8 @@
         "chancePercent": 45,
         "delaySeconds": 12
       },
-      "requiresQuestUnlock": true
+      "requiresQuestUnlock": true,
+      "icon": "/public/icons/sofa.png"
     },
     {
       "id": "armchair",
@@ -147,7 +148,8 @@
       "combustibility": {
         "chancePercent": 35,
         "delaySeconds": 15
-      }
+      },
+      "icon": "/public/icons/bed.png"
     },
     {
       "id": "fridge",
@@ -172,7 +174,8 @@
           1,
           1
         ]
-      }
+      },
+      "icon": "/public/icons/fridge.png"
     },
     {
       "id": "stove",
@@ -210,7 +213,8 @@
       "combustibility": {
         "chancePercent": 25,
         "delaySeconds": 10
-      }
+      },
+      "icon": "/public/icons/stove.png"
     },
     {
       "id": "counter",
@@ -270,7 +274,8 @@
             0.15
           ]
         }
-      }
+      },
+      "icon": "/public/icons/WC.png"
     },
     {
       "id": "shower",
@@ -319,7 +324,8 @@
           ]
         }
       },
-      "_usePoseNote": "ROADMAP_NEXT B2-3: offset [0,0] = footprint center = inside the shower stall (the shower action's animation is 'stand_use', a standing pose — without this explicit usePose.use entry the sim would stay at its walk-up approach spot just outside the footprint, per usePoseFor's 'no default for use' rule)."
+      "_usePoseNote": "ROADMAP_NEXT B2-3: offset [0,0] = footprint center = inside the shower stall (the shower action's animation is 'stand_use', a standing pose — without this explicit usePose.use entry the sim would stay at its walk-up approach spot just outside the footprint, per usePoseFor's 'no default for use' rule).",
+      "icon": "/public/icons/shower.png"
     },
     {
       "id": "sink",
@@ -335,7 +341,8 @@
       ],
       "interactions": [
         "wash_hands"
-      ]
+      ],
+      "icon": "/public/icons/sink.png"
     },
     {
       "id": "tv",
@@ -366,7 +373,8 @@
         "yOffset": 1.1,
         "defaultOn": false
       },
-      "_powerNote": "B6-12: sound and screen-glow light persist while this placed TV is ON. Watch TV auto-turns it on and leaves it on."
+      "_powerNote": "B6-12: sound and screen-glow light persist while this placed TV is ON. Watch TV auto-turns it on and leaves it on.",
+      "icon": "/public/icons/tv.png"
     },
     {
       "id": "bookshelf",
@@ -393,7 +401,8 @@
       "combustibility": {
         "chancePercent": 60,
         "delaySeconds": 8
-      }
+      },
+      "icon": "/public/icons/bookshelf.png"
     },
     {
       "id": "phone",
@@ -435,7 +444,8 @@
         "distance": 5,
         "yOffset": 1.5,
         "defaultOn": false
-      }
+      },
+      "icon": "/public/icons/lamp.png"
     },
     {
       "id": "wall_lamp",
@@ -462,7 +472,8 @@
         "distance": 4.5,
         "yOffset": 0,
         "defaultOn": false
-      }
+      },
+      "icon": "/public/icons/walllight.png"
     },
     {
       "id": "canvas",
@@ -660,7 +671,8 @@
       },
       "meshFit": {
         "yawOffsetDeg": 90
-      }
+      },
+      "icon": "/public/icons/trash.png"
     },
     {
       "id": "dirty_dishes",
