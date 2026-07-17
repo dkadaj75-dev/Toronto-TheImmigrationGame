@@ -281,3 +281,9 @@ D1 (Codex) ──►  D2 (Codex[+Sonnet]) ──►  D3 (Opus) ──►  D4 (Op
   save-compatible but no save/load surface is built here.
 - Multi-floor buildings, elevators, neighbors, or any exterior simulation.
 - Auto-migration of existing maps to the D1 door form (both forms stay valid).
+
+---
+
+## D1 — SHIPPED (2026-07-16/17)
+
+As-built: pure `game/wallaperture.ts` (aperture sizing: AssetDef.door.apertureWidth/Height > footprint x meshFit x-scale > entry width > 1.0m default; height default 2.1m x meshFit y-scale, shared constant with doors.ts DOOR_HEIGHT). ON-WALL doors are matched GEOMETRICALLY (point-on-wall within 0.2m tolerance, orientation axis match — no wall index reference, mirroring the windows precedent, so wall edits never dangle), legacy gap doors match no wall and render byte-identically. Walls rebuild as solid/lintel box segments (overlapping apertures merged; aperture >= wall height = full-height cut, no lintel); every segment keeps per-side textures with per-segment repeat + shared black top; wall-cut view scales solids, HIDES lintels (window precedent). Nav carve honors cutsWall:false (decorative doors). Map Editor: click-a-wall door placement, cutsWall checkbox, live aperture readout via window.ApertureBridge (real apertureSizeFor); Asset Editor Door card gained apertureWidth/Height. Suites: test/wallaperture.test.ts + extended doors/nav/map-editor/asset-editor.
