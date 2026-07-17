@@ -343,7 +343,9 @@
             "lte": 100
           }
         ]
-      }
+      },
+      "fetchBeforeSeat": true,
+      "faceTarget": false
     },
     {
       "id": "turn_on",

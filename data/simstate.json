@@ -10,7 +10,7 @@
     {
       "id": "job",
       "name": "Job",
-      "type": "string",
+      "type": "boolean",
       "default": null
     },
     {

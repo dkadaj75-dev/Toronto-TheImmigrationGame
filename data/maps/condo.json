@@ -124,6 +124,29 @@
       ],
       "material": "tile",
       "texture": "textures/ShittyTiling.jpg"
+    },
+    {
+      "id": "floor_6",
+      "polygon": [
+        [
+          5,
+          5
+        ],
+        [
+          6,
+          5
+        ],
+        [
+          6,
+          6
+        ],
+        [
+          5,
+          6
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/ShittyTiling.jpg"
     }
   ],
   "walls": [
@@ -329,9 +352,9 @@
       "asset": "sink",
       "pos": [
         5.5,
-        5.5
+        6.75
       ],
-      "rotDeg": 0
+      "rotDeg": 270
     },
     {
       "asset": "toilet",

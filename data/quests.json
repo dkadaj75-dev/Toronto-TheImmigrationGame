@@ -44,8 +44,8 @@
       "completion": {
         "all": [
           {
-            "var": "quests.find_a_job.state",
-            "gte": "active"
+            "var": "vars.job",
+            "eq": true
           }
         ]
       },
@@ -71,6 +71,64 @@
             "eq": 30
           }
         ]
+      },
+      "rewards": [],
+      "onceOnly": true
+    },
+    {
+      "id": "become_citizen",
+      "name": "Become Citizen",
+      "description": "",
+      "trigger": {
+        "all": [
+          {
+            "var": "quests.become_permanent_resident.state",
+            "gte": "done"
+          }
+        ]
+      },
+      "completion": {
+        "all": []
+      },
+      "rewards": [],
+      "onceOnly": true
+    },
+    {
+      "id": "become_permanent_resident",
+      "name": "Become Permanent Resident",
+      "description": "",
+      "trigger": {
+        "all": [
+          {
+            "var": "quests.apply_for_permanent_residence.state",
+            "gte": "done"
+          }
+        ]
+      },
+      "completion": {
+        "all": []
+      },
+      "rewards": [],
+      "onceOnly": true
+    },
+    {
+      "id": "apply_for_permanent_residence",
+      "name": "Apply for PR",
+      "description": "",
+      "trigger": {
+        "all": [
+          {
+            "var": "vars.income",
+            "gte": 350
+          },
+          {
+            "var": "funds",
+            "gte": 50000
+          }
+        ]
+      },
+      "completion": {
+        "all": []
       },
       "rewards": [],
       "onceOnly": true

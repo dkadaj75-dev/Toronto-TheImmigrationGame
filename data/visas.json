@@ -10,7 +10,7 @@
     {
       "id": "lmia",
       "name": "LMIA Work Permit",
-      "durationDays": 90,
+      "durationDays": 10,
       "losable": true,
       "graceDays": 3,
       "obtainedVia": "quest"
@@ -18,7 +18,7 @@
     {
       "id": "temp_worker",
       "name": "Temporary Worker",
-      "durationDays": 365,
+      "durationDays": 20,
       "losable": true,
       "graceDays": 3,
       "obtainedVia": "quest"
@@ -29,7 +29,7 @@
       "durationDays": null,
       "losable": false,
       "obtainedVia": "application",
-      "applicationDays": 30,
+      "applicationDays": 15,
       "requirements": {
         "all": [
           {
@@ -38,7 +38,11 @@
           },
           {
             "var": "funds",
-            "gte": 1000
+            "gte": 50000
+          },
+          {
+            "var": "vars.income",
+            "gte": 350
           }
         ]
       }

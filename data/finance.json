@@ -14,13 +14,13 @@
     {
       "id": "phone",
       "name": "Phone",
-      "base": 35,
-      "perAssetValue": 0.001
+      "base": 50,
+      "perAssetValue": 0
     },
     {
       "id": "hydro",
       "name": "Hydro",
-      "base": 45,
+      "base": 35,
       "perAssetValue": 0.005
     }
   ],

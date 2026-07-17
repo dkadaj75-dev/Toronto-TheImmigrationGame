@@ -1,7 +1,7 @@
 {
   "weights": {
     "needDeficit": 0.1,
-    "distance": 0.5,
+    "distance": 1,
     "personalityAffinity": 1
   },
   "decisionThreshold": 2,
@@ -54,13 +54,23 @@
       "conditions": {
         "all": [
           {
-            "var": "personality.cleanliness",
-            "gte": 7
+            "var": "needs.comfort",
+            "lte": 5
           }
         ]
       },
-      "scoreBonus": 8,
+      "scoreBonus": 4,
       "enabled": true
+    },
+    {
+      "id": "reading_1",
+      "name": "Likes to sit and read",
+      "scoreBonus": 3,
+      "enabled": true,
+      "conditions": {
+        "all": []
+      },
+      "action": "read_book"
     }
   ]
 }

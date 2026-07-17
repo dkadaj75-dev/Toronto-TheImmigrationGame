@@ -681,7 +681,7 @@
       "id": "dirty_dishes",
       "name": "Dirty dishes",
       "category": "transient",
-      "mesh": "models/dirty_dishes.glb",
+      "mesh": "/models/plate.glb",
       "buyPrice": 0,
       "sellPrice": 0,
       "environmentScore": -5,
@@ -702,7 +702,7 @@
       "id": "snack",
       "name": "Snack",
       "category": "transient",
-      "mesh": "",
+      "mesh": "/models/cup.glb",
       "buyPrice": 0,
       "sellPrice": 0,
       "environmentScore": 0,
@@ -757,7 +757,10 @@
         "sweep"
       ],
       "buyable": false,
-      "_note": "ROADMAP_NEXT item 6 (fire destruction). Spawned by game/accidents.ts when an unextinguished 'fire' instance burns past tuning.fire.burnSeconds — replaces the destroyed base object at the same spot. No real mesh yet — flat box stand-in until models/ash.glb is imported."
+      "_note": "ROADMAP_NEXT item 6 (fire destruction). Spawned by game/accidents.ts when an unextinguished 'fire' instance burns past tuning.fire.burnSeconds — replaces the destroyed base object at the same spot. No real mesh yet — flat box stand-in until models/ash.glb is imported.",
+      "sprite": {
+        "orientation": "flat"
+      }
     }
   ]
 }
