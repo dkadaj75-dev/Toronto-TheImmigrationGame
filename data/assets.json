@@ -52,7 +52,6 @@
         "chancePercent": 45,
         "delaySeconds": 12
       },
-      "requiresQuestUnlock": true,
       "icon": "/public/icons/sofa.png"
     },
     {
