@@ -722,3 +722,8 @@ Debt-window scaling is exact and pure/headless-tested: normalize the clamped sco
 
 - **Invariant**: the Environment need is a pure aggregate of what is currently in the home — never time-drifting. Pure `computeEnvironmentScore(placedAssetIds, accidentAssetIds, environmentScoreFor)` lives in game/stats.ts (headless-tested).
 - **Fix**: main.ts's `environmentScore()` reads buy-mode's `effectivePlacedObjectsList()` (the same runtime-aware list nav rebakes use: destroyInstance overrides excluded, purchases included) instead of the raw `data.map.placedObjects`; live `accidents.registry.all` still added. `applyEnvironment()` fires on decay tick + hot-reload (as before) and now also on fire destruction, B10-10 completed-clean removal, repo seizure, buy confirm, and sell-selected. Moves/rotations don't change the sum and stay silent.
+
+## 7.37 3-axis meshFit offset + per-asset need multipliers — as-built (B10-15/B10-16, 2026-07-16)
+
+- **meshFit.xOffset?/zOffset?** join yOffset (all sparse meters, absent = 0); `applyMeshFit` (world.ts) nudges position per axis after scale/yaw. Same transform path in-game and in the Asset Editor preview. Backward-compatible superset — no data migration.
+- **AssetDef.needMultipliers?: {[needId]: number}** (sparse, negatives allowed): effective gain = needGains[N] * (multipliers[N] ?? 1) via the single pure `effectiveNeedGain` (game/stats.ts) used by BOTH `applyGains` (sim tick) and `scoreCandidate` (game/behavior.ts autonomy ranking) — never two implementations. Seat-aware actions credit the SEAT actually perched on (`active.seat ?? active.target`, main.ts). Asset Editor card: add/remove rows, need ids from stats.json, sparse deletion. Behavior Editor preview reflects multipliers automatically (imports the real scorer).

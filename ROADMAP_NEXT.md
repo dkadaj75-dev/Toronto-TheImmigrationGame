@@ -309,3 +309,11 @@ Designer intent: always offer `use` in the character preview. With no `usePose.u
 ## B10-14. Trash can fill indicator: small in-world loading bar showing empty -> full status per can.
 
 **DONE (2026-07-16):** camera-space sprite bar over each live garbage can (progressbar.ts geometry helpers reused, scene-parented per the sprite anchoring lesson), synced on deposits/tidy/empty/buy-sell/world rebuild. Tunables: tuning.garbage.fillBar {widthMeters, heightMeters, yOffsetMeters, fillColor, trackColor, showWhenEmpty:false} — Tuning Editor gained one-level nested sub-group rendering to expose it. Pure ratio/visibility/geometry helpers covered in test/garbage.test.ts.
+
+## B10-15. Asset Editor: offset the mesh on all 3 axes (was single-axis).
+
+**DONE (2026-07-16):** meshFit gains sparse xOffset/zOffset alongside the existing yOffset; applyMeshFit nudges position on each set axis, composing with scale/yaw, identically in-game and in the Asset Editor preview. Three sparse inputs on the mesh-fit card. test/meshfit.test.mjs extended (tsx-only quirk unchanged).
+
+## B10-16. Per-asset need multipliers: each asset scales selected needs' action gains (several needs, add/remove, negatives allowed).
+
+**DONE (2026-07-16):** sparse AssetDef.needMultipliers {needId: number}. ONE pure helper (stats.ts effectiveNeedGain) feeds BOTH the sim gain tick (applyGains) and autonomy scoring (behavior.ts scoreCandidate), so a luxury sofa genuinely outranks a bad one and negative multipliers drain. Seat-aware actions credit the multiplier of the seat actually perched on (active.seat ?? target — documented in main.ts). Asset Editor "Need multipliers" card (need dropdown + value, add/remove, sparse). Behavior Editor live preview reflects it automatically (real scorer). Tests: stats/behavior/meshfit/asset-editor suites.
