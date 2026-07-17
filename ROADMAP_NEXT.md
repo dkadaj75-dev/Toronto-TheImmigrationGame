@@ -291,3 +291,11 @@ Designer intent: always offer `use` in the character preview. With no `usePose.u
 **Design reading:** import and use the real `useSpotFor` in the module preview, keep default-vs-authored selection in a pure inline helper for jsdom coverage, and make no data/schema changes.
 
 **DONE 2026-07-16:** `use` is always offered. Sparse assets preview the real `useSpotFor` computed standing spot and label it "computed default"; any authored `usePose.use` field switches to `usePoseFor` and an "authored" label. Pure helper coverage added; no data/schema changes.
+
+---
+
+# Batch 11 — 2026-07-16: apartments / rentals / doors-in-walls / façades / exteriors
+
+## B11-1. PLANNED (no code yet): Kijiji rental tab, door-in-wall rework, frame/pane split, curtain wall + balcony provisions, simplified 3D exteriors, move-in map switch.
+
+**Plan locked in ROADMAP_APT.md** (slices R1-R5 / D1-D4 with per-slice agent assignments: Codex for R4 map switch + D1/D2 door geometry, Claude Opus/Sonnet for the rest, designer authoring pass R5). Read that file before building any slice; open decisions listed in its §6.
