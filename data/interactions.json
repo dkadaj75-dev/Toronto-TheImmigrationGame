@@ -92,7 +92,7 @@
     },
     {
       "id": "watch_tv",
-      "name": "Watch TV",
+      "name": "Watch TV (CBC News)",
       "needGains": {
         "fun": 2.5
       },
@@ -389,6 +389,15 @@
       },
       "producesWaste": "dirty_dishes",
       "cost": 8
+    },
+    {
+      "id": "watch_tv_radio_canada",
+      "name": "Watch TV (Radio Canada)",
+      "needGains": {},
+      "skillGains": {},
+      "animation": "sit_idle",
+      "autonomyEligible": true,
+      "primaryNeed": null
     }
   ]
 }

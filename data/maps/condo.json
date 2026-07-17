@@ -321,7 +321,8 @@
         9
       ],
       "orientation": "horizontal",
-      "assetId": "window_basic"
+      "assetId": "window_basic",
+      "width": 0.5
     }
   ],
   "spawn": {
