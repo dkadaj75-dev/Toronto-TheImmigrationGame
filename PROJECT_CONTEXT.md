@@ -675,6 +675,12 @@ Debt-window scaling is exact and pure/headless-tested: normalize the clamped sco
 - **Module script**: imports the REAL game logic — `loadRiggedCharacter` (game/world.ts, cached across previews and reattached when renderEditor swaps the canvas), `AnimController` (game/anim.ts, real-time `update(dt)` in the preview loop since the tool has no sim clock), and `usePoseFor` (game/facing.ts) with a virtual instance `{pos:[0,0], rotDeg:0}` at the preview origin. `markDirty → schedulePreview` already fires on every usePose field edit, so the character repositions live as the designer types. Camera framing now boxes asset + visible character together. Load failures / unmapped clips degrade to a `#preview-msg` note (AnimController's normal idle fallback applies).
 - **Editor data**: the tool now also fetches `tuning.json` (read-only, resilient — `null` on failure) into `state.tuning`.
 
+### B10-13 computed-default use preview (2026-07-16)
+
+- **Always available**: the pose selector now always offers `use`, including assets with no `usePose.use`. The inline `availablePreviewPoses` helper returns sit/lie/use for every selected asset.
+- **Default vs. authored**: new pure `previewPoseSource` treats a pose as authored only when its sparse entry contains at least one field. An unauthored `use` preview imports and calls the real `useSpotFor` for the character position, while retaining `usePoseFor`'s ground height and asset-facing direction; the preview message explicitly says `computed default standing spot`. Once any `usePose.use` field exists, the module uses the existing full `usePoseFor` transform and labels it `authored standing spot`, matching in-game B2-3 behavior.
+- **Animation/data**: both branches use the existing standing/use animation resolver and `AnimController`. This is preview-only and adds no schema or `data/*.json` fields. `tools/asset-editor.test.mjs` covers always-offered use plus empty/default vs. authored helper semantics.
+
 ## 7.34 Seat-aware sit fixes — as-built (B10-3/B10-4, 2026-07-16)
 
 - **Target is its own seat (B10-3)**: `findSeatFor` (game/sim.ts) returns the target immediately when its AssetDef has `seatTarget` — a seat-aware "Sit" ordered ON the sofa/armchair/dining chair perches on that exact object via `usePoseFor`, instead of excluding itself from the seat search, resolving null, and ground-sitting at the walk-up approach spot beside the furniture (or perching on some other chair that happened to face it). Non-seatTarget targets (TV, fridge) keep the front-half-space + seatSearchRadius search unchanged.
@@ -700,6 +706,12 @@ Debt-window scaling is exact and pure/headless-tested: normalize the clamped sco
 
 - **Root cause**: `stopAction()` correctly restored `savedPose`, and `findPath()` already normalized an unwalkable start. The bad value was captured earlier: B10-5 routed toward a walkable seat-front cell, but locomotion considered the final waypoint reached anywhere inside `movement.arrivalRadius` (0.35m). Approaching furniture could therefore stop on the footprint side of that radius, save a still-blocked pre-perch position, and later restore into the sofa. Start normalization could then choose an arbitrary nearest cell in a disconnected pocket, making floor clicks and subsequent actions fail selectively.
 - **Fix/coverage**: when the final route waypoint enters the arrival radius, `SimAgent.update()` now snaps x/z to that exact known-walkable cell center before `applyPose` captures `savedPose`. Intermediate smoothing and animation are unchanged. The B10-5 blocking-sofa fixture now stops the seated action, asserts the restored position is walkable, orders an arbitrary far `goTo`, and proves the route completes.
+
+### B10-12 precise standing approach without undoing B10-8 (2026-07-16)
+
+- **Root cause**: B10-8 used one coordinate for two different jobs. Snapping final route arrival to the known-walkable cell center made perch restoration safe, but generic standing actions have no later pose snap, so cooking visibly stayed at that quantized center instead of `useSpotFor`'s exact footprint-edge point (up to half a grid cell sideways).
+- **Fix**: `SimAgent` now keeps an optional precise `actionArrival` separately from the route endpoint. Pathfinding and final route arrival still use the walkable cell center. At action start, that center is retained as the safe pose for ground-sit, sit/lie, or authored-use restoration, then the live sim moves to the exact `useSpotFor` point. A generic standing action stays at the exact point. Precision is used only when the exact point's nav cell is walkable; otherwise the safe center remains the fallback.
+- **Coverage**: `test/seatground.test.ts` adds a nav-blocking stove-like fixture whose exact approach differs from its cell center, asserts epsilon equality with `useSpotFor`, confirms the post-action point is in a walkable cell, and proves a later far `goTo` succeeds and completes. Existing B10-8 seat restore coverage remains unchanged and green.
 
 ## 7.35 Per-asset nav blocking + placed-transient cleanup — as-built (B10-9/B10-10, 2026-07-16)
 

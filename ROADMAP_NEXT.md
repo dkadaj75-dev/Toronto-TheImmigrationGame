@@ -275,3 +275,19 @@ Designer report: after reading/studying, many floor clicks and subsequent action
 ## B10-11. Environment must be a pure aggregate of the assets currently present — a cleaned puddle's impact disappears; no drift over time.
 
 **DONE (2026-07-16):** `environmentScore()` (game/main.ts) now sums buy-mode's runtime-aware `effectivePlacedObjectsList()` (destroyed instances excluded, purchases included) instead of the raw authored map list, plus live registry accidents as before — extracted as pure `computeEnvironmentScore` in game/stats.ts. `applyEnvironment()` additionally fires on fire destruction, completed-mop removal (B10-10), repo seizure, buy confirm, and sell. Covered in test/stats.test.ts (destroyed excluded / purchase included / accident included / present puddle still counts).
+
+## B10-12. REGRESSION: precise standing action approach without breaking post-seat navigation
+
+Designer intent: generic standing actions such as cooking must run at `useSpotFor`'s exact footprint-edge approach point, while the saved/restored pre-perch pose and later movement must remain walkable as guaranteed by B10-8.
+
+**Design reading:** decouple the live final standing position from the walkable pose saved for perch restoration. Preserve exact `useSpotFor` placement for the action, but store a safe walkable route endpoint for restoration; cover a stove-like standing action and successful post-action `goTo`.
+
+**DONE 2026-07-16:** action routing now keeps B10-8's walkable cell-center endpoint as the safe restore pose while moving the live action to the exact `useSpotFor` point when its cell is walkable. Generic standing actions remain there; perched/authored-use actions restore to the safe center. Stove-like exact-position and post-action movement regressions pass in `test/seatground.test.ts`.
+
+## B10-13. Asset Editor always previews the default or authored use pose
+
+Designer intent: always offer `use` in the character preview. With no `usePose.use`, show the real computed default standing spot and label it clearly; after any `usePose.use` field is authored, switch to the existing authored `usePoseFor` transform.
+
+**Design reading:** import and use the real `useSpotFor` in the module preview, keep default-vs-authored selection in a pure inline helper for jsdom coverage, and make no data/schema changes.
+
+**DONE 2026-07-16:** `use` is always offered. Sparse assets preview the real `useSpotFor` computed standing spot and label it "computed default"; any authored `usePose.use` field switches to `usePoseFor` and an "authored" label. Pure helper coverage added; no data/schema changes.
