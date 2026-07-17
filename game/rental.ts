@@ -55,6 +55,88 @@ export interface RentalListingContext {
   labels?: Partial<RentalLabels>;
 }
 
+// ============================================================= ROADMAP_APT R4 (pending move-in)
+
+/** A rent that has been accepted but not yet completed: the sim moves `moveInHours` sim-time
+ *  hours after `startHour` (both on main.ts's monotonic in-game-hour clock, gameHourNow — the
+ *  same clock food perishing uses, so pause/2x/3x affect the countdown identically and crossing
+ *  midnight never jumps it). */
+export interface PendingMoveState {
+  mapId: string;
+  /** Monotonic in-game hour the rent was accepted at. */
+  startHour: number;
+  /** Sim-time hours until the move completes (MapData.rental.moveInHours). */
+  moveInHours: number;
+}
+
+export interface PendingMoveSaveState { pending: PendingMoveState | null; }
+
+/**
+ * R4 pending-move state machine. Pure/headless (test/pendingmove.test.ts) — main.ts owns the
+ * actual map switch and only performs it via takeCompleted(), so the side_effect_rule holds by
+ * construction: `cancel()` applies NOTHING (no funds, no vars, no map change), and completion is
+ * the ONLY path that ever returns a mapId to switch to. serialize()/restore() follow the exact
+ * QuestRunner/AccidentRegistry convention so the future save system is a direct JSON round-trip.
+ */
+export class PendingMoveTracker {
+  private state: PendingMoveState | null = null;
+
+  get pending(): Readonly<PendingMoveState> | null { return this.state; }
+
+  /** Starts a pending move. Refuses (returns false, no state change) while another move is
+   *  already pending — the one-pending-move-at-a-time rule the phone UI's rentEnabled encodes. */
+  start(mapId: string, moveInHours: number, nowHours: number): boolean {
+    if (this.state || !mapId) return false;
+    this.state = {
+      mapId,
+      startHour: Number.isFinite(nowHours) ? nowHours : 0,
+      moveInHours: Number.isFinite(moveInHours) ? Math.max(0, moveInHours) : 0,
+    };
+    return true;
+  }
+
+  /** Cancels the pending move. Applies NOTHING else (side_effect_rule: cancellation has zero
+   *  side effects — only completion switches maps). Returns whether a move was pending. */
+  cancel(): boolean {
+    const had = this.state !== null;
+    this.state = null;
+    return had;
+  }
+
+  /** Sim-time hours left before the move completes; null when nothing is pending. */
+  remainingHours(nowHours: number): number | null {
+    if (!this.state) return null;
+    return Math.max(0, this.state.startHour + this.state.moveInHours - nowHours);
+  }
+
+  /** True once the countdown has elapsed (the caller may still defer the actual switch — e.g.
+   *  while the sim is away at work — since the state stays put until takeCompleted()). */
+  isReady(nowHours: number): boolean {
+    return this.state !== null && nowHours >= this.state.startHour + this.state.moveInHours;
+  }
+
+  /** The single completion gate: returns the destination mapId AND clears the pending state,
+   *  but only once the countdown is ready — null otherwise (state untouched). main.ts performs
+   *  the world switch right after a successful take, so a switch can never double-fire. */
+  takeCompleted(nowHours: number): string | null {
+    if (!this.isReady(nowHours)) return null;
+    const mapId = this.state!.mapId;
+    this.state = null;
+    return mapId;
+  }
+
+  serialize(): PendingMoveSaveState { return { pending: this.state ? { ...this.state } : null }; }
+  restore(s: PendingMoveSaveState) { this.state = s.pending ? { ...s.pending } : null; }
+}
+
+/** Kijiji-card countdown copy ("Moving in 3h..."). Ceils so the label never claims 0h while the
+ *  move is still pending; anything under an hour reads as 1h (coarse on purpose — the phone tab
+ *  refreshes hourly, not per frame). */
+export function pendingMoveLabel(remainingHours: number): string {
+  const hours = Math.max(1, Math.ceil(Number.isFinite(remainingHours) ? remainingHours : 0));
+  return `Moving in ${hours}h...`;
+}
+
 /**
  * Builds the Kijiji view-model for every listed map. Pure/deterministic: same inputs -> same
  * output, safe to call every frame/tab-open from a thin UI layer (R3) with zero DOM access here.

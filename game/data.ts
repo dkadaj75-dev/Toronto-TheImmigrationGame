@@ -738,16 +738,41 @@ async function fetchJson<T>(url: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** ROADMAP_APT R4 (§6.1 RESOLVED): which map the engine plays. The `homeMap` simstate variable —
+ *  a designer-visible var whose DEFAULT is rewritten by the one sanctioned runtime data write
+ *  (main.ts's move-in completion PUT) — wins when it names a map; `tuning.map.active` remains the
+ *  fallback for data that predates the rental system (default "condo", as always). Pure/headless
+ *  (test/pendingmove.test.ts). NOTE the deliberate consequence, flagged in ROADMAP_APT: once
+ *  homeMap is set, the Map Editor's "Play this map" (a tuning.map.active PUT) no longer changes
+ *  the played map until homeMap itself is updated/cleared. */
+export function resolveHomeMapId(simstate: SimStateData, tuning: TuningData): string {
+  const home = simstate.variables?.find((v) => v.id === 'homeMap')?.default;
+  if (typeof home === 'string' && home.trim()) return home;
+  return tuning.map?.active ?? 'condo';
+}
+
 export async function loadAll(): Promise<GameData> {
-  // tuning first — it names the active map (tuning.map.active, default "condo")
-  const tuning = await fetchJson<TuningData>(FILES.tuning);
-  const mapFile = `/data/maps/${tuning.map?.active ?? 'condo'}.json`;
-  const [stats, interactions, assets, map, simstate, quests, visas, jobs, bills, finance, happiness, loading, behavior, theme] = await Promise.all([
+  // tuning + simstate first — together they name the played map (R4 §6.1: simstate.homeMap wins,
+  // tuning.map.active is the fallback — see resolveHomeMapId).
+  const [tuning, simstate] = await Promise.all([
+    fetchJson<TuningData>(FILES.tuning),
+    fetchJson<SimStateData>(FILES.simstate),
+  ]);
+  const homeId = resolveHomeMapId(simstate, tuning);
+  let map: MapData;
+  try {
+    map = await fetchJson<MapData>(`/data/maps/${homeId}.json`);
+  } catch (err) {
+    // keep-going philosophy: a stale homeMap (map renamed/deleted since the move) must not brick
+    // boot — fall back to the designer's tuning.map.active before giving up.
+    const fallbackId = tuning.map?.active ?? 'condo';
+    if (fallbackId === homeId) throw err;
+    map = await fetchJson<MapData>(`/data/maps/${fallbackId}.json`);
+  }
+  const [stats, interactions, assets, quests, visas, jobs, bills, finance, happiness, loading, behavior, theme] = await Promise.all([
     fetchJson<StatsData>(FILES.stats),
     fetchJson<InteractionsData>(FILES.interactions),
     fetchJson<AssetsData>(FILES.assets),
-    fetchJson<MapData>(mapFile),
-    fetchJson<SimStateData>(FILES.simstate),
     fetchJson<QuestsData>(FILES.quests),
     fetchJson<VisasData>(FILES.visas),
     fetchJson<JobsData>(FILES.jobs),

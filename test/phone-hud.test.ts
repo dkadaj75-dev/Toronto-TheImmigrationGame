@@ -82,18 +82,42 @@ check('unavailable ad shows NO price', gatedCard.querySelector('.phone-card-pay'
 check('unavailable ad renders the not-available chip', gatedCard.querySelector('.phone-pending')?.textContent === 'Not available yet');
 check('current home ad is flagged "Current"', homeCard.querySelector('.phone-pending')?.textContent === 'Current');
 
-// The Rent button is present but DISABLED for R3, and carries the coming-soon tooltip.
+// R4: the Rent button is ENABLED per RentalCardView.rentEnabled (available + not current + no
+// pending move); gated/current ads stay disabled and carry the tooltip.
 const rentButtons = cards.map((c) => c.querySelector('button.apply') as HTMLButtonElement);
 check('every ad has a Rent button', rentButtons.every((b) => b && b.textContent === 'Rent'));
-check('Rent buttons are all disabled (R3)', rentButtons.every((b) => b.disabled === true));
-check('disabled Rent button carries the coming-soon tooltip', rentButtons[0].title === 'Renting is coming soon');
+check('the available ad Rent button is enabled', rentButtons[0].disabled === false);
+check('the gated + current-home Rent buttons stay disabled', rentButtons[1].disabled === true && rentButtons[2].disabled === true);
+check('an enabled Rent button carries no disabled tooltip', !rentButtons[0].title);
+check('a disabled Rent button carries the tooltip', rentButtons[1].title === 'Renting is coming soon');
 
-// The hook seam is wired: with the button force-enabled (as R4 will), a click routes the map id.
+// The hook seam is wired: an enabled Rent button click routes its map id.
 let requested: string | null = null;
 hud.onPhoneRentRequested = (id) => { requested = id; };
-rentButtons[0].disabled = false;
 rentButtons[0].dispatchEvent(new window.Event('click', { bubbles: true }));
 check('Rent button routes its map id to the onPhoneRentRequested hook', requested === 'available_apt');
+
+// R4: the pending-move destination card replaces the Rent button with a countdown + Cancel move
+// control; every other Rent button is disabled while a move is pending.
+const pendingRentals: RentalCardView[] = [
+  { mapId: 'available_apt', title: 'Sunny 1BR', text: 'Great light', areaLabel: '45 m2', priceLabel: '§812', statusLabel: 'Available', isCurrentHome: false, rentEnabled: false },
+  { mapId: 'moving_apt', title: 'Loft', text: 'Downtown', areaLabel: '60 m2', priceLabel: '§900', statusLabel: 'Available', isCurrentHome: false, rentEnabled: false, pendingHere: true, pendingLabel: 'Moving in 3h...' },
+];
+hud.renderPhone({
+  tab: 'rentals', currentStatusName: 'Visitor', searchedJobs: false, jobs: [], currentJob: null,
+  visas: [], pending: null, currencyName: '§', bills: [], billsTotal: 0, creditScore: 700,
+  creditHistory: [], rentalTabName: 'Kijiji', rentals: pendingRentals, rentDisabledTitle: 'Not rentable right now',
+});
+const pCards = [...doc.querySelectorAll('#phone-body .phone-card')];
+const movingCard = pCards[1];
+check('pending card shows the move-in countdown', movingCard.querySelector('.phone-rental-countdown')?.textContent === 'Moving in 3h...');
+check('pending card shows no Rent button', movingCard.querySelector('button.apply.phone-rental-cancel') !== null && movingCard.querySelector('button.apply:not(.phone-rental-cancel)') === null);
+check('other ad Rent button is disabled while a move is pending', (pCards[0].querySelector('button.apply') as HTMLButtonElement).disabled === true);
+let cancelledId: string | null = null;
+hud.onPhoneMoveCancelRequested = (id) => { cancelledId = id; };
+const cancelBtn = movingCard.querySelector('button.phone-rental-cancel') as HTMLButtonElement;
+cancelBtn.dispatchEvent(new window.Event('click', { bubbles: true }));
+check('Cancel move routes its map id to onPhoneMoveCancelRequested', cancelledId === 'moving_apt');
 
 // Empty-state smoke: no listings renders the empty message, not a crash.
 rentals.length = 0;

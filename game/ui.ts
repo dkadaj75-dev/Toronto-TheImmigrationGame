@@ -462,8 +462,11 @@ export class Hud {
   onPhoneBillPay: ((key: string) => void) | null = null;
   onPhoneBillsPayAll: (() => void) | null = null;
   /** ROADMAP_APT R3 hook seam: fired when the Kijiji "Rent" button is activated. R4 wires the
-   *  real rent → move-in flow here; for R3 the button is always DISABLED so this stays a no-op. */
+   *  real rent → move-in flow here (the button is enabled per RentalCardView.rentEnabled). */
   onPhoneRentRequested: ((mapId: string) => void) | null = null;
+  /** ROADMAP_APT R4: fired by the pending-move card's Cancel control. Cancellation applies
+   *  NOTHING beyond clearing the pending move (side_effect_rule — see game/rental.ts). */
+  onPhoneMoveCancelRequested: ((mapId: string) => void) | null = null;
   onRepoClose: (() => void) | null = null;
 
   onCancelAction: (() => void) | null = null;
@@ -936,7 +939,7 @@ export class Hud {
     rentalTabName: string;
     /** ROADMAP_APT R3: pre-massaged rent-card view-models (game/phone.ts rentalCardViews). */
     rentals: RentalCardView[];
-    /** Tooltip on the (always-disabled for R3) Rent button — R4 enables the flow. */
+    /** Tooltip shown only on a DISABLED Rent button (gated/current/move-pending ads). */
     rentDisabledTitle?: string;
   }) {
     this.phoneStatus.textContent = args.currentStatusName;
@@ -985,15 +988,34 @@ export class Hud {
           text.textContent = ad.text;
           card.el.appendChild(text);
         }
-        const rent = document.createElement('button');
-        rent.className = 'apply';
-        rent.textContent = 'Rent';
-        // R3: the button is present but always disabled (R4 wires the rent → move-in flow). The
-        // click still routes to the hook seam so R4 only flips `disabled`, not the wiring.
-        rent.disabled = true;
-        if (args.rentDisabledTitle) rent.title = args.rentDisabledTitle;
-        rent.addEventListener('click', () => this.onPhoneRentRequested?.(ad.mapId));
-        card.el.appendChild(rent);
+        if (ad.pendingHere) {
+          // R4: this ad is the destination of the pending move — the Rent button is replaced by
+          // the sim-time countdown ("Moving in Xh...") and a Cancel control. Cancelling applies
+          // nothing beyond clearing the pending move (side_effect_rule); completion — never this
+          // card — is what switches maps.
+          const row = document.createElement('div');
+          row.className = 'phone-meta phone-rental-meta';
+          const label = document.createElement('span');
+          label.className = 'phone-pending phone-rental-countdown';
+          label.textContent = ad.pendingLabel ?? '';
+          row.appendChild(label);
+          const cancel = document.createElement('button');
+          cancel.className = 'apply phone-rental-cancel';
+          cancel.textContent = 'Cancel move';
+          cancel.addEventListener('click', () => this.onPhoneMoveCancelRequested?.(ad.mapId));
+          row.appendChild(cancel);
+          card.el.appendChild(row);
+        } else {
+          const rent = document.createElement('button');
+          rent.className = 'apply';
+          rent.textContent = 'Rent';
+          // R4: enabled per the view-model's gating (available AND not current AND no pending
+          // move) — the pure decision lives in game/phone.ts's rentalCardViews, never here.
+          rent.disabled = !ad.rentEnabled;
+          if (rent.disabled && args.rentDisabledTitle) rent.title = args.rentDisabledTitle;
+          rent.addEventListener('click', () => this.onPhoneRentRequested?.(ad.mapId));
+          card.el.appendChild(rent);
+        }
         this.phoneBody.appendChild(card.el);
       }
       return;

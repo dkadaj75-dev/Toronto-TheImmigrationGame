@@ -3,7 +3,7 @@
 
 import type { Condition, JobDef, JobsData, VisaDef, VisasData } from './data';
 import { evaluate, type EvalContext, type VarValue } from './quests';
-import type { RentalListing } from './rental';
+import { pendingMoveLabel, type RentalListing } from './rental';
 
 export const DEFAULT_PHONE_JOB_LIST_SIZE = 3;
 
@@ -220,9 +220,15 @@ export interface RentalCardView {
   statusLabel: string;
   /** This map is the sim's current home — flag it "current" and never offer to rent it. */
   isCurrentHome: boolean;
-  /** Whether the eventual (R4) Rent action should be permitted for this ad. The R3 UI keeps the
-   *  button disabled regardless; this drives R4 and the tests. */
+  /** Whether the Rent action is permitted for this ad (R4 wires the flow: available AND not the
+   *  current home AND no move already pending). The UI renders the button disabled otherwise. */
   rentEnabled: boolean;
+  /** R4: true when THIS ad is the destination of the currently pending move — the card shows the
+   *  countdown + cancel control instead of the Rent button. Sparse for pre-R4 fixtures. */
+  pendingHere?: boolean;
+  /** R4: countdown copy for the pending card ("Moving in 3h..."); null on every other card.
+   *  Sparse for pre-R4 fixtures. */
+  pendingLabel?: string | null;
 }
 
 export interface RentalCardOptions {
@@ -230,16 +236,22 @@ export interface RentalCardOptions {
   currencyName: string;
   /** True when a move-in is already pending (R4). Disables renting anything meanwhile. */
   movePending?: boolean;
+  /** R4: the live pending move (mapId + remaining sim-time hours). Presence implies movePending
+   *  (either signal disables renting everywhere); additionally flags/labels the destination card. */
+  pendingMove?: { mapId: string; remainingHours: number } | null;
 }
 
 /** Formats R2's listings into rent-card view-models. Deterministic/DOM-free — safe to call every
  *  tab refresh from the thin UI layer (game/ui.ts renderPhone). */
 export function rentalCardViews(listings: readonly RentalListing[], opts: RentalCardOptions): RentalCardView[] {
+  const pending = opts.pendingMove ?? null;
+  const movePending = (opts.movePending ?? false) || pending !== null;
   return listings.map((listing) => {
     const available = listing.available;
     const priceLabel = available && listing.rentPrice !== undefined
       ? `${opts.currencyName}${Math.round(listing.rentPrice).toLocaleString()}`
       : null;
+    const pendingHere = pending !== null && pending.mapId === listing.mapId;
     return {
       mapId: listing.mapId,
       title: listing.title,
@@ -249,7 +261,9 @@ export function rentalCardViews(listings: readonly RentalListing[], opts: Rental
       priceLabel,
       statusLabel: listing.statusLabel,
       isCurrentHome: listing.isCurrentHome,
-      rentEnabled: available && !listing.isCurrentHome && !opts.movePending,
+      rentEnabled: available && !listing.isCurrentHome && !movePending,
+      pendingHere,
+      pendingLabel: pendingHere ? pendingMoveLabel(pending!.remainingHours) : null,
     };
   });
 }

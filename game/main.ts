@@ -3,7 +3,7 @@
 // Simulation (needs/autonomy/pathfinding) arrives in Phase 1 and will read the same data objects.
 
 import * as THREE from 'three';
-import { loadAll, loadAllMaps, watchData, type ActionDef, type GameData, type MapData } from './data';
+import { loadAll, loadAllMaps, watchData, type ActionDef, type GameData, type MapData, type SimStateData } from './data';
 import { TouchCamera } from './camera';
 import { applyWallCutView, buildWorld, makeSimStandIn, makeLights, applyDayNight, loadRiggedCharacter, normalizeMeshUrl, setAssetObjectOn } from './world';
 import { buildDoors } from './doors';
@@ -17,7 +17,7 @@ import { Autonomy } from './autonomy';
 import { QuestRunner, isActionAvailable, type EvalContext } from './quests';
 import { VisaMachine } from './visas';
 import { PhoneJobSearch, applyForJob, applyForVisa, jobListingViews, jobSwitchPrompt, pendingDaysRemaining, rentalCardViews, visaApplicationViews } from './phone';
-import { listRentals } from './rental';
+import { listRentals, PendingMoveTracker } from './rental';
 import { FinanceState, decideRepoSeizure } from './bills';
 import { WorkTracker, applyNeedsCost, decideAutoDepart, isLeaveForWorkAvailable, isWithinDepartureWindow, jobLevelPay, jobLevelTitle, shouldStartVisaGrace, type WorkTickEvent } from './work';
 import { computeHappiness } from './happiness';
@@ -418,22 +418,35 @@ async function start() {
   // so live designer map/rental edits appear. Empty until the first load resolves — the tab renders
   // its empty state meanwhile.
   let allMaps: MapData[] = [];
+  // ROADMAP_APT R4: at most one pending move at a time (rentalCardViews gates every other Rent
+  // button on it). Pure countdown state (game/rental.ts); the actual switch happens ONLY when the
+  // render loop below observes takeCompleted() — cancellation applies nothing (side_effect_rule).
+  const pendingMove = new PendingMoveTracker();
   const reloadRentalMaps = () => {
     void loadAllMaps().then((maps) => { allMaps = maps; if (phoneTab === 'rentals') refreshPhone(); }).catch(() => { /* server briefly unavailable — keep last */ });
   };
   const refreshPhone = () => {
     const ctx = buildEvalContext();
     const pendingDays = pendingDaysRemaining(visaMachine.pending, gameDay);
+    const pendingState = pendingMove.pending;
     const rentals = rentalCardViews(
       listRentals({
         maps: allMaps,
         evalContext: ctx,
         finance: data.finance,
         assets: data.assets,
-        // Current home = the active map today; R4 introduces simstate.homeMap. Flags the ad "Current".
+        // Current home = the map the sim actually lives on right now (data.map — kept in lockstep
+        // with simstate.homeMap by the R4 move flow). Flags the ad "Current".
         homeMapId: data.map.id,
       }),
-      { currencyName: data.tuning.economy.currencyName },
+      {
+        currencyName: data.tuning.economy.currencyName,
+        // R4: a pending move disables every Rent button and puts the countdown + Cancel control
+        // on the destination card (rentalCardViews/ui.ts render it; the decision lives in phone.ts).
+        pendingMove: pendingState
+          ? { mapId: pendingState.mapId, remainingHours: pendingMove.remainingHours(gameHourNow()) ?? 0 }
+          : null,
+      },
     );
     hud.renderPhone({
       tab: phoneTab,
@@ -460,7 +473,7 @@ async function start() {
       creditHistory: bills.creditHistory,
       rentalTabName: data.tuning.phone?.rentalTabName ?? 'Kijiji',
       rentals,
-      rentDisabledTitle: 'Renting is coming soon',
+      rentDisabledTitle: 'Not rentable right now',
     });
     hud.setPhoneBadge(bills.outstanding.length);
   };
@@ -483,8 +496,31 @@ async function start() {
     if (tab === 'rentals') reloadRentalMaps(); // pull fresh maps/rental edits each time the tab opens
     refreshPhone();
   };
-  // R3 leaves the Rent flow to R4: the button is disabled, so this hook stays a marked no-op seam.
-  hud.onPhoneRentRequested = (_mapId) => { /* R4: rent → move-in → map switch */ };
+  // ROADMAP_APT R4: renting starts a PENDING MOVE (sim-time countdown of the map's
+  // rental.moveInHours). Re-validated here against a fresh listing (not the possibly-stale card
+  // the click came from): must be available, not the current home, and no move already pending.
+  hud.onPhoneRentRequested = (mapId) => {
+    if (pendingMove.pending) return; // one move at a time (the buttons are disabled anyway)
+    const listing = listRentals({
+      maps: allMaps,
+      evalContext: buildEvalContext(),
+      finance: data.finance,
+      assets: data.assets,
+      homeMapId: data.map.id,
+    }).find((entry) => entry.mapId === mapId);
+    if (!listing || !listing.available || listing.isCurrentHome) return;
+    if (!pendingMove.start(mapId, listing.moveInHours, gameHourNow())) return;
+    const hours = Math.max(0, Math.ceil(listing.moveInHours));
+    phoneToast(`Rented: ${listing.title || mapId} — moving in ${hours}h`, true);
+    refreshPhone();
+  };
+  // R4: cancel applies NOTHING beyond clearing the pending move (side_effect_rule — completion is
+  // the only thing that ever switches maps). No refund because renting charged nothing up front.
+  hud.onPhoneMoveCancelRequested = () => {
+    if (!pendingMove.cancel()) return;
+    phoneToast('Move cancelled');
+    refreshPhone();
+  };
   reloadRentalMaps(); // warm the Kijiji listing in the background so the first open isn't empty
   hud.onPhoneSearchJobs = () => {
     phoneJobs.search(buildEvalContext().time);
@@ -1340,7 +1376,12 @@ async function start() {
 
   // --- data hot-reload (design pillar: tuning is play-test-live) ---
   let currentMapId = data.map.id;
-  watchData((fresh) => {
+  // ROADMAP_APT R4: the whole rebuild body is a named closure so the move-in map switch reuses
+  // the EXACT hot-reload rebuild path (world/doors/lights/nav/audio/finance/quests retunes + the
+  // map-id-change respawn branch) instead of a second parallel rebuild. watchData still calls it
+  // on every data edit; completePendingMove (below) calls it once with freshly-loaded data after
+  // wiping map-bound runtime state.
+  const applyFreshData = (fresh: GameData) => {
     data = fresh;
     applyTheme(data.theme);
     scene.remove(world);
@@ -1401,7 +1442,117 @@ async function start() {
     hud.setFunds(quests.funds, currencyName());
     if (buyMode.active) refreshBuyCatalog(); // asset prices/icons/gates may have changed mid-shop
     flashDevbar();
-  });
+  };
+  watchData(applyFreshData);
+
+  // --- ROADMAP_APT R4: move-in completion → home persistence + runtime map switch --------------
+  /** §6.1 RESOLVED: THE one sanctioned runtime data write. simstate.json is the designated
+   *  designer-visible variable surface, so the new home is persisted the same way the tools
+   *  persist designer state: read-modify-write of the parsed JSON through the existing
+   *  GET/PUT /api/data path, changing ONLY the homeMap variable's default (added with sensible
+   *  name/type if the designer hasn't authored the variable yet) and re-serializing with the
+   *  shared JSON.stringify(data, null, 2) pretty-print every tool uses — every other key survives
+   *  untouched. Failure is non-fatal: the runtime move still applies for this session (the next
+   *  boot would just fall back to the old home). */
+  const persistHomeMap = async (mapId: string) => {
+    try {
+      const res = await fetch('/api/data/simstate.json', { cache: 'no-store' });
+      if (!res.ok) throw new Error(`GET simstate.json: ${res.status}`);
+      const simstate = (await res.json()) as SimStateData & Record<string, unknown>;
+      const variables = Array.isArray(simstate.variables) ? simstate.variables : [];
+      const existing = variables.find((v) => v.id === 'homeMap');
+      if (existing) existing.default = mapId;
+      else variables.push({ id: 'homeMap', name: 'Home Map', type: 'string', default: mapId });
+      simstate.variables = variables;
+      const put = await fetch('/api/data/simstate.json', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(simstate, null, 2),
+      });
+      if (!put.ok) throw new Error(`PUT simstate.json: ${put.status}`);
+    } catch (err) {
+      console.warn('homeMap persistence failed — the move still applies for this session.', err);
+    }
+  };
+
+  /** The move-in countdown completed (the ONLY path that switches maps — side_effect_rule).
+   *  Per-system KEEP/DROP decisions for the runtime switch, each chosen against that system's
+   *  serialize()/restore() surface:
+   *  - KEEP needs/skills/personality: SimStats is untouched (the sim is the same person).
+   *  - KEEP funds/vars/quest state/unlocks: QuestRunner is untouched (economy + progression are
+   *    not map-bound); the homeMap var is UPDATED through the same runtime surface a quest
+   *    setVar reward writes (quests.vars).
+   *  - KEEP visa/job/work skips/levels: VisaMachine/WorkTracker untouched (immigration status and
+   *    employment follow the sim). The switch is deferred while work.isAtWork so the return
+   *    teleport can never land on a stale map (see the render-loop gate).
+   *  - KEEP credit/outstanding bills: FinanceState untouched — already-issued bills keep their
+   *    snapshot amounts (they were incurred at the old home); the NEXT cycle recomputes from the
+   *    new map because main.ts passes the live data.map/effective objects into bills.tick.
+   *  - KEEP phone job-search roll + hourly cadence, camera prefs, wall-cut preference (view-only).
+   *  - DROP accident instances (fires/puddles/dirty dishes/ash burn with the old address —
+   *    restore({}) also disposes every live THREE group) and their destroyed-base/spread history.
+   *  - DROP buy-mode overlay: destroyed/sold/moved overrides index the OLD map's placedObjects
+   *    (designer indices) and player purchases sit at old-map coordinates — both meaningless on
+   *    the new map, so the overlay resets and furniture purchases are LEFT BEHIND (deliberate:
+   *    no auto-refund, matching "moving is a fresh start"; flagged in ROADMAP_APT R4 notes).
+   *  - DROP carried food + pending waste: the food registry is discarded outright (no waste is
+   *    spawned — that would litter the NEW map with the OLD map's leftovers) and waste transients
+   *    die with the accident registry above.
+   *  - DROP garbage fill: fills are keyed per old-map can instance; the new home starts clean.
+   *  - DROP asset ON/OFF state: assetStateKeys are per-map placed indices ("designer:<i>") and
+   *    would silently leak onto the new map's same-index instances if kept.
+   *  Nav rebake, environment score, music restart, and door re-registration all ride the shared
+   *  applyFreshData rebuild (its map-id-change branch also teleports the sim to the new spawn). */
+  let mapSwitchInFlight = false;
+  const completePendingMove = async (mapId: string) => {
+    mapSwitchInFlight = true;
+    try {
+      // Runtime home var first — the same mechanism a quest setVar reward uses (§6.1).
+      quests.vars.homeMap = mapId;
+      await persistHomeMap(mapId);
+      // Fresh full bundle: after the PUT, loadAll() resolves the new home (resolveHomeMapId).
+      // If the server hiccups, fall back to the already-fetched Kijiji copy of the map.
+      let fresh: GameData | null = null;
+      try {
+        fresh = await loadAll();
+      } catch {
+        const known = allMaps.find((m) => m.id === mapId);
+        if (known) fresh = { ...data, map: known };
+      }
+      if (!fresh || fresh.map.id !== mapId) {
+        // Neither source produced the destination map (deleted mid-countdown?) — abort without
+        // switching; the pending state was already consumed, nothing else was applied.
+        console.warn(`move-in aborted: map "${mapId}" could not be loaded`);
+        return;
+      }
+      // Cancel whatever the sim was doing (a cancel, never a completion — no side effects) and
+      // drop every map-bound runtime system per the KEEP/DROP table above.
+      agent.stopAction();
+      carryState = null;
+      durationState = null;
+      panicState = null;
+      peeState = null;
+      for (const item of [...food.all]) food.discard(item.key);
+      accidents.restore({ instances: [], seq: accidents.serialize().seq, destroyedBase: [], spreadRolled: [] });
+      buyMode.restore({ additions: [], overrides: [], seq: 0 });
+      garbage.emptyAll();
+      assetStates.restore({ on: {} });
+      // One shared rebuild: world/doors/lights/nav/audio/finance retunes + the map-id-change
+      // branch (spawn teleport, action-menu close, music restart). The empty registries make the
+      // reattach calls inside it harmless no-ops. The next watchData poll will see the changed
+      // simstate/map signature and run applyFreshData once more — a routine, idempotent rebuild.
+      applyFreshData(fresh);
+      hud.showQuestToast(
+        `Moved in: ${fresh.map.name || mapId}`,
+        'completed',
+        data.tuning.quests.toastDurationSeconds * 1000,
+        'questCompleted',
+      );
+      refreshPhone();
+    } finally {
+      mapSwitchInFlight = false;
+    }
+  };
 
   devData.innerHTML = `data: <b>${data.assets.assets.length} assets</b> · <b>${data.stats.needs.length} needs</b> · <b>${data.stats.skills.filter(s => s.enabled !== false).length} skills</b> · <b>${data.interactions.actions.length} actions</b> · <b>${data.quests.quests.length} quests</b>`;
 
@@ -1437,6 +1588,8 @@ async function start() {
   // day boundary. Fire is the only current consumer; kept general in case anything else ever
   // wants an unwrapping sim clock.
   let simClockSeconds = 0;
+  // ROADMAP_APT R4: last in-game hour the Kijiji tab was refreshed for the pending-move countdown.
+  let lastPendingRefreshHour = -1;
 
   // --- render loop ---
   let frames = 0, fpsTimer = 0, last = performance.now();
@@ -1503,6 +1656,25 @@ async function start() {
       currentWorkTime(),
       data.tuning.work?.departureWindowHours ?? 2,
     )) handleWorkEvent(event);
+
+    // ROADMAP_APT R4: move-in completion check. The countdown runs on the same sim-time clock as
+    // food perishing (gameHourNow — pause freezes it, 2x/3x and the work auto-speed advance it).
+    // The actual switch is DEFERRED while the sim is away at work (the shift's return teleport
+    // must land on the map it left from), while buy mode/repo/game-over overlays are up, and
+    // while a previous switch is still in flight — the pending state simply waits, takeCompleted
+    // is only called when the switch can really happen (side_effect_rule: completion is the one
+    // and only trigger; cancel applies nothing).
+    if (!mapSwitchInFlight && !work.isAtWork && !buyMode.active && !repoOverlayActive && !gameOverActive
+      && pendingMove.isReady(gameHourNow())) {
+      const moveMapId = pendingMove.takeCompleted(gameHourNow());
+      if (moveMapId) void completePendingMove(moveMapId);
+    }
+    // Keep the Kijiji countdown label fresh (once per crossed in-game hour, only while pending —
+    // refreshPhone is cheap but not free, and the label is hour-granular anyway).
+    if (pendingMove.pending) {
+      const hourNow = Math.floor(gameHourNow());
+      if (hourNow !== lastPendingRefreshHour) { lastPendingRefreshHour = hourNow; refreshPhone(); }
+    }
 
     agent.update(sdt);
     // ROADMAP_NEXT B3-5: "carry to garbage" arrival check — carryState is only ever set right after
