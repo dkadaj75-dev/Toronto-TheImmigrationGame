@@ -337,3 +337,7 @@ Designer intent: always offer `use` in the character preview. With no `usePose.u
 ## B10-21. Put-trash-out visits the fullest can first, then the exterior door; orderable directly on a can.
 
 **DONE (2026-07-17):** pure chooseFullestCan (highest fill, tie nearest, empties ignored); startTrashOut walks to the ordered-on can (if any fill) or the fullest, then orders the real empty_garbage on the exterior door (completion semantics unchanged); cancels clear the leg like the carry precedent. DESIGNER: add interaction id 'empty_garbage' to the garbage_can asset in the Asset Editor to order it on the can; map needs an exterior door.
+
+## B10-22. BUG: job-gated quest conditions never validated; BUG: rented home persisted across refresh (not wanted before the save system).
+
+**DONE (2026-07-17):** (1) simstate declares vars.job as boolean so quests author "job eq true", but hiring writes the employer-id STRING (work system needs it) — strict equality never matched. Evaluator now treats a boolean literal on eq/neq as a truthiness test; vars.income is also written on hire (payPerShift), updated on promotion, reset with vars.job on job loss. (2) R4's runtime PUT of simstate.homeMap removed — move-in stays in-memory only until the save system (boot still reads resolveHomeMapId for forward-compat); leftover homeMap="Apt1" our old code wrote in simstate.json reset to null. ROADMAP_APT 6.1 decision superseded: NO persistence until save system.

@@ -3,7 +3,7 @@
 // Simulation (needs/autonomy/pathfinding) arrives in Phase 1 and will read the same data objects.
 
 import * as THREE from 'three';
-import { loadAll, loadAllMaps, watchData, type ActionDef, type GameData, type MapData, type SimStateData } from './data';
+import { loadAll, loadAllMaps, watchData, type ActionDef, type GameData, type MapData } from './data';
 import { TouchCamera } from './camera';
 import { applyWallCutView, buildWorld, makeSimStandIn, makeLights, applyDayNight, loadRiggedCharacter, normalizeMeshUrl, setAssetObjectOn } from './world';
 import { buildDoors } from './doors';
@@ -378,6 +378,8 @@ async function start() {
         if (promotion.promoted) {
           const pay = `${promotion.payIncrease >= 0 ? '+' : ''}${data.tuning.economy.currencyName}${promotion.payIncrease}`;
           hud.showQuestToast(`Promoted to ${promotion.title}! ${pay}`, 'completed', data.tuning.quests.toastDurationSeconds * 1000);
+          // Keep the income quest var current with the new level's pay (see phone.ts applyForJob).
+          quests.vars.income = jobLevelPay(job, work.getJobLevel(job.id));
         }
       }
       refreshPhone();
@@ -400,6 +402,7 @@ async function start() {
     }
 
     quests.vars.job = null;
+    quests.vars.income = 0; // no employer → no income (mirrors the applyForJob write)
     if (job && shouldStartVisaGrace(job, visaMachine.statusId, visaMachine.currentDef())) {
       visaMachine.startGrace(gameDay);
     }
@@ -1490,35 +1493,14 @@ async function start() {
   };
   watchData(applyFreshData);
 
-  // --- ROADMAP_APT R4: move-in completion → home persistence + runtime map switch --------------
-  /** §6.1 RESOLVED: THE one sanctioned runtime data write. simstate.json is the designated
-   *  designer-visible variable surface, so the new home is persisted the same way the tools
-   *  persist designer state: read-modify-write of the parsed JSON through the existing
-   *  GET/PUT /api/data path, changing ONLY the homeMap variable's default (added with sensible
-   *  name/type if the designer hasn't authored the variable yet) and re-serializing with the
-   *  shared JSON.stringify(data, null, 2) pretty-print every tool uses — every other key survives
-   *  untouched. Failure is non-fatal: the runtime move still applies for this session (the next
-   *  boot would just fall back to the old home). */
-  const persistHomeMap = async (mapId: string) => {
-    try {
-      const res = await fetch('/api/data/simstate.json', { cache: 'no-store' });
-      if (!res.ok) throw new Error(`GET simstate.json: ${res.status}`);
-      const simstate = (await res.json()) as SimStateData & Record<string, unknown>;
-      const variables = Array.isArray(simstate.variables) ? simstate.variables : [];
-      const existing = variables.find((v) => v.id === 'homeMap');
-      if (existing) existing.default = mapId;
-      else variables.push({ id: 'homeMap', name: 'Home Map', type: 'string', default: mapId });
-      simstate.variables = variables;
-      const put = await fetch('/api/data/simstate.json', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(simstate, null, 2),
-      });
-      if (!put.ok) throw new Error(`PUT simstate.json: ${put.status}`);
-    } catch (err) {
-      console.warn('homeMap persistence failed — the move still applies for this session.', err);
-    }
-  };
+  // --- ROADMAP_APT R4: move-in completion → runtime map switch ---------------------------------
+  /** Home-map PERSISTENCE is intentionally NOT implemented yet. R4 originally wrote the new home to
+   *  data/simstate.json via a runtime PUT, but the designer does NOT want any persistence before the
+   *  save system exists — a browser refresh must always boot the authored map (tuning.map.active via
+   *  resolveHomeMapId), never the rented apartment. So the move is applied IN MEMORY only
+   *  (quests.vars.homeMap, below) and nothing is written to disk. Boot still reads resolveHomeMapId
+   *  (game/data.ts) so the future save system can restore a home by seeding that var, but no code
+   *  path writes it. */
 
   /** The move-in countdown completed (the ONLY path that switches maps — side_effect_rule).
    *  Per-system KEEP/DROP decisions for the runtime switch, each chosen against that system's
@@ -1552,10 +1534,11 @@ async function start() {
   const completePendingMove = async (mapId: string) => {
     mapSwitchInFlight = true;
     try {
-      // Runtime home var first — the same mechanism a quest setVar reward uses (§6.1).
+      // Runtime home var only — the same mechanism a quest setVar reward uses (§6.1). No PUT: the
+      // home is NOT persisted (see the note above completePendingMove); a refresh returns to the
+      // authored map until the save system lands.
       quests.vars.homeMap = mapId;
-      await persistHomeMap(mapId);
-      // Fresh full bundle: after the PUT, loadAll() resolves the new home (resolveHomeMapId).
+      // Fresh full bundle: loadAll() re-reads live data (the switched map is applied below).
       // If the server hiccups, fall back to the already-fetched Kijiji copy of the map.
       let fresh: GameData | null = null;
       try {

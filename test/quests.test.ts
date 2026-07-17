@@ -2,7 +2,8 @@
 // Run: npx tsx test/quests.test.ts
 
 import { evaluate, QuestRunner, type EvalContext } from '../game/quests';
-import type { Condition, QuestDef, QuestsData, SimStateData } from '../game/data';
+import { applyForJob } from '../game/phone';
+import type { Condition, JobsData, QuestDef, QuestsData, SimStateData } from '../game/data';
 
 let failures = 0;
 function check(name: string, cond: boolean, detail = '') {
@@ -46,6 +47,24 @@ console.log('quests.test — operators');
   // pins the behavior down as a regression test.
   check('neq null vs null (job unset) — condition UNMET', evaluate({ var: 'vars.job', neq: null }, c) === false);
   check('neq null vs a real job — condition MET', evaluate({ var: 'vars.job', neq: null }, ctx({ vars: { ...c.vars, job: 'chef' } })) === true);
+
+  // BUG 1 (2026-07-17): the Quest/condition builder only offers true/false for a var declared
+  // `type: boolean` in simstate.json (e.g. `job`), so a designer's "has a job" completion is
+  // authored as `{ var: 'vars.job', eq: true }`. But the runtime stores the employer id STRING in
+  // vars.job (null when jobless — the work system depends on that id). A boolean eq/neq literal is
+  // therefore a TRUTHINESS test, not a strict === against a raw boolean, so these must hold:
+  const withJob = ctx({ vars: { ...c.vars, job: 'chef' } });
+  check('eq true vs a real job id — MET (BUG 1 core)', evaluate({ var: 'vars.job', eq: true }, withJob) === true);
+  check('eq true vs null (jobless) — UNMET', evaluate({ var: 'vars.job', eq: true }, c) === false);
+  check('eq false vs null (jobless) — MET', evaluate({ var: 'vars.job', eq: false }, c) === true);
+  check('eq false vs a real job id — UNMET', evaluate({ var: 'vars.job', eq: false }, withJob) === false);
+  check('neq true vs null (jobless) — MET', evaluate({ var: 'vars.job', neq: true }, c) === true);
+  check('neq true vs a real job id — UNMET', evaluate({ var: 'vars.job', neq: true }, withJob) === false);
+  // Genuine boolean values are unchanged by the coercion (Boolean(x) === x for real booleans).
+  check('eq true vs actual boolean true still MET', evaluate({ var: 'vars.flag', eq: true }, ctx({ vars: { ...c.vars, flag: true } })) === true);
+  check('eq true vs actual boolean false still UNMET', evaluate({ var: 'vars.flag', eq: true }, ctx({ vars: { ...c.vars, flag: false } })) === false);
+  // A boolean literal against an unknown var is still UNMET (undefined early-returns before coercion).
+  check('eq true vs unknown var — UNMET', evaluate({ var: 'vars.nope', eq: true }, c) === false);
 }
 
 console.log('quests.test — namespaces');
@@ -246,6 +265,47 @@ console.log('quests.test — serialize/restore round-trip (shape for a future sa
   check('restore reproduces quest state', runner2.quests['q1'] === 'active');
   check('restore reproduces funds', runner2.funds === 300);
   check('restore reproduces vars', runner2.vars['visaStatus'] === 'tourist');
+}
+
+console.log('quests.test — BUG 1: job acquisition completes a boolean job quest + income-gated quest');
+{
+  // The designer's authored quests (data/quests.json): find_a_job completes on `vars.job eq true`
+  // (the only form the builder offers for a boolean var), apply_for_permanent_residence triggers on
+  // `vars.income >= 350`. Drive them through the REAL job-acceptance path (game/phone.ts applyForJob)
+  // and the runner's tick re-evaluation to prove the end-to-end fix.
+  const findJob: QuestDef = {
+    id: 'find_a_job', name: 'Find a job', description: '',
+    trigger: { all: [{ var: 'skills.english', gte: 0 }] },
+    completion: { all: [{ var: 'vars.job', eq: true }] },
+    rewards: [], onceOnly: true,
+  };
+  const prQuest: QuestDef = {
+    id: 'apply_pr', name: 'Apply PR', description: '',
+    trigger: { all: [{ var: 'vars.income', gte: 350 }] },
+    completion: { all: [] }, rewards: [], onceOnly: true,
+  };
+  const runner = new QuestRunner({ quests: [findJob, prQuest] }, simState, 0);
+  const jobs: JobsData = { jobs: [
+    { id: 'dishwasher', name: 'Dishwasher', hours: { startHour: 9, endHour: 17 }, payPerShift: 400, maxSkips: 3 },
+  ] };
+
+  runner.tick({}, { english: 1 }, { hour: 9, day: 1 }); // find_a_job triggers; still jobless
+  check('find_a_job active but not done while jobless', runner.quests['find_a_job'] === 'active');
+  check('income-gated PR quest not triggered while income is 0', runner.quests['apply_pr'] === 'locked');
+
+  const evalCtx: EvalContext = { needs: {}, skills: { english: 1 }, funds: 0, time: { hour: 9, day: 1 }, vars: runner.vars, quests: runner.quests };
+  const res = applyForJob('dishwasher', jobs, evalCtx, runner.vars, () => {});
+  check('job accepted via the real phone path', res.ok === true);
+  check('vars.job holds the employer id string (work system contract)', runner.vars['job'] === 'dishwasher');
+  check('vars.income seeded to the job base pay', runner.vars['income'] === 400);
+
+  runner.tick({}, { english: 1 }, { hour: 9, day: 1 }); // re-evaluate after acquisition
+  check('BUG 1 FIX: find_a_job completes once the sim has a job', runner.quests['find_a_job'] === 'done');
+  check('BUG 1 FIX: income-gated PR quest triggers off vars.income', runner.quests['apply_pr'] === 'done');
+
+  // Job loss (main.ts writes vars.job=null, vars.income=0) — the boolean condition flips back UNMET.
+  runner.vars['job'] = null; runner.vars['income'] = 0;
+  check('boolean job condition is UNMET again once jobless', evaluate({ var: 'vars.job', eq: true }, evalCtx) === false);
 }
 
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }

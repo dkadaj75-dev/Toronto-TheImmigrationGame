@@ -81,13 +81,18 @@ console.log('phone.test — job apply effects');
   const c = makeContext();
   const vars: Record<string, VarValue> = { ...c.vars };
   const grants: { id: string; day: number }[] = [];
+  vars.income = 0;
   const denied = applyForJob('cook', jobs, c, vars, (id, day) => grants.push({ id, day }));
   check('unmet job application is rejected', denied.ok === false && denied.reason === 'requirements_unmet');
   check('rejected job does not mutate vars.job', vars.job === null);
+  check('rejected job does not mutate vars.income', vars.income === 0);
 
   const accepted = applyForJob('dishwasher', jobs, c, vars, (id, day) => grants.push({ id, day }));
   check('met job application succeeds', accepted.ok === true);
   check('successful job application sets vars.job', vars.job === 'dishwasher');
+  // BUG 1 (2026-07-17): applyForJob now also seeds the designer-facing `income` quest var with the
+  // hired job's base pay so income-gated quests (e.g. PR-application `vars.income >= 350`) can fire.
+  check('successful job application sets vars.income to base pay', vars.income === 100);
   check('grantsVisa goes through injected visa callback with live day', grants.length === 1 && grants[0].id === 'lmia' && grants[0].day === 2);
   const creditDenied = applyForJob('tutor', jobs, c, vars, () => {}, 600);
   check('authoritative apply path rejects unmet minCreditScore', creditDenied.ok === false && creditDenied.reason === 'requirements_unmet');

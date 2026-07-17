@@ -55,8 +55,16 @@ function evaluateLeaf(leaf: { var: string; gte?: number; lte?: number; eq?: VarV
   if (value === undefined) return false; // unknown id → false, never throw
   if (leaf.gte !== undefined) return typeof value === 'number' && value >= leaf.gte;
   if (leaf.lte !== undefined) return typeof value === 'number' && value <= leaf.lte;
-  if (leaf.eq !== undefined) return value === leaf.eq;
-  if (leaf.neq !== undefined) return value !== leaf.neq;
+  // A boolean literal on eq/neq is a TRUTHINESS test, not a strict === against a `true`/`false`
+  // value. This matters for designer variables whose declared type is `boolean` but whose runtime
+  // value is a nullable payload rather than a raw boolean — most notably `vars.job`, which is
+  // `null` when jobless and holds the employer id STRING when hired (the work system depends on
+  // that id; see game/work.ts). The Quest/condition builder only offers true/false for a boolean
+  // var, so a "has a job" condition is authored as `{ var: 'vars.job', eq: true }`; without this
+  // coercion that could never match the string id and the quest would never complete. Genuine
+  // boolean values are unaffected (Boolean(true|false) === the literal is identical to ===).
+  if (leaf.eq !== undefined) return typeof leaf.eq === 'boolean' ? Boolean(value) === leaf.eq : value === leaf.eq;
+  if (leaf.neq !== undefined) return typeof leaf.neq === 'boolean' ? Boolean(value) !== leaf.neq : value !== leaf.neq;
   return false; // no operator present — malformed leaf, treated the same as unknown
 }
 

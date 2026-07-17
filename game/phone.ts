@@ -165,6 +165,12 @@ export function applyForJob(
   if (!requirementsMet(job.requirements, ctx)) return { ok: false, reason: 'requirements_unmet' };
   if (!jobCreditRequirementMet(job, creditScore)) return { ok: false, reason: 'requirements_unmet' };
   vars.job = job.id;
+  // Keep the designer-facing `income` var (data/simstate.json, read by quest conditions such as the
+  // PR-application trigger `vars.income >= 350`) in step with employment. At hire the sim is at the
+  // base level, so base pay is the income; promotions and job loss update it at those call sites in
+  // game/main.ts (jobLevelPay / 0). Without this write income stays at its `0` default forever and
+  // income-gated quests never trigger.
+  vars.income = job.payPerShift;
   if (job.grantsVisa) grantVisa(job.grantsVisa, ctx.time.day);
   return { ok: true, id: job.id };
 }

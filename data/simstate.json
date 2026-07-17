@@ -18,6 +18,12 @@
       "name": "Income",
       "type": "number",
       "default": 0
+    },
+    {
+      "id": "homeMap",
+      "name": "Home Map",
+      "type": "string",
+      "default": null
     }
   ]
 }
