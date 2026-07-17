@@ -1,4 +1,4 @@
-import { scaleSkillGain, SimStats } from '../game/stats';
+import { computeEnvironmentScore, scaleSkillGain, SimStats } from '../game/stats';
 import type { ActionDef, StatsData } from '../game/data';
 
 let passed = 0;
@@ -27,5 +27,25 @@ const action: ActionDef = {
 const stats = new SimStats(defs, 1.5);
 stats.applyGains(action);
 check('SimStats.applyGains uses the non-linear helper', approx(stats.skills.get('cooking')!, 90 + scaleSkillGain(raw, 90, 100, 1.5)));
+
+// B10-11: environmentScore is a pure aggregate of assets currently present — no drift over time.
+const envScoreFor = (assetId: string) => ({ couch: 5, tv: 3, puddle: -8, fire: -20 }[assetId] ?? 0);
+check(
+  'destroyed instance (mopped puddle / burned asset) is excluded once removed from the effective list',
+  computeEnvironmentScore(['couch'], [], envScoreFor) === 5,
+  `expected only couch's score, got ${computeEnvironmentScore(['couch'], [], envScoreFor)}`,
+);
+check(
+  'purchase is included via the effective placed-object list',
+  computeEnvironmentScore(['couch', 'tv'], [], envScoreFor) === 8,
+);
+check(
+  'live accident registry instance (e.g. an active fire) is included via the accident sum',
+  computeEnvironmentScore(['couch'], ['fire'], envScoreFor) === 5 + -20,
+);
+check(
+  'a still-present designer puddle drags the score down until destroyed',
+  computeEnvironmentScore(['couch', 'puddle'], [], envScoreFor) === 5 + -8,
+);
 
 console.log(`\n${passed} stats tests passed.`);

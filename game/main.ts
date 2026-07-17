@@ -11,7 +11,7 @@ import { AnimController } from './anim';
 import { bakeNavGrid } from './nav';
 import { TapInput, type TapResult } from './input';
 import { SimAgent, ClickCue, findSeatFor, type ActiveAction } from './sim';
-import { SimStats } from './stats';
+import { computeEnvironmentScore, SimStats } from './stats';
 import { Hud } from './ui';
 import { Autonomy } from './autonomy';
 import { QuestRunner, isActionAvailable, type EvalContext } from './quests';
@@ -177,7 +177,7 @@ async function start() {
   // then rebake nav since a destroyed object frees up floor space.
   const accidents = new AccidentsController(() => data, () => world, () => grid, (obj) => {
     const inst = buyMode.instanceForObject(obj);
-    if (inst) { buyMode.destroyInstance(inst); rebakeNav(); }
+    if (inst) { buyMode.destroyInstance(inst); rebakeNav(); applyEnvironment(); }
   }, () => triggerPanic());
 
   // --- garbage cans + autonomous tidying (ROADMAP_NEXT item 10): scans the live world for placed
@@ -258,11 +258,18 @@ async function start() {
   // Environment need (Sims "Room" score) = Σ environment scores of placed objects + any
   // currently-live accident instances (§7.3: fire/puddles ship negative environmentScore and
   // should drag the room score down while present — accidents.registry.all is the live list).
+  // B10-11: reads buyMode's EFFECTIVE placed-object list (purchases included, sold/destroyed
+  // instances excluded), not the raw designer-authored map.placedObjects — so environment is a
+  // pure aggregate of what's actually present and never drifts (a mopped puddle or a
+  // fire-destroyed asset drops out immediately instead of scoring forever).
   const environmentScore = () => {
     const byId = new Map(data.assets.assets.map((a) => [a.id, a]));
-    const placedSum = data.map.placedObjects.reduce((sum, p) => sum + (byId.get(p.asset)?.environmentScore ?? 0), 0);
-    const accidentSum = accidents.registry.all.reduce((sum, inst) => sum + (byId.get(inst.accidentId)?.environmentScore ?? 0), 0);
-    return placedSum + accidentSum;
+    const environmentScoreFor = (assetId: string) => byId.get(assetId)?.environmentScore ?? 0;
+    return computeEnvironmentScore(
+      buyMode.effectivePlacedObjectsList().map((p) => p.asset),
+      accidents.registry.all.map((inst) => inst.accidentId),
+      environmentScoreFor,
+    );
   };
   const envNeedId = () => data.stats.needs.find((n) => n.computed)?.id;
   const applyEnvironment = () => { const id = envNeedId(); if (id) stats.setComputed(id, environmentScore()); };
@@ -532,7 +539,7 @@ async function start() {
     }
     quests.funds = decision.remainingFunds;
     bills.observeFunds(gameDay, quests.funds);
-    if (decision.seized.length > 0) rebakeNav();
+    if (decision.seized.length > 0) { rebakeNav(); applyEnvironment(); }
     hud.setFunds(quests.funds, currencyName());
     refreshPhone();
     repoOverlayActive = true;
@@ -926,6 +933,7 @@ async function start() {
           if (inst) {
             buyMode.destroyInstance(inst);
             if (def.blocksNav !== false) rebakeNav();
+            applyEnvironment();
           }
         }
       }
@@ -1114,6 +1122,7 @@ async function start() {
       quests.funds -= result.cost;
       hud.setFunds(quests.funds, currencyName());
       rebakeNav();
+      applyEnvironment();
       refreshBuyCatalog();
       hud.hideGhostControls();
     } else if (result.kind === 'moved') {
@@ -1152,6 +1161,7 @@ async function start() {
       quests.funds += refund;
       hud.setFunds(quests.funds, currencyName());
       rebakeNav();
+      applyEnvironment();
       refreshBuyCatalog();
     }
     hud.hideSelectionChips();

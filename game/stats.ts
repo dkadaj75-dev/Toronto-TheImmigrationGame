@@ -5,6 +5,23 @@
 
 import type { StatsData, ActionDef, NeedDef, SkillDef, PersonalityDef } from './data';
 
+/** B10-11: Environment (Sims "Room" score) is a PURE aggregate of assets currently present —
+ *  it never drifts over time. `placedAssetIds` must be the EFFECTIVE placed-object list (buy-mode
+ *  purchases included, sold/destroyed instances excluded — see buymode.ts's
+ *  `effectivePlacedObjectsList()`), NOT the raw designer-authored `map.placedObjects`, so a mopped
+ *  puddle or a fire-destroyed asset stops contributing the instant it's gone rather than forever.
+ *  `accidentAssetIds` is the live AccidentRegistry list (fire/puddle instances currently burning/
+ *  wet) — those already self-correct on cleanup since the registry itself drops them. */
+export function computeEnvironmentScore(
+  placedAssetIds: string[],
+  accidentAssetIds: string[],
+  environmentScoreFor: (assetId: string) => number,
+): number {
+  const placedSum = placedAssetIds.reduce((sum, id) => sum + environmentScoreFor(id), 0);
+  const accidentSum = accidentAssetIds.reduce((sum, id) => sum + environmentScoreFor(id), 0);
+  return placedSum + accidentSum;
+}
+
 /** B5-1: positive practice gains taper as a skill approaches its max. Losses/decay are returned
  *  untouched; exponent 0 preserves the previous linear gain, except that a skill already at max
  *  can never gain further. */
