@@ -295,3 +295,7 @@ As-built: sparse MapData.rental (RentalConfig: listed, adTitle/adText/adImage, a
 ## R2 — SHIPPED (2026-07-17)
 
 As-built: pure game/rental.ts listRentals(ctx) -> RentalListing[] {mapId,title,text,image,areaM2,available,rentPrice?,statusLabel,moveInHours,isCurrentHome}. Availability via quests.ts isActionAvailable (absent = available); rent via bills.ts computeFinancePreview; m2 via textures.ts floorsAreaM2; overrides win. Price only when available; labels themeable (DEFAULT_RENTAL_LABELS, overridable). Unlisted/absent-rental excluded. test/rental.test.ts (35 checks).
+
+## R3 — SHIPPED (2026-07-17)
+
+As-built: 'rentals' PhoneTab (game/ui.ts) labeled live from tuning.phone.rentalTabName; ad cards render R2's view-model (m2 always, price + Rent only when available, 'Not available yet'/'Current' chips; Rent DISABLED with coming-soon tooltip). R4 seam: Hud.onPhoneRentRequested(mapId) no-op + rentalCardViews() rentEnabled gating (available AND not current AND no pending move) in game/phone.ts. Maps enumeration: data.ts loadAllMaps() over the EXISTING GET /api/maps + per-map fetch, network-only — NO server.js change, no dev-server restart needed. EvalContext reused from buildEvalContext. Suites: phone.test.ts + new phone-hud.test.ts.

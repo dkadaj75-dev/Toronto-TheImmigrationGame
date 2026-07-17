@@ -3,6 +3,7 @@
 
 import type { Condition, JobDef, JobsData, VisaDef, VisasData } from './data';
 import { evaluate, type EvalContext, type VarValue } from './quests';
+import type { RentalListing } from './rental';
 
 export const DEFAULT_PHONE_JOB_LIST_SIZE = 3;
 
@@ -193,4 +194,62 @@ export function applyForVisa(
 
 export function pendingDaysRemaining(pending: { resolvesAtDay: number } | null, day: number): number | null {
   return pending ? Math.max(0, pending.resolvesAtDay - day) : null;
+}
+
+// ================================================================ ROADMAP_APT R3 (Kijiji rental tab)
+
+/** Per-ad view-model the phone's Kijiji tab renders. Pure DOM-free massaging of R2's
+ *  RentalListing (game/rental.ts): keeps the UI layer dumb (it just paints fields) and keeps the
+ *  formatting/gating decisions here where they're headless-tested (test/phone.test.ts).
+ *  Design rules straight from ROADMAP_APT §2/R3: m² shows on EVERY ad; the rent price + an ENABLED
+ *  Rent button appear ONLY on an available, non-current, no-move-pending listing; an unavailable ad
+ *  shows the "Not available yet" chip with NO price and NO conditions. The current home is flagged
+ *  and never rentable. NOTE: for R3 the Rent button is present but always DISABLED (R4 wires the
+ *  actual rent flow) — `rentEnabled` still encodes the eventual gating so R4 need only flip one
+ *  guard, not reshape this view. */
+export interface RentalCardView {
+  mapId: string;
+  title: string;
+  text: string;
+  image?: string;
+  /** Always present — e.g. "45 m2". Shown on every ad regardless of availability. */
+  areaLabel: string;
+  /** Present (formatted with the currency) ONLY when the listing is available; null otherwise. */
+  priceLabel: string | null;
+  /** Themeable status text supplied by R2 ("Available" / "Not available yet"). */
+  statusLabel: string;
+  /** This map is the sim's current home — flag it "current" and never offer to rent it. */
+  isCurrentHome: boolean;
+  /** Whether the eventual (R4) Rent action should be permitted for this ad. The R3 UI keeps the
+   *  button disabled regardless; this drives R4 and the tests. */
+  rentEnabled: boolean;
+}
+
+export interface RentalCardOptions {
+  /** tuning.economy.currencyName — no hardcoded "§" (design pillar). */
+  currencyName: string;
+  /** True when a move-in is already pending (R4). Disables renting anything meanwhile. */
+  movePending?: boolean;
+}
+
+/** Formats R2's listings into rent-card view-models. Deterministic/DOM-free — safe to call every
+ *  tab refresh from the thin UI layer (game/ui.ts renderPhone). */
+export function rentalCardViews(listings: readonly RentalListing[], opts: RentalCardOptions): RentalCardView[] {
+  return listings.map((listing) => {
+    const available = listing.available;
+    const priceLabel = available && listing.rentPrice !== undefined
+      ? `${opts.currencyName}${Math.round(listing.rentPrice).toLocaleString()}`
+      : null;
+    return {
+      mapId: listing.mapId,
+      title: listing.title,
+      text: listing.text,
+      image: listing.image,
+      areaLabel: `${Math.round(listing.areaM2)} m2`,
+      priceLabel,
+      statusLabel: listing.statusLabel,
+      isCurrentHome: listing.isCurrentHome,
+      rentEnabled: available && !listing.isCurrentHome && !opts.movePending,
+    };
+  });
 }

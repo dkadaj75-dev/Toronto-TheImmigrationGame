@@ -4,9 +4,13 @@
 // Bar colors/names come from stats.json; action names from interactions.json.
 
 import type { ActionDef, AssetDef, JobDef, VisaDef } from './data';
-import type { RequirementView } from './phone';
+import type { RentalCardView, RequirementView } from './phone';
 import type { SimStats } from './stats';
 import { jobLevelPay, jobLevelTitle } from './work';
+
+/** Phone overlay tabs. ROADMAP_APT R3 adds 'rentals' (the Kijiji tab; its visible label comes
+ *  from tuning.phone.rentalTabName, never hardcoded). */
+export type PhoneTab = 'jobs' | 'visas' | 'bills' | 'credit' | 'rentals';
 
 export interface ScreenPoint { x: number; y: number }
 export interface ScreenInsets { top: number; right: number; bottom: number; left: number }
@@ -326,6 +330,10 @@ const CSS = `
 .phone-credit-trend { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 8px; }
 .phone-credit-trend li { display: grid; grid-template-columns: 32px 1fr auto; gap: 8px; font-size: 12px; color: #aebbd1; }
 .phone-credit-trend .positive { color: #76d394; } .phone-credit-trend .negative { color: #ff8b8b; }
+.phone-rental-img { display: block; width: 100%; height: 128px; object-fit: cover; border-radius: 10px;
+  margin: 8px 0 4px; background: #10182a; }
+.phone-rental-meta { display: flex; align-items: center; gap: 8px; }
+.phone-rental-area { font-variant-numeric: tabular-nums; }
 
 #buy-bar { position: absolute; left: 0; right: 0; bottom: 0; pointer-events: none;
   display: none; flex-direction: column; }
@@ -447,12 +455,15 @@ export class Hud {
 
   onPhoneClose: (() => void) | null = null;
   onPhoneOpen: (() => void) | null = null;
-  onPhoneTabPick: ((tab: 'jobs' | 'visas' | 'bills' | 'credit') => void) | null = null;
+  onPhoneTabPick: ((tab: PhoneTab) => void) | null = null;
   onPhoneSearchJobs: (() => void) | null = null;
   onPhoneJobApply: ((jobId: string) => void) | null = null;
   onPhoneVisaApply: ((statusId: string) => void) | null = null;
   onPhoneBillPay: ((key: string) => void) | null = null;
   onPhoneBillsPayAll: (() => void) | null = null;
+  /** ROADMAP_APT R3 hook seam: fired when the Kijiji "Rent" button is activated. R4 wires the
+   *  real rent → move-in flow here; for R3 the button is always DISABLED so this stays a no-op. */
+  onPhoneRentRequested: ((mapId: string) => void) | null = null;
   onRepoClose: (() => void) | null = null;
 
   onCancelAction: (() => void) | null = null;
@@ -519,6 +530,7 @@ export class Hud {
             <button data-phone-tab="visas">Visas</button>
             <button data-phone-tab="bills">Bills</button>
             <button data-phone-tab="credit">Credit</button>
+            <button data-phone-tab="rentals">Rentals</button>
           </div>
           <div id="phone-body"></div>
         </div>
@@ -590,7 +602,7 @@ export class Hud {
       this.onPhoneClose?.();
     });
     this.phoneTabs.forEach((button) => button.addEventListener('click', () => {
-      const tab = button.dataset.phoneTab as 'jobs' | 'visas' | 'bills' | 'credit';
+      const tab = button.dataset.phoneTab as PhoneTab;
       this.onPhoneTabPick?.(tab);
     }));
 
@@ -908,7 +920,7 @@ export class Hud {
   }
 
   renderPhone(args: {
-    tab: 'jobs' | 'visas' | 'bills' | 'credit';
+    tab: PhoneTab;
     currentStatusName: string;
     searchedJobs: boolean;
     jobs: { job: JobDef; requirementsMet: boolean; requirements: RequirementView[] }[];
@@ -920,10 +932,72 @@ export class Hud {
     billsTotal: number;
     creditScore: number;
     creditHistory: { day: number; delta: number; reason: string; score: number }[];
+    /** ROADMAP_APT R3 (Kijiji): the tab's visible label (tuning.phone.rentalTabName). */
+    rentalTabName: string;
+    /** ROADMAP_APT R3: pre-massaged rent-card view-models (game/phone.ts rentalCardViews). */
+    rentals: RentalCardView[];
+    /** Tooltip on the (always-disabled for R3) Rent button — R4 enables the flow. */
+    rentDisabledTitle?: string;
   }) {
     this.phoneStatus.textContent = args.currentStatusName;
+    // The Kijiji tab's label is data-driven (tuning.phone.rentalTabName), never hardcoded.
+    this.phoneTabs.forEach((button) => {
+      if (button.dataset.phoneTab === 'rentals') button.textContent = args.rentalTabName;
+    });
     this.phoneTabs.forEach((button) => button.classList.toggle('active', button.dataset.phoneTab === args.tab));
     this.phoneBody.innerHTML = '';
+
+    if (args.tab === 'rentals') {
+      if (args.rentals.length === 0) {
+        this.phoneBody.appendChild(phoneEmpty('No rentals listed yet.'));
+        return;
+      }
+      for (const ad of args.rentals) {
+        const card = phoneCard(ad.title || 'Untitled listing');
+        if (ad.priceLabel !== null) {
+          const price = document.createElement('span');
+          price.className = 'phone-card-pay';
+          price.textContent = ad.priceLabel;
+          card.head.appendChild(price);
+        }
+        if (ad.image) {
+          const img = document.createElement('img');
+          img.className = 'phone-rental-img';
+          img.alt = '';
+          img.src = ad.image;
+          card.el.appendChild(img);
+        }
+        // m² is shown on EVERY ad; the not-available chip / current flag sits beside it.
+        const meta = document.createElement('div');
+        meta.className = 'phone-meta phone-rental-meta';
+        const area = document.createElement('span');
+        area.className = 'phone-rental-area';
+        area.textContent = ad.areaLabel;
+        meta.appendChild(area);
+        const chip = document.createElement('span');
+        chip.className = 'phone-pending';
+        chip.textContent = ad.isCurrentHome ? 'Current' : ad.statusLabel;
+        meta.appendChild(chip);
+        card.el.appendChild(meta);
+        if (ad.text) {
+          const text = document.createElement('div');
+          text.className = 'phone-meta';
+          text.textContent = ad.text;
+          card.el.appendChild(text);
+        }
+        const rent = document.createElement('button');
+        rent.className = 'apply';
+        rent.textContent = 'Rent';
+        // R3: the button is present but always disabled (R4 wires the rent → move-in flow). The
+        // click still routes to the hook seam so R4 only flips `disabled`, not the wiring.
+        rent.disabled = true;
+        if (args.rentDisabledTitle) rent.title = args.rentDisabledTitle;
+        rent.addEventListener('click', () => this.onPhoneRentRequested?.(ad.mapId));
+        card.el.appendChild(rent);
+        this.phoneBody.appendChild(card.el);
+      }
+      return;
+    }
 
     if (args.tab === 'credit') {
       const score = document.createElement('div');

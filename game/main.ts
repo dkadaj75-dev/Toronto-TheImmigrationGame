@@ -3,7 +3,7 @@
 // Simulation (needs/autonomy/pathfinding) arrives in Phase 1 and will read the same data objects.
 
 import * as THREE from 'three';
-import { loadAll, watchData, type ActionDef, type GameData } from './data';
+import { loadAll, loadAllMaps, watchData, type ActionDef, type GameData, type MapData } from './data';
 import { TouchCamera } from './camera';
 import { applyWallCutView, buildWorld, makeSimStandIn, makeLights, applyDayNight, loadRiggedCharacter, normalizeMeshUrl, setAssetObjectOn } from './world';
 import { buildDoors } from './doors';
@@ -16,7 +16,8 @@ import { Hud } from './ui';
 import { Autonomy } from './autonomy';
 import { QuestRunner, isActionAvailable, type EvalContext } from './quests';
 import { VisaMachine } from './visas';
-import { PhoneJobSearch, applyForJob, applyForVisa, jobListingViews, jobSwitchPrompt, pendingDaysRemaining, visaApplicationViews } from './phone';
+import { PhoneJobSearch, applyForJob, applyForVisa, jobListingViews, jobSwitchPrompt, pendingDaysRemaining, rentalCardViews, visaApplicationViews } from './phone';
+import { listRentals } from './rental';
 import { FinanceState, decideRepoSeizure } from './bills';
 import { WorkTracker, applyNeedsCost, decideAutoDepart, isLeaveForWorkAvailable, isWithinDepartureWindow, jobLevelPay, jobLevelTitle, shouldStartVisaGrace, type WorkTickEvent } from './work';
 import { computeHappiness } from './happiness';
@@ -411,10 +412,29 @@ async function start() {
   // --- smartphone jobs + visa applications (PROJECT_CONTEXT.md §7.20 V2, B3-7) ---
   const phoneJobs = new PhoneJobSearch(data.jobs, data.tuning.phone?.jobListSize);
   const bills = new FinanceState(data.bills, data.finance, data.tuning.bills?.intervalDays, 1, data.tuning.credit);
-  let phoneTab: 'jobs' | 'visas' | 'bills' | 'credit' = 'jobs';
+  let phoneTab: 'jobs' | 'visas' | 'bills' | 'credit' | 'rentals' = 'jobs';
+  // ROADMAP_APT R3 (Kijiji): the phone tab needs EVERY map, not just the active one. Loaded
+  // network-only (data.ts loadAllMaps, via GET /api/maps) and refreshed each time the tab is shown
+  // so live designer map/rental edits appear. Empty until the first load resolves — the tab renders
+  // its empty state meanwhile.
+  let allMaps: MapData[] = [];
+  const reloadRentalMaps = () => {
+    void loadAllMaps().then((maps) => { allMaps = maps; if (phoneTab === 'rentals') refreshPhone(); }).catch(() => { /* server briefly unavailable — keep last */ });
+  };
   const refreshPhone = () => {
     const ctx = buildEvalContext();
     const pendingDays = pendingDaysRemaining(visaMachine.pending, gameDay);
+    const rentals = rentalCardViews(
+      listRentals({
+        maps: allMaps,
+        evalContext: ctx,
+        finance: data.finance,
+        assets: data.assets,
+        // Current home = the active map today; R4 introduces simstate.homeMap. Flags the ad "Current".
+        homeMapId: data.map.id,
+      }),
+      { currencyName: data.tuning.economy.currencyName },
+    );
     hud.renderPhone({
       tab: phoneTab,
       currentStatusName: visaMachine.currentDef()?.name ?? visaMachine.statusId,
@@ -438,6 +458,9 @@ async function start() {
       billsTotal: bills.total,
       creditScore: bills.creditScore,
       creditHistory: bills.creditHistory,
+      rentalTabName: data.tuning.phone?.rentalTabName ?? 'Kijiji',
+      rentals,
+      rentDisabledTitle: 'Renting is coming soon',
     });
     hud.setPhoneBadge(bills.outstanding.length);
   };
@@ -455,7 +478,14 @@ async function start() {
     refreshPhone();
     hud.openPhone();
   };
-  hud.onPhoneTabPick = (tab) => { phoneTab = tab; refreshPhone(); };
+  hud.onPhoneTabPick = (tab) => {
+    phoneTab = tab;
+    if (tab === 'rentals') reloadRentalMaps(); // pull fresh maps/rental edits each time the tab opens
+    refreshPhone();
+  };
+  // R3 leaves the Rent flow to R4: the button is disabled, so this hook stays a marked no-op seam.
+  hud.onPhoneRentRequested = (_mapId) => { /* R4: rent → move-in → map switch */ };
+  reloadRentalMaps(); // warm the Kijiji listing in the background so the first open isn't empty
   hud.onPhoneSearchJobs = () => {
     phoneJobs.search(buildEvalContext().time);
     refreshPhone();

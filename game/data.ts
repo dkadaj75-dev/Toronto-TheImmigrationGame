@@ -768,6 +768,28 @@ async function fetchOptionalJson<T>(url: string): Promise<T | undefined> {
   return res.json() as Promise<T>;
 }
 
+/** ROADMAP_APT R3 (Kijiji phone tab): enumerate + load EVERY map, not just the active one.
+ *  Uses the existing read-only `GET /api/maps` listing (server.js, the same endpoint the Map
+ *  Editor uses) — no new server endpoint needed — then fetches each `/data/maps/<id>.json`.
+ *  Network-only (`cache: 'no-store'`, PWA rule: never cache /data or /api), so a designer's live
+ *  map/rental edits are always reflected on the next call. A map that fails to parse is skipped
+ *  rather than failing the whole listing (keep-going philosophy). */
+export async function loadAllMaps(): Promise<MapData[]> {
+  const listRes = await fetch('/api/maps', { cache: 'no-store' });
+  if (!listRes.ok) throw new Error(`Failed to list maps: ${listRes.status}`);
+  const { maps } = (await listRes.json()) as { maps: string[] };
+  const loaded = await Promise.all(
+    maps.map(async (id) => {
+      try {
+        return await fetchJson<MapData>(`/data/maps/${id}.json`);
+      } catch {
+        return undefined;
+      }
+    }),
+  );
+  return loaded.filter((m): m is MapData => !!m);
+}
+
 /** Dev hot-reload: polls the data files and invokes callbacks when content changes. */
 export function watchData(onChange: (data: GameData) => void, intervalMs = 2000): () => void {
   let last = '';

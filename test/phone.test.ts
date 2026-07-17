@@ -7,8 +7,10 @@ import {
   jobListingViews,
   jobSwitchPrompt,
   pendingDaysRemaining,
+  rentalCardViews,
   visaApplicationViews,
 } from '../game/phone';
+import type { RentalListing } from '../game/rental';
 import type { EvalContext, VarValue } from '../game/quests';
 import type { JobsData, VisasData } from '../game/data';
 
@@ -121,6 +123,28 @@ console.log('phone.test — visa application listing and gating');
   const rejected = applyForVisa('open_permit', visas, c, () => false);
   check('visa machine rejection is surfaced', rejected.ok === false && rejected.reason === 'application_rejected');
   check('pending days remaining is day based', pendingDaysRemaining({ resolvesAtDay: 12 }, 5) === 7);
+}
+
+console.log('phone.test — ROADMAP_APT R3 rental card view-models');
+{
+  const listings: RentalListing[] = [
+    { mapId: 'available_apt', title: 'Sunny 1BR', text: 'Great light', image: 'ads/a.jpg', areaM2: 44.6, available: true, rentPrice: 812.4, statusLabel: 'Available', moveInHours: 48, isCurrentHome: false },
+    { mapId: 'gated_apt', title: 'Loft', text: 'Downtown', areaM2: 60, available: false, statusLabel: 'Not available yet', moveInHours: 24, isCurrentHome: false },
+    { mapId: 'home_apt', title: 'My place', text: 'Home', areaM2: 30, available: true, rentPrice: 500, statusLabel: 'Available', moveInHours: 0, isCurrentHome: true },
+  ];
+  const views = rentalCardViews(listings, { currencyName: '§' });
+
+  check('every ad carries an m2 label', views.every((v) => v.areaLabel.endsWith(' m2')));
+  check('m2 label rounds the computed area', views[0].areaLabel === '45 m2' && views[1].areaLabel === '60 m2');
+  check('available ad exposes a formatted price', views[0].priceLabel === '§812');
+  check('unavailable ad exposes NO price', views[1].priceLabel === null);
+  check('unavailable ad keeps the not-available status label', views[1].statusLabel === 'Not available yet');
+  check('available non-home ad is rentable', views[0].rentEnabled === true);
+  check('unavailable ad is not rentable', views[1].rentEnabled === false);
+  check('current home is flagged and never rentable', views[2].isCurrentHome === true && views[2].rentEnabled === false);
+
+  const pending = rentalCardViews(listings, { currencyName: '§', movePending: true });
+  check('a pending move disables renting everything', pending.every((v) => v.rentEnabled === false));
 }
 
 if (failures > 0) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }
