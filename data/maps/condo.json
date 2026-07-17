@@ -421,8 +421,8 @@
     {
       "asset": "pee_puddle",
       "pos": [
-        1.5,
-        1.25
+        0.5,
+        0.5
       ],
       "rotDeg": 0
     },
@@ -431,6 +431,14 @@
       "pos": [
         3.5,
         2.75
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "water_puddle",
+      "pos": [
+        2,
+        0.75
       ],
       "rotDeg": 0
     }
