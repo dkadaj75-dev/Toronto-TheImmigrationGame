@@ -109,7 +109,10 @@ export function normalizeModelToFootprint(model: THREE.Object3D, footprint: [num
  *  - yawOffsetDeg: rotates the model in place — corrects a mesh not authored facing the
  *    game's local +Z convention. AssetDef.facingDeg (game/facing.ts) is then defined in terms
  *    of the model's orientation AFTER this correction, so the two fields compose cleanly.
- *  - yOffset: nudges the model vertically post-grounding (e.g. a door sitting flush in its frame).
+ *  - xOffset/yOffset/zOffset: nudge the model along each world axis post-grounding (e.g. a door
+ *    sitting flush in its frame). Each is sparse — an absent axis is 0. yOffset predates the
+ *    other two (single-axis vertical nudge) and is unchanged; xOffset/zOffset are a backward-
+ *    compatible superset, so data carrying only yOffset behaves exactly as before.
  *
  * Exported for reuse by game/doors.ts, which applies the same correction to a door panel's GLB.
  */
@@ -120,7 +123,9 @@ export function applyMeshFit(model: THREE.Object3D, fit: AssetDef['meshFit']) {
     else model.scale.multiplyScalar(fit.scale);
   }
   if (fit.yawOffsetDeg) model.rotation.y += THREE.MathUtils.degToRad(fit.yawOffsetDeg);
+  if (fit.xOffset) model.position.x += fit.xOffset;
   if (fit.yOffset) model.position.y += fit.yOffset;
+  if (fit.zOffset) model.position.z += fit.zOffset;
 }
 
 /** public/ serves at root — normalize "models/x.glb" → "/models/x.glb"; leave absolute/http(s) alone. */

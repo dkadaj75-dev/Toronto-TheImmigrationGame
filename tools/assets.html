@@ -728,12 +728,68 @@ function renderEditor() {
     (v) => { if (v === undefined) { if (a.meshFit) delete a.meshFit.yawOffsetDeg; } else ensureFit().yawOffsetDeg = v; pruneFit(); },
     'meshFit.yawOffsetDeg',
   )));
-  card4b.appendChild(frow('y offset (meters, post-grounding)', numInput(
-    () => a.meshFit?.yOffset,
-    (v) => { if (v === undefined) { if (a.meshFit) delete a.meshFit.yOffset; } else ensureFit().yOffset = v; pruneFit(); },
-    'meshFit.yOffset',
-  )));
+  // Per-axis position nudge (meters, post-grounding). Each axis is sparse — blank = unset (0).
+  // yOffset predates xOffset/zOffset and keeps its exact meaning; the two new axes are a
+  // backward-compatible superset (see game/data.ts meshFit + game/world.ts applyMeshFit).
+  const offsetInput = (key) => numInput(
+    () => a.meshFit?.[key],
+    (v) => { if (v === undefined) { if (a.meshFit) delete a.meshFit[key]; } else ensureFit()[key] = v; pruneFit(); },
+    'meshFit.' + key,
+  );
+  const offsetPair = document.createElement('div');
+  offsetPair.className = 'pair';
+  offsetPair.append(offsetInput('xOffset'), offsetInput('yOffset'), offsetInput('zOffset'));
+  card4b.appendChild(frow('position offset x / y / z (meters, post-grounding, blank = 0)', offsetPair));
   root.appendChild(card4b);
+
+  // --- need multipliers (sparse: needMultipliers keys only exist while set; an empty map is
+  // pruned away entirely). Each row scales this asset's effective per-tick gain for one need:
+  // effective gain = action.needGains[need] * multiplier. >1 is better than average, <1 worse,
+  // NEGATIVE inverts it (an awful chair that drains comfort). Applied identically in-game and by
+  // the autonomy scorer via game/stats.ts effectiveNeedGain.
+  const card4c = document.createElement('div');
+  card4c.className = 'card';
+  card4c.innerHTML = '<h2>Need multipliers</h2><div class="hint">Scale how much of each need this asset gives while an action runs on it (effective gain = action gain × multiplier). 1 = unchanged, above 1 = better, below 1 = worse, negative = drains the need. Leave empty for no scaling.</div>';
+  const ensureMult = () => (a.needMultipliers ??= {});
+  const pruneMult = () => { if (a.needMultipliers && Object.keys(a.needMultipliers).length === 0) delete a.needMultipliers; };
+  const needOptions = () => state.stats.needs.map((n) => ({ value: n.id, label: n.name }));
+  const rows = Object.entries(a.needMultipliers ?? {});
+  rows.forEach(([needId, mult]) => {
+    const row = document.createElement('div');
+    row.className = 'frow';
+    // Changing the need id must move the value to the new key (and free the old one), staying sparse.
+    row.appendChild(selectInput(needOptions(), () => needId, (v) => {
+      if (v === needId) return;
+      const val = a.needMultipliers[needId];
+      delete a.needMultipliers[needId];
+      ensureMult()[v] = val;
+      pruneMult(); renderAll();
+    }, `needMultipliers.${needId}.need`));
+    row.appendChild(numInput(
+      () => a.needMultipliers?.[needId],
+      (v) => { ensureMult()[needId] = v ?? 1; },
+      `needMultipliers.${needId}`,
+    ));
+    const rm = document.createElement('button');
+    rm.textContent = '× remove';
+    rm.addEventListener('click', () => {
+      delete a.needMultipliers[needId];
+      pruneMult(); markDirty(); renderAll();
+    });
+    row.appendChild(rm);
+    card4c.appendChild(row);
+  });
+  const addMult = document.createElement('button');
+  addMult.textContent = '+ Add need multiplier';
+  addMult.addEventListener('click', () => {
+    const used = new Set(Object.keys(a.needMultipliers ?? {}));
+    const next = state.stats.needs.find((n) => !used.has(n.id));
+    if (!next) return; // every need already has a row
+    ensureMult()[next.id] = 1;
+    markDirty(); renderAll();
+  });
+  card4c.appendChild(addMult);
+  root.appendChild(card4c);
 
   // --- sprite (§7.5: only rendered when the mesh path is an image — png/jpg/webp/gif — rather
   // than a GLB; sparse writes, same ensure/prune pattern as meshFit above).

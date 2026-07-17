@@ -3,6 +3,7 @@
 
 import type { ActionDef, AssetDef, BehaviorData } from './data';
 import { evaluate, type EvalContext } from './quests';
+import { effectiveNeedGain } from './stats';
 
 export interface BehaviorScoreContext {
   behavior: BehaviorData;
@@ -26,8 +27,13 @@ function finite(value: number | undefined, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
-/** Locked formula: weighted need deficits × this action's gain rates, minus distance, plus
- * matching condition-gated rule bonuses. personalityAffinity scales the rule/trait term. */
+/** Locked formula: weighted need deficits × this action's EFFECTIVE gain rates (raw needGains
+ * scaled by the candidate asset's needMultipliers via the shared effectiveNeedGain helper, so the
+ * scorer ranks a luxury sofa above a bad one exactly as the sim tick will reward it), minus
+ * distance, plus matching condition-gated rule bonuses. personalityAffinity scales the rule term.
+ * The multiplied asset is the candidate's own asset: for seat-target assets (sofa/bed/chair) the
+ * sit/sleep action targets the asset itself, which is also the perched seat, so scorer and sim
+ * tick credit the very same asset's multipliers. */
 export function scoreCandidate(asset: AssetDef, action: ActionDef, ctx: BehaviorScoreContext): number {
   const needScale = finite(ctx.behavior.weights?.needDeficit);
   const distanceScale = finite(ctx.behavior.weights?.distance);
@@ -39,7 +45,7 @@ export function scoreCandidate(asset: AssetDef, action: ActionDef, ctx: Behavior
     if (!Number.isFinite(current)) continue;
     const deficit = Math.max(0, 100 - current);
     const needWeight = finite(ctx.behavior.needWeights?.[needId], 1);
-    needUtility += deficit * needWeight * finite(rawGain);
+    needUtility += deficit * needWeight * effectiveNeedGain(needId, finite(rawGain), asset.needMultipliers);
   }
 
   let ruleBonus = 0;

@@ -3,7 +3,18 @@
 // all gain values come from interactions.json; tick lengths from tuning.json.
 // Nothing here is a constant — design pillar #2.
 
-import type { StatsData, ActionDef, NeedDef, SkillDef, PersonalityDef } from './data';
+import type { StatsData, ActionDef, AssetDef, NeedDef, SkillDef, PersonalityDef } from './data';
+
+/** THE single source of truth for how an asset's per-need multiplier scales an action's raw
+ *  per-tick need gain. Used by BOTH the sim tick (SimStats.applyGains, below) and the autonomy
+ *  scorer (game/behavior.ts scoreCandidate) — there must never be two implementations, or a
+ *  luxury sofa could rank differently from how it actually feels to sit on. `multipliers` is the
+ *  needMultipliers map of the asset the gain is credited to (see main.ts for the seat-vs-target
+ *  decision); an absent map or absent key defaults to a 1x (unchanged) multiplier, and negative
+ *  values are allowed and intentional (an awful asset that drains a need while used). */
+export function effectiveNeedGain(needId: string, rawGain: number, multipliers?: AssetDef['needMultipliers']): number {
+  return rawGain * (multipliers?.[needId] ?? 1);
+}
 
 /** B10-11: Environment (Sims "Room" score) is a PURE aggregate of assets currently present —
  *  it never drifts over time. `placedAssetIds` must be the EFFECTIVE placed-object list (buy-mode
@@ -74,11 +85,14 @@ export class SimStats {
     }
   }
 
-  /** One activity-gain tick while an action runs. */
-  applyGains(action: ActionDef) {
+  /** One activity-gain tick while an action runs. `needMultipliers` (optional) scales the effective
+   *  per-need gain by the asset the gain is credited to (main.ts passes the perched seat's map for
+   *  seat-aware actions, the target asset's otherwise — see its call site). Absent = every need
+   *  multiplies by 1x (old behavior). */
+  applyGains(action: ActionDef, needMultipliers?: AssetDef['needMultipliers']) {
     for (const [needId, gain] of Object.entries(action.needGains)) {
       const v = this.needs.get(needId);
-      if (v !== undefined) this.needs.set(needId, clamp(v + gain, 0, 100));
+      if (v !== undefined) this.needs.set(needId, clamp(v + effectiveNeedGain(needId, gain, needMultipliers), 0, 100));
     }
     for (const [skillId, gain] of Object.entries(action.skillGains)) {
       const v = this.skills.get(skillId);

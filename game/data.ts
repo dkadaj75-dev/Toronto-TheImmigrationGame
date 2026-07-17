@@ -155,9 +155,20 @@ export interface AssetDef {
    *  scale multiplies on top of the automatic footprint-fit scale (uniform or per-axis);
    *  yawOffsetDeg rotates the loaded model in place (fixes a mesh not authored facing the
    *  game's local +Z convention — see facingDeg's doc comment above, which is defined in
-   *  terms of the model's orientation AFTER this correction); yOffset nudges the model
-   *  vertically post-grounding (e.g. a door needing to sit flush in its frame). */
-  meshFit?: { scale?: number | [number, number, number]; yawOffsetDeg?: number; yOffset?: number };
+   *  terms of the model's orientation AFTER this correction); xOffset/yOffset/zOffset nudge the
+   *  model along each world axis post-grounding (e.g. a door needing to sit flush in its frame).
+   *  All three offsets are sparse: an absent axis means 0 (no nudge). yOffset predates
+   *  xOffset/zOffset (single-axis vertical nudge) and keeps its exact old meaning — the two new
+   *  axes are a backward-compatible superset, so old data with only yOffset is unchanged. */
+  meshFit?: { scale?: number | [number, number, number]; yawOffsetDeg?: number; xOffset?: number; yOffset?: number; zOffset?: number };
+  /** B11-x per-asset need multipliers (sparse, absent = {}): scales the effective per-tick gain of
+   *  selected needs while an action is performed ON this asset. effective gain for need N =
+   *  action.needGains[N] * (needMultipliers[N] ?? 1). A value >1 makes this asset better than
+   *  average for that need, <1 worse, and NEGATIVE values invert it (an awful chair that DRAINS
+   *  comfort while sitting). Absent keys default to 1 (no change). Applied identically by the sim
+   *  tick (game/stats.ts applyGains) and the autonomy scorer (game/behavior.ts) via the shared
+   *  effectiveNeedGain helper, so a luxury sofa genuinely outranks a bad one. */
+  needMultipliers?: { [needId: string]: number };
   /** Door-specific block on door-category assets (§7.1). hingeOffset is the rotation-axis
    *  position in the door's CANONICAL model-local frame (local +X = the door's long/swing
    *  axis, local +Z = its thickness axis — the SAME frame regardless of the door's orientation

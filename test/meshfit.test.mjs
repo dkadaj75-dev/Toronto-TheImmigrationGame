@@ -1,7 +1,7 @@
 // Headless test for normalizeModelToFootprint: any authoring scale must end up
 // fitting the asset footprint in XZ, centered, and grounded at y = 0.
 import * as THREE from 'three';
-import { normalizeModelToFootprint } from '../game/world';
+import { normalizeModelToFootprint, applyMeshFit } from '../game/world';
 
 function boundsOf(o) {
   const b = new THREE.Box3().setFromObject(o);
@@ -46,6 +46,39 @@ function boundsOf(o) {
   approx(b.size.x, 2, 'meter model: unchanged width');
   approx(b.size.y, 0.6, 'meter model: unchanged height');
   approx(b.min.y, 0, 'meter model: grounded');
+}
+
+// --- applyMeshFit: 3-axis position offset (sparse — absent axis = 0), applied post-grounding
+{
+  const g = new THREE.Group();
+  applyMeshFit(g, { xOffset: 1.5, yOffset: -0.25, zOffset: 2 });
+  approx(g.position.x, 1.5, '3-axis offset: x nudged');
+  approx(g.position.y, -0.25, '3-axis offset: y nudged');
+  approx(g.position.z, 2, '3-axis offset: z nudged');
+}
+// sparse: only one axis set leaves the others untouched at 0
+{
+  const g = new THREE.Group();
+  applyMeshFit(g, { zOffset: 0.4 });
+  approx(g.position.x, 0, 'sparse offset: absent x stays 0');
+  approx(g.position.y, 0, 'sparse offset: absent y stays 0');
+  approx(g.position.z, 0.4, 'sparse offset: z applied');
+}
+// backward-compat: legacy single-axis yOffset form behaves exactly as before (y only)
+{
+  const g = new THREE.Group();
+  applyMeshFit(g, { yOffset: 0.9 });
+  approx(g.position.x, 0, 'legacy yOffset: x untouched');
+  approx(g.position.y, 0.9, 'legacy yOffset: y applied');
+  approx(g.position.z, 0, 'legacy yOffset: z untouched');
+}
+// offsets compose with scale/yaw without clobbering them
+{
+  const g = new THREE.Group();
+  g.scale.set(2, 2, 2);
+  applyMeshFit(g, { scale: 3, xOffset: 1 });
+  approx(g.scale.x, 6, 'offset + scale: scale still multiplied');
+  approx(g.position.x, 1, 'offset + scale: x offset applied alongside scale');
 }
 
 console.log('ALL MESH-NORMALIZE TESTS PASSED');

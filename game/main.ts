@@ -1250,7 +1250,16 @@ async function start() {
       const active = agent.current;
       if (active) {
         const skillsBefore = Object.fromEntries(stats.skills);
-        stats.applyGains(active.action);
+        // Per-asset need multipliers (B11-x): credit the gain to the asset the sim is actually
+        // PERCHED on for seat-aware actions (active.seat — e.g. the couch you sit on to watch TV,
+        // which is what makes a comfy sofa feel better), falling back to the action's target asset
+        // for everything else. Same effectiveNeedGain helper as the autonomy scorer (stats.ts).
+        const gainAsset = active.seat ?? active.target;
+        const gainAssetId = gainAsset.userData?.assetId as string | undefined;
+        const gainMultipliers = gainAssetId
+          ? data.assets.assets.find((d) => d.id === gainAssetId)?.needMultipliers
+          : undefined;
+        stats.applyGains(active.action, gainMultipliers);
         const skillsAfter = Object.fromEntries(stats.skills);
         for (const up of skillLevelUps(skillsBefore, skillsAfter)) {
           const name = data.stats.skills.find((def) => def.id === up.id)?.name ?? up.id;

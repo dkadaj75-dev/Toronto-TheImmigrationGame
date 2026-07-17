@@ -26,7 +26,11 @@ const interactions = { actions: [
 ] };
 const condo = { gridSize: 0.5, placedObjects: [{ asset: 'couch', pos: [1, 1], rotDeg: 0 }, { asset: 'couch', pos: [3, 1], rotDeg: 0 }] };
 const stats = {
-  needs: [{ id: 'hunger', name: 'Hunger', color: '#e74c3c', default: 70, decayPerTick: 0.1, autonomy: true }],
+  needs: [
+    { id: 'hunger', name: 'Hunger', color: '#e74c3c', default: 70, decayPerTick: 0.1, autonomy: true },
+    { id: 'comfort', name: 'Comfort', color: '#3498db', default: 50, decayPerTick: 0.1, autonomy: true },
+    { id: 'energy', name: 'Energy', color: '#2ecc71', default: 60, decayPerTick: 0.1, autonomy: true },
+  ],
   skills: [{ id: 'cooking', name: 'Cooking', color: '#d35400', default: 0, max: 10 }],
 };
 const tuning = {
@@ -223,6 +227,42 @@ scaleInput.dispatchEvent(new window.Event('input', { bubbles: true }));
 const yawInput = doc.querySelector('input[data-path="meshFit.yawOffsetDeg"]');
 yawInput.value = '45';
 yawInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+
+// --- meshFit 3-axis position offset (sparse superset): set X and Z, leave the legacy Y axis
+// blank to prove the two new axes coexist with — and don't force — the pre-existing yOffset.
+const xOffInput = doc.querySelector('input[data-path="meshFit.xOffset"]');
+assert(xOffInput && xOffInput.value === '', 'meshFit.xOffset blank when absent');
+assert(doc.querySelector('input[data-path="meshFit.yOffset"]'), 'meshFit.yOffset input still present');
+assert(doc.querySelector('input[data-path="meshFit.zOffset"]'), 'meshFit.zOffset input present (3-axis)');
+xOffInput.value = '0.25';
+xOffInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+const zOffInput = doc.querySelector('input[data-path="meshFit.zOffset"]');
+zOffInput.value = '-0.5';
+zOffInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+
+// --- need multipliers (add/remove rows + sparse map). Add two rows, edit their values, remove
+// one, and confirm the surviving one round-trips while the removed key is gone.
+assert(!doc.querySelector('input[data-path^="needMultipliers."]'), 'no multiplier rows on a fresh asset');
+const addMultBtn = [...doc.querySelectorAll('button')].find((b) => b.textContent === '+ Add need multiplier');
+assert(addMultBtn, 'Need multipliers card renders an add button');
+addMultBtn.click(); // first row (first unused need = hunger)
+[...doc.querySelectorAll('button')].find((b) => b.textContent === '+ Add need multiplier').click(); // second row (comfort)
+// The two rows should default to distinct needs (add picks the first UNUSED need each time).
+assert(doc.querySelector('select[data-path="needMultipliers.hunger.need"]'), 'first multiplier row keyed on hunger');
+const comfortSel = doc.querySelector('select[data-path="needMultipliers.comfort.need"]');
+assert(comfortSel, 'second multiplier row keyed on the next unused need (comfort)');
+// Set a NEGATIVE multiplier on comfort (an awful chair drains comfort) and a positive on hunger.
+const hungerMult = doc.querySelector('input[data-path="needMultipliers.hunger"]');
+hungerMult.value = '1.5';
+hungerMult.dispatchEvent(new window.Event('input', { bubbles: true }));
+const comfortMult = doc.querySelector('input[data-path="needMultipliers.comfort"]');
+comfortMult.value = '-0.5';
+comfortMult.dispatchEvent(new window.Event('input', { bubbles: true }));
+// Remove the hunger row — its key must vanish from the sparse map (sparse deletion).
+[...doc.querySelectorAll('#editor .frow')].find((r) => r.querySelector('select[data-path="needMultipliers.hunger.need"]'))
+  .querySelector('button').click();
+assert(!doc.querySelector('select[data-path="needMultipliers.hunger.need"]'), 'removed multiplier row is gone from the form');
+assert(doc.querySelector('select[data-path="needMultipliers.comfort.need"]'), 'the untouched comfort multiplier row survives the removal');
 
 // --- clear the sparse seats field
 const seats = doc.querySelector('input[data-path="seats"]');
@@ -433,7 +473,11 @@ assert(savedCouch.survivalImportance === 75, 'PUT carries sparse survivalImporta
 assert(savedCouch.facingDeg === 90, 'PUT carries edited facingDeg');
 assert(savedCouch.meshFit.scale === 1.2, 'PUT carries sparse meshFit.scale');
 assert(savedCouch.meshFit.yawOffsetDeg === 45, 'PUT carries sparse meshFit.yawOffsetDeg');
-assert(!('yOffset' in savedCouch.meshFit), 'untouched meshFit.yOffset stays absent (sparse)');
+assert(savedCouch.meshFit.xOffset === 0.25, 'PUT carries sparse meshFit.xOffset (3-axis)');
+assert(savedCouch.meshFit.zOffset === -0.5, 'PUT carries sparse meshFit.zOffset (3-axis, negative)');
+assert(!('yOffset' in savedCouch.meshFit), 'untouched meshFit.yOffset stays absent (sparse superset — new axes do not force it)');
+assert(savedCouch.needMultipliers && savedCouch.needMultipliers.comfort === -0.5, 'PUT carries sparse needMultipliers (negative comfort)');
+assert(!('hunger' in savedCouch.needMultipliers), 'removed need multiplier key is gone (sparse deletion)');
 assert(savedCouch.usePose.sit.offset[0] === 0.3 && savedCouch.usePose.sit.offset[1] === 0, 'PUT carries usePose.sit.offset');
 assert(savedCouch.usePose.sit.y === 0.42, 'PUT carries usePose.sit.y');
 assert(savedCouch.usePose.sit.facingDeg === 180, 'PUT carries usePose.sit.facingDeg');
@@ -455,6 +499,7 @@ assert(!('blocksNav' in savedLamp), 'new asset has no blocksNav key (defaults to
 assert(!('survivalImportance' in savedLamp), 'new asset has no survivalImportance key (defaults neutral)');
 assert(!('facingDeg' in savedLamp), 'new asset has no facingDeg key (defaults 0)');
 assert(!('meshFit' in savedLamp), 'new asset has no meshFit key (nothing set)');
+assert(!('needMultipliers' in savedLamp), 'new asset has no needMultipliers key (empty map pruned)');
 assert(!('usePose' in savedLamp), 'new asset has no usePose key (nothing set)');
 assert(!('requiresQuestUnlock' in savedLamp), 'new asset has no requiresQuestUnlock key (defaults unlocked)');
 assert(!('icon' in savedLamp), 'new asset has no icon key (falls back to initials tile)');

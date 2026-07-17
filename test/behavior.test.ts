@@ -54,6 +54,25 @@ const distanceWinner = pickBest([
 ], { behavior, eval: evalCtx });
 check('distance breaks otherwise equal utility toward the nearer candidate', distanceWinner?.candidate.asset.id === 'sofa_near');
 
+// --- per-asset needMultipliers flow into scoring: two IDENTICAL assets (same action, same
+// distance) rank differently purely by their needMultipliers, so a luxury sofa outranks a bad one.
+const luxSofa: AssetDef = { ...sofa, id: 'lux_sofa', needMultipliers: { energy: 2 } };
+const badSofa: AssetDef = { ...sofa, id: 'bad_sofa', needMultipliers: { energy: 0.25 } };
+const multRanked = pickBest([
+  { asset: badSofa, action: nap, distance: 1 },
+  { asset: luxSofa, action: nap, distance: 1 },
+], { behavior, eval: evalCtx });
+check('a higher needMultiplier makes an otherwise identical asset outrank a worse one', multRanked?.candidate.asset.id === 'lux_sofa');
+check(
+  'the multiplier scales the score itself (2x asset scores exactly 2x a 1x asset)',
+  scoreCandidate(luxSofa, nap, { behavior, eval: evalCtx, distance: 0 }) === 2 * scoreCandidate(sofa, nap, { behavior, eval: evalCtx, distance: 0 }),
+);
+check(
+  'a negative multiplier drives the utility term below zero (draining asset)',
+  scoreCandidate(badSofa, nap, { behavior, eval: evalCtx, distance: 0 }) > 0 &&
+  scoreCandidate({ ...sofa, id: 'drain', needMultipliers: { energy: -1 } }, nap, { behavior, eval: evalCtx, distance: 0 }) < 0,
+);
+
 const ruleBehavior: BehaviorData = {
   ...behavior,
   rules: [{
