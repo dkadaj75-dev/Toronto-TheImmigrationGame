@@ -746,3 +746,7 @@ Debt-window scaling is exact and pure/headless-tested: normalize the clamped sco
 
 - **Rental**: see ROADMAP_APT.md SHIPPED notes (R1 schema+Map Editor card+shared tools/condition-builder.js; R2 pure game/rental.ts listRentals; R3 Kijiji phone tab (tuning.phone.rentalTabName) via loadAllMaps over existing /api/maps; R4 PendingMoveTracker + runtime map switch via applyFreshData, homeMap simstate var + sanctioned runtime PUT, finance re-reads live map). Designer authors rental blocks per map (R5).
 - **B10-19..21**: garbage fill-bar occlusion raycast (tuning.garbage.fillBar.hideWhenOccluded); skill progress bar above the action bar (pure skillPointProgress, tuning.feedback.skillBar); put-trash-out fullest-can-first (chooseFullestCan) then exterior door, orderable on a can once the designer adds empty_garbage to garbage_can's interactions.
+
+## 7.41 Batch 11 completion (D2-D5b) — as-built pointers (2026-07-17)
+
+See ROADMAP_APT.md SHIPPED notes (authoritative per-slice as-builts): D2 frame/pane door split (door.paneNode/paneMesh, pane-edge hinge); D3 curtain walls (walls[].kind, mullionPositions, tuning.facade) + outdoor floors excluded from rent; D4 per-map exterior (game/exterior.ts, buildExteriorInto/applyExteriorScene, day/night sky+ground lerp); D5a Map Editor live 3D preview (window.MapPreview, previewHighlightBox); D5b 3D editing through shared worldPointer* handlers (same mutations/undo as 2D). B10-22: job-quest boolean coercion + income var; homeMap persistence removed (in-memory until save system).
