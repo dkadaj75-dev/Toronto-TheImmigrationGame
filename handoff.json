@@ -12,7 +12,8 @@
     "PROJECT_CONTEXT.md": "Canonical living design + as-built doc. WINS over everything else. §5 conventions; §7.x = every shipped system as-built. Update it with every behavior/schema change.",
     "ROADMAP_NEXT.md": "Designer request batches 1-6, each item marked DONE with pointers. Append new designer requests here verbatim before building.",
     "WEB_GAME_ROADMAP.md": "Original phase plan (historical; superseded where PROJECT_CONTEXT disagrees).",
-    "ROADMAP_APT.md": "Batch 11 PLAN (no code yet): Kijiji rental tab, move-in map switch, door-in-plain-wall holes, frame/pane split, curtain wall/balcony provisions, simplified 3D exteriors — slices R1-R5/D1-D4 with per-slice agent assignments and open decisions. Read before building any B11 slice."
+    "ROADMAP_APT.md": "Batch 11 PLAN (no code yet): Kijiji rental tab, move-in map switch, door-in-plain-wall holes, frame/pane split, curtain wall/balcony provisions, simplified 3D exteriors — slices R1-R5/D1-D4 with per-slice agent assignments and open decisions. Read before building any B11 slice.",
+    "ROADMAP_SOCIAL.md": "Batch 12 PLAN (no code yet, builds AFTER ROADMAP_APT.md): NPC visitors, personality compatibility, relationship levels, contextual sim-to-sim interactions, phone contacts (invite/text/call), visit-their-place away flow, dedicated tools/social.html — slices S1-S7 with agent assignments and open decisions."
   },
   "designer": {
     "who": "Septentrion — NOT a programmer; drives everything through the browser tools and plain-language batches",

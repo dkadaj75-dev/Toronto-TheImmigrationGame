@@ -299,3 +299,9 @@ Designer intent: always offer `use` in the character preview. With no `usePose.u
 ## B11-1. PLANNED (no code yet): Kijiji rental tab, door-in-wall rework, frame/pane split, curtain wall + balcony provisions, simplified 3D exteriors, move-in map switch.
 
 **Plan locked in ROADMAP_APT.md** (slices R1-R5 / D1-D4 with per-slice agent assignments: Codex for R4 map switch + D1/D2 door geometry, Claude Opus/Sonnet for the rest, designer authoring pass R5). Read that file before building any slice; open decisions listed in its §6.
+
+# Batch 12 — 2026-07-16: social system (NPCs, relationships, visits, phone contact)
+
+## B12-1. PLANNED (no code yet): NPC Sims with personality/compatibility, Sims-style relationship levels, contextual sim-to-sim interactions, invite home / ask to leave, text/call from phone, visit-their-place away flow, dedicated Social Editor tool page.
+
+**Plan locked in ROADMAP_SOCIAL.md** (slices S1-S7; Codex for NPC runtime + sim-to-sim choreography, Claude Opus/Sonnet elsewhere; builds ONLY after ROADMAP_APT.md ships). ROADMAP_APT.md §6 decisions were approved by the designer and marked RESOLVED.

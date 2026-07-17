@@ -237,16 +237,14 @@ D1 (Codex) ──►  D2 (Codex[+Sonnet]) ──►  D3 (Opus) ──►  D4 (Op
 | D3 | Curtain wall + balcony provisions | Claude Opus | Schema/material on precedents; needs D1 |
 | D4 | Simplified 3D exterior | Claude Opus (Codex fallback) | Render-layer visuals |
 
-## 6. Open decisions (resolve before the slice that needs them)
+## 6. Decisions — RESOLVED (designer approved the recommendations, 2026-07-16)
 
-1. **R4 home-map persistence:** simstate var (recommended) vs in-memory until save system.
-2. **D1 aperture source:** door asset footprint/meshFit vs explicit `door.apertureWidth/Height`
-   fields (recommendation: explicit fields with footprint-derived defaults — designer can fix a
-   badly-sized GLB without re-exporting).
-3. **Finance & balconies (D3):** confirm whether rent tiles should exclude `outdoor: true`
-   floors (recommendation: yes).
-4. **Kijiji naming:** in-game brand string lives in data (theme/phone config), not code, in case
-   the designer renames it.
+1. **R4 home-map persistence:** `simstate.json` designer-visible var (`homeMap`), engine reads it
+   at boot with `tuning.map.active` as fallback; folds into the future save system.
+2. **D1 aperture source:** explicit `door.apertureWidth/Height` fields with footprint-derived
+   defaults — designer can fix a badly-sized GLB without re-exporting.
+3. **Finance & balconies (D3):** rent tiles EXCLUDE `outdoor: true` floors.
+4. **Kijiji naming:** in-game brand string lives in data (phone config), not code.
 
 ## 7. What this plan explicitly does NOT include
 
