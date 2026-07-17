@@ -81,6 +81,22 @@ faceCb2.dispatchEvent(new window.Event('change', { bubbles: true }));
 fetchCb2.checked = true;
 fetchCb2.dispatchEvent(new window.Event('change', { bubbles: true }));
 
+// --- food override (ROADMAP item 2, meal tiers): sparse numeric override of the spawned food
+// transient's own food block. Blank when absent; setting a field creates a.food; clearing a field
+// prunes just that field (the object survives while any other field is set).
+const foodHunger = doc.querySelector('input[data-path="food.hungerGain"]');
+assert(foodHunger, 'food.hungerGain input rendered');
+assert(foodHunger.value === '', 'food override blank when absent');
+const foodPerish = doc.querySelector('input[data-path="food.perishHours"]');
+assert(foodPerish, 'food.perishHours input rendered');
+foodHunger.value = '30';
+foodHunger.dispatchEvent(new window.Event('input', { bubbles: true }));
+foodPerish.value = '5';
+foodPerish.dispatchEvent(new window.Event('input', { bubbles: true }));
+// clear perishHours again → object stays (hungerGain still set) but perishHours is pruned out
+foodPerish.value = '';
+foodPerish.dispatchEvent(new window.Event('input', { bubbles: true }));
+
 // --- save: PUT reflects both round-trips
 doc.getElementById('save').click();
 await new Promise((r) => setTimeout(r, 50));
@@ -92,6 +108,8 @@ assert(savedReadBook.fetchBeforeSeat === true, 'untouched fetchBeforeSeat:true s
 const savedWatchTv = saved.actions.find((a) => a.id === 'watch_tv');
 assert(savedWatchTv.faceTarget === false, 'unchecking faceTarget on watch_tv writes faceTarget:false');
 assert(savedWatchTv.fetchBeforeSeat === true, 'checking fetchBeforeSeat writes sparse true');
+assert(savedWatchTv.food && savedWatchTv.food.hungerGain === 30, 'food.hungerGain override written sparsely');
+assert(!('perishHours' in savedWatchTv.food), 'cleared perishHours pruned from the sparse food override');
 
 console.log('ALL INTERACTION-EDITOR TESTS PASSED');
 

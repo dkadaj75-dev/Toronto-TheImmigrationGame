@@ -29,7 +29,7 @@ import { createProgressBarInstance, type ProgressBarInstance } from './progressb
 import { computeDurationSeconds, isDurationComplete } from './duration';
 import { AudioManager, loopSoundFor } from './audio';
 import { initBladderFailureState, checkBladderFailure, rearmBladderFailure } from './bladder';
-import { FoodRegistry, foodAssetForActionEvent, firstLegSeatAware, actionAfterSourceFetch, cookedMealHungerGain } from './food';
+import { FoodRegistry, foodAssetForActionEvent, firstLegSeatAware, actionAfterSourceFetch, cookedMealHungerGain, resolveFoodConfig, wasteAssetForDroppedFood } from './food';
 import { initEnergyCollapseState, StarvationTracker, tickEnergyCollapse } from './survival';
 import { formatMoneyChange, formatSkillUp, skillLevelUps } from './feedback';
 import { AssetStateRegistry, isAssetStateActionAvailable, isStatefulAsset, powerStateForAction } from './assetstate';
@@ -643,7 +643,21 @@ async function start() {
 
   const dropActiveFood = () => {
     const dropped = food.interruptActive([sim.position.x, sim.position.z], gameHourNow());
-    if (dropped) accidents.setTransientPlacement(dropped.key, dropped.pos, true);
+    if (!dropped) return;
+    // ROADMAP item 1 fix: an abandoned carried-food item becomes clearable WASTE at the drop spot
+    // (the Eat action's producesWaste, e.g. dirty_dishes) instead of being left as an uncleanable,
+    // self-perishing food transient. ROOT CAUSE of the designer bug: a dropped snack/meal is a
+    // `snack`/`meal` transient whose AssetDef.interactions is EMPTY, so the tap menu (which reads
+    // the asset's own interactions) offered no cleanup action; and FoodRegistry.tick silently
+    // despawned it at perishHours (snack = 3 in-game hours ≈ 22.5s at secondsPerGameDay=180 — the
+    // "vanishes on its own" symptom). Routing it through handleProducedWaste gives it the ordinary
+    // garbage pipeline: auto-tidy into a nearby non-full can if the sim is clean enough, else a
+    // clearable `dirty_dishes` transient that persists until a COMPLETED clean_up — identical to a
+    // finished Eat's own waste. `discard` removes it from the food registry so tick never touches it.
+    accidents.despawnTransient(dropped.key);
+    food.discard(dropped.key);
+    const wasteId = wasteAssetForDroppedFood(dropped);
+    if (wasteId) handleProducedWaste(wasteId);
   };
   /** Any order that redirects the sim away from an in-progress "carry to garbage" walk cancels it —
    *  the transient stays exactly where it was (still dirty), the can's fill is untouched. Call this
@@ -669,29 +683,35 @@ async function start() {
   /** Starts B4-2's second leg using the same bare main.ts orchestration as B3-5 carry-to-garbage.
    *  The source action has already arrived at the fridge/stove; the transient is hidden while
    *  carried, then an internal duration action reuses SimAgent's seat pose / sit_ground fallback. */
-  const startCarriedFood = (assetId: string, cooked = false) => {
+  const startCarriedFood = (assetId: string, cooked = false, sourceAction?: ActionDef) => {
     const def = data.assets.assets.find((a) => a.id === assetId && a.category === 'transient');
     if (!def?.food) return;
+    const eatDef = data.interactions.actions.find((a) => a.id === 'eat');
+    if (!eatDef) return;
     const pos: [number, number] = [sim.position.x, sim.position.z];
     const rec = accidents.spawnTransient(assetId, pos, THREE.MathUtils.radToDeg(sim.rotation.y), simClockSeconds);
     if (!rec) return;
-    // ROADMAP_NEXT B7-2: a COOKED meal's hunger fill scales with cooking skill (snacks unaffected).
-    let foodConfig = def.food;
+    // ROADMAP item 2 (meal tiers): the SOURCE action (fridge Eat / stove cook_light_meal /
+    // cook_large_meal) may sparsely override the spawned transient's own food block; present fields
+    // win, absent fields fall back to def.food. ROADMAP_NEXT B7-2: a COOKED meal's hunger fill then
+    // scales with cooking skill ON TOP of the resolved base (snacks unaffected — cooked=false).
+    let foodConfig = resolveFoodConfig(def.food, sourceAction?.food);
     if (cooked) {
       const ft = data.tuning.food;
       const cookingSkill = stats.skills.get('cooking') ?? 0;
       const skillMax = data.stats.skills.find((s) => s.id === 'cooking')?.max ?? 100;
-      const gain = cookedMealHungerGain(def.food.hungerGain, cookingSkill, skillMax, {
+      const gain = cookedMealHungerGain(foodConfig.hungerGain, cookingSkill, skillMax, {
         cookHungerAtSkill0: ft?.cookHungerAtSkill0 ?? 0.6,
         cookHungerAtSkillMax: ft?.cookHungerAtSkillMax ?? 1.5,
       });
-      foodConfig = { ...def.food, hungerGain: gain };
+      foodConfig = { ...foodConfig, hungerGain: gain };
     }
-    food.startCarrying(rec.key, assetId, foodConfig, pos);
+    // ROADMAP item 1 fix: record the clearable waste this food becomes if abandoned (dropActiveFood)
+    // — the Eat action's producesWaste, matching a finished Eat's own waste (dirty_dishes).
+    food.startCarrying(rec.key, assetId, foodConfig, pos, eatDef.producesWaste);
     accidents.setTransientPlacement(rec.key, pos, false);
     const target = accidents.groupFor(rec.key);
-    const eatDef = data.interactions.actions.find((a) => a.id === 'eat');
-    if (!target || !eatDef) { dropActiveFood(); return; }
+    if (!target) { dropActiveFood(); return; }
     const eatingAction = {
       ...eatDef,
       id: FOOD_EATING_ACTION_ID,
@@ -799,7 +819,7 @@ async function start() {
       hud.openPhone();
     }
     const foodAssetId = foodAssetForActionEvent(a.action.id, 'arrival');
-    if (foodAssetId) startCarriedFood(foodAssetId);
+    if (foodAssetId) startCarriedFood(foodAssetId, false, a.action);
   };
 
   // B6-14/B6-15: pure state lives in survival.ts; this layer owns interruption and presentation.
@@ -874,7 +894,7 @@ async function start() {
     // `duration` timer running out in the render loop) — see sim.ts's stopAction doc comment.
     if (!completed) return;
     const completedFoodAssetId = foodAssetForActionEvent(a.action.id, 'completion');
-    if (completedFoodAssetId) { startCarriedFood(completedFoodAssetId, true); return; }
+    if (completedFoodAssetId) { startCarriedFood(completedFoodAssetId, true, a.action); return; }
     // §7.20 V3: the short duration on leave_for_work finishes through the ordinary completed-only
     // action path. Re-check the live job/time here because the shift may have ended during the walk
     // from menu-open to the exterior door.

@@ -13,14 +13,49 @@ export interface FoodItem extends FoodConfig {
   phase: FoodPhase;
   pos: [number, number];
   droppedAtHour?: number;
+  /** ROADMAP item 1 fix: the clearable WASTE asset id (e.g. "dirty_dishes") this food becomes when
+   *  abandoned mid-carry/eat, so a dropped item is a proper cleanable transient instead of an
+   *  uncleanable, self-perishing snack/meal. Recorded at startCarrying from the Eat action's
+   *  producesWaste. Absent = no waste recorded (older items / test doubles). */
+  wasteAssetId?: string;
 }
 
-/** The source-action timing is intentionally explicit: fridge Eat produces on use-spot arrival, while a
- * cooked meal does not exist unless Cook genuinely completes. */
+/** ROADMAP item 2: an action id belongs to a carried-food FAMILY when it is the base id or a
+ *  `base_` variant. This lets the designer author meal-tier variants (`cook_light_meal`,
+ *  `cook_large_meal`) that all spawn the same `meal` transient and differ only through their sparse
+ *  ActionDef.food override — without any code change per new action. */
+function inActionFamily(actionId: string, base: string): boolean {
+  return actionId === base || actionId.startsWith(`${base}_`);
+}
+
+/** The source-action timing is intentionally explicit: an eat-family action (fridge) produces a
+ *  `snack` on use-spot arrival, while a cook-family action (stove) produces a `meal` only if Cook
+ *  genuinely completes. */
 export function foodAssetForActionEvent(actionId: string, event: FoodSpawnEvent): string | null {
-  if (actionId === 'eat' && event === 'arrival') return 'snack';
-  if (actionId === 'cook' && event === 'completion') return 'meal';
+  if (event === 'arrival' && inActionFamily(actionId, 'eat')) return 'snack';
+  if (event === 'completion' && inActionFamily(actionId, 'cook')) return 'meal';
   return null;
+}
+
+/** ROADMAP item 2: a source ACTION's sparse override of the spawned food transient's own food block
+ *  (AssetDef.food). Present fields win; absent fields fall back to the asset default. */
+export interface FoodOverride { hungerGain?: number; perishHours?: number; }
+
+/** Merge a food transient's default food block with an optional per-action override. The result's
+ *  hungerGain is the value the B7-2 cooking-skill scaling (cookedMealHungerGain) then multiplies —
+ *  the override changes the BASE, the skill proportionality still applies on top. */
+export function resolveFoodConfig(base: FoodConfig, override?: FoodOverride | null): FoodConfig {
+  return {
+    hungerGain: override?.hungerGain ?? base.hungerGain,
+    perishHours: override?.perishHours ?? base.perishHours,
+  };
+}
+
+/** ROADMAP item 1 fix: the clearable waste an abandoned carried-food item turns into (or null if
+ *  none was recorded). Pulled out as its own pure function so main.ts's drop-to-waste conversion is
+ *  independently unit-tested. */
+export function wasteAssetForDroppedFood(item: { wasteAssetId?: string }): string | null {
+  return item.wasteAssetId ?? null;
 }
 
 /** ROADMAP_NEXT B7-4: true when performing this action at its SOURCE asset spawns a carried-food item
@@ -77,11 +112,20 @@ export class FoodRegistry {
   get all(): readonly FoodItem[] { return [...this.items.values()]; }
   get active(): FoodItem | null { return this.activeKey ? this.items.get(this.activeKey) ?? null : null; }
 
-  startCarrying(key: string, assetId: string, config: FoodConfig, pos: [number, number]): FoodItem {
-    const item: FoodItem = { key, assetId, hungerGain: config.hungerGain, perishHours: config.perishHours, phase: 'carried', pos: [...pos] };
+  startCarrying(key: string, assetId: string, config: FoodConfig, pos: [number, number], wasteAssetId?: string): FoodItem {
+    const item: FoodItem = { key, assetId, hungerGain: config.hungerGain, perishHours: config.perishHours, phase: 'carried', pos: [...pos], wasteAssetId };
     this.items.set(key, item);
     this.activeKey = key;
     return item;
+  }
+
+  /** ROADMAP item 1 fix: remove an item outright (once main.ts has converted a dropped item into
+   *  clearable waste), clearing the active pointer if it was the one. Unlike `tick`'s perish path,
+   *  this leaves nothing behind to silently self-despawn. */
+  discard(key: string): boolean {
+    const existed = this.items.delete(key);
+    if (this.activeKey === key) this.activeKey = null;
+    return existed;
   }
 
   beginEating(key: string): boolean {

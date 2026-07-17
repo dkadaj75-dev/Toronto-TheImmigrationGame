@@ -95,6 +95,14 @@ export interface ActionDef {
    *  decideWasteHandling) auto-tidies it into a nearby garbage can instead. Absent = this action
    *  produces no waste. See game/garbage.ts's module doc comment for the full decision flow. */
   producesWaste?: string;
+  /** ROADMAP item 2 (meal tiers): sparse per-ACTION override of the food transient this action
+   *  spawns (fridge Eat → snack, stove Cook → meal — see game/food.ts foodAssetForActionEvent).
+   *  Present fields win over the spawned transient's own AssetDef.food block (the default); absent
+   *  fields fall back to it. The B7-2 cooking-skill proportionality (tuning.food) still applies on
+   *  top of whichever hungerGain this resolves to. Lets a designer author cook_light_meal /
+   *  cook_large_meal (different hungerGain, same `meal` visual) entirely in the Interaction Editor.
+   *  See game/food.ts resolveFoodConfig. */
+  food?: { hungerGain?: number; perishHours?: number };
   /** ROADMAP_NEXT B2-1: optional availability gate, reusing the EXACT quest condition tree/
    *  namespace/evaluator (game/quests.ts's `Condition`/`evaluate` — needs.<id>, skills.<id>, funds,
    *  time.hour/day, vars.<name>, quests.<id>.state). Absent = always available (sparse, same

@@ -637,6 +637,30 @@ function renderEditor() {
   cardWaste.appendChild(frow('produces waste (transient asset)', wasteSel));
   root.appendChild(cardWaste);
 
+  // --- food override (ROADMAP item 2, meal tiers): sparse per-action override of the food transient
+  // this action spawns (fridge Eat → snack, stove Cook → meal). Present fields win over the spawned
+  // transient's OWN AssetDef.food block; blank fields fall back to it. The B7-2 cooking-skill scaling
+  // still applies on top of whichever hungerGain this resolves to. Lets a designer author
+  // cook_light_meal / cook_large_meal that spawn the same `meal` but fill different amounts, entirely
+  // here — no code change. Same sparse ensure/prune convention as the duration card above. See
+  // game/food.ts resolveFoodConfig.
+  const cardFood = document.createElement('div');
+  cardFood.className = 'card';
+  cardFood.innerHTML = '<h2>Food override <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#5f6f93">(optional — overrides the spawned snack/meal transient\'s own hunger/perish; blank = use the asset default; cooking-skill scaling still applies)</span></h2>';
+  const ensureFood = () => { if (!a.food) a.food = {}; return a.food; };
+  const pruneFoodIfEmpty = () => { if (a.food && a.food.hungerGain === undefined && a.food.perishHours === undefined) delete a.food; };
+  cardFood.appendChild(frow('hunger gain (overrides asset food.hungerGain)', numInput(
+    () => a.food?.hungerGain,
+    (v) => { if (v === undefined) { if (a.food) delete a.food.hungerGain; pruneFoodIfEmpty(); } else ensureFood().hungerGain = v; },
+    'food.hungerGain',
+  )));
+  cardFood.appendChild(frow('perish hours (overrides asset food.perishHours)', numInput(
+    () => a.food?.perishHours,
+    (v) => { if (v === undefined) { if (a.food) delete a.food.perishHours; pruneFoodIfEmpty(); } else ensureFood().perishHours = v; },
+    'food.perishHours',
+  )));
+  root.appendChild(cardFood);
+
   // --- need gains (fed from stats.json — no free-typed ids, one row per real need)
   const card3 = document.createElement('div');
   card3.className = 'card';

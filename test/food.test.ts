@@ -1,4 +1,4 @@
-import { FoodRegistry, foodAssetForActionEvent, actionSpawnsCarriedFood, defersSeatToSecondLeg, firstLegSeatAware, actionAfterSourceFetch, cookedMealHungerGain } from '../game/food';
+import { FoodRegistry, foodAssetForActionEvent, actionSpawnsCarriedFood, defersSeatToSecondLeg, firstLegSeatAware, actionAfterSourceFetch, cookedMealHungerGain, resolveFoodConfig, wasteAssetForDroppedFood } from '../game/food';
 
 let passed = 0;
 function check(name: string, ok: boolean) {
@@ -66,5 +66,43 @@ check('master (skill at max) fills 150% of the base meal', Math.abs(cookedMealHu
 check('mid skill lerps linearly (skill 50/100 → factor 1.05)', Math.abs(cookedMealHungerGain(45, 50, 100, ct) - 45 * 1.05) < 1e-9);
 check('skill above max clamps to the max factor', Math.abs(cookedMealHungerGain(45, 250, 100, ct) - 67.5) < 1e-9);
 check('zero skillMax degrades to the skill-0 factor (no divide-by-zero)', Math.abs(cookedMealHungerGain(45, 5, 0, ct) - 27) < 1e-9);
+
+console.log('food.test — item 2 meal tiers: action-family spawn mapping');
+// The designer authors cook_light_meal / cook_large_meal (both cook-family) — they must all spawn
+// the same `meal` transient without any per-action code change; eat-family variants spawn `snack`.
+check('cook_light_meal completion spawns a meal (cook family)', foodAssetForActionEvent('cook_light_meal', 'completion') === 'meal');
+check('cook_large_meal completion spawns a meal (cook family)', foodAssetForActionEvent('cook_large_meal', 'completion') === 'meal');
+check('eat_leftovers arrival spawns a snack (eat family)', foodAssetForActionEvent('eat_leftovers', 'arrival') === 'snack');
+check('a cook variant does not spawn on arrival', foodAssetForActionEvent('cook_large_meal', 'arrival') === null);
+check('family match needs the base_ prefix, not a substring', foodAssetForActionEvent('cooktop_scrub', 'completion') === null);
+check('cook variants are carried-food source actions', actionSpawnsCarriedFood('cook_large_meal') === true);
+check('cook variant first leg walks to the stove, not a seat', firstLegSeatAware({ id: 'cook_large_meal', seatAware: true }) === false);
+
+console.log('food.test — item 2 meal tiers: sparse action food override + skill scaling on both paths');
+const assetMeal = { hungerGain: 45, perishHours: 6 };
+check('absent override falls back to the asset default', resolveFoodConfig(assetMeal, undefined).hungerGain === 45 && resolveFoodConfig(assetMeal).perishHours === 6);
+const lightCfg = resolveFoodConfig(assetMeal, { hungerGain: 12 });
+check('override hungerGain wins over the asset default', lightCfg.hungerGain === 12);
+check('an unset override field falls back to the asset default', lightCfg.perishHours === 6);
+const largeCfg = resolveFoodConfig(assetMeal, { hungerGain: 60, perishHours: 8 });
+check('an override replaces both fields when both are set', largeCfg.hungerGain === 60 && largeCfg.perishHours === 8);
+// B7-2 cooking-skill proportionality applies ON TOP of whichever base (default OR override) is used.
+const ct2 = { cookHungerAtSkill0: 0.6, cookHungerAtSkillMax: 1.5 };
+check('skill scaling applies to the asset-default base (45 * 0.6 = 27)',
+  Math.abs(cookedMealHungerGain(resolveFoodConfig(assetMeal).hungerGain, 0, 100, ct2) - 27) < 1e-9);
+check('skill scaling applies to the action-override base (12 * 1.5 = 18)',
+  Math.abs(cookedMealHungerGain(lightCfg.hungerGain, 100, 100, ct2) - 18) < 1e-9);
+
+console.log('food.test — item 1 fix: abandoned carried food becomes clearable waste, never self-despawns');
+const foodW = new FoodRegistry();
+const carried = foodW.startCarrying('snack#w', 'snack', { hungerGain: 18, perishHours: 3 }, [1, 2], 'dirty_dishes');
+check('carried food records the waste asset it becomes when abandoned', carried.wasteAssetId === 'dirty_dishes');
+check('wasteAssetForDroppedFood returns the recorded clearable waste asset', wasteAssetForDroppedFood(carried) === 'dirty_dishes');
+check('a food item with no recorded waste yields null (older items / test doubles)', wasteAssetForDroppedFood({}) === null);
+const droppedW = foodW.interruptActive([3, 3], 5);
+check('interrupt still reports the drop position for the waste spawn', droppedW?.pos[0] === 3 && droppedW.pos[1] === 3);
+check('discard removes the item so tick can never silently self-despawn it',
+  foodW.discard('snack#w') === true && foodW.all.length === 0 && foodW.tick(999).length === 0);
+check('discarding an unknown key is a no-op', foodW.discard('nope') === false);
 
 console.log(`food.test: ${passed} passed`);

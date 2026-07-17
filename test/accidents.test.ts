@@ -208,6 +208,15 @@ console.log('accidents.test — AccidentRegistry (spawn/despawn/no-duplicate-sta
   check('shouldRemovePlacedOnCleanup false for a completed but non-clearing action', shouldRemovePlacedOnCleanup(true, 'sit', ['mop']) === false);
   check('shouldRemovePlacedOnCleanup false when clearedBy is undefined', shouldRemovePlacedOnCleanup(true, 'mop', undefined) === false);
 
+  // --- item 1 fix: a dropped-food-derived `dirty_dishes` waste is a normal clearable transient —
+  // it carries its own cleanup action and persists until a COMPLETED clean_up (a cancelled one
+  // leaves it, per side_effect_rule). Framed against dirty_dishes' authored clearedBy: ['clean_up'].
+  const dirtyDishesClearedBy = ['clean_up'];
+  check('waste carries its cleanup action (clean_up despawns dirty_dishes)', shouldDespawnOnCleanup('clean_up', dirtyDishesClearedBy) === true);
+  check('an unrelated action does not clear the waste', shouldDespawnOnCleanup('sweep', dirtyDishesClearedBy) === false);
+  check('a COMPLETED clean_up clears the waste', shouldRemovePlacedOnCleanup(true, 'clean_up', dirtyDishesClearedBy) === true);
+  check('a CANCELLED clean_up leaves the waste in place (side_effect_rule)', shouldRemovePlacedOnCleanup(false, 'clean_up', dirtyDishesClearedBy) === false);
+
   const despawned = reg.despawn(r1.key);
   check('despawn removes and returns the record', despawned?.key === r1.key && reg.all.length === 1);
   check('despawning an unknown key returns null and is a no-op', reg.despawn('ghost#99') === null && reg.all.length === 1);

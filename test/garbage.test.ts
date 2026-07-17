@@ -104,6 +104,13 @@ console.log('garbage.test — decideWasteHandling');
   const allFullNearby = decideWasteHandling([0, 0], nearCan, () => 999, 10, tuning);
   check('the only nearby can is full → drop', allFullNearby.kind === 'drop');
 
+  // item 1 fix: an ABANDONED carried-food item is routed through this exact waste pipeline (main.ts
+  // dropActiveFood → handleProducedWaste → decideWasteHandling), so a dropped snack/meal near a
+  // clean sim auto-tidies into the can instead of leaving any transient behind — no longer a
+  // self-perishing uncleanable food blob.
+  const droppedFoodWaste = decideWasteHandling([0, 0], nearCan, empty, 8, tuning);
+  check('abandoned-food waste auto-tidies into a nearby can when the sim is clean', droppedFoodWaste.kind === 'auto');
+
   check('DEFAULT_GARBAGE_TUNING matches the roadmap-specified defaults',
     DEFAULT_GARBAGE_TUNING.autoTidyRadius === 4 && DEFAULT_GARBAGE_TUNING.cleanlinessThreshold === 5 && DEFAULT_GARBAGE_TUNING.cleanlinessVar === 'cleanliness');
 }
