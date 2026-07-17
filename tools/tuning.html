@@ -237,7 +237,23 @@ function renderTuning() {
     g.className = 'group';
     g.innerHTML = `<h3>${groupName}</h3>`;
     for (const key of Object.keys(group)) {
-      const kind = typeof group[key] === 'string' ? 'text' : 'number';
+      const val = group[key];
+      // One level of nested sub-group support (e.g. garbage.fillBar) — same generic "any group in
+      // tuning.json gets a UI for free" principle as the flat fields below, just one level deeper.
+      if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+        const sub = document.createElement('div');
+        sub.className = 'group';
+        sub.style.marginLeft = '1rem';
+        sub.innerHTML = `<h4>${groupName}.${key}</h4>`;
+        for (const subKey of Object.keys(val)) {
+          const subVal = val[subKey];
+          const kind = typeof subVal === 'boolean' ? 'checkbox' : typeof subVal === 'string' ? (/color/i.test(subKey) ? 'color' : 'text') : 'number';
+          sub.appendChild(fieldRow(subKey, `${groupName}.${key}.${subKey}`, () => val[subKey], (v) => { val[subKey] = v; }, file, kind));
+        }
+        g.appendChild(sub);
+        continue;
+      }
+      const kind = typeof val === 'string' ? 'text' : 'number';
       g.appendChild(fieldRow(key, `${groupName}.${key}`, () => group[key], (v) => { group[key] = v; }, file, kind));
     }
     s.appendChild(g);

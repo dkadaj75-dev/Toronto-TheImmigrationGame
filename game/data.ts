@@ -547,7 +547,21 @@ export interface TuningData {
    *  stat (default id "cleanliness", stats.json's `personality[]` family — see PersonalityDef)
    *  required to bother auto-tidying at all. game/garbage.ts falls back to `{4, 5, "cleanliness"}`
    *  when this whole block (or an individual field) is absent. */
-  garbage?: { autoTidyRadius?: number; cleanlinessThreshold?: number; cleanlinessVar?: string };
+  garbage?: {
+    autoTidyRadius?: number; cleanlinessThreshold?: number; cleanlinessVar?: string;
+    /** Designer request (2026-07-16): a small in-world fill indicator over each placed garbage
+     *  can, mirroring game/progressbar.ts's camera-space sprite bar. Every field optional/sparse —
+     *  game/garbage.ts's DEFAULT_GARBAGE_FILLBAR fills in whatever's absent so old fixtures/tests
+     *  that predate this field stay valid untouched. widthMeters/heightMeters/yOffsetMeters mirror
+     *  ProgressBarConfig's fields (yOffsetMeters is above the can's own placed position, not a
+     *  character height like the progress bar's anchor); fillColor/trackColor are CSS hex strings
+     *  (same convention as view.wallTopColor/loading.json's bar, not progressbar.ts's numeric hex —
+     *  THREE.SpriteMaterial accepts either); showWhenEmpty defaults false (bar hidden at fill 0). */
+    fillBar?: {
+      widthMeters?: number; heightMeters?: number; yOffsetMeters?: number;
+      fillColor?: string; trackColor?: string; showWhenEmpty?: boolean;
+    };
+  };
   /** B6-4: chance of one extra waste item, lerped by a quest-namespace numeric stat. */
   waste?: { extraChanceVar?: string; extraAtMin?: number; extraAtMax?: number };
   /** ROADMAP_NEXT B9-1: floor/wall image-texture tiling. `metersPerTile` = how many meters of

@@ -95,6 +95,15 @@
     "autoTidyRadius": 5,
     "cleanlinessThreshold": 5,
     "cleanlinessVar": "cleanliness",
+    "fillBar": {
+      "widthMeters": 0.4,
+      "heightMeters": 0.06,
+      "yOffsetMeters": 0.55,
+      "fillColor": "#7ed957",
+      "trackColor": "#1c2436",
+      "showWhenEmpty": false,
+      "_source": "Designer request (2026-07-16): a small in-world fill indicator over each placed garbage can, mirroring game/progressbar.ts's camera-space sprite bar. widthMeters/heightMeters/yOffsetMeters size and position it above the can's own placed position (yOffsetMeters, not tied to a character height); fillColor/trackColor are CSS hex strings (THREE.SpriteMaterial accepts either a numeric or string hex); showWhenEmpty=false hides the bar entirely at fill 0. All fields optional/sparse — see game/garbage.ts's DEFAULT_GARBAGE_FILLBAR fallback and GarbageFillBarController."
+    },
     "_source": "ROADMAP_NEXT item 10 (garbage/tidying). autoTidyRadius (meters) = how close a non-full garbage can must be for the sim to deposit waste itself instead of dropping a transient; cleanlinessThreshold = the minimum value of the personality stat named by cleanlinessVar (stats.json's personality[] family) required to bother; see game/garbage.ts's decideWasteHandling."
   },
   "waste": {

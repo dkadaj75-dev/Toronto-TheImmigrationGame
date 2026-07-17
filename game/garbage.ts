@@ -48,6 +48,7 @@ import * as THREE from 'three';
 import type { GameData, StatsData, TuningData } from './data';
 import { resolveVar, type EvalContext } from './quests';
 import type { AccidentsController } from './accidents';
+import { clampProgress01, fillInnerHeight, fillScaleX, fillCenterX } from './progressbar';
 
 // ==================================================================== pure fill/capacity bookkeeping
 
@@ -83,7 +84,11 @@ export class GarbageRegistry {
 
 // ==================================================================== pure decision logic
 
-export interface CanCandidate { key: string; pos: [number, number]; capacity: number; }
+/** `y` (world height, meters) is optional — only the fill-bar renderer below needs it (the
+ *  auto-tidy distance math above is 2D, ground-plane only); absent/undefined treated as 0 by
+ *  callers, and existing pre-fill-bar test fixtures that build CanCandidate literals without it
+ *  stay valid. */
+export interface CanCandidate { key: string; pos: [number, number]; capacity: number; y?: number; }
 export interface NearestCan { key: string; pos: [number, number]; dist: number; }
 
 /** Nearest can with fill < capacity, or null if every known can is full (or there are none at all). */
@@ -152,7 +157,129 @@ export function decideWasteHandling(
   return { kind: 'auto', canKey: nearest.key, canPos: nearest.pos };
 }
 
+// ==================================================================== fill-bar pure logic (designer
+// request, 2026-07-16: a small in-world fill indicator over each garbage can)
+//
+// Mirrors game/progressbar.ts's own split exactly: the ratio/visibility/geometry math below is pure
+// and headless-tested (test/garbage.test.ts); the three.js sprite rendering lives in
+// GarbageFillBarController further down and REUSES progressbar.ts's exported bar-geometry helpers
+// (fillInnerHeight/fillScaleX/fillCenterX/clampProgress01) rather than re-deriving the same
+// symmetric-inset/camera-space-anchor math a second time — same CRITICAL lesson as the progress
+// bar's own module doc comment: THREE.Sprite offsets are CAMERA-space, never world-space, so the
+// fill sprite's "grows rightward from a fixed left edge" trick has to be expressed through
+// sprite.center/scale exactly like progressbar.ts does, not through position.
+
+/** Fallback when `tuning.garbage.fillBar` (or one of its fields) is absent — kept modest and
+ *  visually distinct from the progress bar's own default (a different fillColor) so the two read
+ *  as different HUD elements even when both are visible at once. */
+export const DEFAULT_GARBAGE_FILLBAR = {
+  widthMeters: 0.4, heightMeters: 0.06, yOffsetMeters: 0.55, fillColor: '#7ed957', trackColor: '#1c2436', showWhenEmpty: false,
+};
+export interface GarbageFillBarTuning {
+  widthMeters: number; heightMeters: number; yOffsetMeters: number; fillColor: string; trackColor: string; showWhenEmpty: boolean;
+}
+
+/** Fill ratio in [0,1] — 0 = empty, 1 = full. Guards a non-positive/misconfigured capacity (would
+ *  otherwise divide by zero or go negative) by reporting empty rather than throwing. */
+export function garbageFillRatio(fill: number, capacity: number): number {
+  if (!(capacity > 0)) return 0;
+  return clampProgress01(fill / capacity);
+}
+
+/** Whether the bar should be drawn at all: always once there's any fill, or always (even at 0) when
+ *  the designer opts into `showWhenEmpty`. */
+export function shouldShowFillBar(ratio: number, showWhenEmpty: boolean): boolean {
+  return showWhenEmpty || ratio > 0;
+}
+
+/** Bar geometry fractions for a given ratio, expressed the identical way progressbar.ts's own
+ *  ProgressBarInstance.update() sets its fill sprite — reused here (not reimplemented) so any future
+ *  fix to the fill/track alignment math (see progressbar.ts's B6-1/B7-3 root-cause comments) applies
+ *  to both bars for free. `innerHeight` only depends on heightMeters (not ratio) but is included here
+ *  so callers/tests have the complete per-frame geometry in one place. */
+export function garbageFillBarGeometry(widthMeters: number, heightMeters: number, ratio: number): { scaleX: number; centerX: number; innerHeight: number } {
+  return {
+    scaleX: fillScaleX(widthMeters, heightMeters, ratio),
+    centerX: fillCenterX(ratio),
+    innerHeight: fillInnerHeight(heightMeters),
+  };
+}
+
 // ==================================================================== three.js layer
+
+interface FillBarEntry { pivot: THREE.Group; bg: THREE.Sprite; fill: THREE.Sprite; bgMat: THREE.SpriteMaterial; fillMat: THREE.SpriteMaterial; }
+
+/**
+ * Renders one small camera-facing fill-bar sprite pair per live garbage can, keyed by the same
+ * `obj.uuid` identity GarbageRegistry itself uses. Same ANCHOR DESIGN precedent as
+ * progressbar.ts/marker.ts/censor.ts: bars are INDEPENDENT top-level objects added directly to
+ * `scene` (never parented under a placed can or the world group), since game/main.ts's hot-reload
+ * handler does `scene.remove(world); disposeGroup(world); world = buildWorld(data)` — parenting
+ * under a world-owned object would silently delete the bar on every hot-reload. `sync()` is called
+ * from main.ts right after every event that can change a can's fill OR the live can set itself
+ * (deposit, emptyAll, carry-to-garbage arrival, and post-hot-reload/buy-mode-reattach) rather than
+ * every render frame — the designer's own spec for this feature: "fill only changes on discrete
+ * events," no sim-tick timer needed, mirroring GarbageRegistry's own event-driven (not polled)
+ * bookkeeping.
+ */
+export class GarbageFillBarController {
+  private bars = new Map<string, FillBarEntry>();
+
+  constructor(private scene: THREE.Object3D) {}
+
+  private ensure(key: string, cfg: GarbageFillBarTuning): FillBarEntry {
+    const existing = this.bars.get(key);
+    if (existing) return existing;
+    const pivot = new THREE.Group();
+    pivot.name = 'garbage-fill-bar';
+    const bgMat = new THREE.SpriteMaterial({ color: cfg.trackColor, depthTest: false, transparent: true, opacity: 0.85 });
+    const bg = new THREE.Sprite(bgMat);
+    bg.renderOrder = 998;
+    bg.scale.set(cfg.widthMeters, cfg.heightMeters, 1);
+    const fillMat = new THREE.SpriteMaterial({ color: cfg.fillColor, depthTest: false });
+    const fill = new THREE.Sprite(fillMat);
+    fill.renderOrder = 999;
+    fill.center.set(0.5, 0.5);
+    fill.scale.set(0, fillInnerHeight(cfg.heightMeters), 1); // starts empty; sync() sets real scale/center
+    pivot.add(bg, fill);
+    this.scene.add(pivot);
+    const entry: FillBarEntry = { pivot, bg, fill, bgMat, fillMat };
+    this.bars.set(key, entry);
+    return entry;
+  }
+
+  private remove(key: string) {
+    const entry = this.bars.get(key);
+    if (!entry) return;
+    this.scene.remove(entry.pivot);
+    entry.bgMat.dispose();
+    entry.fillMat.dispose();
+    this.bars.delete(key);
+  }
+
+  /** Resyncs bars to the live can set: creates a bar the first time a can becomes visible (fill > 0,
+   *  or always when `showWhenEmpty`), updates position/fill for every visible can, and disposes bars
+   *  for cans that are hidden (fill dropped back to 0 without showWhenEmpty) or no longer exist
+   *  (sold/destroyed/hot-reloaded away). `cans` already carries each can's live world position/
+   *  capacity (GarbageController.cans()); `fillOf` reads the pure registry. */
+  sync(cans: CanCandidate[], fillOf: (key: string) => number, cfg: GarbageFillBarTuning) {
+    const liveKeys = new Set(cans.map((c) => c.key));
+    for (const key of [...this.bars.keys()]) if (!liveKeys.has(key)) this.remove(key);
+    for (const can of cans) {
+      const ratio = garbageFillRatio(fillOf(can.key), can.capacity);
+      if (!shouldShowFillBar(ratio, cfg.showWhenEmpty)) { this.remove(can.key); continue; }
+      const entry = this.ensure(can.key, cfg);
+      entry.pivot.position.set(can.pos[0], (can.y ?? 0) + cfg.yOffsetMeters, can.pos[1]);
+      const geom = garbageFillBarGeometry(cfg.widthMeters, cfg.heightMeters, ratio);
+      entry.fill.scale.x = geom.scaleX;
+      entry.fill.center.x = geom.centerX; // camera-space left anchor; never offset in world X (same B7-3 lesson as progressbar.ts)
+    }
+  }
+
+  dispose() {
+    for (const key of [...this.bars.keys()]) this.remove(key);
+  }
+}
 
 /**
  * Thin three.js-aware wrapper: scans the live world for placed garbage-can instances (any placed
@@ -164,11 +291,37 @@ export function decideWasteHandling(
  */
 export class GarbageController {
   readonly registry = new GarbageRegistry();
+  private readonly fillBars: GarbageFillBarController;
 
   constructor(
     private getData: () => GameData,
     private getWorld: () => THREE.Group,
-  ) {}
+    scene: THREE.Object3D,
+  ) {
+    this.fillBars = new GarbageFillBarController(scene);
+  }
+
+  private fillBarTuning(): GarbageFillBarTuning {
+    const f = this.getData().tuning.garbage?.fillBar;
+    return {
+      widthMeters: f?.widthMeters ?? DEFAULT_GARBAGE_FILLBAR.widthMeters,
+      heightMeters: f?.heightMeters ?? DEFAULT_GARBAGE_FILLBAR.heightMeters,
+      yOffsetMeters: f?.yOffsetMeters ?? DEFAULT_GARBAGE_FILLBAR.yOffsetMeters,
+      fillColor: f?.fillColor ?? DEFAULT_GARBAGE_FILLBAR.fillColor,
+      trackColor: f?.trackColor ?? DEFAULT_GARBAGE_FILLBAR.trackColor,
+      showWhenEmpty: f?.showWhenEmpty ?? DEFAULT_GARBAGE_FILLBAR.showWhenEmpty,
+    };
+  }
+
+  /** Designer request (2026-07-16): resync every can's fill-bar sprite to the live can set + fill
+   *  state. Call after anything that can change a can's fill (deposit/emptyAll/carry-arrival) or the
+   *  live can set itself (world rebuild/hot-reload, buy-mode reattach/sell) — see
+   *  GarbageFillBarController's own doc comment for why this is event-driven, not per-frame. */
+  syncFillBars() {
+    this.fillBars.sync(this.cans(), (k) => this.registry.fillOf(k), this.fillBarTuning());
+  }
+
+  disposeFillBars() { this.fillBars.dispose(); }
 
   private tuning(): GarbageTuning {
     const g = this.getData().tuning.garbage;
@@ -191,7 +344,7 @@ export class GarbageController {
       if (!assetId) continue;
       const def = data.assets.assets.find((a) => a.id === assetId);
       if (!def?.garbage) continue;
-      out.push({ key: obj.uuid, pos: [obj.position.x, obj.position.z], capacity: def.garbage.capacity });
+      out.push({ key: obj.uuid, pos: [obj.position.x, obj.position.z], capacity: def.garbage.capacity, y: obj.position.y });
     }
     return out;
   }
@@ -223,6 +376,7 @@ export class GarbageController {
     if (plan.kind === 'auto') {
       const capacity = cans.find((c) => c.key === plan.canKey)?.capacity ?? Infinity;
       this.registry.deposit(plan.canKey, capacity);
+      this.syncFillBars(); // fill-bar request: a deposit can flip a can's bar from hidden to visible (or grow it)
     } else {
       accidents.spawnTransient(wasteAssetId, simPos);
     }
@@ -242,11 +396,16 @@ export class GarbageController {
     const nearest = findNearestNonFullCan(simPos, cans, (k) => this.registry.fillOf(k));
     if (!nearest) return false;
     const capacity = cans.find((c) => c.key === nearest.key)?.capacity ?? Infinity;
-    return this.registry.deposit(nearest.key, capacity);
+    const deposited = this.registry.deposit(nearest.key, capacity);
+    if (deposited) this.syncFillBars(); // fill-bar request: reflect the carry-to-garbage deposit immediately
+    return deposited;
   }
 
   /** ROADMAP_NEXT item 4: the exterior door's `empty_garbage` interaction — resets every can. */
-  emptyAll() { this.registry.emptyAll(); }
+  emptyAll() {
+    this.registry.emptyAll();
+    this.syncFillBars(); // fill-bar request: every bar should disappear (or reset, if showWhenEmpty) on empty
+  }
 
   serialize(): GarbageSaveState { return this.registry.serialize(); }
   restore(s: GarbageSaveState) { this.registry.restore(s); }

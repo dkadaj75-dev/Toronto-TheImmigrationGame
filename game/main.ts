@@ -177,14 +177,15 @@ async function start() {
   // then rebake nav since a destroyed object frees up floor space.
   const accidents = new AccidentsController(() => data, () => world, () => grid, (obj) => {
     const inst = buyMode.instanceForObject(obj);
-    if (inst) { buyMode.destroyInstance(inst); rebakeNav(); applyEnvironment(); }
+    if (inst) { buyMode.destroyInstance(inst); rebakeNav(); applyEnvironment(); garbage.syncFillBars(); }
   }, () => triggerPanic());
 
   // --- garbage cans + autonomous tidying (ROADMAP_NEXT item 10): scans the live world for placed
   // garbage-can instances (closures over the same `let world` as accidents, so a hot-reload
   // rebuild is picked up automatically) and reuses `accidents.spawnTransient` for the "drop it on
   // the ground" case (dirty_dishes is a transient asset) — see game/garbage.ts's module doc comment.
-  const garbage = new GarbageController(() => data, () => world);
+  const garbage = new GarbageController(() => data, () => world, scene);
+  garbage.syncFillBars(); // designer request (2026-07-16): draw any can's fill bar visible at boot (showWhenEmpty)
 
   // --- rigged character: swap the capsule's contents for the GLB when it loads.
   // The `sim` group stays the agent's object, so position/rotation/pose logic is untouched.
@@ -934,6 +935,7 @@ async function start() {
             buyMode.destroyInstance(inst);
             if (def.blocksNav !== false) rebakeNav();
             applyEnvironment();
+            garbage.syncFillBars(); // designer request (2026-07-16): drop any bar for a destroyed garbage can
           }
         }
       }
@@ -1124,6 +1126,7 @@ async function start() {
       rebakeNav();
       applyEnvironment();
       refreshBuyCatalog();
+      garbage.syncFillBars(); // designer request (2026-07-16): a newly bought garbage can joins the live can set
       hud.hideGhostControls();
     } else if (result.kind === 'moved') {
       buyModeChangedSomething = true;
@@ -1163,6 +1166,7 @@ async function start() {
       rebakeNav();
       applyEnvironment();
       refreshBuyCatalog();
+      garbage.syncFillBars(); // designer request (2026-07-16): a sold garbage can's bar (if any) must disappear
     }
     hud.hideSelectionChips();
   };
@@ -1295,6 +1299,7 @@ async function start() {
     // both back onto the new world. rebakeNav() (not a raw bakeNavGrid call) so the overlay keeps
     // feeding the nav grid across hot-reloads too.
     buyMode.reattach(world);
+    garbage.syncFillBars(); // designer request (2026-07-16): the live can set/positions can change across a hot-reload
     syncAssetStates();
     cam.retune(data.tuning.camera, data.map);
     rebakeNav();

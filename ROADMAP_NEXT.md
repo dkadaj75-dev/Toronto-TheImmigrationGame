@@ -305,3 +305,7 @@ Designer intent: always offer `use` in the character preview. With no `usePose.u
 ## B12-1. PLANNED (no code yet): NPC Sims with personality/compatibility, Sims-style relationship levels, contextual sim-to-sim interactions, invite home / ask to leave, text/call from phone, visit-their-place away flow, dedicated Social Editor tool page.
 
 **Plan locked in ROADMAP_SOCIAL.md** (slices S1-S7; Codex for NPC runtime + sim-to-sim choreography, Claude Opus/Sonnet elsewhere; builds ONLY after ROADMAP_APT.md ships). ROADMAP_APT.md §6 decisions were approved by the designer and marked RESOLVED.
+
+## B10-14. Trash can fill indicator: small in-world loading bar showing empty -> full status per can.
+
+**DONE (2026-07-16):** camera-space sprite bar over each live garbage can (progressbar.ts geometry helpers reused, scene-parented per the sprite anchoring lesson), synced on deposits/tidy/empty/buy-sell/world rebuild. Tunables: tuning.garbage.fillBar {widthMeters, heightMeters, yOffsetMeters, fillColor, trackColor, showWhenEmpty:false} — Tuning Editor gained one-level nested sub-group rendering to expose it. Pure ratio/visibility/geometry helpers covered in test/garbage.test.ts.

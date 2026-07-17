@@ -4,7 +4,10 @@
 // decideWasteHandling) — GarbageController's three.js layer (world-scanning, spawnTransient
 // delegation) is sanity-checked by wiring/dev-server verification instead, same convention as
 // AccidentsController/BuyModeController/doors.ts's own three.js layers.
-import { GarbageRegistry, findNearestNonFullCan, decideWasteHandling, wasteItemCount, DEFAULT_GARBAGE_TUNING, type CanCandidate } from '../game/garbage';
+import {
+  GarbageRegistry, findNearestNonFullCan, decideWasteHandling, wasteItemCount, DEFAULT_GARBAGE_TUNING, type CanCandidate,
+  garbageFillRatio, shouldShowFillBar, garbageFillBarGeometry, DEFAULT_GARBAGE_FILLBAR,
+} from '../game/garbage';
 
 let failures = 0;
 function check(name: string, cond: boolean, detail = '') {
@@ -115,6 +118,38 @@ console.log('garbage.test - tunable waste amount');
   check('mid cleanliness lerps to 50% extra chance', wasteItemCount(tuning, { ...base, personality: { cleanliness: 5 } }, stats, () => 0.49) === 2
     && wasteItemCount(tuning, { ...base, personality: { cleanliness: 5 } }, stats, () => 0.5) === 1);
   check('missing mapping preserves one baseline item', wasteItemCount(undefined, base, stats, () => 0) === 1);
+}
+
+console.log('garbage.test — fill-bar pure logic (designer request, 2026-07-16)');
+{
+  check('empty can → ratio 0', garbageFillRatio(0, 5) === 0);
+  check('half-full can → ratio 0.5', garbageFillRatio(2, 4) === 0.5);
+  check('full can → ratio 1', garbageFillRatio(5, 5) === 1);
+  check('over-full (should not normally happen) clamps to ratio 1', garbageFillRatio(7, 5) === 1);
+  check('zero capacity guards against divide-by-zero, reports empty', garbageFillRatio(3, 0) === 0);
+  check('negative capacity (misconfigured) also reports empty, no throw', garbageFillRatio(3, -1) === 0);
+
+  check('ratio 0 + showWhenEmpty false → hidden', shouldShowFillBar(0, false) === false);
+  check('ratio 0 + showWhenEmpty true → shown', shouldShowFillBar(0, true) === true);
+  check('ratio > 0 + showWhenEmpty false → shown', shouldShowFillBar(0.01, false) === true);
+  check('ratio > 0 + showWhenEmpty true → shown', shouldShowFillBar(0.5, true) === true);
+  check('ratio 1 always shown regardless of showWhenEmpty', shouldShowFillBar(1, false) === true && shouldShowFillBar(1, true) === true);
+
+  const W = DEFAULT_GARBAGE_FILLBAR.widthMeters, H = DEFAULT_GARBAGE_FILLBAR.heightMeters;
+  const zero = garbageFillBarGeometry(W, H, 0);
+  const half = garbageFillBarGeometry(W, H, 0.5);
+  const full = garbageFillBarGeometry(W, H, 1);
+  check('progress 0 → zero fill width', zero.scaleX === 0);
+  check('progress 1 → full fill width is wider than progress 0.5', full.scaleX > half.scaleX && half.scaleX > zero.scaleX);
+  check('innerHeight is stable across ratio (only depends on heightMeters)', zero.innerHeight === half.innerHeight && half.innerHeight === full.innerHeight);
+  check('geometry values match progressbar.ts\'s own fillScaleX/fillCenterX exactly (reused, not reimplemented)',
+    (() => {
+      const overshoot = garbageFillBarGeometry(W, H, 1.7); // out-of-range ratio should clamp the same way fillScaleX does
+      return overshoot.scaleX === full.scaleX;
+    })());
+
+  check('DEFAULT_GARBAGE_FILLBAR ships sane positive dimensions and hidden-when-empty default',
+    DEFAULT_GARBAGE_FILLBAR.widthMeters > 0 && DEFAULT_GARBAGE_FILLBAR.heightMeters > 0 && DEFAULT_GARBAGE_FILLBAR.showWhenEmpty === false);
 }
 
 if (failures > 0) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }
