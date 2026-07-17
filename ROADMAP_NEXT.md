@@ -243,3 +243,23 @@ Designer report: Watch TV now sits the sim in mid-air at/inside the TV footprint
 **Design reading:** trace `findSeatFor`, ordered-action leg/seat state, `applyPose`, arrival facing, world instance transforms, and the preview's virtual instance. Share one placement semantic rather than compensating with asset offsets; preserve `data/*.json` unchanged.
 
 **DONE 2026-07-16:** `findSeatFor` was correct; `orderAction` discarded its sofa when pivot routing chose an unreachable cell inside/behind the nav-blocking footprint, then ground-sat at the TV. Seats now route to their reachable front approach before snapping to `usePose`. Direct Sit no longer post-rotates toward its own target pivot, so its complete transform matches the Asset Editor's shared `usePoseFor` preview. Headless regression covers both paths with a blocked-pivot/rotated-offset fixture; designer data untouched. See PROJECT_CONTEXT §7.34 B10-5.
+
+## B10-6. Read book fetches from the bookshelf before sitting
+
+Designer intent: Read book must walk to the bookshelf first, then continue to a seat and read, using the fridge-snack two-leg precedent; Practice English should follow when it uses the same bookshelf source.
+
+**Design reading:** generalize first-leg seat deferral into a sparse action field shared with the existing food decision, orchestrate the second leg only after source arrival, and expose it in the Interaction Editor.
+
+**DONE 2026-07-16:** sparse `ActionDef.fetchBeforeSeat` now defers generic seat routing until source arrival; `read_book` and bookshelf-backed `practice_english` both opt in. Player and autonomy first legs reuse `firstLegSeatAware`; source arrival starts one flag-cleared seat leg, so action effects begin only at the seat. Pure and editor coverage added. See PROJECT_CONTEXT §7.34 B10-6.
+
+## B10-7. Practice English keeps the seat's authored facing
+
+Designer report: Practice English rotated the seated sim toward its bookshelf target, overriding the seat `usePose` facing.
+
+**DONE 2026-07-16:** root cause was the missing sparse B10-4 opt-out. `practice_english` now has `faceTarget: false`, matching `read_book`; existing engine/editor semantics were already correct. See PROJECT_CONTEXT §7.34 B10-7.
+
+## B10-8. Seated actions no longer break later movement/actions
+
+Designer report: after reading/studying, many floor clicks and subsequent actions failed; investigate restoration from furniture-blocked perch positions.
+
+**DONE 2026-07-16:** teardown did restore `savedPose`, but final approach used the arrival-radius position rather than the exact walkable endpoint, so it could save/restore inside the sofa footprint. Final route arrival now snaps to its known-walkable cell center before perching. A blocking-sofa regression proves stop restores walkable ground and a far `goTo` succeeds/completes. See PROJECT_CONTEXT §7.34 B10-8.
