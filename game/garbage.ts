@@ -106,6 +106,29 @@ export function findNearestNonFullCan(
   return best;
 }
 
+export interface FullestCan { key: string; pos: [number, number]; fill: number; dist: number; }
+
+/** ITEM 3 (put-trash-out routing, 2026-07-17): pick the FULLEST can (highest fill), tie-break on
+ *  nearest to `simPos`. Cans with zero fill are never chosen (nothing to collect there). Returns
+ *  null when every known can is empty (or there are none) — main.ts then skips the collection leg
+ *  and walks straight to the exterior door. Pure/headless-tested in test/garbage.test.ts. */
+export function chooseFullestCan(
+  simPos: [number, number],
+  cans: CanCandidate[],
+  fillOf: (key: string) => number,
+): FullestCan | null {
+  let best: FullestCan | null = null;
+  for (const c of cans) {
+    const fill = fillOf(c.key);
+    if (fill <= 0) continue;
+    const dist = Math.hypot(c.pos[0] - simPos[0], c.pos[1] - simPos[1]);
+    if (!best || fill > best.fill || (fill === best.fill && dist < best.dist)) {
+      best = { key: c.key, pos: c.pos, fill, dist };
+    }
+  }
+  return best;
+}
+
 /** Fallback when `tuning.garbage` (or one of its fields) is absent. */
 export const DEFAULT_GARBAGE_TUNING = { autoTidyRadius: 4, cleanlinessThreshold: 5, cleanlinessVar: 'cleanliness' };
 export interface GarbageTuning { autoTidyRadius: number; cleanlinessThreshold: number; }
@@ -174,9 +197,23 @@ export function decideWasteHandling(
  *  as different HUD elements even when both are visible at once. */
 export const DEFAULT_GARBAGE_FILLBAR = {
   widthMeters: 0.4, heightMeters: 0.06, yOffsetMeters: 0.55, fillColor: '#7ed957', trackColor: '#1c2436', showWhenEmpty: false,
+  hideWhenOccluded: true,
 };
 export interface GarbageFillBarTuning {
   widthMeters: number; heightMeters: number; yOffsetMeters: number; fillColor: string; trackColor: string; showWhenEmpty: boolean;
+  hideWhenOccluded: boolean;
+}
+
+/** ITEM 1 (fill-bar occlusion, 2026-07-17): pure decision from a camera-to-anchor raycast. Given
+ *  the distance to the NEAREST occluder hit along the ray from the camera toward the bar anchor
+ *  (`nearestHitDist`, or null when nothing was hit before the anchor) and the straight-line
+ *  distance to the anchor itself (`anchorDist`), the bar is occluded iff something was hit
+ *  meaningfully closer than the anchor. `eps` (meters) absorbs a grazing hit on the can's own top
+ *  surface / a co-planar adjacent asset so the bar doesn't flicker at the edge. Pure/headless-tested
+ *  in test/garbage.test.ts; the three.js raycast that produces `nearestHitDist` lives in
+ *  GarbageFillBarController.updateOcclusion. */
+export function fillBarOccluded(nearestHitDist: number | null, anchorDist: number, eps = 0.05): boolean {
+  return nearestHitDist !== null && nearestHitDist < anchorDist - eps;
 }
 
 /** Fill ratio in [0,1] — 0 = empty, 1 = full. Guards a non-positive/misconfigured capacity (would
@@ -224,8 +261,45 @@ interface FillBarEntry { pivot: THREE.Group; bg: THREE.Sprite; fill: THREE.Sprit
  */
 export class GarbageFillBarController {
   private bars = new Map<string, FillBarEntry>();
+  private ray = new THREE.Raycaster();
+  private tmpDir = new THREE.Vector3();
 
   constructor(private scene: THREE.Object3D) {}
+
+  /** ITEM 1 (fill-bar occlusion, 2026-07-17): show/hide each live bar based on whether its can is
+   *  occluded from `camera` by any `occluders` (main.ts passes the live world children — walls +
+   *  placed asset meshes). Casts one cheap ray per bar from the camera toward the bar's own anchor
+   *  (entry.pivot.position, already set by sync()), skipping hits that belong to the can the bar
+   *  sits on (walk the hit's ancestry to `key`) so a can never occludes its own bar. Called on a
+   *  THROTTLE from main.ts (camera move/rotate + a ~0.25s tick, not every frame — the only inputs
+   *  that change occlusion are camera motion and the rare world rebuild, and fill bars are a small
+   *  set). When `hideWhenOccluded` is off, every bar is forced visible (restores the tunable's
+   *  opt-out cleanly). Visibility is owned ENTIRELY here; sync() only creates/removes bars and never
+   *  touches `pivot.visible`, so the two never fight. */
+  updateOcclusion(camera: THREE.Camera, occluders: THREE.Object3D[], hideWhenOccluded: boolean) {
+    if (!hideWhenOccluded) {
+      for (const entry of this.bars.values()) entry.pivot.visible = true;
+      return;
+    }
+    const camPos = camera.position;
+    for (const [key, entry] of this.bars) {
+      const anchorDist = this.tmpDir.subVectors(entry.pivot.position, camPos).length();
+      if (!(anchorDist > 1e-4)) { entry.pivot.visible = true; continue; }
+      this.ray.set(camPos, this.tmpDir.multiplyScalar(1 / anchorDist));
+      this.ray.far = anchorDist;
+      const hits = this.ray.intersectObjects(occluders, true);
+      let nearestHitDist: number | null = null;
+      for (const hit of hits) {
+        let o: THREE.Object3D | null = hit.object;
+        let isSelf = false;
+        while (o) { if (o.uuid === key) { isSelf = true; break; } o = o.parent; }
+        if (isSelf) continue; // the can this bar belongs to never occludes its own bar
+        nearestHitDist = hit.distance;
+        break;
+      }
+      entry.pivot.visible = !fillBarOccluded(nearestHitDist, anchorDist);
+    }
+  }
 
   private ensure(key: string, cfg: GarbageFillBarTuning): FillBarEntry {
     const existing = this.bars.get(key);
@@ -310,7 +384,14 @@ export class GarbageController {
       fillColor: f?.fillColor ?? DEFAULT_GARBAGE_FILLBAR.fillColor,
       trackColor: f?.trackColor ?? DEFAULT_GARBAGE_FILLBAR.trackColor,
       showWhenEmpty: f?.showWhenEmpty ?? DEFAULT_GARBAGE_FILLBAR.showWhenEmpty,
+      hideWhenOccluded: f?.hideWhenOccluded ?? DEFAULT_GARBAGE_FILLBAR.hideWhenOccluded,
     };
+  }
+
+  /** ITEM 1 (2026-07-17): recompute per-can fill-bar occlusion against the live world. main.ts calls
+   *  this on a throttle (camera move + ~0.25s) — see GarbageFillBarController.updateOcclusion. */
+  updateFillBarOcclusion(camera: THREE.Camera, occluders: THREE.Object3D[]) {
+    this.fillBars.updateOcclusion(camera, occluders, this.fillBarTuning().hideWhenOccluded);
   }
 
   /** Designer request (2026-07-16): resync every can's fill-bar sprite to the live can set + fill
@@ -365,6 +446,18 @@ export class GarbageController {
     const nearest = findNearestNonFullCan(simPos, cans, (k) => this.registry.fillOf(k));
     return nearest ? nearest.pos : null;
   }
+
+  /** ITEM 3 (put-trash-out routing, 2026-07-17): world position of the FULLEST can (tie-break
+   *  nearest to `simPos`), or null if every can is empty. main.ts routes the take-out-trash flow
+   *  here FIRST (collection leg) before the exterior door. See chooseFullestCan. */
+  fullestCanPos(simPos: [number, number]): [number, number] | null {
+    const c = chooseFullestCan(simPos, this.cans(), (k) => this.registry.fillOf(k));
+    return c ? c.pos : null;
+  }
+
+  /** ITEM 3: fill of a specific live can Object3D (keyed by uuid) — main.ts uses this to decide
+   *  whether an `empty_garbage` action ordered directly ON a can makes that can the first stop. */
+  fillOfObject(obj: THREE.Object3D): number { return this.registry.fillOf(obj.uuid); }
 
   /** Call from main.ts's onActionStop whenever the just-stopped action's `producesWaste` is set.
    *  `cleanliness` is the sim's current value of `cleanlinessVarId()` (or undefined if that stat

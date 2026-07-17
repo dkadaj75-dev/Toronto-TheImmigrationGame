@@ -103,7 +103,8 @@
       "fillColor": "#7ed957",
       "trackColor": "#1c2436",
       "showWhenEmpty": false,
-      "_source": "Designer request (2026-07-16): a small in-world fill indicator over each placed garbage can, mirroring game/progressbar.ts's camera-space sprite bar. widthMeters/heightMeters/yOffsetMeters size and position it above the can's own placed position (yOffsetMeters, not tied to a character height); fillColor/trackColor are CSS hex strings (THREE.SpriteMaterial accepts either a numeric or string hex); showWhenEmpty=false hides the bar entirely at fill 0. All fields optional/sparse — see game/garbage.ts's DEFAULT_GARBAGE_FILLBAR fallback and GarbageFillBarController."
+      "hideWhenOccluded": true,
+      "_source": "Designer request (2026-07-16): a small in-world fill indicator over each placed garbage can, mirroring game/progressbar.ts's camera-space sprite bar. widthMeters/heightMeters/yOffsetMeters size and position it above the can's own placed position (yOffsetMeters, not tied to a character height); fillColor/trackColor are CSS hex strings (THREE.SpriteMaterial accepts either a numeric or string hex); showWhenEmpty=false hides the bar entirely at fill 0. hideWhenOccluded=true (2026-07-17) hides a can's bar while the can is behind a wall/another asset from the current camera (cheap throttled raycast, game/garbage.ts's GarbageFillBarController.updateOcclusion) — only these garbage fill bars are occlusion-tested; the sim's action/skill bars stay always-visible. All fields optional/sparse — see game/garbage.ts's DEFAULT_GARBAGE_FILLBAR fallback and GarbageFillBarController."
     },
     "_source": "ROADMAP_NEXT item 10 (garbage/tidying). autoTidyRadius (meters) = how close a non-full garbage can must be for the sim to deposit waste itself instead of dropping a transient; cleanlinessThreshold = the minimum value of the personality stat named by cleanlinessVar (stats.json's personality[] family) required to bother; see game/garbage.ts's decideWasteHandling."
   },
@@ -199,7 +200,14 @@
     "durationSeconds": 1.6,
     "risePixels": 48,
     "yOffsetMeters": 0.25,
-    "_source": "ROADMAP_NEXT B6-16. Projected HTML feedback above the sim; duration is simulation seconds, rise is screen pixels, yOffset is meters above character height."
+    "skillBar": {
+      "fillColor": "#f4c542",
+      "trackColor": "#1c2436",
+      "heightMeters": 0.08,
+      "widthMeters": 0.5,
+      "gapMeters": 0.12
+    },
+    "_source": "ROADMAP_NEXT B6-16. Projected HTML feedback above the sim; duration is simulation seconds, rise is screen pixels, yOffset is meters above character height. skillBar (2026-07-17): the second world bar shown near the sim whenever the current action grants a skill, tracking the primary (largest-gain) skill's progress toward its next point; stacked gapMeters above the action progress bar with a distinct fillColor. All fields optional/sparse — see game/progressbar.ts's SKILL_BAR_DEFAULTS/createSkillBarInstance."
   },
   "food": {
     "cookHungerAtSkill0": 0.6,

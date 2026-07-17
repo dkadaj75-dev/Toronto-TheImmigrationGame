@@ -1,4 +1,4 @@
-import { computeEnvironmentScore, scaleSkillGain, effectiveNeedGain, SimStats } from '../game/stats';
+import { computeEnvironmentScore, scaleSkillGain, effectiveNeedGain, SimStats, skillPointProgress, primarySkillGain } from '../game/stats';
 import type { ActionDef, StatsData } from '../game/data';
 
 let passed = 0;
@@ -80,5 +80,29 @@ check(
   'a still-present designer puddle drags the score down until destroyed',
   computeEnvironmentScore(['couch', 'puddle'], [], envScoreFor) === 5 + -8,
 );
+
+// ITEM 2 (skill progress bar) — skillPointProgress: fraction toward the next integer skill point.
+{
+  const midA = skillPointProgress(3.25, 100);
+  check('mid-level fraction is the value\'s fractional part', approx(midA.fraction, 0.25) && midA.atMax === false);
+  const midB = skillPointProgress(15.75, 100);
+  check('another mid-level fraction', approx(midB.fraction, 0.75) && midB.atMax === false);
+  check('exactly on a point → fraction 0 (bar empty)', skillPointProgress(5, 100).fraction === 0 && skillPointProgress(5, 100).atMax === false);
+  check('value 0 → fraction 0', skillPointProgress(0, 10).fraction === 0);
+  const atMax = skillPointProgress(100, 100);
+  check('at max → atMax true (bar hidden)', atMax.atMax === true);
+  check('above max (clamped elsewhere) → atMax true', skillPointProgress(120, 100).atMax === true);
+  check('just below max still shows its fraction', (() => { const p = skillPointProgress(99.5, 100); return p.atMax === false && approx(p.fraction, 0.5); })());
+  check('non-positive max → atMax true (no divide/invalid)', skillPointProgress(3, 0).atMax === true);
+}
+
+// ITEM 2 — primarySkillGain: the largest positive skill gain of an action, or null.
+{
+  check('null when the action grants no skill', primarySkillGain({}) === null);
+  check('null when all gains are non-positive', primarySkillGain({ cooking: 0, english: -1 }) === null);
+  const p = primarySkillGain({ english: 0.2, cooking: 0.5, finance: 0.1 });
+  check('picks the largest gain as primary', p?.id === 'cooking' && p?.gain === 0.5);
+  check('single-skill action returns that skill', primarySkillGain({ engineering: 0.3 })?.id === 'engineering');
+}
 
 console.log(`\n${passed} stats tests passed.`);

@@ -325,3 +325,15 @@ Designer intent: always offer `use` in the character preview. With no `usePose.u
 ## B10-18. Meal tiers: what you cook determines hunger fulfillment (light $12 < large $25), still scaled by cooking skill.
 
 **DONE (2026-07-16):** sparse ActionDef.food {hungerGain, perishHours} overrides the source asset's food block (resolveFoodConfig); B7-2 cooking-skill scaling applies on top of either base. Food spawn mapping generalized to action FAMILIES (cook/cook_*, eat/eat_*) so new cook actions need zero code. Interaction Editor gained a sparse "Food override" card. Designer authors cook_light_meal/cook_large_meal in the tool.
+
+## B10-19. Garbage fill bar hides when occluded (wall/asset between camera and can); sim bars unaffected.
+
+**DONE (2026-07-17):** camera->bar-anchor raycast vs world (own can excluded), pure fillBarOccluded decision, throttled to camera-change + 0.25s. Tunable tuning.garbage.fillBar.hideWhenOccluded (default true).
+
+## B10-20. Skill progress bar: second bar above the action bar, own color, "<Skill>:" label, progress toward the NEXT skill point only.
+
+**DONE (2026-07-17):** createSkillBarInstance (progressbar.ts geometry reuse, world-Y gap so bars never overlap), gold default, canvas-texture label, shown when the action has skillGains (primary = largest gain). Pure skillPointProgress = fractional part toward next integer point (growthCurveExp tapers rate, not thresholds), 0 exactly on a point, hidden at max. Tunables tuning.feedback.skillBar {fillColor,trackColor,heightMeters,widthMeters,gapMeters}.
+
+## B10-21. Put-trash-out visits the fullest can first, then the exterior door; orderable directly on a can.
+
+**DONE (2026-07-17):** pure chooseFullestCan (highest fill, tie nearest, empties ignored); startTrashOut walks to the ordered-on can (if any fill) or the fullest, then orders the real empty_garbage on the exterior door (completion semantics unchanged); cancels clear the leg like the carry precedent. DESIGNER: add interaction id 'empty_garbage' to the garbage_can asset in the Asset Editor to order it on the can; map needs an exterior door.

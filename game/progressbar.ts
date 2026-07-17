@@ -129,6 +129,119 @@ export interface ProgressBarInstance {
   dispose(): void;
 }
 
+// ==================================================================== ITEM 2: skill progress bar
+// A SECOND world bar shown near the sim whenever the current action has skillGains (game/main.ts
+// resolves the primary skill + next-point fraction from game/stats.ts's skillPointProgress). Reuses
+// this module's fill/track geometry helpers (fillScaleX/fillCenterX/fillInnerHeight — the exact
+// B6-1/B7-3 camera-space-anchor math) so it never re-derives the sprite-center trick. Stacked ABOVE
+// the action progress bar by `gapMeters` of world-Y (world-up projects near-vertically under the
+// isometric camera, so a pure Y offset separates the two bars on screen without the world-X drift
+// the B7-3 note warns about — the two bars share the sim's x/z and never overlap). Label is a
+// camera-facing canvas-texture sprite ('<SkillName>:'), the "sprite text" option the brief offered
+// (progressbar.ts had no text mechanism; the floating-feedback HTML is transient, unfit for a
+// persistent label). Always-visible while active — NOT occlusion-tested (only garbage fill bars are).
+
+export interface SkillBarConfig {
+  widthMeters: number; heightMeters: number; gapMeters: number;
+  fillColor: number | string; trackColor: number | string;
+}
+
+/** Shipped defaults — a DISTINCT fillColor (warm gold) from the action bar's cyan so the two read
+ *  as different HUD elements when both are visible; sized like the action bar and stacked above it. */
+export const SKILL_BAR_DEFAULTS: SkillBarConfig = {
+  widthMeters: 0.5, heightMeters: 0.08, gapMeters: 0.12, fillColor: '#f4c542', trackColor: '#1c2436',
+};
+
+/** Merge a sparse tuning.feedback.skillBar block over the defaults. */
+export function resolveSkillBarConfig(partial?: Partial<SkillBarConfig>): SkillBarConfig {
+  return {
+    widthMeters: partial?.widthMeters ?? SKILL_BAR_DEFAULTS.widthMeters,
+    heightMeters: partial?.heightMeters ?? SKILL_BAR_DEFAULTS.heightMeters,
+    gapMeters: partial?.gapMeters ?? SKILL_BAR_DEFAULTS.gapMeters,
+    fillColor: partial?.fillColor ?? SKILL_BAR_DEFAULTS.fillColor,
+    trackColor: partial?.trackColor ?? SKILL_BAR_DEFAULTS.trackColor,
+  };
+}
+
+/** World-Y anchor of the skill bar: the action bar's own anchor height plus `gapMeters`, so it sits
+ *  clear above the action bar (which is at heightMeters + PROGRESS_BAR_DEFAULTS.yOffset) and below
+ *  the overhead marker (default yOffset 0.35). Pure/testable. */
+export function skillBarAnchorHeight(heightMeters: number, gapMeters: number): number {
+  return progressBarAnchorHeight(heightMeters, PROGRESS_BAR_DEFAULTS.yOffset) + gapMeters;
+}
+
+export interface SkillBarInstance {
+  update(characterRoot: THREE.Object3D, active: boolean, fraction: number, label: string, heightMeters: number, config: SkillBarConfig): void;
+  dispose(): void;
+}
+
+export function createSkillBarInstance(scene: THREE.Object3D): SkillBarInstance {
+  const pivot = new THREE.Group();
+  pivot.name = 'skill-bar';
+  pivot.visible = false;
+
+  const bgMat = new THREE.SpriteMaterial({ depthTest: false, transparent: true, opacity: 0.85 });
+  const bg = new THREE.Sprite(bgMat);
+  bg.renderOrder = 998;
+
+  const fillMat = new THREE.SpriteMaterial({ depthTest: false });
+  const fill = new THREE.Sprite(fillMat);
+  fill.renderOrder = 999;
+  fill.center.set(0.5, 0.5);
+
+  // Label — a canvas-texture sprite redrawn only when the text changes (cheap steady state).
+  const canvas = document.createElement('canvas');
+  canvas.width = 256; canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  const labelTex = new THREE.CanvasTexture(canvas);
+  const labelMat = new THREE.SpriteMaterial({ map: labelTex, depthTest: false, transparent: true });
+  const labelSprite = new THREE.Sprite(labelMat);
+  labelSprite.renderOrder = 1000;
+  let lastLabel = '';
+  const redrawLabel = (text: string) => {
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.font = 'bold 40px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)'; // outline for legibility over any background
+    ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+    labelTex.needsUpdate = true;
+  };
+
+  pivot.add(bg, fill, labelSprite);
+  scene.add(pivot);
+
+  return {
+    update(characterRoot, active, fraction, label, heightMeters, config) {
+      pivot.visible = active;
+      if (!active) return;
+      pivot.position.set(characterRoot.position.x, skillBarAnchorHeight(heightMeters, config.gapMeters), characterRoot.position.z);
+      bgMat.color.set(config.trackColor as THREE.ColorRepresentation);
+      bg.scale.set(config.widthMeters, config.heightMeters, 1);
+      fillMat.color.set(config.fillColor as THREE.ColorRepresentation);
+      fill.scale.set(fillScaleX(config.widthMeters, config.heightMeters, fraction), fillInnerHeight(config.heightMeters), 1);
+      fill.center.x = fillCenterX(fraction); // camera-space left anchor (same B7-3 lesson)
+      if (label !== lastLabel) { lastLabel = label; redrawLabel(label); }
+      // Label sits just above the bar; canvas is 4:1, so keep that aspect in world units.
+      const labelW = config.widthMeters;
+      const labelH = labelW * (canvas.height / canvas.width);
+      labelSprite.scale.set(labelW, labelH, 1);
+      labelSprite.position.set(0, config.heightMeters / 2 + labelH / 2 + 0.02, 0);
+    },
+    dispose() {
+      scene.remove(pivot);
+      bgMat.dispose();
+      fillMat.dispose();
+      labelMat.dispose();
+      labelTex.dispose();
+    },
+  };
+}
+
 export function createProgressBarInstance(scene: THREE.Object3D, config: ProgressBarConfig = PROGRESS_BAR_DEFAULTS): ProgressBarInstance {
   const pivot = new THREE.Group();
   pivot.name = 'progress-bar';

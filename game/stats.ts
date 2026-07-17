@@ -43,6 +43,35 @@ export function scaleSkillGain(rawDelta: number, level: number, max: number, cur
   return rawDelta * Math.pow(1 - ratio, Math.max(0, curveExp));
 }
 
+/** ITEM 2 (skill progress bar, 2026-07-17): fraction of the way from the current skill point to the
+ *  NEXT one, plus an `atMax` flag (bar hidden at max).
+ *
+ *  Design note — the growth curve: skill "points" are the INTEGER values of the raw skill (the exact
+ *  same convention feedback.ts's skillLevelUps uses — it floors before/after to count level-ups), so
+ *  the point thresholds are evenly (linearly) spaced along the value axis. `tuning.skills.growthCurveExp`
+ *  (see scaleSkillGain above) tapers the per-practice GAIN RATE near max — it makes high levels take
+ *  more practice-time to traverse — but it does NOT move where the point thresholds sit. So, per the
+ *  brief's "honoring the growth curve IF levels are non-linear": on inspection the levels here are
+ *  linear, and the correct next-point fraction is simply the value's fractional part. A value sitting
+ *  exactly on a point returns fraction 0 (bar empty); at/above max, atMax=true (caller hides it). */
+export interface SkillPointProgress { fraction: number; atMax: boolean; }
+export function skillPointProgress(value: number, max: number): SkillPointProgress {
+  if (!(max > 0) || value >= max) return { fraction: 1, atMax: true };
+  const v = Math.max(0, value);
+  return { fraction: v - Math.floor(v), atMax: false };
+}
+
+/** ITEM 2: the PRIMARY skill of an action = its largest positive skillGain, or null if the action
+ *  grants no (positive) skill. Deterministic tie-break: the first-encountered entry wins. */
+export function primarySkillGain(skillGains: Record<string, number>): { id: string; gain: number } | null {
+  let best: { id: string; gain: number } | null = null;
+  for (const [id, gain] of Object.entries(skillGains)) {
+    if (!(gain > 0)) continue;
+    if (!best || gain > best.gain) best = { id, gain };
+  }
+  return best;
+}
+
 export class SimStats {
   needs = new Map<string, number>();
   skills = new Map<string, number>();

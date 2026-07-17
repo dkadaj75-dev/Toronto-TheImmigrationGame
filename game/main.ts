@@ -11,7 +11,7 @@ import { AnimController } from './anim';
 import { bakeNavGrid } from './nav';
 import { TapInput, type TapResult } from './input';
 import { SimAgent, ClickCue, findSeatFor, type ActiveAction } from './sim';
-import { computeEnvironmentScore, SimStats } from './stats';
+import { computeEnvironmentScore, SimStats, skillPointProgress, primarySkillGain } from './stats';
 import { Hud } from './ui';
 import { Autonomy } from './autonomy';
 import { QuestRunner, isActionAvailable, type EvalContext } from './quests';
@@ -26,7 +26,7 @@ import { GarbageController, wasteItemCount } from './garbage';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials, isSelectableForSell } from './buymode';
 import { createMarkerInstance, type MarkerInstance } from './marker';
 import { createCensorInstance, type CensorInstance } from './censor';
-import { createProgressBarInstance, type ProgressBarInstance } from './progressbar';
+import { createProgressBarInstance, createSkillBarInstance, resolveSkillBarConfig, type ProgressBarInstance, type SkillBarInstance } from './progressbar';
 import { computeDurationSeconds, isDurationComplete } from './duration';
 import { AudioManager, loopSoundFor } from './audio';
 import { initBladderFailureState, checkBladderFailure, rearmBladderFailure } from './bladder';
@@ -236,6 +236,9 @@ async function start() {
   // same convention as censor above; it's a procedural overlay, not part of the rig) and shown
   // purely by polling `durationState` every render frame below.
   const progressBar: ProgressBarInstance = createProgressBarInstance(scene);
+  // ITEM 2 (2026-07-17): the second, always-visible bar shown while the current action has skillGains
+  // (primary skill = largest gain), tracking that skill's fraction toward its next point.
+  const skillBar: SkillBarInstance = createSkillBarInstance(scene);
 
   agent.onLocomotionChange = (moving) => {
     if (!anim) return;
@@ -695,6 +698,12 @@ async function start() {
   // "recompute, don't assume" convention garbage.ts's own doc comment already uses for the no-carry
   // clean_up path this replaces.
   let carryState: { target: THREE.Object3D; actionId: string } | null = null;
+  // ITEM 3 (put-trash-out routing, 2026-07-17): set when the take-out-trash flow is walking the sim
+  // to the FIRST stop (the fullest can, or a specific can the action was ordered on) BEFORE the
+  // exterior door. On arrival (render loop) the actual `empty_garbage` action is ordered on
+  // `doorTarget`, which walks to the door and — on completion — empties every can as today. Same
+  // main.ts-owned extra-leg pattern as carryState (sim.ts has no multi-leg chaining).
+  let trashOutState: { doorTarget: THREE.Object3D; action: ActionDef } | null = null;
   const food = new FoodRegistry();
   const FOOD_EATING_ACTION_ID = '__eat_carried_food';
   let foodTransitioning = false;
@@ -730,7 +739,40 @@ async function start() {
    *  from every place that can send the sim somewhere else: a fresh ground-tap/action order, the
    *  buy-mode "stop in place" safety net, and the panic/bladder-failure interrupts (both of which
    *  otherwise leave the sim mid-walk toward the can while "reacting" to something else). */
-  const cancelCarry = () => { carryState = null; dropActiveFood(); };
+  const cancelCarry = () => { carryState = null; trashOutState = null; dropActiveFood(); };
+
+  const assetById = (id?: string) => (id ? data.assets.assets.find((a) => a.id === id) : undefined);
+  /** The live exterior-door Object3D (the one carrying `empty_garbage`/`leave_for_work`), or
+   *  undefined if the map has none. Same lookup autoDepart uses for the work door. */
+  const findExteriorDoorObject = (): THREE.Object3D | undefined =>
+    doors.group.children.find((entry) => assetById(entry.userData.assetId as string)?.door?.exterior === true);
+
+  /** ITEM 3 (put-trash-out routing, 2026-07-17): the take-out-trash flow. `empty_garbage` may be
+   *  ordered on the exterior door (as today) OR on a garbage can (the designer attaches the action
+   *  to the can asset in the tools). Either way the sim FIRST walks to a collection stop — the
+   *  ordered-on can if it has any fill, otherwise the FULLEST can (tie-break nearest, garbage.ts's
+   *  chooseFullestCan) — and only then (render-loop arrival) walks to the exterior door and runs the
+   *  action, whose completion empties every can exactly as before. If no can has any fill (nothing
+   *  to collect) or the collection stop is unreachable, the sim goes straight to the door as today. */
+  const startTrashOut = (action: ActionDef, target: THREE.Object3D) => {
+    const targetDef = assetById(target.userData.assetId as string);
+    const doorTarget = targetDef?.door?.exterior ? target : findExteriorDoorObject();
+    if (!doorTarget) { console.log('empty_garbage: no exterior door on this map'); return; }
+    const doorDef = assetById(doorTarget.userData.assetId as string);
+    const simPos: [number, number] = [sim.position.x, sim.position.z];
+    const firstStop: [number, number] | null =
+      targetDef?.garbage && garbage.fillOfObject(target) > 0
+        ? [target.position.x, target.position.z]
+        : garbage.fullestCanPos(simPos);
+    if (firstStop && agent.goTo(firstStop[0], firstStop[1])) {
+      trashOutState = { doorTarget, action };
+      cue.showAt(firstStop[0], firstStop[1]);
+    } else if (agent.orderAction(action, doorTarget, null, doorDef)) {
+      cue.showAt(doorTarget.position.x, doorTarget.position.z); // nothing to collect / unreachable can → straight to door
+    } else {
+      console.log('empty_garbage: no path to exterior door');
+    }
+  };
 
   const nearestFoodSeat = (): THREE.Object3D | null => {
     const byId = new Map(data.assets.assets.map((a) => [a.id, a]));
@@ -1122,6 +1164,9 @@ async function start() {
             }
             autonomy.notePlayerCommand();
             cancelCarry(); // ROADMAP_NEXT B3-5: a fresh order interrupts any in-progress carry walk
+            // ITEM 3 (2026-07-17): take-out-trash routes to the fullest can first, THEN the exterior
+            // door — whether the action was ordered on the door or directly on a can (see startTrashOut).
+            if (action.id === 'empty_garbage') { startTrashOut(action, target); return; }
             // ROADMAP_NEXT B7-4: a food-source action (fridge Eat / stove Cook) is seatAware but its
             // FIRST leg must reach the source — seat routing is deferred to the carry/eat second leg
             // (startCarriedFood). firstLegSeatAware encodes that so the sim never skips the fridge.
@@ -1593,6 +1638,13 @@ async function start() {
 
   // --- render loop ---
   let frames = 0, fpsTimer = 0, last = performance.now();
+  // ITEM 1 (2026-07-17): garbage fill-bar occlusion is recomputed only when the camera actually
+  // moved/rotated OR on a ~0.25s tick (never every frame) — occlusion can only change with camera
+  // motion or a rare world rebuild, and the fill-bar set is small. Camera motion is detected by
+  // comparing the live camera transform to the last one we tested against (real-time, cosmetic).
+  let occAcc = 0;
+  const lastCamPos = new THREE.Vector3(Infinity, Infinity, Infinity);
+  const lastCamQuat = new THREE.Quaternion();
   renderer.setAnimationLoop((now) => {
     const dt = Math.min((now - last) / 1000, 0.1);
     last = now;
@@ -1692,6 +1744,17 @@ async function start() {
       garbage.depositAtNearestCan([sim.position.x, sim.position.z]);
       accidents.maybeCleanup(cs.target, cs.actionId);
     }
+    // ITEM 3 (2026-07-17): take-out-trash arrival at the collection can (fullest can / the ordered-on
+    // can) — now order the real `empty_garbage` action on the exterior door. Its completion empties
+    // every can (existing onActionStop). Mutually exclusive with carryState (only one is ever set).
+    if (trashOutState && !agent.isMoving) {
+      const ts = trashOutState;
+      trashOutState = null;
+      const doorDef = assetById(ts.doorTarget.userData.assetId as string);
+      if (!agent.orderAction(ts.action, ts.doorTarget, null, doorDef)) {
+        hud.showQuestToast('No path to the door', 'started', 2500);
+      }
+    }
     // B4-2: dropped food ages in monotonic in-game hours; pause freezes it and crossing midnight
     // stays monotonic through gameDay. The pure registry returns keys for the transient layer.
     for (const key of food.tick(gameHourNow())) accidents.despawnTransient(key);
@@ -1751,6 +1814,21 @@ async function start() {
     // sim-time) — visible for ANY duration-timed action, cook included (free consistency win).
     const durationProgress = durationState ? (durationState.totalSeconds > 0 ? durationState.elapsed / durationState.totalSeconds : 1) : 0;
     progressBar.update(sim, !!durationState, durationProgress, data.tuning.character?.heightMeters ?? 1.55);
+    // ITEM 2 (2026-07-17): skill bar — visible whenever the current action grants a skill, showing
+    // ONLY the primary (largest-gain) skill's progress toward its next point (game/stats.ts's pure
+    // skillPointProgress). Hidden at max level and when the action has no skillGains. Stacked above
+    // the action bar (never overlapping) — see game/progressbar.ts createSkillBarInstance.
+    const curAction = agent.current?.action;
+    const primarySkill = curAction ? primarySkillGain(curAction.skillGains) : null;
+    let skillActive = false, skillFraction = 0, skillLabel = '';
+    if (primarySkill) {
+      const sdef = stats.skillDefs.find((s) => s.id === primarySkill.id);
+      if (sdef) {
+        const prog = skillPointProgress(stats.skills.get(sdef.id) ?? sdef.default, sdef.max ?? 100);
+        if (!prog.atMax) { skillActive = true; skillFraction = prog.fraction; skillLabel = `${sdef.name}:`; }
+      }
+    }
+    skillBar.update(sim, skillActive, skillFraction, skillLabel, data.tuning.character?.heightMeters ?? 1.55, resolveSkillBarConfig(data.tuning.feedback?.skillBar));
     cue.update(dt); // UI feedback stays real-time
     // ROADMAP_NEXT B2-3: censor quad — real-time dt (see game/censor.ts's module doc comment),
     // active purely from the current action's own `censor` flag (covers autonomy-driven AND
@@ -1792,6 +1870,16 @@ async function start() {
     );
     hudAcc += dt;
     if (hudAcc >= 0.25) { hudAcc = 0; hud.refresh(); hud.setFunds(quests.funds, currencyName()); } // 4 Hz is plenty for bars/funds
+
+    // ITEM 1: throttled garbage fill-bar occlusion — recompute on camera move/rotate or every 0.25s.
+    occAcc += dt;
+    const camMoved = !lastCamPos.equals(cam.camera.position) || !lastCamQuat.equals(cam.camera.quaternion);
+    if (camMoved || occAcc >= 0.25) {
+      occAcc = 0;
+      lastCamPos.copy(cam.camera.position);
+      lastCamQuat.copy(cam.camera.quaternion);
+      garbage.updateFillBarOcclusion(cam.camera, world.children);
+    }
 
     frames++; fpsTimer += dt;
     if (fpsTimer >= 1) { devFps.textContent = `${frames} fps`; frames = 0; fpsTimer = 0; }

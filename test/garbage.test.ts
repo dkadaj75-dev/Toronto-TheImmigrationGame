@@ -7,6 +7,7 @@
 import {
   GarbageRegistry, findNearestNonFullCan, decideWasteHandling, wasteItemCount, DEFAULT_GARBAGE_TUNING, type CanCandidate,
   garbageFillRatio, shouldShowFillBar, garbageFillBarGeometry, DEFAULT_GARBAGE_FILLBAR,
+  chooseFullestCan, fillBarOccluded,
 } from '../game/garbage';
 
 let failures = 0;
@@ -157,6 +158,43 @@ console.log('garbage.test — fill-bar pure logic (designer request, 2026-07-16)
 
   check('DEFAULT_GARBAGE_FILLBAR ships sane positive dimensions and hidden-when-empty default',
     DEFAULT_GARBAGE_FILLBAR.widthMeters > 0 && DEFAULT_GARBAGE_FILLBAR.heightMeters > 0 && DEFAULT_GARBAGE_FILLBAR.showWhenEmpty === false);
+}
+
+console.log('garbage.test — chooseFullestCan (ITEM 3 put-trash-out routing)');
+{
+  const cans: CanCandidate[] = [
+    { key: 'a', pos: [0, 0], capacity: 10 },
+    { key: 'b', pos: [1, 0], capacity: 10 },
+    { key: 'c', pos: [5, 0], capacity: 10 },
+  ];
+  const sim: [number, number] = [0, 0];
+
+  check('all-empty → null (nothing to collect)', chooseFullestCan(sim, cans, () => 0) === null);
+  check('no cans → null', chooseFullestCan(sim, [], () => 5) === null);
+
+  const fills1 = new Map([['a', 2], ['b', 7], ['c', 4]]);
+  const fullest = chooseFullestCan(sim, cans, (k) => fills1.get(k) ?? 0);
+  check('picks the fullest can regardless of distance', fullest?.key === 'b', `got ${fullest?.key}`);
+  check('reports that can\'s fill', fullest?.fill === 7);
+
+  // tie on fill (both 5) → nearest to sim wins (a at dist 0 beats b at dist 1)
+  const fills2 = new Map([['a', 5], ['b', 5], ['c', 1]]);
+  const tie = chooseFullestCan(sim, cans, (k) => fills2.get(k) ?? 0);
+  check('fill tie broken by nearest', tie?.key === 'a', `got ${tie?.key}`);
+
+  // a zero-fill can is never chosen even if nearest
+  const fills3 = new Map([['a', 0], ['c', 3]]);
+  const skipEmpty = chooseFullestCan(sim, cans, (k) => fills3.get(k) ?? 0);
+  check('zero-fill nearest can is skipped for the only filled can', skipEmpty?.key === 'c');
+}
+
+console.log('garbage.test — fillBarOccluded (ITEM 1 fill-bar occlusion)');
+{
+  check('no hit before the anchor → not occluded', fillBarOccluded(null, 10) === false);
+  check('hit clearly closer than the anchor → occluded', fillBarOccluded(3, 10) === true);
+  check('hit essentially AT the anchor (within eps) → not occluded', fillBarOccluded(9.99, 10, 0.05) === false);
+  check('hit just inside eps of the anchor → not occluded', fillBarOccluded(9.96, 10, 0.05) === false);
+  check('hit just beyond eps (closer) → occluded', fillBarOccluded(9.9, 10, 0.05) === true);
 }
 
 if (failures > 0) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }

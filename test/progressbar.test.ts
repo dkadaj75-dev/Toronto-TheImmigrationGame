@@ -19,6 +19,7 @@ import {
   PROGRESS_BAR_DEFAULTS, progressBarAnchorHeight, clampProgress01,
   fillMargin, fillInnerWidth, fillInnerHeight, fillLeftEdge, fillScaleX, fillCenterX,
   createProgressBarInstance,
+  SKILL_BAR_DEFAULTS, resolveSkillBarConfig, skillBarAnchorHeight,
 } from '../game/progressbar';
 
 let failures = 0;
@@ -199,6 +200,29 @@ console.log('progressbar.test — isometric camera projection (B7-3 regression)'
     )) < 1e-9,
     `center=${fill.center.x} scale=${fill.scale.x}`);
   bar.dispose();
+}
+
+// ITEM 2 (skill progress bar) — pure config/geometry helpers (the THREE render layer, which needs a
+// DOM canvas for the label sprite, is verified via dev-server boot, same convention as the action
+// bar's own createProgressBarInstance not being fully unit-tested here).
+{
+  const merged = resolveSkillBarConfig({ fillColor: '#abcdef', gapMeters: 0.3 });
+  check('resolveSkillBarConfig keeps provided fields', merged.fillColor === '#abcdef' && merged.gapMeters === 0.3);
+  check('resolveSkillBarConfig fills absent fields from defaults',
+    merged.widthMeters === SKILL_BAR_DEFAULTS.widthMeters && merged.trackColor === SKILL_BAR_DEFAULTS.trackColor);
+  check('empty/absent partial → full defaults', (() => {
+    const d = resolveSkillBarConfig();
+    return d.widthMeters === SKILL_BAR_DEFAULTS.widthMeters && d.fillColor === SKILL_BAR_DEFAULTS.fillColor && d.gapMeters === SKILL_BAR_DEFAULTS.gapMeters;
+  })());
+  check('skill bar defaults use a fillColor distinct from the action bar (read as separate HUD elements)',
+    SKILL_BAR_DEFAULTS.fillColor !== PROGRESS_BAR_DEFAULTS.fillColor);
+  // Stacked strictly ABOVE the action bar (never overlapping): its anchor is higher by gapMeters.
+  const h = 1.55;
+  check('skill bar anchor sits gapMeters above the action bar anchor',
+    Math.abs(skillBarAnchorHeight(h, SKILL_BAR_DEFAULTS.gapMeters)
+      - (progressBarAnchorHeight(h, PROGRESS_BAR_DEFAULTS.yOffset) + SKILL_BAR_DEFAULTS.gapMeters)) < 1e-9);
+  check('skill bar anchor is strictly higher than the action bar anchor',
+    skillBarAnchorHeight(h, SKILL_BAR_DEFAULTS.gapMeters) > progressBarAnchorHeight(h, PROGRESS_BAR_DEFAULTS.yOffset));
 }
 
 if (failures > 0) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }

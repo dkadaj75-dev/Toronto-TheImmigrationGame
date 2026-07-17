@@ -640,6 +640,12 @@ export interface TuningData {
     fillBar?: {
       widthMeters?: number; heightMeters?: number; yOffsetMeters?: number;
       fillColor?: string; trackColor?: string; showWhenEmpty?: boolean;
+      /** Designer request (2026-07-17): hide a can's fill bar while the can is OCCLUDED (behind a
+       *  wall or another placed asset) from the current camera, via a cheap throttled raycast
+       *  (game/garbage.ts GarbageFillBarController.updateOcclusion). Only these garbage fill bars
+       *  are occlusion-tested — the sim's action/skill progress bars stay always-visible. Defaults
+       *  true (game/garbage.ts's DEFAULT_GARBAGE_FILLBAR). */
+      hideWhenOccluded?: boolean;
     };
   };
   /** B6-4: chance of one extra waste item, lerped by a quest-namespace numeric stat. */
@@ -677,8 +683,17 @@ export interface TuningData {
   /** B6-14/B6-15 survival events. All durations use simulation seconds. */
   energyCollapse?: { collapseSeconds?: number; sleepSeconds?: number; energyAfter?: number };
   starvation?: { countdownSeconds?: number; collapseSeconds?: number; recoveryThreshold?: number; message?: string };
-  /** B6-16 projected HTML feedback above the sim. */
-  feedback?: { durationSeconds?: number; risePixels?: number; yOffsetMeters?: number };
+  /** B6-16 projected HTML feedback above the sim. `skillBar` (designer request 2026-07-17): the
+   *  second, always-visible world bar shown near the sim whenever the current action has skillGains,
+   *  stacked above the action progress bar (game/progressbar.ts createSkillBarInstance). All fields
+   *  optional/sparse — SKILL_BAR_DEFAULTS fills in whatever's absent so old fixtures stay valid.
+   *  fillColor/trackColor are CSS hex strings (deliberately a different fillColor from the action
+   *  bar so the two read as distinct HUD elements); gapMeters is the vertical world offset above the
+   *  action bar's anchor. */
+  feedback?: {
+    durationSeconds?: number; risePixels?: number; yOffsetMeters?: number;
+    skillBar?: { fillColor?: string; trackColor?: string; heightMeters?: number; widthMeters?: number; gapMeters?: number };
+  };
   /** ROADMAP_NEXT B7-2: a COOKED meal's hunger fulfillment scales with cooking skill (snacks
    *  unaffected). effectiveHungerGain = base * lerp(cookHungerAtSkill0, cookHungerAtSkillMax,
    *  skills.cooking/max). Optional so old fixtures stay valid; game/food.ts + main.ts default to
