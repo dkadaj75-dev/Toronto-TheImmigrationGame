@@ -263,3 +263,11 @@ Designer report: Practice English rotated the seated sim toward its bookshelf ta
 Designer report: after reading/studying, many floor clicks and subsequent actions failed; investigate restoration from furniture-blocked perch positions.
 
 **DONE 2026-07-16:** teardown did restore `savedPose`, but final approach used the arrival-radius position rather than the exact walkable endpoint, so it could save/restore inside the sofa footprint. Final route arrival now snaps to its known-walkable cell center before perching. A blocking-sofa regression proves stop restores walkable ground and a far `goTo` succeeds/completes. See PROJECT_CONTEXT §7.34 B10-8.
+
+## B10-9. Not all transient assets should block navigation — per-asset boolean (puddle walkable, fire blocking).
+
+**DONE (2026-07-16):** sparse `AssetDef.blocksNav?: boolean` — absent = blocks (furniture/fire, unchanged), `false` = footprint stays walkable in the nav bake. `water_puddle` + `pee_puddle` ship with `false`. Asset Editor: "blocks navigation" checkbox (checked by default) under footprint. Runtime-spawned accidents were never nav-baked (registry-only), so this affects map-placed instances only.
+
+## B10-10. BUG: designer-placed puddles never disappear after mopping (runtime-spawned ones did).
+
+**DONE (2026-07-16):** a COMPLETED clearing action now also removes a map-placed instance of a clearedBy-matching asset: main.ts's completed-only onActionStop branch falls back from the AccidentRegistry despawn to buy-mode's destroyInstance runtime override (+ nav rebake if the asset blocked). Interrupted/cancelled mopping leaves the puddle (side_effect_rule); the map file is never written, so a full data rebuild legitimately restores authored puddles. Pure helper `shouldRemovePlacedOnCleanup` covered in test/accidents.test.ts.
