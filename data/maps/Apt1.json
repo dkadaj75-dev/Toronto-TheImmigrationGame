@@ -60,5 +60,12 @@
     ],
     "facingDeg": 0
   },
-  "placedObjects": []
+  "placedObjects": [],
+  "rental": {
+    "listed": true,
+    "adTitle": "test",
+    "adText": "test",
+    "moveInHours": 1,
+    "rentPriceOverride": 10
+  }
 }
