@@ -229,7 +229,7 @@
       ],
       "to": [
         4,
-        8
+        7
       ],
       "textureB": "textures/wallpaper.jpg",
       "texture": "textures/Tiling.jpg"
@@ -308,7 +308,7 @@
     {
       "at": [
         4,
-        7.67
+        6.5
       ],
       "orientation": "vertical",
       "assetId": "door_basic"
