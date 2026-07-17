@@ -824,6 +824,152 @@ console.log('map-editor.test — D5a preview highlight-target resolution');
   }
 }
 
+// ------------------------------------------------------------------ D5b: 3D editing pure helpers
+// The 3D pane's raycast lives in the module script (WebGL, untestable here), but everything after
+// the raycast — ray→ground math, mode→acting-point choice, edit-vs-orbit claim, and the shared
+// worldPointer* mutation path — is inline and jsdom-testable. Fixtures self-derive from the live map.
+console.log('map-editor.test — D5b: ray→ground / edit-point / claim helpers');
+{
+  check('vertical ray lands under its origin', ME.rayToGround([3, 5, 4], [0, -1, 0])?.join(',') === '3,4');
+  const slant = ME.rayToGround([0, 2, 0], [1, -1, 0]); // t=2 → [2, 0]
+  check('slanted ray projects along its direction', !!slant && Math.abs(slant[0] - 2) < 1e-9 && Math.abs(slant[1]) < 1e-9, JSON.stringify(slant));
+  check('upward ray misses the ground', ME.rayToGround([0, 1, 0], [0, 1, 0]) === null);
+  check('horizontal ray misses the ground', ME.rayToGround([0, 1, 0], [1, 0, 0]) === null);
+  check('intersection behind the origin is rejected', ME.rayToGround([0, -1, 0], [0, -1, 0]) === null);
+
+  const hit = { point: [2, 1.2, 3], ground: [5, 6], placedIndex: null };
+  check('objects mode acts at the GROUND point (drag-anchor consistency)', ME.edit3DPoint('objects', hit)?.join(',') === '5,6');
+  check('walls mode acts at the mesh hit (click lands ON the wall line)', ME.edit3DPoint('walls', hit)?.join(',') === '2,3');
+  check('mesh-less gesture falls back to the ground point', ME.edit3DPoint('walls', { point: null, ground: [5, 6] })?.join(',') === '5,6');
+  check('no point at all → null (gesture stays with OrbitControls)', ME.edit3DPoint('walls', { point: null, ground: null }) === null);
+}
+
+console.log('map-editor.test — D5b: claim (edit) vs orbit decisions');
+{
+  const g = (x, z) => ({ point: null, ground: [x, z], placedIndex: null });
+  check('objects: raycast-resolved placed object claims the gesture',
+    ME.claim3DGesture('objects', { ...g(1, 1), placedIndex: 0 }) === true);
+  check('objects: empty space orbits', ME.claim3DGesture('objects', g(1, 1)) === false);
+  check('objects: stale placedIndex orbits', ME.claim3DGesture('objects', { ...g(1, 1), placedIndex: 999 }) === false);
+  check('walls: in-bounds ground claims (drawing surface)', ME.claim3DGesture('walls', g(1, 11)) === true);
+  check('walls: outside the map bounds orbits', ME.claim3DGesture('walls', g(-5, -5)) === false);
+  check('floors: in-bounds ground claims', ME.claim3DGesture('floors', g(6, 13)) === true);
+  check('spawn: in-bounds claims, out-of-bounds orbits',
+    ME.claim3DGesture('spawn', g(2, 2)) === true && ME.claim3DGesture('spawn', g(-3, 2)) === false);
+  const spot = verticalWallSpot();
+  check('doors: a click within the wall placement radius claims',
+    !!spot && ME.claim3DGesture('doors', g(spot.x + 0.15, spot.z)) === true);
+  // a spot with no wall within the 0.7m placement radius, derived from the live map
+  const farSpot = [6, 13.8];
+  check('doors: far-from-wall fixture really is clear of walls', ME.nearestWall(...farSpot) === null);
+  check('doors: far from any wall orbits', ME.claim3DGesture('doors', g(...farSpot)) === false);
+}
+
+console.log('map-editor.test — D5b: 3D object drag = same mutation + ONE undo step');
+{
+  ME.setMode('objects');
+  const isWallMounted = (assetId) => !!st.assets.assets.find((a) => a.id === assetId)?.wallMounted;
+  const idx = st.doc.placedObjects.findIndex((p) => !isWallMounted(p.asset));
+  check('live map offers a draggable probe object', idx >= 0);
+  const origPos = [...st.doc.placedObjects[idx].pos];
+  // Down at an offset point WITH the raycast hint — the hint must win over the footprint hit-test
+  // (a 3D click on a tall mesh can land outside the 2D footprint rectangle).
+  const down = [origPos[0] + 0.4, origPos[1] + 0.3];
+  const undoBefore = st.undoStack.length;
+  ME.worldPointerDown(down[0], down[1], { placedIndex: idx });
+  check('hint selects the raycast-resolved object', st.sel?.kind === 'object' && st.sel.index === idx);
+  const target = [down[0] + 1.63, down[1] + 2.36];
+  ME.worldPointerMove(...target);
+  ME.worldPointerUp();
+  // same anchor math as the 2D drag: dx = pos - down, expected = snapPoint(target + dx)
+  const expected = ME.snapPoint(target[0] + (origPos[0] - down[0]), target[1] + (origPos[1] - down[1]));
+  check('3D drag moves with the editor\'s own snap', st.doc.placedObjects[idx].pos.join(',') === expected.join(','), st.doc.placedObjects[idx].pos.join(','));
+  check('3D drag marks dirty', st.dirty === true);
+  // the stack caps at 50 entries (pushUndo shifts the oldest) — length grows by one below the cap
+  check('exactly ONE undo step for the whole drag', st.undoStack.length === Math.min(undoBefore + 1, 50), `${undoBefore} -> ${st.undoStack.length}`);
+  ME.undo();
+  check('undo restores the pre-drag position', st.doc.placedObjects[idx].pos.join(',') === origPos.join(','), st.doc.placedObjects[idx].pos.join(','));
+}
+
+console.log('map-editor.test — D5b: 3D rotate uses the same R path');
+{
+  ME.setMode('objects');
+  const isWallMounted = (assetId) => !!st.assets.assets.find((a) => a.id === assetId)?.wallMounted;
+  const idx = st.doc.placedObjects.findIndex((p) => !isWallMounted(p.asset));
+  const before = st.doc.placedObjects[idx].rotDeg;
+  ME.worldPointerDown(st.doc.placedObjects[idx].pos[0], st.doc.placedObjects[idx].pos[1], { placedIndex: idx });
+  ME.worldPointerUp();
+  ME.rotateSelected(); // the same global R handler serves both panes (window keydown)
+  check('R rotates the 3D-selected object +90', st.doc.placedObjects[idx].rotDeg === ME.normRot(before + 90));
+  ME.undo();
+  check('rotate undoes in one step', st.doc.placedObjects[idx].rotDeg === before);
+}
+
+console.log('map-editor.test — D5b: 3D wall draw = same axis-lock/snap/undo');
+{
+  ME.setMode('walls');
+  const before = st.doc.walls.length;
+  const undoBefore = st.undoStack.length;
+  ME.worldPointerDown(1.1, 11.1);
+  ME.worldPointerMove(3.6, 11.4); // mostly horizontal → z locks to start
+  ME.worldPointerUp();
+  check('3D drag creates a wall', st.doc.walls.length === before + 1);
+  const w = st.doc.walls.at(-1);
+  check('wall axis-locked + snapped exactly like 2D', w.from.join(',') === '1,11' && w.to.join(',') === '3.5,11', `${w.from} -> ${w.to}`);
+  check('ONE undo step for the wall draw', st.undoStack.length === undoBefore + 1);
+  ME.undo();
+  check('undo removes the drawn wall', st.doc.walls.length === before);
+}
+
+console.log('map-editor.test — D5b: 3D door/window placement onto a wall');
+{
+  ME.setMode('doors');
+  const before = st.doc.doors.length;
+  const undoBefore = st.undoStack.length;
+  const spot = verticalWallSpot();
+  check('live map offers a clear vertical-wall spot (3D)', !!spot);
+  ME.worldPointerDown(spot.x + 0.05, spot.z); // as if the wall FACE was clicked in the 3D pane
+  ME.worldPointerUp();
+  check('3D wall click places a door', st.doc.doors.length === before + 1);
+  const d = st.doc.doors.at(-1);
+  check('door snapped onto the wall line, orientation inferred',
+    d.at[0] === spot.x && d.at[1] === ME.snapPoint(spot.x, spot.z)[1] && d.orientation === 'vertical', d.at.join(','));
+  check('ONE undo step for the door placement', st.undoStack.length === undoBefore + 1);
+  ME.undo();
+  check('undo removes the placed door', st.doc.doors.length === before);
+
+  ME.setMode('windows');
+  const wBefore = st.doc.windows.length;
+  const wUndoBefore = st.undoStack.length;
+  ME.worldPointerDown(spot.x + 0.05, spot.z);
+  ME.worldPointerUp();
+  check('3D wall click places a window', st.doc.windows.length === wBefore + 1
+    && st.doc.windows.at(-1).orientation === 'vertical');
+  check('ONE undo step for the window placement', st.undoStack.length === wUndoBefore + 1);
+  ME.undo();
+  check('undo removes the placed window', st.doc.windows.length === wBefore);
+}
+
+console.log('map-editor.test — D5b: 3D floor-rect painting');
+{
+  ME.setMode('floors');
+  check('paint fixture area is empty of floors', ME.hitTest(6, 12.8, 'floors') === null);
+  const before = st.doc.floors.length;
+  const undoBefore = st.undoStack.length;
+  ME.worldPointerDown(6.1, 12.8);
+  ME.worldPointerMove(7.9, 13.4);
+  ME.worldPointerUp();
+  check('3D drag paints a floor rect', st.doc.floors.length === before + 1);
+  const f = st.doc.floors.at(-1);
+  const s1 = ME.snapPoint(6.1, 12.8), s2 = ME.snapPoint(7.9, 13.4);
+  const expectedPoly = [[s1[0], s1[1]], [s2[0], s1[1]], [s2[0], s2[1]], [s1[0], s2[1]]];
+  check('floor rect snapped exactly like 2D', JSON.stringify(f.polygon) === JSON.stringify(expectedPoly), JSON.stringify(f.polygon));
+  check('floor uses the current new-floor material', f.material === st.newFloorMaterial);
+  check('ONE undo step for the floor paint', st.undoStack.length === undoBefore + 1);
+  ME.undo();
+  check('undo removes the painted floor', st.doc.floors.length === before);
+}
+
 // ------------------------------------------------------------------ maps CRUD + active switch
 console.log('map-editor.test — maps: new / duplicate / play / delete guards');
 {

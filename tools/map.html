@@ -121,16 +121,18 @@
   </div>
 </main>
 
-<!-- D5a: read-only live 3D preview of the CURRENT in-memory map, rendered through the GAME's own
-     builders (buildWorld/buildDoors) in the module script below. Orbit/pan/zoom, wall-cut toggle
-     mirroring the in-game view, and one-way selection highlight. Full-width + collapsible so the
-     2D editor stays fully usable. -->
+<!-- D5a: live 3D preview of the CURRENT in-memory map, rendered through the GAME's own builders
+     (buildWorld/buildDoors) in the module script below. Orbit/pan/zoom, wall-cut toggle mirroring
+     the in-game view, and one-way selection highlight. Full-width + collapsible so the 2D editor
+     stays fully usable. D5b: the pane also EDITS — the active 2D tool works here (select/drag
+     objects, draw walls/floors, place doors/windows on walls, spawn), every edit routed through the
+     inline editor's own worldPointer* handlers so state/undo stay single-sourced. -->
 <section id="preview-panel" class="panel">
   <div id="preview-head">
     <h2>3D preview</h2>
     <label class="chk"><input type="checkbox" id="preview-wallcut" /> wall-cut view</label>
     <span class="grow" style="flex:1"></span>
-    <span id="preview-msg">drag to orbit · right-drag to pan · scroll to zoom</span>
+    <span id="preview-msg">active tool edits on left-click/drag · orbit: drag empty space / outside the map · right-drag pan · scroll zoom</span>
     <button id="preview-toggle">Hide</button>
   </div>
   <div id="preview-wrap" style="position:relative">
@@ -379,6 +381,49 @@ function previewHighlightBox(doc, sel, assets) {
       size: vertical ? [t, PREVIEW_DOOR_H, span] : [span, PREVIEW_DOOR_H, t] };
   }
   return null; // spawn / unknown → nothing to box
+}
+
+// ---------------------------------------------------------------- D5b 3D-editing pure helpers
+// The preview module does the three.js raycast, then everything else resolves HERE (jsdom-testable):
+// ray → ground point, mode → acting world point, gesture claim (edit vs orbit). hit shape:
+// { point: [x,y,z]|null (nearest world-mesh raycast hit), ground: [x,z]|null (ray ∩ y=0 plane),
+//   placedIndex: number|null (userData.placedIndex climbed from the hit mesh, objects only) }.
+
+// PURE: ray/ground-plane (y=0) intersection. Returns [x, z] or null (parallel / behind the origin).
+function rayToGround(origin, dir) {
+  const [ox, oy, oz] = origin, [dx, dy, dz] = dir;
+  if (Math.abs(dy) < 1e-9) return null;
+  const t = -oy / dy;
+  if (t <= 0) return null;
+  return [ox + dx * t, oz + dz * t];
+}
+
+// PURE: which world x,z a 3D gesture acts at for the given mode. Objects prefer the GROUND point so
+// the drag anchor stays consistent with later ground-plane moves (the mesh hit can sit meters above
+// the floor); every other tool prefers the actual mesh hit (a click on a wall FACE lands exactly on
+// the wall line) and falls back to the ground point in empty space.
+function edit3DPoint(mode, hit) {
+  if (mode === 'objects') return hit.ground ?? (hit.point ? [hit.point[0], hit.point[2]] : null);
+  if (hit.point) return [hit.point[0], hit.point[2]];
+  return hit.ground ?? null;
+}
+
+// Claim vs orbit (OrbitControls stays in charge unless the active tool can actually act here):
+// objects — only a raycast-resolved placed object starts a drag (empty space orbits, Esc deselects);
+// floors/walls/spawn — anywhere on the map bounds draws/places (orbit by dragging OUTSIDE the map or
+// right-drag panning); doors/windows — an existing entity or a wall within the same 0.7m placement
+// radius the 2D tool uses. Resolution reuses hitTest/nearestWall — the 2D editor's own picking.
+function claim3DGesture(mode, hit) {
+  if (!state.doc) return false;
+  const pt = edit3DPoint(mode, hit);
+  if (!pt) return false;
+  const [x, z] = pt;
+  if (mode === 'objects') return hit.placedIndex != null && !!state.doc.placedObjects[hit.placedIndex];
+  if (mode === 'doors' || mode === 'windows') return !!hitTest(x, z, mode) || !!nearestWall(x, z);
+  const inBounds = x >= -0.01 && z >= -0.01 && x <= state.doc.bounds.w + 0.01 && z <= state.doc.bounds.h + 0.01;
+  if (mode === 'floors' || mode === 'walls') return inBounds || !!hitTest(x, z, mode);
+  if (mode === 'spawn') return inBounds;
+  return false;
 }
 
 function pointInPolygon(x, z, poly) {
@@ -696,13 +741,27 @@ function redraw() {
 }
 
 // ---------------------------------------------------------------- pointer interaction
+// D5b: the 2D canvas handlers are thin event->world-coordinate adapters over the world-space
+// handlers below. The 3D preview pane drives the SAME worldPointer* functions (via window.MapEditor)
+// after converting a raycast hit / ground-plane point to world x,z — so every 3D edit runs the exact
+// mutation + markDirty + pushUndo path the 2D editor uses. Never a second data path.
 function onPointerDown(e) {
   if (!state.doc) return;
   canvas.setPointerCapture?.(e.pointerId);
   const [x, z] = eventWorld(e);
+  worldPointerDown(x, z);
+}
+
+// hint.placedIndex (3D only): raycasting the preview world resolves a placed object directly from
+// its mesh (userData.placedIndex), which beats the 2D footprint hit-test — a tall/offset mesh can be
+// clicked anywhere on its geometry, not just over its footprint rectangle.
+function worldPointerDown(x, z, hint) {
+  if (!state.doc) return;
 
   if (state.mode === 'objects') {
-    const hit = hitTest(x, z);
+    const hinted = hint?.placedIndex != null && state.doc.placedObjects[hint.placedIndex]
+      ? { kind: 'object', index: hint.placedIndex } : null;
+    const hit = hinted ?? hitTest(x, z);
     state.sel = hit;
     if (hit) {
       const p = state.doc.placedObjects[hit.index];
@@ -762,6 +821,11 @@ function onPointerDown(e) {
 function onPointerMove(e) {
   if (!state.doc || !state.drag) return;
   const [x, z] = eventWorld(e);
+  worldPointerMove(x, z);
+}
+
+function worldPointerMove(x, z) {
+  if (!state.doc || !state.drag) return;
   const d = state.drag;
   if (d.kind === 'move') {
     if (!d.moved) { pushUndo(); d.moved = true; }
@@ -783,7 +847,9 @@ function onPointerMove(e) {
   redraw();
 }
 
-function onPointerUp() {
+function onPointerUp() { worldPointerUp(); }
+
+function worldPointerUp() {
   const d = state.drag;
   state.drag = null;
   if (!d || !state.doc) return;
@@ -1418,6 +1484,10 @@ window.MapEditor = {
   hitTest, nearestWall, snapPoint, snapWallObject, normRot, objectRect,
   addObjectFromPalette, rotateSelected, deleteSelected, setMode, undo,
   fitView, redraw, pxToWorld, worldToPx, previewHighlightBox,
+  // D5b: world-space pointer handlers + pure 3D picking helpers — the preview module drives THESE,
+  // so 3D edits share the 2D editor's mutation/undo path (single source of truth).
+  worldPointerDown, worldPointerMove, worldPointerUp,
+  rayToGround, edit3DPoint, claim3DGesture,
   navBridgeReady: () => { state.navDirty = true; redraw(); },
 };
 
@@ -1504,6 +1574,14 @@ function ensure() {
   scene.background = new THREE.Color(0x2a3346);
   camera = new THREE.PerspectiveCamera(50, 1, 0.05, 500);
   camera.position.set(8, 9, 12);
+  // D5b: the edit listeners are registered BEFORE OrbitControls is constructed, so when a gesture is
+  // claimed for editing, stopImmediatePropagation() keeps the controls from ever engaging (the
+  // standard "controls must not fight entity drags" pattern). Unclaimed left-drags, right-drags and
+  // the wheel reach OrbitControls untouched.
+  canvas.addEventListener('pointerdown', onEditPointerDown);
+  canvas.addEventListener('pointermove', onEditPointerMove);
+  canvas.addEventListener('pointerup', onEditPointerUp);
+  canvas.addEventListener('pointercancel', onEditPointerUp);
   controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
   lights = makeLights(); // the game's own light rig, so materials read as in-game
@@ -1563,11 +1641,78 @@ function rebuild() {
     applyExteriorScene(scene, world, st.doc); // sky/ground/fog for this map (sparse — void map clears)
     if (st.doc.id !== framedMapId) { frameCamera(); framedMapId = st.doc.id; } // keep orbit across edits
     updateHighlight();
-    setMsg('drag to orbit · right-drag to pan · scroll to zoom');
+    setMsg('active tool edits on left-click/drag · orbit: drag empty space / outside the map · right-drag pan · scroll zoom');
   } catch (e) {
     console.warn('3D preview rebuild failed', e);
     setMsg('3D preview unavailable: ' + (e?.message || e));
   }
+}
+
+// =============================================================== D5b direct manipulation
+// Only the three.js RAYCAST lives here; everything downstream — ground-point math, gesture claim,
+// entity resolution, snapping, mutation, markDirty, undo — runs through window.MapEditor's own
+// inline-script functions (worldPointerDown/Move/Up), so a 3D edit is byte-identical to its 2D
+// equivalent: same snap (map snapStep 0.25 default), same single pushUndo per gesture, same
+// selection object re-rendering both views.
+const raycaster = new THREE.Raycaster();
+let editDragId = null; // active claimed pointer id (null = OrbitControls owns the gesture)
+
+/** Raycast the preview world at a pointer event → { point, ground, placedIndex } for the inline
+ *  helpers. Exterior meshes disable their own raycast (world.ts), the highlight lives outside
+ *  `world`, so hits are real map geometry only. */
+function pickAt(e) {
+  const canvas = document.getElementById('preview-canvas');
+  const rect = canvas.getBoundingClientRect();
+  const nx = ((e.clientX - rect.left) / Math.max(rect.width, 1)) * 2 - 1;
+  const ny = -((e.clientY - rect.top) / Math.max(rect.height, 1)) * 2 + 1;
+  raycaster.setFromCamera(new THREE.Vector2(nx, ny), camera);
+  let point = null, placedIndex = null;
+  if (world) {
+    const hit = raycaster.intersectObject(world, true)[0];
+    if (hit) {
+      point = [hit.point.x, hit.point.y, hit.point.z];
+      let o = hit.object; // climb to the placed-object group (world.ts tags userData.placedIndex)
+      while (o && o !== world && o.userData?.placedIndex === undefined) o = o.parent;
+      if (o && o !== world && o.userData?.placedIndex !== undefined) placedIndex = o.userData.placedIndex;
+    }
+  }
+  const ro = raycaster.ray.origin, rd = raycaster.ray.direction;
+  const ground = window.MapEditor?.rayToGround?.([ro.x, ro.y, ro.z], [rd.x, rd.y, rd.z]) ?? null;
+  return { point, ground, placedIndex };
+}
+
+function onEditPointerDown(e) {
+  if (e.button !== 0) return; // right/middle drags stay OrbitControls pan/zoom
+  const ME = window.MapEditor;
+  const st = editorState();
+  if (!ready(st) || paused || !camera || !ME?.worldPointerDown) return;
+  const hit = pickAt(e);
+  if (!ME.claim3DGesture(st.mode, hit)) return; // unclaimed → OrbitControls orbits
+  e.preventDefault();
+  e.stopImmediatePropagation(); // registered before OrbitControls — it never sees this gesture
+  editDragId = e.pointerId;
+  e.currentTarget.setPointerCapture?.(e.pointerId);
+  const pt = ME.edit3DPoint(st.mode, hit);
+  ME.worldPointerDown(pt[0], pt[1], { placedIndex: hit.placedIndex });
+}
+
+function onEditPointerMove(e) {
+  if (editDragId === null || e.pointerId !== editDragId) return;
+  const ME = window.MapEditor;
+  if (!ME?.worldPointerMove || !camera) return;
+  e.stopImmediatePropagation();
+  // Drags (object move, wall/floor draw, door slide) all act on the GROUND plane — recompute the
+  // ray → y=0 point each move so the entity follows the cursor regardless of camera pitch.
+  const hit = pickAt(e);
+  if (hit.ground) ME.worldPointerMove(hit.ground[0], hit.ground[1]);
+}
+
+function onEditPointerUp(e) {
+  if (editDragId === null || e.pointerId !== editDragId) return;
+  editDragId = null;
+  e.stopImmediatePropagation();
+  e.currentTarget.releasePointerCapture?.(e.pointerId);
+  window.MapEditor?.worldPointerUp?.();
 }
 
 function updateHighlight() {
