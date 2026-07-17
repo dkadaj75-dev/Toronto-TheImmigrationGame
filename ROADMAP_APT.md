@@ -291,3 +291,7 @@ As-built: pure `game/wallaperture.ts` (aperture sizing: AssetDef.door.apertureWi
 ## R1 — SHIPPED (2026-07-17)
 
 As-built: sparse MapData.rental (RentalConfig: listed, adTitle/adText/adImage, areaM2Override, rentPriceOverride, availability = quest Condition tree, moveInHours). m2 default = pure shoelace polygonArea/floorsAreaM2 in game/textures.ts (test/area.test.ts); rent default stays finance.json via computeFinancePreview (referenced, not duplicated — R2 wires it). Brand string tuning.phone.rentalTabName ("Kijiji"). Quest Editor's condition builder EXTRACTED to shared tools/condition-builder.js (window.ConditionBuilder; quests.html delegates, map.html Rental card reuses — no second builder). Map Editor "Rental ad (Kijiji)" card with live computed-m2 readout via window.AreaBridge.
+
+## R2 — SHIPPED (2026-07-17)
+
+As-built: pure game/rental.ts listRentals(ctx) -> RentalListing[] {mapId,title,text,image,areaM2,available,rentPrice?,statusLabel,moveInHours,isCurrentHome}. Availability via quests.ts isActionAvailable (absent = available); rent via bills.ts computeFinancePreview; m2 via textures.ts floorsAreaM2; overrides win. Price only when available; labels themeable (DEFAULT_RENTAL_LABELS, overridable). Unlisted/absent-rental excluded. test/rental.test.ts (35 checks).
