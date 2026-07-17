@@ -72,8 +72,10 @@ window.AssetPreview = { show: (mesh, asset) => previewCalls.push({ mesh, asset }
 const characterCheckbox = doc.querySelector('input[data-path="preview.showCharacter"]');
 assert(characterCheckbox && !characterCheckbox.checked, 'Show character defaults unchecked');
 assert(!characterCheckbox.disabled, 'Show character is enabled when tuning.character exists');
-assert(JSON.stringify(window.AssetEditor.availablePreviewPoses(assets.assets[0])) === JSON.stringify(['sit', 'lie']), 'sit/lie preview poses exist from computed defaults');
-assert(JSON.stringify(window.AssetEditor.availablePreviewPoses({ ...assets.assets[0], usePose: { use: {} } })) === JSON.stringify(['sit', 'lie', 'use']), 'use preview pose appears only when explicitly defined');
+assert(JSON.stringify(window.AssetEditor.availablePreviewPoses(assets.assets[0])) === JSON.stringify(['sit', 'lie', 'use']), 'sit/lie/use preview poses are always offered');
+assert(window.AssetEditor.previewPoseSource('use', assets.assets[2]) === 'computed default', 'sparse use pose previews the computed default standing spot');
+assert(window.AssetEditor.previewPoseSource('use', { ...assets.assets[2], usePose: { use: {} } }) === 'computed default', 'empty use pose object is still treated as computed default');
+assert(window.AssetEditor.previewPoseSource('use', { ...assets.assets[2], usePose: { use: { y: 0 } } }) === 'authored', 'any authored usePose.use field switches the preview to authored');
 const sitAnim = window.AssetEditor.resolvePoseAnimation(
   'sit', { ...assets.assets[0], interactions: ['custom_sit'] },
   [{ id: 'custom_sit', animation: 'sit_unmapped' }], tuning.character.clipMap,

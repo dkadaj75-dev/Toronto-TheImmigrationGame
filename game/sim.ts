@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 import type { TuningData, ActionDef, GameData, AssetDef } from './data';
-import { findPath, nearestWalkable, worldToCell, cellCenter, type NavGrid } from './nav';
+import { findPath, nearestWalkable, worldToCell, cellCenter, isWalkable, type NavGrid } from './nav';
 import { useSpotFor, isInFrontHalfSpace, viewingPointFor, usePoseFor, type FacingInstance } from './facing';
 
 /** THREE.Object3D → the {pos, rotDeg} shape facing.ts's pure math works with. Objects are
@@ -73,6 +73,8 @@ export function findSeatFor(world: THREE.Group, data: GameData, target: THREE.Ob
 export class SimAgent {
   private path: [number, number][] = [];
   private pathIndex = 0;
+  /** Optional exact visual action point reached after the route's safe walkable cell center. */
+  private actionArrival: [number, number] | null = null;
   /** action waiting for arrival at its object */
   private queued: ActiveAction | null = null;
   /** action currently being performed */
@@ -115,6 +117,7 @@ export class SimAgent {
   goTo(x: number, z: number): boolean {
     this.stopAction();
     this.queued = null;
+    this.actionArrival = null;
     return this.route(x, z);
   }
 
@@ -154,10 +157,14 @@ export class SimAgent {
     };
     const routeToTargetFront = (obj: THREE.Object3D, def: AssetDef): boolean => {
       const [fx, fz] = useSpotFor(facingInstanceOf(obj), def, this.tuning);
-      const stand = nearestWalkable(this.grid, worldToCell(this.grid, fx, fz));
+      const exactCell = worldToCell(this.grid, fx, fz);
+      const stand = nearestWalkable(this.grid, exactCell);
       if (!stand) return routeToPivot(obj); // front cell unreachable (e.g. asset flush against a wall) — old heuristic still works
       const [sx, sz] = cellCenter(this.grid, stand);
-      return this.route(sx, sz);
+      // B10-12: route through the safe cell center, then perform the action at useSpotFor's
+      // precise point when that point belongs to a walkable cell. If geometry puts the computed
+      // spot in a blocked cell, retain the safe-center fallback instead.
+      return this.route(sx, sz, isWalkable(this.grid, exactCell) ? [fx, fz] : null);
     };
     if (seat) {
       const seatDef = this.assetsById.get(seat.userData?.assetId as string);
@@ -196,6 +203,7 @@ export class SimAgent {
     this.queued = null;
     this.path = [];
     this.pathIndex = 0;
+    this.actionArrival = null;
     this.object.position.set(x, 0, z);
     this.object.rotation.set(0, (facingDeg * Math.PI) / 180, 0);
   }
@@ -234,13 +242,17 @@ export class SimAgent {
    * computed default for `use`, unlike sit/lie (see game/data.ts's AssetDef.usePose doc comment
    * for why: most standing actions want the approach spot, not the footprint center).
    */
-  private applyPose(a: ActiveAction) {
+  private applyPose(a: ActiveAction, safeGroundPose?: THREE.Vector3) {
+    const saveGroundPose = () => ({
+      pos: safeGroundPose?.clone() ?? this.object.position.clone(),
+      rotX: this.object.rotation.x,
+    });
     if (a.groundSit) {
       // ROADMAP_NEXT item 2: no eligible seat in range — sit right where the sim already
       // walked to (useSpotFor's in-front-of-the-target spot) instead of snapping onto the
       // target object itself (which, e.g. for a TV, made no geometric sense). Animation state
       // is resolved separately by the caller (main.ts) to 'sit_ground', not action.animation.
-      this.savedPose = { pos: this.object.position.clone(), rotX: this.object.rotation.x };
+      this.savedPose = saveGroundPose();
       this.object.position.y = 0;
       return;
     }
@@ -254,7 +266,7 @@ export class SimAgent {
       // AssetDef, or an AssetDef with no `usePose.use`, means "keep the approach spot" (return,
       // nothing to do — the sim is already standing where it walked to).
       if (!def?.usePose?.use) return;
-      this.savedPose = { pos: this.object.position.clone(), rotX: this.object.rotation.x };
+      this.savedPose = saveGroundPose();
       const { pos, y, facingDeg } = usePoseFor('use', facingInstanceOf(perch), def, this.tuning);
       this.object.position.x = pos[0];
       this.object.position.z = pos[1];
@@ -263,7 +275,7 @@ export class SimAgent {
       return;
     }
 
-    this.savedPose = { pos: this.object.position.clone(), rotX: this.object.rotation.x };
+    this.savedPose = saveGroundPose();
 
     if (def) {
       const { pos, y, facingDeg } = usePoseFor(pose, facingInstanceOf(perch), def, this.tuning);
@@ -290,12 +302,13 @@ export class SimAgent {
     this.savedPose = null;
   }
 
-  private route(x: number, z: number): boolean {
+  private route(x: number, z: number, actionArrival: [number, number] | null = null): boolean {
     const p = this.object.position;
     const path = findPath(this.grid, [p.x, p.z], [x, z]);
     if (!path) return false;
     this.path = path;
     this.pathIndex = 0;
+    this.actionArrival = actionArrival;
     return true;
   }
 
@@ -364,7 +377,16 @@ export class SimAgent {
       const a = this.queued;
       this.queued = null;
       this.current = a;
-      this.applyPose(a); // sit on the couch / lie on the bed first…
+      // B10-12: B10-8's route endpoint remains the safe pose used for later restoration, while
+      // the live action returns to useSpotFor's precise footprint-edge point. Generic standing
+      // actions keep that precise position; sit/lie/authored-use poses replace it visually.
+      const safeGroundPose = this.actionArrival ? p.clone() : undefined;
+      if (this.actionArrival) {
+        p.x = this.actionArrival[0];
+        p.z = this.actionArrival[1];
+      }
+      this.actionArrival = null;
+      this.applyPose(a, safeGroundPose); // sit on the couch / lie on the bed first…
       const perch = a.seat ?? a.target;
       // A direct Sit has target === perch. Its authored usePose already owns the final facing;
       // with a non-zero offset, turning back toward the same object's pivot both disagreed with

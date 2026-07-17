@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { bakeNavGrid, isWalkable, worldToCell } from '../game/nav';
 import { SimAgent, findSeatFor } from '../game/sim';
-import { usePoseFor } from '../game/facing';
+import { usePoseFor, useSpotFor } from '../game/facing';
 import { actionAfterSourceFetch, firstLegSeatAware } from '../game/food';
 import type { MapData, TuningData, GameData, AssetDef, ActionDef } from '../game/data';
 
@@ -259,6 +259,43 @@ console.log('seatground.test — blocked furniture pivot routes to the seat fron
   check('far goTo completes after the seated action', !sitAgent.isMoving
     && Math.hypot(sitObj.position.x - 1.25, sitObj.position.z - 5.25) < 1e-6,
     `${sitObj.position.x},${sitObj.position.z}`);
+}
+
+console.log('seatground.test - B10-12 precise standing approach remains navigable after action');
+{
+  const stoveDef = asset({
+    id: 'stove_like', name: 'Stove-like asset', category: 'appliances', footprint: [1, 1],
+    interactions: ['cook'],
+  });
+  const stoveMap: MapData = {
+    id: 'stove-route', name: 'stove-route', gridSize: 0.5, bounds: { w: 6, h: 6 },
+    floors: [{ id: 'f', polygon: [[0, 0], [6, 0], [6, 6], [0, 6]], material: 'wood' }],
+    walls: [], doors: [], spawn: { pos: [1, 1], facingDeg: 0 },
+    placedObjects: [{ asset: 'stove_like', pos: [3, 3], rotDeg: 0 }],
+  };
+  const stoveGrid = bakeNavGrid(stoveMap, { categories: [], assets: [stoveDef] });
+  const stove = new THREE.Group();
+  stove.position.set(3, 0, 3); stove.userData.assetId = 'stove_like';
+  const sim = new THREE.Group(); sim.position.set(1, 0, 1);
+  const agent = new SimAgent(sim, stoveGrid, tuning, new Map([['stove_like', stoveDef]]));
+  const cook: ActionDef = {
+    id: 'cook', name: 'Cook', needGains: {}, skillGains: {}, animation: 'stand_use',
+    autonomyEligible: false, primaryNeed: null,
+  };
+  const exact = useSpotFor({ pos: [3, 3], rotDeg: 0 }, stoveDef, tuning);
+  check('stove-like standing action can route to its approach', agent.orderAction(cook, stove, null, stoveDef));
+  for (let i = 0; i < 600 && !agent.current; i++) agent.update(1 / 30);
+  check('standing action uses the exact useSpotFor point instead of the cell center',
+    !!agent.current && Math.hypot(sim.position.x - exact[0], sim.position.z - exact[1]) < 1e-6,
+    `${sim.position.x},${sim.position.z} vs ${exact[0]},${exact[1]}`);
+  agent.stopAction(true);
+  check('post-action exact standing point remains in a walkable cell',
+    isWalkable(stoveGrid, worldToCell(stoveGrid, sim.position.x, sim.position.z)));
+  check('post-action goTo succeeds from the exact standing point', agent.goTo(1, 5));
+  for (let i = 0; i < 600 && agent.isMoving; i++) agent.update(1 / 30);
+  check('post-action goTo completes from the exact standing point', !agent.isMoving
+    && Math.hypot(sim.position.x - 1.25, sim.position.z - 5.25) < 1e-6,
+    `${sim.position.x},${sim.position.z}`);
 }
 
 console.log('seatground.test — faceTarget (B9-1 follow-up): per-action opt-out of the post-arrival face-the-target rotation');

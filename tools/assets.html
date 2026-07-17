@@ -81,14 +81,17 @@ const previewGridSpec = () => {
   const divisions = Math.max(1, Math.ceil(4 / tileSize));
   return { tileSize, divisions, size: divisions * tileSize };
 };
-/** Sit/lie always have game/facing.ts computed transforms, even on a completely sparse asset.
- * `use` deliberately has no runtime default, so it is offered only when usePose.use explicitly
- * exists (matching SimAgent.applyPose). */
+/** Every pose can be inspected before it is authored. Sit/lie use their computed perch defaults;
+ * use previews the normal computed standing approach until usePose.use has authored fields. */
 function availablePreviewPoses(asset) {
-  if (!asset) return [];
-  const poses = ['sit', 'lie'];
-  if (asset.usePose?.use) poses.push('use');
-  return poses;
+  return asset ? ['sit', 'lie', 'use'] : [];
+}
+
+/** Pure preview label/branch helper. Empty pose objects count as computed defaults because the
+ * editor prunes them and no actual transform field has been authored. */
+function previewPoseSource(pose, asset) {
+  const entry = asset?.usePose?.[pose];
+  return entry && Object.keys(entry).length > 0 ? 'authored' : 'computed default';
 }
 
 /** Resolve a preview pose to the game's logical animation vocabulary and configured clip name.
@@ -109,7 +112,7 @@ function resolvePoseAnimation(pose, asset, actions = state.interactions?.actions
   return { logicalState, clipName: clipMap[logicalState] ?? null };
 }
 
-window.AssetEditor = { state, previewGridSize, previewGridSpec, availablePreviewPoses, resolvePoseAnimation };
+window.AssetEditor = { state, previewGridSize, previewGridSpec, availablePreviewPoses, previewPoseSource, resolvePoseAnimation };
 
 async function load() {
   setStatus('loading…');
@@ -876,7 +879,7 @@ load();
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { AnimController } from '/game/anim.ts';
-import { usePoseFor } from '/game/facing.ts';
+import { usePoseFor, useSpotFor } from '/game/facing.ts';
 import { classifyMeshPath, createSpriteInstance } from '/game/sprites.ts';
 import { normalizeModelToFootprint, applyMeshFit, loadMeshTemplate, loadRiggedCharacter } from '/game/world.ts';
 
@@ -952,16 +955,22 @@ function updateCharacter(seq, assetDef) {
   }
   ensureCharacter(character).then(() => {
     if (seq !== previewSeq) return;
-    const transform = usePoseFor(pose, { pos: [0, 0], rotDeg: 0 }, assetDef, editor.state.tuning);
+    const instance = { pos: [0, 0], rotDeg: 0 };
+    const source = editor.previewPoseSource(pose, assetDef);
+    const poseTransform = usePoseFor(pose, instance, assetDef, editor.state.tuning);
+    const transform = pose === 'use' && source === 'computed default'
+      ? { ...poseTransform, pos: useSpotFor(instance, assetDef, editor.state.tuning) }
+      : poseTransform;
     characterRoot.position.set(transform.pos[0], transform.y, transform.pos[1]);
     characterRoot.rotation.set(0, THREE.MathUtils.degToRad(transform.facingDeg), 0);
     characterRoot.visible = true;
     const resolved = editor.resolvePoseAnimation(pose, assetDef);
     characterAnim.retune(character);
     characterAnim.play(resolved.logicalState);
+    const sourceLabel = pose === 'use' ? `${source} standing spot; ` : '';
     characterStatus = resolved.clipName
-      ? `${pose} character animation: ${resolved.logicalState} → ${resolved.clipName}`
-      : `${pose} character animation "${resolved.logicalState}" is unmapped; game fallback applies`;
+      ? `${sourceLabel}${pose} character animation: ${resolved.logicalState} -> ${resolved.clipName}`
+      : `${sourceLabel}${pose} character animation "${resolved.logicalState}" is unmapped; game fallback applies`;
     previewMessage();
     framePreview();
   }).catch(() => {
