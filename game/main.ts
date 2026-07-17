@@ -20,7 +20,7 @@ import { PhoneJobSearch, applyForJob, applyForVisa, jobListingViews, jobSwitchPr
 import { FinanceState, decideRepoSeizure } from './bills';
 import { WorkTracker, applyNeedsCost, decideAutoDepart, isLeaveForWorkAvailable, isWithinDepartureWindow, jobLevelPay, jobLevelTitle, shouldStartVisaGrace, type WorkTickEvent } from './work';
 import { computeHappiness } from './happiness';
-import { AccidentsController, resolveTapAssetId, shouldDespawnOnCleanup } from './accidents';
+import { AccidentsController, resolveTapAssetId, shouldDespawnOnCleanup, shouldRemovePlacedOnCleanup } from './accidents';
 import { GarbageController, wasteItemCount } from './garbage';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials, isSelectableForSell } from './buymode';
 import { createMarkerInstance, type MarkerInstance } from './marker';
@@ -911,8 +911,23 @@ async function start() {
           // below). The transient is untouched: still there, still dirty, can fill unchanged.
           hud.showQuestToast('No empty garbage can available', 'started', 2500);
         }
-      } else {
-        accidents.maybeCleanup(a.target, a.action.id);
+      } else if (!accidents.maybeCleanup(a.target, a.action.id)) {
+        // ROADMAP_NEXT item 2: the mop completed but the target was NOT a runtime AccidentRegistry
+        // instance (maybeCleanup returned false) — it's a DESIGNER-PLACED puddle (a map placedObject).
+        // Those never enter the registry, so remove the live instance through the buy-mode overlay's
+        // `destroyed` path (hides the group + drops it from the nav feed), then rebake nav if this
+        // asset actually blocked it. `completed` is already true here (guarded above); the pure
+        // helper re-checks it so the side_effect_rule stays enforced in one unit-tested place — an
+        // interrupted mop leaves the puddle untouched. We deliberately DON'T write to the map file:
+        // the puddle is the designer's authored source, so a data hot-reload/session rebuild that
+        // resets the runtime overlay legitimately brings it back.
+        if (shouldRemovePlacedOnCleanup(completed, a.action.id, def.clearedBy)) {
+          const inst = buyMode.instanceForObject(a.target);
+          if (inst) {
+            buyMode.destroyInstance(inst);
+            if (def.blocksNav !== false) rebakeNav();
+          }
+        }
       }
     } else if (def && !a.action.duration) {
       accidents.rollFor(a.target, def, buildEvalContext(), simClockSeconds);

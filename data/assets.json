@@ -606,6 +606,7 @@
         "mop"
       ],
       "buyable": false,
+      "blocksNav": false,
       "_note": "Accidents slice (PROJECT_CONTEXT.md §7.3). Risk-configured on 'shower' (see its accidents[] entry). No real mesh yet — flat box stand-in until models/water_puddle.glb is imported.",
       "sprite": {
         "orientation": "flat"
@@ -630,6 +631,7 @@
         "mop"
       ],
       "buyable": false,
+      "blocksNav": false,
       "_note": "ROADMAP_NEXT B2-4 (bladder failure) — spawned by game/accidents.ts's spawnTransient at the sim's exact location when bladder hits 0 (game/bladder.ts's checkBladderFailure). Same 'mop' interaction/clearedBy and puddle.png stand-in as water_puddle (§7.3); a separate asset id (not just a re-skinned water_puddle) so it can be styled/priced/scored independently later. No real mesh yet — flat box stand-in until a distinct texture is imported.",
       "sprite": {
         "orientation": "flat"

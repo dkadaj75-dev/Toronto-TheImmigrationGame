@@ -75,6 +75,21 @@ const cluttered2: MapData = { ...map, placedObjects: [{ asset: 'crate', pos: [8,
 const g5 = bakeNavGrid(cluttered2, crateAssets);
 assert(!isWalkable(g5, worldToCell(g5, 8, 3)), 'crate away from doors still blocks its cells');
 
+// ROADMAP_NEXT item 2: blocksNav:false keeps a flat sprite's footprint walkable; absent still blocks.
+const puddleAssets = {
+  categories: ['transient'],
+  assets: [
+    { id: 'puddle', name: 'Puddle', category: 'transient', mesh: '', buyPrice: 0, sellPrice: 0, environmentScore: 0, footprint: [1, 1] as [number, number], interactions: [], blocksNav: false },
+    { id: 'block', name: 'Block', category: 'misc', mesh: '', buyPrice: 0, sellPrice: 0, environmentScore: 0, footprint: [1, 1] as [number, number], interactions: [] },
+  ],
+};
+const puddleMap: MapData = { ...map, placedObjects: [{ asset: 'puddle', pos: [8, 3], rotDeg: 0 }] };
+const g6 = bakeNavGrid(puddleMap, puddleAssets);
+assert(isWalkable(g6, worldToCell(g6, 8, 3)), 'blocksNav:false asset leaves its cells walkable');
+const blockMap: MapData = { ...map, placedObjects: [{ asset: 'block', pos: [8, 3], rotDeg: 0 }] };
+const g7 = bakeNavGrid(blockMap, puddleAssets);
+assert(!isWalkable(g7, worldToCell(g7, 8, 3)), 'asset without blocksNav still blocks (default behavior)');
+
 // tap on a wall resolves to a nearby walkable cell
 const p3 = findPath(grid, [2, 3], [5, 1]); // goal is on the divider wall
 assert(p3 !== null, 'tap on wall snaps to nearest walkable');

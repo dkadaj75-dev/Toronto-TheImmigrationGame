@@ -4,7 +4,7 @@ import {
   accidentModifierContribution, computeAccidentChance, rollAccident,
   footprintRect, rectsOverlap,
   findAdjacentCell, findNearestFreeCell, planAccidentPlacement,
-  AccidentRegistry, shouldDespawnOnCleanup, resolveTapAssetId, isAutonomyBlocked,
+  AccidentRegistry, shouldDespawnOnCleanup, shouldRemovePlacedOnCleanup, resolveTapAssetId, isAutonomyBlocked,
   fireShouldDestroy, spreadShouldRoll, DEFAULT_FIRE_TUNING,
   type AccidentInstanceRecord,
 } from '../game/accidents';
@@ -201,6 +201,12 @@ console.log('accidents.test — AccidentRegistry (spawn/despawn/no-duplicate-sta
   check('shouldDespawnOnCleanup true for a listed clearedBy action', shouldDespawnOnCleanup('extinguish', ['extinguish']) === true);
   check('shouldDespawnOnCleanup false for an unrelated action', shouldDespawnOnCleanup('mop', ['extinguish']) === false);
   check('shouldDespawnOnCleanup false when clearedBy is undefined', shouldDespawnOnCleanup('extinguish', undefined) === false);
+
+  // --- ROADMAP_NEXT item 2: designer-placed puddle removal is completed-only (side_effect_rule)
+  check('shouldRemovePlacedOnCleanup true for a completed clearedBy action', shouldRemovePlacedOnCleanup(true, 'mop', ['mop']) === true);
+  check('shouldRemovePlacedOnCleanup false for a CANCELLED clearedBy action (puddle survives)', shouldRemovePlacedOnCleanup(false, 'mop', ['mop']) === false);
+  check('shouldRemovePlacedOnCleanup false for a completed but non-clearing action', shouldRemovePlacedOnCleanup(true, 'sit', ['mop']) === false);
+  check('shouldRemovePlacedOnCleanup false when clearedBy is undefined', shouldRemovePlacedOnCleanup(true, 'mop', undefined) === false);
 
   const despawned = reg.despawn(r1.key);
   check('despawn removes and returns the record', despawned?.key === r1.key && reg.all.length === 1);

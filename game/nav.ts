@@ -65,6 +65,7 @@ export function bakeNavGrid(map: MapData, assets?: AssetsData): NavGrid {
     for (const p of map.placedObjects) {
       const def = byId.get(p.asset);
       if (!def) continue;
+      if (def.blocksNav === false) continue; // walkable flat sprites (puddles, scorch) — absent still blocks
       let [w, d] = def.footprint;
       if ((((Math.round(p.rotDeg) % 180) + 180) % 180) === 90) [w, d] = [d, w];
       const x0 = p.pos[0] - w / 2, x1 = p.pos[0] + w / 2;

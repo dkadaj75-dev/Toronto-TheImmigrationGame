@@ -141,6 +141,13 @@ assert(buyableCb.checked === true, 'buyable defaults checked when absent');
 buyableCb.checked = false;
 buyableCb.dispatchEvent(new window.Event('change', { bubbles: true }));
 
+// --- blocksNav (ROADMAP_NEXT item 2): sparse, absent = true (checked); unchecking writes blocksNav:false
+const blocksNavCb = doc.querySelector('input[data-path="blocksNav"]');
+assert(blocksNavCb, 'blocks navigation checkbox rendered');
+assert(blocksNavCb.checked === true, 'blocksNav defaults checked when absent (absent = blocks)');
+blocksNavCb.checked = false;
+blocksNavCb.dispatchEvent(new window.Event('change', { bubbles: true }));
+
 // --- facingDeg: blank by default, sparse round-trip
 const facingInput = doc.querySelector('input[data-path="facingDeg"]');
 assert(facingInput.value === '', 'facingDeg blank when absent');
@@ -419,6 +426,7 @@ assert(!saved.assets.some((a) => a.id === 'tv'), 'PUT reflects deletion');
 assert(saved.assets.some((a) => a.id === 'lamp'), 'PUT includes new asset');
 assert(doc.getElementById('save').disabled, 'save disabled after saving');
 assert(savedCouch.buyable === false, 'PUT carries explicit buyable:false');
+assert(savedCouch.blocksNav === false, 'PUT carries explicit blocksNav:false');
 assert(savedCouch.survivalImportance === 75, 'PUT carries sparse survivalImportance');
 assert(savedCouch.facingDeg === 90, 'PUT carries edited facingDeg');
 assert(savedCouch.meshFit.scale === 1.2, 'PUT carries sparse meshFit.scale');
@@ -441,6 +449,7 @@ assert(!('distance' in savedCouch.light) && !('yOffset' in savedCouch.light), 'u
 assert(savedCouch.wallMounted.heightY === 1.8, 'PUT carries wall-mounted height');
 const savedLamp = saved.assets.find((a) => a.id === 'lamp');
 assert(!('buyable' in savedLamp), 'new asset has no buyable key (defaults true)');
+assert(!('blocksNav' in savedLamp), 'new asset has no blocksNav key (defaults to blocking)');
 assert(!('survivalImportance' in savedLamp), 'new asset has no survivalImportance key (defaults neutral)');
 assert(!('facingDeg' in savedLamp), 'new asset has no facingDeg key (defaults 0)');
 assert(!('meshFit' in savedLamp), 'new asset has no meshFit key (nothing set)');

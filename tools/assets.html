@@ -431,6 +431,12 @@ function renderEditor() {
     numInput(() => a.footprint[1], (v) => { a.footprint[1] = v ?? 1; }, 'footprint.d'),
   );
   card2.appendChild(frow('footprint (w × d, meters)', pair));
+  // blocksNav (ROADMAP_NEXT item 2): sparse, absent = true (blocks — furniture, fire). Uncheck for
+  // flat floor sprites a sim should walk over (puddles, scorch marks). Same "absent = true" sparse
+  // convention as buyable above.
+  const blocksNavCb = checkInput(() => a.blocksNav !== false, (v) => { if (v) delete a.blocksNav; else a.blocksNav = false; }, 'blocksNav');
+  card2.appendChild(frow('blocks navigation (sims cannot walk through its footprint)', blocksNavCb));
+  card2.insertAdjacentHTML('beforeend', '<div class="hint">On by default (right for furniture and fire). Uncheck for flat floor sprites a sim should be able to stand on or walk over - puddles, scorch marks, debris.</div>');
   card2.appendChild(frow('seats (count)', numInput(() => a.seats, (v) => { if (v === undefined) delete a.seats; else a.seats = v; }, 'seats')));
   card2.appendChild(frow('is a seat target (sit here for seat-aware actions)', checkInput(() => a.seatTarget, (v) => { if (v) a.seatTarget = true; else delete a.seatTarget; }, 'seatTarget')));
   card2.appendChild(frow('facing ° (blank = 0)', numInput(() => a.facingDeg, (v) => { if (v === undefined) delete a.facingDeg; else a.facingDeg = v; }, 'facingDeg')));

@@ -329,6 +329,17 @@ export function shouldDespawnOnCleanup(actionId: string, clearedBy: string[] | u
   return !!clearedBy?.includes(actionId);
 }
 
+/** ROADMAP_NEXT item 2 (designer-placed puddle cleanup): should a clearing action remove a
+ *  DESIGNER-PLACED (map placedObject) instance of a clearedBy-matching asset? A designer puddle is
+ *  NOT in the AccidentRegistry (it lives in map.placedObjects, not spawned at runtime), so
+ *  `maybeCleanup` never touches it — main.ts removes it from the scene via the buy-mode overlay
+ *  instead. Gated on `completed` here so the side_effect_rule (side effects fire ONLY on completed
+ *  actions, never on cancels/interrupts) is enforced in one pure, unit-tested place: an interrupted
+ *  mop must leave the puddle. */
+export function shouldRemovePlacedOnCleanup(completed: boolean, actionId: string, clearedBy: string[] | undefined): boolean {
+  return completed && shouldDespawnOnCleanup(actionId, clearedBy);
+}
+
 /** §7.3 hierarchy decision — what asset id the tap menu should build actions from: the
  *  blocking accident's, if any, otherwise the tapped base asset's own. Kept as an explicit
  *  named function (not inlined in main.ts) so the decision itself is unit-tested. */
@@ -621,14 +632,15 @@ export class AccidentsController {
   /** §7.3 cleanup: call from onActionStop whenever the completed action's target carries an
    *  `accidentKey` (i.e. it WAS an accident instance) — despawns it if `actionId` is in the
    *  accident asset's `clearedBy` list. No-op for any other target. */
-  maybeCleanup(targetObj: THREE.Object3D, actionId: string) {
+  maybeCleanup(targetObj: THREE.Object3D, actionId: string): boolean {
     const key = targetObj.userData?.accidentKey as string | undefined;
-    if (!key) return;
+    if (!key) return false;
     const rec = this.registry.all.find((i) => i.key === key);
-    if (!rec) return;
+    if (!rec) return false;
     const def = this.getData().assets.assets.find((a) => a.id === rec.accidentId);
-    if (!shouldDespawnOnCleanup(actionId, def?.clearedBy)) return;
+    if (!shouldDespawnOnCleanup(actionId, def?.clearedBy)) return false;
     this.despawn(key);
+    return true;
   }
 
   private despawn(key: string) {

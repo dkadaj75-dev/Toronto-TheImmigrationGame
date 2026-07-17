@@ -127,6 +127,12 @@ export interface AssetDef {
   id: string; name: string; category: string; mesh: string;
   buyPrice: number; sellPrice: number; environmentScore: number;
   footprint: [number, number]; seats?: number;
+  /** Whether this asset's placed footprint bakes as UNWALKABLE into the nav grid (game/nav.ts
+   *  bakeNavGrid). Sparse: absent = true (blocks — correct for furniture and fire). `false` keeps
+   *  the cells walkable, for flat floor sprites a sim should be able to stand on/walk over: puddles,
+   *  scorch marks, debris. Only affects map-placed objects; runtime accident instances aren't in the
+   *  nav grid at all (they block via accidents.ts's geometric hierarchy, unaffected by this flag). */
+  blocksNav?: boolean;
   interactions: string[]; seatTarget?: boolean;
   /** Model-local facing yaw in degrees; absent = 0. PROJECT_CONTEXT.md §7.2 as-built:
    *  world facing = instance.rotDeg + facingDeg, using the SAME "rotation.y=0 → local +Z is
