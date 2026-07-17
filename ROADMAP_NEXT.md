@@ -317,3 +317,11 @@ Designer intent: always offer `use` in the character preview. With no `usePose.u
 ## B10-16. Per-asset need multipliers: each asset scales selected needs' action gains (several needs, add/remove, negatives allowed).
 
 **DONE (2026-07-16):** sparse AssetDef.needMultipliers {needId: number}. ONE pure helper (stats.ts effectiveNeedGain) feeds BOTH the sim gain tick (applyGains) and autonomy scoring (behavior.ts scoreCandidate), so a luxury sofa genuinely outranks a bad one and negative multipliers drain. Seat-aware actions credit the multiplier of the seat actually perched on (active.seat ?? target — documented in main.ts). Asset Editor "Need multipliers" card (need dropdown + value, add/remove, sparse). Behavior Editor live preview reflects it automatically (real scorer). Tests: stats/behavior/meshfit/asset-editor suites.
+
+## B10-17. BUG: uncleanable "dirty dish" after a snack, self-vanishing after ~15s.
+
+**DONE (2026-07-16):** the object was an ABANDONED CARRIED-FOOD transient (snack/meal left by an interrupted eat/carry), not dirty_dishes: it had interactions:[] (nothing for the radial menu) and perished on the food clock (perishHours x 7.5 real seconds at current time scale). dropActiveFood() now routes abandoned food through the normal waste pipeline (auto-tidy or clearable dirty_dishes that persists until a COMPLETED clean_up) and discards it from the FoodRegistry so the perish tick can never silently remove it.
+
+## B10-18. Meal tiers: what you cook determines hunger fulfillment (light $12 < large $25), still scaled by cooking skill.
+
+**DONE (2026-07-16):** sparse ActionDef.food {hungerGain, perishHours} overrides the source asset's food block (resolveFoodConfig); B7-2 cooking-skill scaling applies on top of either base. Food spawn mapping generalized to action FAMILIES (cook/cook_*, eat/eat_*) so new cook actions need zero code. Interaction Editor gained a sparse "Food override" card. Designer authors cook_light_meal/cook_large_meal in the tool.
