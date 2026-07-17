@@ -776,6 +776,54 @@ console.log('map-editor.test — save PUT payload');
   check('dirty cleared', st.dirty === false && doc.getElementById('save').disabled);
 }
 
+// ------------------------------------------------------------------ D5a preview highlight resolution
+// The 3D preview pane is a module script (WebGL, untestable under jsdom), but the pure selection →
+// world-box resolution lives in the inline script and IS testable. Fixtures self-derive from the
+// live map (never hardcoded coords).
+console.log('map-editor.test — D5a preview highlight-target resolution');
+{
+  const HB = ME.previewHighlightBox;
+  const dc = st.doc;
+  check('no selection → null', HB(dc, null, st.assets) === null);
+  check('spawn selection → null (nothing to box)', HB(dc, { kind: 'spawn' }, st.assets) === null);
+  check('out-of-range index → null', HB(dc, { kind: 'object', index: 999 }, st.assets) === null);
+
+  if (dc.placedObjects.length) {
+    const p = dc.placedObjects[0];
+    const def = st.assets.assets.find((a) => a.id === p.asset);
+    let fw = def ? def.footprint[0] : 1, fd = def ? def.footprint[1] : 1;
+    const rot = ((Math.round((p.rotDeg || 0) / 90) * 90) % 360 + 360) % 360;
+    if (rot === 90 || rot === 270) [fw, fd] = [fd, fw];
+    const b = HB(dc, { kind: 'object', index: 0 }, st.assets);
+    check('object box centered on pos', b && b.center[0] === p.pos[0] && b.center[2] === p.pos[1]);
+    check('object box uses rotation-aware footprint', b && b.size[0] === fw && b.size[2] === fd);
+    check('object box rests on the ground (centerY = height/2)', b && Math.abs(b.center[1] - b.size[1] / 2) < 1e-9);
+  }
+
+  if (dc.floors.length) {
+    const f = dc.floors[0];
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const [x, z] of f.polygon) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z); }
+    const b = HB(dc, { kind: 'floor', index: 0 }, st.assets);
+    check('floor box centered on polygon bounds', b && Math.abs(b.center[0] - (minX + maxX) / 2) < 1e-9 && Math.abs(b.center[2] - (minZ + maxZ) / 2) < 1e-9);
+    check('floor box sized to polygon bounds', b && Math.abs(b.size[0] - (maxX - minX)) < 1e-9 && Math.abs(b.size[2] - (maxZ - minZ)) < 1e-9);
+  }
+
+  if (dc.walls.length) {
+    const w = dc.walls[0];
+    const b = HB(dc, { kind: 'wall', index: 0 }, st.assets);
+    check('wall box centered on midpoint', b && Math.abs(b.center[0] - (w.from[0] + w.to[0]) / 2) < 1e-9 && Math.abs(b.center[2] - (w.from[1] + w.to[1]) / 2) < 1e-9);
+    check('wall box spans full height (2.5m, grounded)', b && Math.abs(b.size[1] - 2.5) < 1e-9 && Math.abs(b.center[1] - 1.25) < 1e-9);
+    check('wall box includes thickness padding', b && b.size[0] >= Math.abs(w.to[0] - w.from[0]) && b.size[2] >= Math.abs(w.to[1] - w.from[1]));
+  }
+
+  if (dc.doors.length) {
+    const d0 = dc.doors[0];
+    const b = HB(dc, { kind: 'door', index: 0 }, st.assets);
+    check('door box at door.at with 2.1m panel height', b && b.center[0] === d0.at[0] && b.center[2] === d0.at[1] && Math.abs(b.size[1] - 2.1) < 1e-9);
+  }
+}
+
 // ------------------------------------------------------------------ maps CRUD + active switch
 console.log('map-editor.test — maps: new / duplicate / play / delete guards');
 {

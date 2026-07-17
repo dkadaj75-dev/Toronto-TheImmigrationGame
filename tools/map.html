@@ -37,6 +37,14 @@
   #canvas-wrap { position: relative; }
   canvas { display: block; width: 100%; height: 640px; background: #0d1322; border: 1px solid #26304a; border-radius: 12px;
     touch-action: none; cursor: crosshair; }
+  /* D5a live 3D preview pane — its own sizing/cursor (overrides the 2D-editor canvas rule above). */
+  #preview-panel { margin: 0 14px 14px; }
+  #preview-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  #preview-head h2 { margin: 0; }
+  #preview-canvas { height: 420px; cursor: grab; }
+  #preview-canvas:active { cursor: grabbing; }
+  #preview-panel.collapsed #preview-wrap { display: none; }
+  #preview-msg { font-size: 11px; color: #5f6f93; }
   .field { display: grid; grid-template-columns: 74px 1fr; gap: 6px; align-items: center; margin: 5px 0; }
   .field label { font-size: 12px; color: #93a3c0; }
   .field input, .field select { width: 100%; }
@@ -112,6 +120,23 @@
     <div id="inspector"><span class="muted">nothing selected</span></div>
   </div>
 </main>
+
+<!-- D5a: read-only live 3D preview of the CURRENT in-memory map, rendered through the GAME's own
+     builders (buildWorld/buildDoors) in the module script below. Orbit/pan/zoom, wall-cut toggle
+     mirroring the in-game view, and one-way selection highlight. Full-width + collapsible so the
+     2D editor stays fully usable. -->
+<section id="preview-panel" class="panel">
+  <div id="preview-head">
+    <h2>3D preview</h2>
+    <label class="chk"><input type="checkbox" id="preview-wallcut" /> wall-cut view</label>
+    <span class="grow" style="flex:1"></span>
+    <span id="preview-msg">drag to orbit · right-drag to pan · scroll to zoom</span>
+    <button id="preview-toggle">Hide</button>
+  </div>
+  <div id="preview-wrap" style="position:relative">
+    <canvas id="preview-canvas"></canvas>
+  </div>
+</section>
 
 <script src="/tools/condition-builder.js"></script>
 <script>
@@ -311,6 +336,51 @@ function objectRect(p) {
   return { x: p.pos[0] - w / 2, z: p.pos[1] - d / 2, w, d };
 }
 
+// D5a SELECTION SYNC (one-way): resolve the 2D editor's current selection to an axis-aligned box in
+// WORLD space (three.js coords — x east, y up, z south, matching buildWorld). The 3D preview draws a
+// wireframe box here. PURE + jsdom-testable (no three.js dependency); the module script consumes the
+// result and, for placed objects, refines the box from the real loaded mesh bounds when available.
+// Returns null when nothing highlightable is selected (spawn/none). Constants mirror world.ts
+// (WALL_H 2.5, WALL_T 0.12, door panel 2.1) so the box lines up with what buildWorld renders.
+const PREVIEW_WALL_H = 2.5, PREVIEW_WALL_T = 0.12, PREVIEW_DOOR_H = 2.1;
+function previewHighlightBox(doc, sel, assets) {
+  if (!doc || !sel) return null;
+  const byId = (id) => assets?.assets?.find((a) => a.id === id);
+  if (sel.kind === 'object') {
+    const p = doc.placedObjects?.[sel.index];
+    if (!p) return null;
+    const def = byId(p.asset);
+    let [w, d] = (def && def.footprint) || [1, 1];
+    const rot = normRot(p.rotDeg ?? 0);
+    if (rot === 90 || rot === 270) [w, d] = [d, w];
+    const h = Math.max(w, d, 1); // nominal height; the module refines from real mesh bounds when loaded
+    return { center: [p.pos[0], h / 2, p.pos[1]], size: [w, h, d] };
+  }
+  if (sel.kind === 'floor') {
+    const f = doc.floors?.[sel.index];
+    if (!f || !f.polygon || !f.polygon.length) return null;
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const [x, z] of f.polygon) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z); }
+    return { center: [(minX + maxX) / 2, 0.05, (minZ + maxZ) / 2], size: [Math.max(maxX - minX, 0.1), 0.1, Math.max(maxZ - minZ, 0.1)] };
+  }
+  if (sel.kind === 'wall') {
+    const wl = doc.walls?.[sel.index];
+    if (!wl) return null;
+    const [x1, z1] = wl.from, [x2, z2] = wl.to;
+    return { center: [(x1 + x2) / 2, PREVIEW_WALL_H / 2, (z1 + z2) / 2],
+      size: [Math.abs(x2 - x1) + PREVIEW_WALL_T, PREVIEW_WALL_H, Math.abs(z2 - z1) + PREVIEW_WALL_T] };
+  }
+  if (sel.kind === 'door' || sel.kind === 'window') {
+    const e = (sel.kind === 'door' ? doc.doors : doc.windows)?.[sel.index];
+    if (!e || !e.at) return null;
+    const vertical = e.orientation === 'vertical';
+    const span = 1.1, t = 0.3;
+    return { center: [e.at[0], PREVIEW_DOOR_H / 2, e.at[1]],
+      size: vertical ? [t, PREVIEW_DOOR_H, span] : [span, PREVIEW_DOOR_H, t] };
+  }
+  return null; // spawn / unknown → nothing to box
+}
+
 function pointInPolygon(x, z, poly) {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -484,6 +554,9 @@ function eventWorld(e) {
 }
 
 function redraw() {
+  // D5a: keep the live 3D preview in step with every 2D edit / selection change. The module
+  // debounces the heavy world rebuild and updates the selection highlight cheaply (no-op headless).
+  window.MapPreview?.sync?.();
   if (!ctx || !state.doc) return;
   const doc = state.doc;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -1344,7 +1417,7 @@ window.MapEditor = {
   state, boot, selectMap, save, newMap, duplicateMap, deleteMap, playThisMap,
   hitTest, nearestWall, snapPoint, snapWallObject, normRot, objectRect,
   addObjectFromPalette, rotateSelected, deleteSelected, setMode, undo,
-  fitView, redraw, pxToWorld, worldToPx,
+  fitView, redraw, pxToWorld, worldToPx, previewHighlightBox,
   navBridgeReady: () => { state.navDirty = true; redraw(); },
 };
 
@@ -1378,6 +1451,183 @@ window.NavBridge = {
 };
 window.MapEditor?.navBridgeReady?.();
 </script>
+
+<script type="module">
+// =============================================================== D5a 3D preview pane
+// Read-only live 3D view of the CURRENT in-memory map, rendered through the GAME's OWN builders —
+// buildWorld/buildDoors (+ applyWallCutView, applyExteriorScene) imported verbatim, NEVER
+// reimplemented (same architectural rule as the Asset Editor preview). This module owns all
+// three.js; the inline script stays jsdom-testable and drives us through the window.MapPreview
+// bridge from redraw(). buildWorld only reads data.{map,assets,tuning}, so a minimal GameData shaped
+// from the editor's loaded state is enough — no runtime sim/quest/visa state needed for a static
+// render (verified against world.ts/doors.ts). Every 2D edit debounce-rebuilds the whole world
+// (maps are small; full rebuild is fine per D5a), disposing the previous group exactly as the game's
+// applyFreshData does (skip userData.sharedResource — GLB clones share cached template buffers).
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { buildWorld, applyWallCutView, applyExteriorScene, makeLights } from '/game/world.ts';
+import { buildDoors } from '/game/doors.ts';
+
+let renderer = null, scene, camera, controls, raf = 0;
+let world = null, highlight = null, lights = null;
+let rebuildTimer = 0, lastDocSig = '', framedMapId = null, wallCut = false, paused = false;
+const REBUILD_DEBOUNCE_MS = 180;
+
+function editorState() { return window.MapEditor?.state ?? null; }
+function ready(st) { return !!(st && st.doc && st.assets && st.tuning); }
+/** Minimal GameData: buildWorld/buildDoors/applyExteriorScene read only these three fields. */
+function gameData(st) { return { map: st.doc, assets: st.assets, tuning: st.tuning }; }
+
+function setMsg(text) { const el = document.getElementById('preview-msg'); if (el && text != null) el.textContent = text; }
+
+// Mirror main.ts's disposeGroup: free geometry/material for meshes we own, but skip GLB clones
+// (userData.sharedResource) whose buffers belong to loadMeshTemplate's cache.
+function disposeGroup(g) {
+  g.traverse((o) => {
+    if (o.isMesh && !o.userData.sharedResource) {
+      o.geometry?.dispose?.();
+      const m = o.material;
+      (Array.isArray(m) ? m : [m]).forEach((mm) => mm?.dispose?.());
+    }
+  });
+}
+
+function ensure() {
+  const canvas = document.getElementById('preview-canvas');
+  if (!canvas) return false;
+  if (renderer) return true;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  } catch { renderer = null; return false; }
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x2a3346);
+  camera = new THREE.PerspectiveCamera(50, 1, 0.05, 500);
+  camera.position.set(8, 9, 12);
+  controls = new OrbitControls(camera, canvas);
+  controls.enableDamping = true;
+  lights = makeLights(); // the game's own light rig, so materials read as in-game
+  scene.add(lights);
+  scene.add(new THREE.AmbientLight(0xbfd0e8, 0.5)); // a touch of fill for the editor pane
+  // reusable selection highlight: a unit wireframe box, positioned/scaled per selection, drawn on top
+  highlight = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
+    new THREE.LineBasicMaterial({ color: 0xffd166 }),
+  );
+  highlight.material.depthTest = false;
+  highlight.renderOrder = 999;
+  highlight.visible = false;
+  scene.add(highlight);
+  cancelAnimationFrame(raf);
+  const loop = () => {
+    raf = requestAnimationFrame(loop);
+    if (paused) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width > 0 && (canvas.width !== Math.floor(rect.width * renderer.getPixelRatio()) || canvas.height !== Math.floor(rect.height * renderer.getPixelRatio()))) {
+      renderer.setSize(rect.width, rect.height, false);
+      camera.aspect = rect.width / Math.max(rect.height, 1);
+      camera.updateProjectionMatrix();
+    }
+    controls.update();
+    renderer.render(scene, camera);
+  };
+  loop();
+  return true;
+}
+
+function frameCamera() {
+  if (!world) return;
+  const box = new THREE.Box3().setFromObject(world);
+  if (box.isEmpty()) return;
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const span = Math.max(size.x, size.z, 4);
+  controls.target.copy(center);
+  camera.position.copy(center).add(new THREE.Vector3(0.9, 1.0, 1.25).setLength(span * 1.4));
+  camera.near = Math.max(span / 500, 0.05);
+  camera.far = span * 40;
+  camera.updateProjectionMatrix();
+  controls.update();
+}
+
+function rebuild() {
+  const st = editorState();
+  if (!ready(st) || !ensure()) return;
+  if (world) { scene.remove(world); disposeGroup(world); world = null; }
+  try {
+    const data = gameData(st);
+    world = buildWorld(data);
+    world.add(buildDoors(data).group); // main.ts adds the door group into the same world root
+    applyWallCutView(world, wallCut, st.tuning.view?.wallCutHeight ?? 1);
+    scene.add(world);
+    applyExteriorScene(scene, world, st.doc); // sky/ground/fog for this map (sparse — void map clears)
+    if (st.doc.id !== framedMapId) { frameCamera(); framedMapId = st.doc.id; } // keep orbit across edits
+    updateHighlight();
+    setMsg('drag to orbit · right-drag to pan · scroll to zoom');
+  } catch (e) {
+    console.warn('3D preview rebuild failed', e);
+    setMsg('3D preview unavailable: ' + (e?.message || e));
+  }
+}
+
+function updateHighlight() {
+  if (!highlight) return;
+  const st = editorState();
+  const ME = window.MapEditor;
+  const b = ready(st) && ME?.previewHighlightBox ? ME.previewHighlightBox(st.doc, st.sel, st.assets) : null;
+  if (!b) { highlight.visible = false; return; }
+  let center = b.center, size = b.size;
+  // Refine a placed object's box from its REAL loaded mesh bounds (buildWorld tags each with
+  // userData.placedIndex) — nominal footprint height is only a fallback until the GLB loads.
+  if (st.sel?.kind === 'object' && world) {
+    let found = null;
+    world.traverse((o) => { if (o.userData && o.userData.placedIndex === st.sel.index && o.parent === world) found = o; });
+    if (found) {
+      const box = new THREE.Box3().setFromObject(found);
+      if (!box.isEmpty()) {
+        const c = box.getCenter(new THREE.Vector3()), s = box.getSize(new THREE.Vector3());
+        center = [c.x, c.y, c.z];
+        size = [Math.max(s.x, 0.05), Math.max(s.y, 0.05), Math.max(s.z, 0.05)];
+      }
+    }
+  }
+  highlight.position.set(center[0], center[1], center[2]);
+  highlight.scale.set(size[0], size[1], size[2]);
+  highlight.visible = true;
+}
+
+window.MapPreview = {
+  // Called from the inline redraw() on every edit / selection change. Debounces the heavy world
+  // rebuild on a doc-content signature; the selection highlight updates immediately (cheap).
+  sync() {
+    const st = editorState();
+    if (!ready(st) || paused) return;
+    if (!ensure()) return;
+    const sig = JSON.stringify(st.doc);
+    if (sig !== lastDocSig) {
+      lastDocSig = sig;
+      clearTimeout(rebuildTimer);
+      rebuildTimer = setTimeout(rebuild, REBUILD_DEBOUNCE_MS);
+    }
+    updateHighlight();
+  },
+  setWallCut(active) {
+    wallCut = !!active;
+    if (world) applyWallCutView(world, wallCut, editorState()?.tuning?.view?.wallCutHeight ?? 1);
+  },
+  setPaused(p) { paused = !!p; if (!paused) { framedMapId = null; this.sync(); } },
+};
+
+document.getElementById('preview-wallcut')?.addEventListener('change', (e) => window.MapPreview.setWallCut(e.target.checked));
+document.getElementById('preview-toggle')?.addEventListener('click', () => {
+  const panel = document.getElementById('preview-panel');
+  const collapsed = panel.classList.toggle('collapsed');
+  document.getElementById('preview-toggle').textContent = collapsed ? 'Show' : 'Hide';
+  window.MapPreview.setPaused(collapsed);
+});
+window.MapPreview.sync(); // first paint once the editor has booted
+</script>
+
 <script src="/tools/nav.js"></script>
 </body>
 </html>
