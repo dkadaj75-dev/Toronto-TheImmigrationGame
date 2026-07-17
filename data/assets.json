@@ -396,7 +396,7 @@
       ],
       "meshFit": {
         "yawOffsetDeg": 90,
-        "scale": 1.25
+        "scale": 2
       },
       "combustibility": {
         "chancePercent": 60,
@@ -426,7 +426,7 @@
       "id": "lamp",
       "name": "Floor lamp",
       "category": "decor",
-      "mesh": "",
+      "mesh": "/models/lamp.glb",
       "buyPrice": 120,
       "sellPrice": 90,
       "environmentScore": 2,
@@ -445,13 +445,16 @@
         "yOffset": 1.5,
         "defaultOn": false
       },
-      "icon": "/public/icons/lamp.png"
+      "icon": "/public/icons/lamp.png",
+      "meshFit": {
+        "scale": 0.8
+      }
     },
     {
       "id": "wall_lamp",
       "name": "Wall lamp",
       "category": "decor",
-      "mesh": "",
+      "mesh": "/models/walllamp.glb",
       "buyPrice": 100,
       "sellPrice": 75,
       "environmentScore": 2,

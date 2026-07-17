@@ -1,0 +1,64 @@
+{
+  "id": "Apt1",
+  "name": "Apt1",
+  "propertyType": "condo",
+  "gridSize": 0.5,
+  "snapStep": 0.25,
+  "bounds": {
+    "w": 14,
+    "h": 10
+  },
+  "floors": [],
+  "walls": [
+    {
+      "from": [
+        1,
+        0.5
+      ],
+      "to": [
+        1,
+        9
+      ]
+    },
+    {
+      "from": [
+        5.5,
+        0.5
+      ],
+      "to": [
+        1,
+        0.5
+      ]
+    },
+    {
+      "from": [
+        5.5,
+        9
+      ],
+      "to": [
+        5.5,
+        0.5
+      ]
+    },
+    {
+      "from": [
+        3,
+        2.5
+      ],
+      "to": [
+        1,
+        2.5
+      ]
+    }
+  ],
+  "doors": [],
+  "windows": [],
+  "spawn": {
+    "pos": [
+      3.75,
+      6.25
+    ],
+    "facingDeg": 0
+  },
+  "placedObjects": []
+}

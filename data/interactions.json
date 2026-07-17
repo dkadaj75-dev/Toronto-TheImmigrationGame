@@ -3,15 +3,17 @@
   "actions": [
     {
       "id": "eat",
-      "name": "Eat",
-      "needGains": {},
+      "name": "Eat a cheese slice",
+      "needGains": {
+        "hunger": 5
+      },
       "skillGains": {},
       "animation": "sit_eat",
       "autonomyEligible": true,
       "primaryNeed": "hunger",
       "cost": 5,
       "duration": {
-        "baseSeconds": 5
+        "baseSeconds": 3
       },
       "producesWaste": "dirty_dishes",
       "_wasteNote": "ROADMAP_NEXT item 10 — on stop, either auto-tidied into a nearby non-full garbage can (sim cleanliness personality stat permitting) or dropped as a 'dirty_dishes' transient. See game/garbage.ts.",
@@ -105,7 +107,7 @@
     },
     {
       "id": "cook",
-      "name": "Cook",
+      "name": "Cook a light meal",
       "needGains": {},
       "skillGains": {
         "cooking": 0.05
@@ -117,9 +119,10 @@
       "_durationNote": "ROADMAP_NEXT item 5 (§7.11) — first duration-driven action, ships the spec's own worked example. Sim-time seconds (same clock as needsDecayTickSeconds=1/activityGainTickSeconds=2): a novice (cooking skill 0) takes 60s to cook, a master (skill at its max, 10) takes 20s. Also fixes 'cook' never auto-stopping on its own (primaryNeed is null — see accidents.ts's onActionStop doc comment).",
       "sound": "sounds/action_beep.wav",
       "duration": {
-        "baseSeconds": 20,
-        "atMaxSeconds": 8
-      }
+        "baseSeconds": 12,
+        "atMaxSeconds": 6
+      },
+      "producesWaste": "dirty_dishes"
     },
     {
       "id": "read_book",
@@ -367,6 +370,23 @@
         "baseSeconds": 0.2
       },
       "_note": "B6-12 generic power action. main.ts filters it to ON instances and flips state on arrival; normal use-spot walking remains unchanged."
+    },
+    {
+      "id": "eat_a_snack",
+      "name": "Eat a snack",
+      "needGains": {
+        "hunger": 15
+      },
+      "skillGains": {},
+      "animation": "sit_eat",
+      "autonomyEligible": true,
+      "primaryNeed": "hunger",
+      "seatAware": true,
+      "duration": {
+        "baseSeconds": 5
+      },
+      "producesWaste": "dirty_dishes",
+      "cost": 8
     }
   ]
 }
