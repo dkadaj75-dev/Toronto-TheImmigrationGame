@@ -26,9 +26,12 @@
 import * as THREE from 'three';
 import type { AssetDef, GameData, TuningData } from './data';
 import { attachMesh, type TrackInitialLoad } from './world';
+import { DEFAULT_APERTURE_HEIGHT } from './wallaperture';
 
-/** Marker height for the stand-in panel — matches the pre-existing plain door marker in world.ts. */
-export const DOOR_HEIGHT = 2.1;
+/** Marker height for the stand-in panel — matches the pre-existing plain door marker in world.ts.
+ *  D1: shared with wallaperture.ts's apertureHeight default so the stand-in panel and the hole it
+ *  swings in can never drift apart. */
+export const DOOR_HEIGHT = DEFAULT_APERTURE_HEIGHT;
 
 // ------------------------------------------------------------------ pure math (headless-tested)
 
@@ -38,6 +41,10 @@ export interface DoorEntry {
   orientation: 'vertical' | 'horizontal';
   width?: number;
   assetId?: string;
+  /** D1 (game/data.ts MapData.doors doc): sparse wall-cutting opt-out. Door open/close behavior
+   *  here is IDENTICAL for both placement forms — this module never reads it; carried so a
+   *  map.doors[] entry of either form is a DoorEntry as-is. */
+  cutsWall?: boolean;
 }
 
 export interface DoorConfig {

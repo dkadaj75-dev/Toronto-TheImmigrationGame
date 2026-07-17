@@ -62,6 +62,20 @@ const sealedWithDoor: MapData = { ...map, walls: [...map.walls, { from: [5, 2.5]
 const g3 = bakeNavGrid(sealedWithDoor);
 assert(findPath(g3, [2, 3], [8, 3]) !== null, 'door carves through a wall drawn across it');
 
+// D1 door-in-plain-wall: an ON-WALL door on one CONTINUOUS divider (no gap segments at all)
+// carves the same pass-through — the canonical new-form map.
+const continuous: MapData = {
+  ...map,
+  walls: [...map.walls.slice(0, 4), { from: [5, 0], to: [5, 6] }],
+  doors: [{ at: [5, 3], orientation: 'vertical' }],
+};
+const gD1 = bakeNavGrid(continuous);
+assert(findPath(gD1, [2, 3], [8, 3]) !== null, 'on-wall door carves a pass-through in a continuous wall');
+// ...and cutsWall:false makes that same door purely decorative: no hole, no route.
+const decorative: MapData = { ...continuous, doors: [{ at: [5, 3], orientation: 'vertical', cutsWall: false }] };
+const gDec = bakeNavGrid(decorative);
+assert(findPath(gDec, [2, 3], [8, 3]) === null, 'cutsWall:false door does not carve — wall stays sealed');
+
 // door carving beats furniture parked in the doorway (footprint blocking)
 const crateAssets = {
   categories: ['misc'],
@@ -113,6 +127,9 @@ const bakeStarted = performance.now();
 const condoGrid = bakeNavGrid(condo, condoAssets);
 const bakeMs = performance.now() - bakeStarted;
 assert(condo.gridSize === 0.5 && condo.snapStep === 0.25, 'shipped condo separates 0.5m tiles from 0.25m placement snap');
-assert(condoGrid.cols === 18 && condoGrid.rows === 18, 'shipped condo bakes the expected 0.5m nav cells without changing 9m bounds');
+// Derive expected cells from the LIVE map's own bounds (self-deriving fixture rule — the designer
+// resizes the map; a hardcoded 18x18 broke under live data drift).
+const expCols = Math.ceil(condo.bounds.w / condo.gridSize), expRows = Math.ceil(condo.bounds.h / condo.gridSize);
+assert(condoGrid.cols === expCols && condoGrid.rows === expRows, `shipped condo bakes ${expCols}x${expRows} 0.5m nav cells from its own bounds`);
 assert(bakeMs < 1000, `shipped condo nav bake remains fast (${bakeMs.toFixed(2)}ms)`);
 console.log(`condo 0.5m nav bake: ${condoGrid.cols * condoGrid.rows} cells in ${bakeMs.toFixed(2)}ms`);

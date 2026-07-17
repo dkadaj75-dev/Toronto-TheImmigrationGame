@@ -191,5 +191,22 @@ console.log('doors.test — isAnimatedDoor');
   check('door pointing at an unknown assetId is not animated', isAnimatedDoor({ at: [0, 0], orientation: 'vertical', assetId: 'ghost' }, byId, tuning) === false);
 }
 
+console.log('doors.test — D1 on-wall form: door behavior is placement-form-agnostic');
+{
+  // A D1 on-wall entry is the SAME DoorEntry shape plus sparse cutsWall — none of the door
+  // open/close/hinge logic reads it, so both forms must produce identical results.
+  const byId = new Map<string, AssetDef>([['door_basic', asset({ door: { hingeOffset: [-0.5, 0] } })]]);
+  const gapForm = { at: [3, 5] as [number, number], orientation: 'horizontal' as const, assetId: 'door_basic' };
+  const onWallForm = { ...gapForm, cutsWall: true };
+  const decorative = { ...gapForm, cutsWall: false };
+  for (const [label, entry] of [['on-wall', onWallForm], ['decorative (cutsWall:false)', decorative]] as const) {
+    check(`${label}: isAnimatedDoor matches the gap form`, isAnimatedDoor(entry, byId, tuning) === isAnimatedDoor(gapForm, byId, tuning));
+    check(`${label}: hingeWorldPos matches the gap form`, hingeWorldPos(entry, [-0.5, 0]).join(',') === hingeWorldPos(gapForm, [-0.5, 0]).join(','));
+    check(`${label}: segmentCrossesDoorway matches the gap form`,
+      segmentCrossesDoorway([3, 4], [3, 6], entry) === segmentCrossesDoorway([3, 4], [3, 6], gapForm));
+    check(`${label}: distanceToDoor matches the gap form`, distanceToDoor([0, 0], entry) === distanceToDoor([0, 0], gapForm));
+  }
+}
+
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }
 console.log('\nall doors tests passed');

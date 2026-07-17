@@ -189,7 +189,12 @@ export interface AssetDef {
    *  surface in the tap menu via the SAME userData.assetId mechanism world.ts uses for furniture;
    *  doors.ts sets that userData on the door's hinge pivot only when exterior is true, so interior
    *  doors stay non-tappable exactly as before this field existed. */
-  door?: { hingeOffset: [number, number]; openAngleDeg?: number; openSeconds?: number; closeSeconds?: number; triggerDistance?: number; exterior?: boolean };
+  /** apertureWidth/apertureHeight (ROADMAP_APT D1, resolved decision §6.2): the hole an ON-WALL
+   *  door cuts through a continuous wall, in meters. Sparse EXPLICIT overrides — absent falls
+   *  back to footprint/meshFit-derived defaults (width: footprint[0] x meshFit x-scale; height:
+   *  the 2.1m stand-in panel height x meshFit y-scale — see game/wallaperture.ts's
+   *  apertureSizeFor), so the designer can fix a badly-sized GLB without re-exporting. */
+  door?: { hingeOffset: [number, number]; openAngleDeg?: number; openSeconds?: number; closeSeconds?: number; triggerDistance?: number; exterior?: boolean; apertureWidth?: number; apertureHeight?: number };
   /** Accident-category assets ONLY (§7.3): action ids whose completion on the accident
    *  instance despawns it (e.g. fire's clearedBy: ["extinguish"]). See game/accidents.ts. */
   clearedBy?: string[];
@@ -434,7 +439,21 @@ export interface MapData {
    *  is whichever faces WORLD +X ("east"), side B is -X ("west"). See world.ts buildWorld()'s wall
    *  loop for the face-assignment math. `textureScale` applies to both sides equally. */
   walls: { from: [number, number]; to: [number, number]; texture?: string; textureB?: string | null; textureScale?: number }[];
-  doors: { at: [number, number]; orientation: 'vertical' | 'horizontal'; width?: number; assetId?: string }[];
+  /** TWO placement forms coexist (ROADMAP_APT D1 — both stay valid forever, no auto-migration):
+   *  - GAP-ENCODED (legacy): the doorway is a real gap between two separate `walls[]` segments;
+   *    the door's `at` sits in that gap, on no wall. Rendering/nav are exactly pre-D1.
+   *  - ON-WALL (D1): the SAME entry shape placed with `at` ON a continuous wall segment (same
+   *    orientation as the wall's axis). The wall is derived GEOMETRICALLY at render/bake time —
+   *    no wall index/reference field, mirroring `windows[]`'s "point on a wall" precedent, so
+   *    wall edits never dangle a reference. Unless `cutsWall: false`, world.ts builds that wall
+   *    AROUND the door's aperture (left/right solid segments + lintel — game/wallaperture.ts)
+   *    and nav.ts's door carve opens the pass-through exactly like a gap door.
+   *  `cutsWall` is sparse: absent = true (doors cut by default). `false` = decorative door that
+   *  neither cuts the wall nor carves nav (nav.ts skips its carve). Aperture size comes from the
+   *  door ASSET (AssetDef.door.apertureWidth/apertureHeight, defaults derived from footprint/
+   *  meshFit — see game/wallaperture.ts's apertureSizeFor); `width` here stays what it always
+   *  was: the NAV opening / doorway span (default 1.0m), independent of the visual aperture. */
+  doors: { at: [number, number]; orientation: 'vertical' | 'horizontal'; width?: number; assetId?: string; cutsWall?: boolean }[];
   /** ROADMAP_NEXT item 9: wall openings that are purely visual — a window never affects the nav
    *  grid or wall collision (the wall segment it sits on stays a single unbroken box, unlike a
    *  door which needs its own gap encoded as separate wall segments in `walls[]`; "the opening is

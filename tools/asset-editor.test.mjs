@@ -345,6 +345,15 @@ exteriorCb.checked = true;
 exteriorCb.dispatchEvent(new window.Event('change', { bubbles: true }));
 assert(exteriorCb.checked === true, 'exterior checkbox togglable');
 
+// --- D1 aperture fields (ROADMAP_APT D1): sparse explicit overrides of footprint/meshFit defaults
+const apW = doc.querySelector('input[data-path="door.apertureWidth"]');
+const apH = doc.querySelector('input[data-path="door.apertureHeight"]');
+assert(apW && apH, 'aperture width/height fields rendered on the door card');
+assert(apW.value === '' && apH.value === '', 'aperture fields blank by default (derived defaults)');
+apW.value = '0.9';
+apW.dispatchEvent(new window.Event('input', { bubbles: true }));
+// apertureHeight deliberately left blank — must stay absent in the PUT payload (sparse)
+
 // --- accidents (§7.3): normal (non-accident) asset gets the risk-config section
 doc.querySelector('[data-asset-id="stove"]').click();
 assert(doc.querySelector('.card h2')?.textContent !== undefined, 'stove editor rendered');
@@ -514,6 +523,8 @@ assert(!('openSeconds' in savedLamp.door), 'untouched door.openSeconds stays abs
 assert(!('closeSeconds' in savedLamp.door), 'untouched door.closeSeconds stays absent (sparse, tuning fallback)');
 assert(!('triggerDistance' in savedLamp.door), 'untouched door.triggerDistance stays absent (sparse, tuning fallback)');
 assert(savedLamp.door.exterior === true, 'PUT carries checked door.exterior (ROADMAP_NEXT item 9)');
+assert(savedLamp.door.apertureWidth === 0.9, 'PUT carries explicit door.apertureWidth (D1)');
+assert(!('apertureHeight' in savedLamp.door), 'untouched door.apertureHeight stays absent (sparse, derived default)');
 
 // --- accidents (§7.3): stove's risk config round-trips exactly
 const savedStove = saved.assets.find((a) => a.id === 'stove');

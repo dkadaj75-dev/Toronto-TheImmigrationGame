@@ -108,7 +108,7 @@ const MODE_HELP = {
   objects: 'click to select · drag to move · palette adds',
   floors:  'drag on empty space to draw a floor rectangle · click a floor to edit it',
   walls:   'drag to draw a wall (axis-locked) · click a wall to edit endpoints',
-  doors:   'click on a wall to place a door · drag a door to move it',
+  doors:   'click on a wall to place a door (a continuous wall gets a cut-through aperture — no need to split it) · drag a door to move it',
   windows: 'click on a wall to place a window · drag a window to move it · R flips orientation',
   spawn:   'click to place the spawn point',
 };
@@ -254,6 +254,26 @@ function snapWallObject(p, requested, maxDistance = Infinity) {
   const def = assetById(p.asset);
   if (!def?.wallMounted) return { pos: [requested[0], requested[1]], rotDeg: p.rotDeg };
   return window.PlacementBridge?.snapWallMounted(requested, def, state.doc, maxDistance) ?? null;
+}
+
+// D1: human-readable aperture summary for the door inspector. The actual sizing math lives in
+// game/wallaperture.ts (apertureSizeFor) and is reached through window.ApertureBridge (module
+// script below) - never reimplemented here. Headless (jsdom, no bridge) falls back to showing
+// the asset's EXPLICIT fields only, labeling derived ones without computing them.
+function apertureInfoText(d) {
+  if (d.cutsWall === false) return 'aperture: none (cuts wall is off - decorative door)';
+  const def = d.assetId ? assetById(d.assetId) : undefined;
+  const fmt = (n) => String(Number(Number(n).toFixed(3)));
+  const explicitW = def?.door?.apertureWidth;
+  const explicitH = def?.door?.apertureHeight;
+  const size = window.ApertureBridge?.apertureSizeFor?.(def, d);
+  const wPart = explicitW != null
+    ? `width ${fmt(explicitW)} m (explicit)`
+    : `width ${size ? fmt(size.width) + ' m ' : ''}(derived: footprint x meshFit)`;
+  const hPart = explicitH != null
+    ? `height ${fmt(explicitH)} m (explicit)`
+    : `height ${size ? fmt(size.height) + ' m ' : ''}(derived: 2.1 m panel x meshFit)`;
+  return `aperture: ${wPart}, ${hPart} - override via the door asset's Door card (Asset Editor)`;
 }
 
 function objectRect(p) {
@@ -884,10 +904,35 @@ function renderInspector() {
     doorAssetSel.addEventListener('change', () => {
       pushUndo();
       if (doorAssetSel.value) d.assetId = doorAssetSel.value; else delete d.assetId;
-      markDirty(); redraw();
+      markDirty(); renderInspector(); redraw(); // re-render refreshes the D1 aperture readout
     });
     doorAssetRow.append(doorAssetLabel, doorAssetSel);
     host.appendChild(doorAssetRow);
+    // D1 (door-in-plain-wall): a door placed ON a continuous wall cuts a pass-through aperture
+    // by default (no need to split the wall into gap segments any more); uncheck to keep the
+    // wall solid (decorative door - it also stops carving the nav grid). Sparse: checked deletes
+    // the key (absent = true), only `false` is ever written. Gap-encoded doors are unaffected
+    // either way (they sit on no wall, so there is nothing to cut).
+    const cutsRow = document.createElement('div'); cutsRow.className = 'field';
+    const cutsLabel = document.createElement('label'); cutsLabel.textContent = 'cuts wall (pass-through hole)';
+    const cutsInput = document.createElement('input'); cutsInput.type = 'checkbox';
+    cutsInput.dataset.field = 'door.cutsWall';
+    cutsInput.checked = d.cutsWall !== false;
+    cutsInput.addEventListener('change', () => {
+      pushUndo();
+      if (cutsInput.checked) delete d.cutsWall; else d.cutsWall = false;
+      markDirty(); renderInspector(); redraw(); // re-render refreshes the aperture readout
+    });
+    cutsRow.append(cutsLabel, cutsInput);
+    host.appendChild(cutsRow);
+    // D1 aperture readout (read-only): the hole is sized by the door ASSET - explicit
+    // door.apertureWidth/apertureHeight (Asset Editor, Door card) beat footprint/meshFit-derived
+    // defaults. Real numbers come from game/wallaperture.ts through the module bridge (never
+    // reimplemented); without the bridge (jsdom) only the explicit fields are shown.
+    const apInfo = document.createElement('div'); apInfo.className = 'hint';
+    apInfo.dataset.field = 'door.apertureInfo';
+    apInfo.textContent = apertureInfoText(d);
+    host.appendChild(apInfo);
     host.appendChild(del);
   } else if (s.kind === 'window') {
     const w = doc.windows[s.index];
@@ -1025,6 +1070,9 @@ boot();
 // Nav overlay — the game's own nav module via Vite (never a reimplementation).
 import { bakeNavGrid } from '/game/nav.ts';
 import { snapWallMountedPlacement } from '/game/buymode.ts';
+import { apertureSizeFor } from '/game/wallaperture.ts';
+// D1: the door inspector's aperture readout resolves through the game's own sizing math.
+window.ApertureBridge = { apertureSizeFor };
 window.PlacementBridge = {
   snapWallMounted(requested, def, map, maxDistance) {
     return snapWallMountedPlacement(requested, def, map.walls, map.floors, map.gridSize, maxDistance);

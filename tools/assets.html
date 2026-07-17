@@ -853,6 +853,20 @@ function renderEditor() {
       (v) => { if (v === undefined) { if (a.door) delete a.door.triggerDistance; } else ensureDoor().triggerDistance = v; },
       'door.triggerDistance',
     )));
+    // ROADMAP_APT D1 (resolved decision §6.2): the hole an ON-WALL door cuts through a continuous
+    // wall. Sparse explicit overrides — blank falls back to the footprint/meshFit-derived defaults
+    // (width: footprint[0] x meshFit x-scale; height: 2.1m stand-in panel x meshFit y-scale — see
+    // game/wallaperture.ts's apertureSizeFor), so a badly-sized GLB is fixable without re-export.
+    card4c.appendChild(frow('aperture width m (blank = footprint-derived)', numInput(
+      () => a.door?.apertureWidth,
+      (v) => { if (v === undefined) { if (a.door) delete a.door.apertureWidth; } else ensureDoor().apertureWidth = v; },
+      'door.apertureWidth',
+    )));
+    card4c.appendChild(frow('aperture height m (blank = 2.1m default)', numInput(
+      () => a.door?.apertureHeight,
+      (v) => { if (v === undefined) { if (a.door) delete a.door.apertureHeight; } else ensureDoor().apertureHeight = v; },
+      'door.apertureHeight',
+    )));
     // ROADMAP_NEXT item 9: exterior doors never open/close on path-crossing (game/doors.ts skips
     // them in the tick) — they're tappable interactables instead. Sparse: absent = false/interior.
     card4c.appendChild(frow('exterior (tappable interactable, never opens/closes automatically)', checkInput(

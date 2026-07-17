@@ -12,6 +12,7 @@ import { resolveWindowConfig, windowFacePositions, windowPaneRect } from './wind
 import { wallCutShownHeight } from './wallview';
 import { resolveAssetLight } from './assetstate';
 import { resolveMetersPerTile, effectiveMetersPerTile, textureRepeat, polygonBounds } from './textures';
+import { aperturesForWall, wallSegments, lintelVisibleUnderCut } from './wallaperture';
 
 // ------------------------------------------------------------------ GLB furniture
 // Templates are cached per URL and cloned per placement; clones share geometry/materials
@@ -290,66 +291,81 @@ export function buildWorld(data: GameData, trackInitialLoad?: TrackInitialLoad):
     root.add(mesh);
   }
 
-  // --- walls (with door gaps already encoded as separate segments in the data) ---
+  // --- walls: either door gaps encoded as separate segments in the data (legacy form), or
+  // continuous walls that D1 ON-WALL doors cut apertures through (game/wallaperture.ts). A wall
+  // with no cutting doors produces exactly ONE full-size segment — byte-identical to the pre-D1
+  // single-box path; a cut wall is rebuilt from left/right solid segments + a lintel above each
+  // aperture, pure box arithmetic (no CSG). EVERY segment carries the wall's full material
+  // behavior: per-side texture/textureB, the shared black top, and the wall-cut view userData.
   const wallMat = new THREE.MeshLambertMaterial({ color: 0xf0ead9 });
   // Designer request (B9-1 follow-up): every wall's TOP face renders flat black — no texture, no
   // lighting shading — for an "architecture plan" look in the wall-cut view. MeshBasicMaterial is
   // unlit so it can't be shaded; one shared instance across all walls (never mutated per-wall).
   const wallTopMat = new THREE.MeshBasicMaterial({ color: data.tuning.view?.wallTopColor ?? '#000000' });
   const WALL_H = 2.5, WALL_T = 0.12;
+  const doorDefFor = (assetId: string | undefined) => (assetId ? byId.get(assetId) : undefined);
   for (const wall of map.walls) {
     const [x1, z1] = wall.from, [x2, z2] = wall.to;
     const len = Math.hypot(x2 - x1, z2 - z1);
     const dx = x2 - x1, dz = z2 - z1;
-    const geo = new THREE.BoxGeometry(len, WALL_H, WALL_T);
-    // A textured wall gets its own material so the swap doesn't hit the shared color wallMat.
-    // Every wall always gets a 6-entry material array — BoxGeometry's default face groups are
-    // [+x,-x,+y,-y,+z,-z] (indices 0..5); the wall's two BIG faces are the local +z/-z ones
-    // (index 4/5), since the box is long in x (length) and thin in z (WALL_T). Index 2 (+y, top)
-    // is always the shared flat-black wallTopMat regardless of texture/textureB; index 3 (-y,
-    // bottom) stays side A, same as the edge faces.
-    let matA: THREE.MeshLambertMaterial | undefined;
-    let matB: THREE.MeshLambertMaterial | undefined;
-    let sideA: THREE.Material;
-    // textureB semantics: undefined = same as side A (single material); a path = that texture on
-    // side B; null = side B stays PLAIN COLOR even though side A is textured ("(none)" in the tool).
-    if (wall.textureB !== undefined) {
-      matA = new THREE.MeshLambertMaterial({ color: 0xf0ead9 });
-      matB = new THREE.MeshLambertMaterial({ color: 0xf0ead9 });
-      sideA = matA;
-    } else {
-      sideA = wall.texture ? new THREE.MeshLambertMaterial({ color: 0xf0ead9 }) : wallMat;
-      if (wall.texture) matA = sideA as THREE.MeshLambertMaterial;
+    const ux = len > 0 ? dx / len : 0, uz = len > 0 ? dz / len : 0;
+    const mpt = effectiveMetersPerTile(metersPerTile, wall.textureScale); // per-surface scale follow-up
+    // Which local face (+z or -z) is "side A" depends on the wall's actual placement, not on
+    // from/to point order: local +z's world-space outward normal, after mesh.rotation.y below,
+    // is (-dz/len, dx/len) in the world XZ plane (see game/data.ts walls doc for the A/B
+    // convention). Horizontal wall (runs mostly along X) → normal is mostly along Z, A = the
+    // face pointing world +Z ("south"). Vertical wall (runs mostly along Z) → normal is mostly
+    // along X, A = the face pointing world +X ("east"). Shared by every segment of this wall.
+    const horizontal = Math.abs(dx) >= Math.abs(dz);
+    const localPlusZFacesA = horizontal ? ux > 0 : -uz > 0;
+    const apertures = aperturesForWall(wall, map.doors, doorDefFor, WALL_H);
+    for (const seg of wallSegments(len, WALL_H, apertures)) {
+      const geo = new THREE.BoxGeometry(seg.alongLength, seg.height, WALL_T);
+      // A textured segment gets its own material so the swap doesn't hit the shared color wallMat
+      // (and each segment's repeat differs with its dimensions, so materials are per-SEGMENT).
+      // Every segment always gets a 6-entry material array — BoxGeometry's default face groups are
+      // [+x,-x,+y,-y,+z,-z] (indices 0..5); the wall's two BIG faces are the local +z/-z ones
+      // (index 4/5), since the box is long in x (length) and thin in z (WALL_T). Index 2 (+y, top)
+      // is always the shared flat-black wallTopMat regardless of texture/textureB; index 3 (-y,
+      // bottom) stays side A, same as the edge faces.
+      let matA: THREE.MeshLambertMaterial | undefined;
+      let matB: THREE.MeshLambertMaterial | undefined;
+      let sideA: THREE.Material;
+      // textureB semantics: undefined = same as side A (single material); a path = that texture on
+      // side B; null = side B stays PLAIN COLOR even though side A is textured ("(none)" in the tool).
+      if (wall.textureB !== undefined) {
+        matA = new THREE.MeshLambertMaterial({ color: 0xf0ead9 });
+        matB = new THREE.MeshLambertMaterial({ color: 0xf0ead9 });
+        sideA = matA;
+      } else {
+        sideA = wall.texture ? new THREE.MeshLambertMaterial({ color: 0xf0ead9 }) : wallMat;
+        if (wall.texture) matA = sideA as THREE.MeshLambertMaterial;
+      }
+      const materials: THREE.Material[] = [sideA, sideA, wallTopMat, sideA, sideA, sideA];
+      if (matB) {
+        materials[4] = localPlusZFacesA ? matA! : matB; // local +z
+        materials[5] = localPlusZFacesA ? matB : matA!; // local -z
+      }
+      const mesh = new THREE.Mesh(geo, materials);
+      mesh.position.set(x1 + ux * seg.alongCenter, seg.yCenter, z1 + uz * seg.alongCenter);
+      mesh.rotation.y = -Math.atan2(dz, dx);
+      // Wall-cut view: solid segments are ground-to-top boxes and scale exactly like a whole wall
+      // (same 'wall' tag + full height). A lintel hangs above the aperture, so it HIDES under the
+      // cut instead (window precedent) — see wallaperture.ts's lintelVisibleUnderCut.
+      mesh.userData.wallCutVisual = seg.kind === 'lintel' ? 'lintel' : 'wall';
+      mesh.userData.wallCutFullHeight = WALL_H;
+      mesh.castShadow = true;
+      if (wall.texture || wall.textureB) {
+        // Repeat comes from THIS SEGMENT's dimensions so tiling stays physical on every box; a
+        // solid segment's v-repeat still spans the FULL height (its height IS WALL_H) and the
+        // wall-cut view just compresses it vertically with the geometry — acceptable per B9-1
+        // (documented, not re-mapped). A lintel's v-repeat spans its own (shorter) height.
+        const repeat: [number, number] = [textureRepeat(seg.alongLength, mpt), textureRepeat(seg.height, mpt)];
+        if (wall.texture && matA) applySurfaceTexture(matA, normalizeMeshUrl(wall.texture), repeat, trackInitialLoad);
+        if (wall.textureB && matB) applySurfaceTexture(matB, normalizeMeshUrl(wall.textureB), repeat, trackInitialLoad);
+      }
+      root.add(mesh);
     }
-    const materials: THREE.Material[] = [sideA, sideA, wallTopMat, sideA, sideA, sideA];
-    if (matB) {
-      // Which local face (+z or -z) is "side A" depends on the wall's actual placement, not on
-      // from/to point order: local +z's world-space outward normal, after mesh.rotation.y below,
-      // is (-dz/len, dx/len) in the world XZ plane (see game/data.ts walls doc for the A/B
-      // convention). Horizontal wall (runs mostly along X) → normal is mostly along Z, A = the
-      // face pointing world +Z ("south"). Vertical wall (runs mostly along Z) → normal is mostly
-      // along X, A = the face pointing world +X ("east").
-      const horizontal = Math.abs(dx) >= Math.abs(dz);
-      const localPlusZFacesA = horizontal ? (dx / len) > 0 : (-dz / len) > 0;
-      materials[4] = localPlusZFacesA ? matA! : matB; // local +z
-      materials[5] = localPlusZFacesA ? matB : matA!; // local -z
-    }
-    const mat = materials;
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set((x1 + x2) / 2, WALL_H / 2, (z1 + z2) / 2);
-    mesh.rotation.y = -Math.atan2(z2 - z1, x2 - x1);
-    mesh.userData.wallCutVisual = 'wall';
-    mesh.userData.wallCutFullHeight = WALL_H;
-    mesh.castShadow = true;
-    if (wall.texture || wall.textureB) {
-      // v-repeat from FULL height (WALL_H); the wall-cut view scales the geometry down, which just
-      // compresses the texture vertically with it — acceptable per B9-1 (documented, not re-mapped).
-      const mpt = effectiveMetersPerTile(metersPerTile, wall.textureScale); // per-surface scale follow-up
-      const repeat: [number, number] = [textureRepeat(len, mpt), textureRepeat(WALL_H, mpt)];
-      if (wall.texture && matA) applySurfaceTexture(matA, normalizeMeshUrl(wall.texture), repeat, trackInitialLoad);
-      if (wall.textureB && matB) applySurfaceTexture(matB, normalizeMeshUrl(wall.textureB), repeat, trackInitialLoad);
-    }
-    root.add(mesh);
   }
 
   // --- doors: a bare frame-marker box UNLESS the door links to a door-capable asset (has an
@@ -440,6 +456,13 @@ export function applyWallCutView(root: THREE.Group, active: boolean, requestedHe
     const kind = object.userData.wallCutVisual as string | undefined;
     if (kind === 'window') {
       object.visible = !active;
+      return;
+    }
+    // D1: a lintel segment hangs entirely above its door aperture — scaling it from the ground
+    // would drop a floating slab into the doorway, so it hides like a window instead (pure
+    // decision in game/wallaperture.ts's lintelVisibleUnderCut, headless-tested).
+    if (kind === 'lintel') {
+      object.visible = lintelVisibleUnderCut(active);
       return;
     }
     const fullHeight = object.userData.wallCutFullHeight as number | undefined;

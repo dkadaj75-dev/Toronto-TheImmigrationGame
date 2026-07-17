@@ -55,6 +55,21 @@ const pointer = (type, worldX, worldZ) => {
   doc.getElementById('canvas').dispatchEvent(new window.MouseEvent(type, { clientX: px, clientY: py, bubbles: true }));
 };
 
+// Derive a placement spot on a VERTICAL wall from the LIVE map, clear of existing doors/windows
+// (self-deriving fixture rule — hardcoded wall coordinates broke under designer map edits).
+function verticalWallSpot() {
+  const clearOf = [...st.doc.doors.map((d) => d.at), ...(st.doc.windows ?? []).map((w) => w.at)];
+  for (const w of st.doc.walls) {
+    if (Math.abs(w.to[0] - w.from[0]) >= Math.abs(w.to[1] - w.from[1])) continue; // vertical walls only
+    const x = w.from[0];
+    const zLo = Math.min(w.from[1], w.to[1]), zHi = Math.max(w.from[1], w.to[1]);
+    for (let z = zLo + 0.5; z <= zHi - 0.5 + 1e-9; z += 0.25) {
+      if (clearOf.every(([ax, az]) => Math.hypot(ax - x, az - z) > 1.5)) return { x, z };
+    }
+  }
+  return null;
+}
+
 // ------------------------------------------------------------------ boot & palette
 console.log('map-editor.test — boot');
 check('map loaded', st.doc?.id === 'condo' && st.mapId === 'condo');
@@ -75,49 +90,59 @@ console.log('map-editor.test — objects: hit test / snap / drag / rotate / dele
     if (rot === 90 || rot === 270) [w, d] = [d, w];
     return { xmin: p.pos[0] - w / 2, xmax: p.pos[0] + w / 2, zmin: p.pos[1] - d / 2, zmax: p.pos[1] + d / 2 };
   };
-  const sofaObj = st.doc.placedObjects.find((p) => p.asset === 'sofa');
-  const sofaSpan = spanOf(sofaObj);
-  const insideSofa = [(sofaSpan.xmin + sofaSpan.xmax) / 2, (sofaSpan.zmin + sofaSpan.zmax) / 2];
-  check('hit inside footprint', ME.hitTest(...insideSofa)?.kind === 'object' && st.doc.placedObjects[ME.hitTest(...insideSofa).index].asset === 'sofa');
+  // Probe objects are DERIVED from whatever the designer currently has placed (self-deriving
+  // fixture rule) — never a named asset like 'sofa' (deleted from the live map once already).
+  // Skip wall-mounted assets (rotation is blocked for them) for the rotate/drag probe.
+  const isWallMounted = (assetId) => !!assets.assets.find((a) => a.id === assetId)?.wallMounted;
+  const probeObj = st.doc.placedObjects.find((p) => !isWallMounted(p.asset));
+  check('live map has a non-wall-mounted placed object to probe', !!probeObj);
+  const probeSpan = spanOf(probeObj);
+  const insideProbe = [(probeSpan.xmin + probeSpan.xmax) / 2, (probeSpan.zmin + probeSpan.zmax) / 2];
+  const probeHit = ME.hitTest(...insideProbe);
+  check('hit inside footprint', probeHit?.kind === 'object' && st.doc.placedObjects[probeHit.index] === probeObj);
   // a point well outside every placed object's footprint (bounds start at 0,0; go negative)
   check('miss outside footprint', ME.hitTest(-5, -5) === null);
-  // rotation-aware: bed's footprint swaps axes when rotDeg is 90/270
-  const bedObj = st.doc.placedObjects.find((p) => p.asset === 'bed');
-  const bedSpan = spanOf(bedObj);
-  const insideBed = [(bedSpan.xmin + bedSpan.xmax) / 2, (bedSpan.zmin + bedSpan.zmax) / 2];
-  const bedHit = ME.hitTest(...insideBed);
-  check('rotation-aware hit (bed rot 90 swaps axes)', bedHit && st.doc.placedObjects[bedHit.index].asset === 'bed');
+  // rotation-aware: a rotated object's footprint swaps axes when rotDeg is 90/270 (spanOf above
+  // applies the same rule, so this holds for whatever rotation the live object carries)
+  const rotObj = st.doc.placedObjects.find((p) => {
+    const rot = ((p.rotDeg % 360) + 360) % 360;
+    return (rot === 90 || rot === 270) && !isWallMounted(p.asset);
+  }) ?? probeObj;
+  const rotSpan = spanOf(rotObj);
+  const insideRot = [(rotSpan.xmin + rotSpan.xmax) / 2, (rotSpan.zmin + rotSpan.zmax) / 2];
+  const rotHit = ME.hitTest(...insideRot);
+  check('rotation-aware hit (rot 90/270 swaps axes)', !!rotHit && st.doc.placedObjects[rotHit.index] === rotObj);
   check('placement snap is explicit 0.25m, independent of gridSize', ME.snapPoint(1.13, 3.87).join(',') === '1.25,3.75');
   check('rot normalization 450→90', ME.normRot(450) === 90);
   check('rot normalization -90→270', ME.normRot(-90) === 270);
 
-  // drag the sofa (pointerdown exactly on its actual pos so the drag anchor offset is 0)
-  pointer('pointerdown', sofaObj.pos[0], sofaObj.pos[1]);
-  check('pointerdown selects', st.sel?.kind === 'object' && st.doc.placedObjects[st.sel.index].asset === 'sofa');
-  const dragTarget = [sofaObj.pos[0] + 1.63, sofaObj.pos[1] + 2.36];
+  // drag the probe (pointerdown exactly on its actual pos so the drag anchor offset is 0)
+  pointer('pointerdown', probeObj.pos[0], probeObj.pos[1]);
+  check('pointerdown selects', st.sel?.kind === 'object' && st.doc.placedObjects[st.sel.index] === probeObj);
+  const dragTarget = [probeObj.pos[0] + 1.63, probeObj.pos[1] + 2.36];
   pointer('pointermove', ...dragTarget);
   pointer('pointerup', ...dragTarget);
   const expectedSnap = ME.snapPoint(...dragTarget).join(',');
-  const sofa = st.doc.placedObjects.find((p) => p.asset === 'sofa');
-  check(`drag moves with snap ${expectedSnap}`, sofa.pos.join(',') === expectedSnap, sofa.pos.join(','));
+  check(`drag moves with snap ${expectedSnap}`, probeObj.pos.join(',') === expectedSnap, probeObj.pos.join(','));
   check('drag marks dirty', st.dirty === true);
 
   // inspector round-trip incl. rot normalization
   const rotInput = doc.querySelector('input[data-field="obj.rot"]');
   rotInput.value = '450';
   rotInput.dispatchEvent(new window.Event('change', { bubbles: true }));
-  check('inspector rot round-trip 450→90', sofa.rotDeg === 90);
+  check('inspector rot round-trip 450→90', probeObj.rotDeg === 90);
 
   ME.rotateSelected();
-  check('R rotates +90', sofa.rotDeg === 180);
+  check('R rotates +90', probeObj.rotDeg === 180);
 
   const before = st.doc.placedObjects.length;
   ME.deleteSelected();
   check('delete removes object', st.doc.placedObjects.length === before - 1 && st.sel === null);
 
-  // palette add
-  doc.querySelector('#palette .item[data-asset="armchair"]').click();
-  check('palette adds at snapped center + selects', st.doc.placedObjects.at(-1).asset === 'armchair' && st.sel?.kind === 'object');
+  // palette add — any non-wall-mounted asset from the live asset list (self-deriving)
+  const paletteAsset = assets.assets.find((a) => !a.wallMounted).id;
+  doc.querySelector(`#palette .item[data-asset="${paletteAsset}"]`).click();
+  check('palette adds at snapped center + selects', st.doc.placedObjects.at(-1).asset === paletteAsset && st.sel?.kind === 'object');
 }
 
 // B6-13: jsdom cannot execute the module import, so inject the same bridge surface and verify the
@@ -241,14 +266,21 @@ console.log('map-editor.test — walls: draw axis-locked / select / edit / delet
   check('drag creates a wall', st.doc.walls.length === before + 1);
   const w = st.doc.walls.at(-1);
   check('wall axis-locked + snapped', w.from.join(',') === '1,11' && w.to.join(',') === '3.5,11', `${w.from} → ${w.to}`);
-  // select an existing wall (top boundary y=0) and edit an endpoint
-  pointer('pointerdown', 5, 0.05);
+  // select an existing wall and edit an endpoint — the wall and click point are DERIVED from the
+  // live map (longest mostly-horizontal wall, clicked at its midpoint) per the self-deriving rule
+  const horizWalls = st.doc.walls
+    .map((wl, i) => ({ wl, i, len: Math.abs(wl.to[0] - wl.from[0]) }))
+    .filter(({ wl }) => Math.abs(wl.to[0] - wl.from[0]) > Math.abs(wl.to[1] - wl.from[1]))
+    .sort((a, b) => b.len - a.len);
+  const target = horizWalls[0];
+  pointer('pointerdown', (target.wl.from[0] + target.wl.to[0]) / 2, target.wl.from[1] + 0.05);
   check('click near wall selects it', st.sel?.kind === 'wall');
   const fx = doc.querySelector('input[data-field="wall.fx"]');
-  fx.value = '0.5';
+  const originalFx = st.doc.walls[st.sel.index].from[0];
+  fx.value = String(originalFx + 0.5);
   fx.dispatchEvent(new window.Event('change', { bubbles: true }));
-  check('endpoint editable', st.doc.walls[st.sel.index].from[0] === 0.5);
-  st.doc.walls[st.sel.index].from[0] = 0; // restore for later door test
+  check('endpoint editable', st.doc.walls[st.sel.index].from[0] === originalFx + 0.5);
+  st.doc.walls[st.sel.index].from[0] = originalFx; // restore the live value for later tests
   const count = st.doc.walls.length;
   st.sel = { kind: 'wall', index: st.doc.walls.length - 1 };
   ME.deleteSelected();
@@ -308,24 +340,27 @@ console.log('map-editor.test — doors: place on wall / inferred orientation / m
 {
   ME.setMode('doors');
   const before = st.doc.doors.length;
-  // click near the vertical kitchen wall segment (9, 0→2.5)
-  pointer('pointerdown', 9.15, 1.32);
-  pointer('pointerup', 9.15, 1.32);
+  // click near a vertical wall — spot derived from the live map (self-deriving rule)
+  const spot = verticalWallSpot();
+  check('live map offers a clear vertical-wall spot', !!spot);
+  pointer('pointerdown', spot.x + 0.15, spot.z);
+  pointer('pointerup', spot.x + 0.15, spot.z);
   check('click near wall places a door', st.doc.doors.length === before + 1);
   const d = st.doc.doors.at(-1);
-  const doorStart = ME.snapPoint(9, 1.32);
-  check('door snapped onto the wall line', d.at[0] === 9 && d.at[1] === doorStart[1], d.at.join(','));
+  const doorStart = ME.snapPoint(spot.x, spot.z);
+  check('door snapped onto the wall line', d.at[0] === spot.x && d.at[1] === doorStart[1], d.at.join(','));
   check('orientation inferred from wall axis', d.orientation === 'vertical');
-  // clicking far from any wall does nothing
-  pointer('pointerdown', 2, 12);
-  pointer('pointerup', 2, 12);
+  // clicking far from any wall does nothing (deep in the extended empty zone)
+  pointer('pointerdown', 2, 13.5);
+  pointer('pointerup', 2, 13.5);
   check('no door in open space', st.doc.doors.length === before + 1);
   // move an existing door by drag
   ME.setMode('doors');
   pointer('pointerdown', ...d.at);
-  pointer('pointermove', 9.03, 2.04);
-  pointer('pointerup', 9.03, 2.04);
-  check('door draggable with snap', st.doc.doors.at(-1).at[1] === ME.snapPoint(9, 2.04)[1], st.doc.doors.at(-1).at.join(','));
+  const dragZ = spot.z + 0.72;
+  pointer('pointermove', spot.x + 0.03, dragZ);
+  pointer('pointerup', spot.x + 0.03, dragZ);
+  check('door draggable with snap', st.doc.doors.at(-1).at[1] === ME.snapPoint(spot.x, dragZ)[1], st.doc.doors.at(-1).at.join(','));
   st.sel = { kind: 'door', index: st.doc.doors.length - 1 };
   ME.rotateSelected();
   check('R toggles orientation', st.doc.doors.at(-1).orientation === 'horizontal');
@@ -338,23 +373,74 @@ console.log('map-editor.test — door asset dropdown (assetId round-trip)');
 {
   ME.setMode('doors');
   const before = st.doc.doors.length;
-  pointer('pointerdown', 9.15, 1.32);
-  pointer('pointerup', 9.15, 1.32);
+  const spot = verticalWallSpot();
+  pointer('pointerdown', spot.x + 0.15, spot.z);
+  pointer('pointerup', spot.x + 0.15, spot.z);
   const sel = doc.querySelector('select[data-field="door.assetId"]');
   check('door asset dropdown renders, defaulting to (none)', !!sel && sel.value === '');
   const doorAssets = assets.assets.filter((a) => a.category === 'door').map((a) => a.id);
   const offered = [...sel.options].slice(1).map((o) => o.value); // skip the "(none)" option
   check('dropdown offers exactly the door-category assets', doorAssets.length > 0 && offered.length === doorAssets.length && doorAssets.every((id) => offered.includes(id)), offered.join(','));
 
-  sel.value = 'door_basic';
+  sel.value = doorAssets[0];
   sel.dispatchEvent(new window.Event('change', { bubbles: true }));
-  check('picking an asset sets doors[].assetId', st.doc.doors.at(-1).assetId === 'door_basic');
+  check('picking an asset sets doors[].assetId', st.doc.doors.at(-1).assetId === doorAssets[0]);
 
-  sel.value = '';
-  sel.dispatchEvent(new window.Event('change', { bubbles: true }));
+  const sel2 = doc.querySelector('select[data-field="door.assetId"]'); // inspector re-renders on change
+  sel2.value = '';
+  sel2.dispatchEvent(new window.Event('change', { bubbles: true }));
   check('picking (none) removes assetId — back to a bare opening', !('assetId' in st.doc.doors.at(-1)));
 
   ME.deleteSelected(); // clean up the test door
+  check('cleanup: door count restored', st.doc.doors.length === before);
+}
+
+// ------------------------------------------------------------------ D1: door-in-plain-wall
+console.log('map-editor.test — D1: cuts-wall checkbox + aperture readout (on-wall form)');
+{
+  ME.setMode('doors');
+  const before = st.doc.doors.length;
+  // The on-wall form IS the ordinary door placement (same entry shape) — this spot sits on a
+  // CONTINUOUS live wall, derived from live map data like every other fixture here.
+  const spot = verticalWallSpot();
+  pointer('pointerdown', spot.x + 0.15, spot.z);
+  pointer('pointerup', spot.x + 0.15, spot.z);
+  const d = st.doc.doors.at(-1);
+
+  const cuts = doc.querySelector('input[data-field="door.cutsWall"]');
+  check('cuts-wall checkbox renders checked by default', !!cuts && cuts.checked === true);
+  check('no cutsWall key while checked (sparse — absent = true)', !('cutsWall' in d));
+  cuts.checked = false;
+  cuts.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('unchecking writes cutsWall: false', d.cutsWall === false);
+  check('aperture readout reports the decorative state',
+    doc.querySelector('div[data-field="door.apertureInfo"]')?.textContent.includes('decorative'));
+  const cuts2 = doc.querySelector('input[data-field="door.cutsWall"]');
+  cuts2.checked = true;
+  cuts2.dispatchEvent(new window.Event('change', { bubbles: true }));
+  check('re-checking deletes the key (sparse)', !('cutsWall' in d));
+
+  // aperture readout: derived labels without explicit asset fields; explicit values shown when
+  // the door ASSET carries door.apertureWidth (in-memory asset tweak — never saved by this tool)
+  const doorAssets = assets.assets.filter((a) => a.category === 'door').map((a) => a.id);
+  let sel = doc.querySelector('select[data-field="door.assetId"]');
+  sel.value = doorAssets[0];
+  sel.dispatchEvent(new window.Event('change', { bubbles: true }));
+  const infoDerived = doc.querySelector('div[data-field="door.apertureInfo"]')?.textContent ?? '';
+  check('readout labels footprint/meshFit-derived dims when no explicit fields exist',
+    infoDerived.includes('derived'), infoDerived);
+  const liveDef = st.assets.assets.find((a) => a.id === doorAssets[0]);
+  const hadDoorBlock = !!liveDef.door;
+  (liveDef.door ??= { hingeOffset: [0, 0] }).apertureWidth = 0.9;
+  sel = doc.querySelector('select[data-field="door.assetId"]');
+  sel.dispatchEvent(new window.Event('change', { bubbles: true })); // re-render with the tweak
+  const infoExplicit = doc.querySelector('div[data-field="door.apertureInfo"]')?.textContent ?? '';
+  check('readout shows the explicit apertureWidth override',
+    infoExplicit.includes('0.9') && infoExplicit.includes('explicit'), infoExplicit);
+  delete liveDef.door.apertureWidth; // undo the in-memory tweak
+  if (!hadDoorBlock) delete liveDef.door;
+
+  ME.deleteSelected();
   check('cleanup: door count restored', st.doc.doors.length === before);
 }
 
@@ -364,24 +450,26 @@ console.log('map-editor.test — windows: place on wall / inferred orientation /
   check('windows array normalized on load', Array.isArray(st.doc.windows));
   ME.setMode('windows');
   const before = st.doc.windows.length;
-  // click near the same vertical kitchen wall segment used by the doors test above
-  pointer('pointerdown', 9.15, 1.32);
-  pointer('pointerup', 9.15, 1.32);
+  // click near a vertical wall — spot derived from the live map (self-deriving rule)
+  const spot = verticalWallSpot();
+  pointer('pointerdown', spot.x + 0.15, spot.z);
+  pointer('pointerup', spot.x + 0.15, spot.z);
   check('click near wall places a window', st.doc.windows.length === before + 1);
   const w = st.doc.windows.at(-1);
-  const windowStart = ME.snapPoint(9, 1.32);
-  check('window snapped onto the wall line', w.at[0] === 9 && w.at[1] === windowStart[1], w.at.join(','));
+  const windowStart = ME.snapPoint(spot.x, spot.z);
+  check('window snapped onto the wall line', w.at[0] === spot.x && w.at[1] === windowStart[1], w.at.join(','));
   check('orientation inferred from wall axis', w.orientation === 'vertical');
   // clicking far from any wall does nothing
-  pointer('pointerdown', 2, 12);
-  pointer('pointerup', 2, 12);
+  pointer('pointerdown', 2, 13.5);
+  pointer('pointerup', 2, 13.5);
   check('no window in open space', st.doc.windows.length === before + 1);
   // move an existing window by drag
   ME.setMode('windows');
   pointer('pointerdown', ...w.at);
-  pointer('pointermove', 9.03, 2.04);
-  pointer('pointerup', 9.03, 2.04);
-  check('window draggable with snap', st.doc.windows.at(-1).at[1] === ME.snapPoint(9, 2.04)[1], st.doc.windows.at(-1).at.join(','));
+  const dragZ = spot.z + 0.72;
+  pointer('pointermove', spot.x + 0.03, dragZ);
+  pointer('pointerup', spot.x + 0.03, dragZ);
+  check('window draggable with snap', st.doc.windows.at(-1).at[1] === ME.snapPoint(spot.x, dragZ)[1], st.doc.windows.at(-1).at.join(','));
   st.sel = { kind: 'window', index: st.doc.windows.length - 1 };
   ME.rotateSelected();
   check('R flips orientation', st.doc.windows.at(-1).orientation === 'horizontal');
@@ -393,14 +481,15 @@ console.log('map-editor.test — window inspector: x/z/orientation/width/assetId
 {
   ME.setMode('windows');
   const before = st.doc.windows.length;
-  pointer('pointerdown', 9.15, 1.32);
-  pointer('pointerup', 9.15, 1.32);
+  const spot = verticalWallSpot();
+  pointer('pointerdown', spot.x + 0.15, spot.z);
+  pointer('pointerup', spot.x + 0.15, spot.z);
 
   const xInput = doc.querySelector('input[data-field="window.x"]');
-  check('x field renders with the placed value', !!xInput && Number(xInput.value) === 9);
-  xInput.value = '9.5';
+  check('x field renders with the placed value', !!xInput && Number(xInput.value) === spot.x);
+  xInput.value = String(spot.x + 0.5);
   xInput.dispatchEvent(new window.Event('change', { bubbles: true }));
-  check('x editable', st.doc.windows.at(-1).at[0] === 9.5);
+  check('x editable', st.doc.windows.at(-1).at[0] === spot.x + 0.5);
 
   const orientSel = doc.querySelector('select[data-field="window.orientation"]');
   check('orientation dropdown renders', !!orientSel && orientSel.value === 'vertical');
@@ -422,9 +511,9 @@ console.log('map-editor.test — window inspector: x/z/orientation/width/assetId
   const windowAssets = assets.assets.filter((a) => a.category === 'window').map((a) => a.id);
   const offered = [...assetSel.options].slice(1).map((o) => o.value);
   check('dropdown offers exactly the window-category assets', windowAssets.length > 0 && offered.length === windowAssets.length && windowAssets.every((id) => offered.includes(id)), offered.join(','));
-  assetSel.value = 'window_basic';
+  assetSel.value = windowAssets[0];
   assetSel.dispatchEvent(new window.Event('change', { bubbles: true }));
-  check('picking an asset sets windows[].assetId', st.doc.windows.at(-1).assetId === 'window_basic');
+  check('picking an asset sets windows[].assetId', st.doc.windows.at(-1).assetId === windowAssets[0]);
   assetSel.value = '';
   assetSel.dispatchEvent(new window.Event('change', { bubbles: true }));
   check('picking (none) removes assetId', !('assetId' in st.doc.windows.at(-1)));
@@ -451,7 +540,7 @@ console.log('map-editor.test — undo');
 {
   const objCount = st.doc.placedObjects.length;
   ME.setMode('objects');
-  doc.querySelector('#palette .item[data-asset="tv"]').click();
+  doc.querySelector(`#palette .item[data-asset="${assets.assets.find((a) => !a.wallMounted).id}"]`).click();
   check('object added', st.doc.placedObjects.length === objCount + 1);
   ME.undo();
   check('Ctrl+Z restores previous doc', st.doc.placedObjects.length === objCount);

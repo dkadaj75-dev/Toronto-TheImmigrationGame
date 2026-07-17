@@ -86,7 +86,12 @@ export function bakeNavGrid(map: MapData, assets?: AssetsData): NavGrid {
   //    so a couch overlapping a doorway can't seal the room but real geometry holds.
   //    Opening length = door.width from the map data (default 1.0 m, matching the
   //    rendered door).
+  //    D1 (door-in-plain-wall): an ON-WALL door needs NO nav change — the wall blocks its cells
+  //    in step 2 and this carve re-opens the doorway ring unconditionally, exactly like a gap
+  //    door. Only `cutsWall: false` (a decorative door that cuts no hole) skips the carve, so a
+  //    sim can never walk through a visually solid wall.
   for (const door of map.doors) {
+    if (door.cutsWall === false) continue; // D1: decorative door — no pass-through
     const half = (door.width ?? 1.0) / 2;
     const [ax, az] = door.at;
     for (let r = 0; r < rows; r++) {
