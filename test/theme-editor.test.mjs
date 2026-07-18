@@ -1,5 +1,5 @@
 // theme-editor.test.mjs — jsdom coverage for B13-1's Theme Editor.
-import { JSDOM } from 'jsdom';
+import { JSDOM, VirtualConsole } from 'jsdom';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -25,6 +25,10 @@ await new Promise((resolve)=>setTimeout(resolve,50));
 let failures=0,previewCalls=0;
 function check(cond,msg){if(cond)console.log('  ok  '+msg);else{failures++;console.error('FAIL  '+msg);}}
 function fire(el,type){el.dispatchEvent(new window.Event(type,{bubbles:true}));}
+
+check(doc.querySelectorAll('#colorFields [data-path]').length>0,'Colors renders fields against the real on-disk theme');
+check(doc.querySelectorAll('#shapeFields [data-path]').length>0,'Shapes renders fields against the real on-disk theme');
+check(doc.querySelectorAll('#componentFields .component [data-path]').length>0,'Element gallery renders fields against the real on-disk theme');
 
 const T=window.ThemeEditor;
 check(!!T,'plain script exposes ThemeEditor');
@@ -79,5 +83,38 @@ check(saved.components.phoneShell.background==='#334455'&&saved.components.phone
 check(saved.layout['funds-chip'].anchor==='bl'&&saved.accordions[0].icon==='/icons/custom.png','PUT payload contains layout and accordion edits');
 check(rawPut===JSON.stringify(T.state.theme,null,2),'save uses exact pretty whole-file JSON payload');
 check(previewCalls>4&&doc.documentElement.dataset.previewFamily==='Test Family','edits live-apply through the engine bridge');
+
+async function bootWith(themeData,{brokenListings=false}={}){
+  const messages=[];
+  const virtualConsole=new VirtualConsole();
+  virtualConsole.on('jsdomError',(error)=>messages.push(String(error)));
+  virtualConsole.on('error',(...parts)=>messages.push(parts.map(String).join(' ')));
+  virtualConsole.on('warn',(...parts)=>messages.push(parts.map(String).join(' ')));
+  const localFetch=async(url)=>{
+    if(String(url).endsWith('/theme.json'))return{ok:true,status:200,json:async()=>structuredClone(themeData)};
+    if(brokenListings)return{ok:true,status:200,json:async()=>{throw new SyntaxError('Unexpected token < in JSON');}};
+    return{ok:true,status:200,json:async()=>[]};
+  };
+  const isolated=new JSDOM(html,{url:'http://localhost:5173/tools/theme.html',runScripts:'dangerously',virtualConsole,beforeParse(win){win.fetch=localFetch;}});
+  await new Promise((resolve)=>setTimeout(resolve,50));
+  return{doc:isolated.window.document,editor:isolated.window.ThemeEditor,messages};
+}
+
+const fallbackBoot=await bootWith(theme,{brokenListings:true});
+check(fallbackBoot.doc.querySelectorAll('#fontFields [data-path]').length>0&&fallbackBoot.doc.querySelectorAll('#colorFields [data-path]').length>0&&fallbackBoot.doc.querySelectorAll('#shapeFields [data-path]').length>0&&fallbackBoot.doc.querySelectorAll('#componentFields .component').length>0,'HTTP-200 HTML/non-JSON font and icon listings cannot blank editor cards');
+check(fallbackBoot.doc.getElementById('status').textContent==='Loaded'&&fallbackBoot.editor.state.fonts.length===0&&fallbackBoot.editor.state.icons.length===0,'malformed optional listings degrade to empty asset choices without failing theme load');
+check(fallbackBoot.messages.some((message)=>message.includes('listing unavailable'))&&!fallbackBoot.messages.some((message)=>message.includes('Uncaught')),'optional listing parse failures are warned without an uncaught render exception');
+
+const malformedTheme=structuredClone(theme);
+malformedTheme.components.brokenComponent='designer typo';
+malformedTheme.extraDesignerSection={kept:true};
+const isolatedBoot=await bootWith(malformedTheme);
+const validComponentCount=Object.keys(theme.components).length;
+check(isolatedBoot.doc.querySelectorAll('#componentFields .component').length===validComponentCount+1&&isolatedBoot.doc.querySelectorAll('#componentFields .component [data-path]').length>0,'an extended theme and valid component cards still render beside a malformed component key');
+check(isolatedBoot.doc.querySelector('[data-component="brokenComponent"] .render-error')?.textContent.includes('must be an object'),'a malformed component reports its error inside its own card');
+check(isolatedBoot.doc.querySelectorAll('#colorFields [data-path]').length>0&&isolatedBoot.doc.querySelectorAll('#shapeFields [data-path]').length>0,'a malformed component cannot blank Colors or Shapes');
+
+const sparseBoot=await bootWith({components:{panel:{}},layout:{}});
+check(sparseBoot.doc.querySelectorAll('#colorFields [data-path]').length===Object.keys({panelBg:1,panelFg:1,accent:1,warn:1,error:1,buttonBg:1,buttonFg:1,outline:1}).length&&sparseBoot.doc.querySelectorAll('#shapeFields [data-path]').length===3&&sparseBoot.doc.querySelector('[data-component="panel"] [data-path]'),'missing optional theme sections are created sparsely and every core card renders');
 
 if(failures){console.error(`\n${failures} failure(s)`);process.exit(1);}console.log('\nall theme editor tests passed');
