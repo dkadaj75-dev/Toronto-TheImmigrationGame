@@ -130,7 +130,13 @@ Notes:
 
 ## 3. Slices
 
-### S1 — Pure social core (`game/social.ts`) + schema types
+### S1 — Pure social core (`game/social.ts`) + schema types — ✅ SHIPPED (2026-07-18)
+> As-built: game/social.ts + data/npcs.json + data/social.json + test/social.test.ts (82
+> assertions). Deviations from §2: `compatibility.traitRange` added to social.json (formula
+> denominator, no magic numbers); trait ids are the real stats.json ones (cleanliness,
+> intelligence — the doc's `sociability` doesn't exist); negative relationshipGain uses the
+> mid-band reflected multiplier `(min+max)−mult` so incompatible pairs cut deeper. §6 decisions
+> adopted as recommended (decay ON 0.5/day; one visitor; no romance mechanics). PROJECT_CONTEXT §7.42.
 Compatibility formula, relationship container (get/apply/decay/level resolution), interaction
 gating (`levelAllows(interaction, level)`), phone gain math with cooldowns, visit-their-place
 outcome computation (needs/relationship deltas from level + compatibility). Fully headless,

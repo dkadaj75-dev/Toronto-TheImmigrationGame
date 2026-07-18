@@ -1,0 +1,16 @@
+{
+  "npcs": [
+    {
+      "id": "amara",
+      "name": "Amara",
+      "portrait": "npcs/amara.png",
+      "mesh": "/models/character.glb",
+      "tint": "#d9a066",
+      "clipMap": null,
+      "personality": { "cleanliness": 7, "intelligence": 6 },
+      "availableHours": { "from": 10, "to": 22 },
+      "visitDurationHours": 3,
+      "arrivalDelayMinutes": 30
+    }
+  ]
+}
