@@ -373,3 +373,17 @@ Design reading: (1) Theme Editor gains a per-element gallery preview (each thema
 ## B13-3. BUG: Theme Editor colors/shapes/element overrides don't apply. B13-4: loading music should autoplay.
 
 **DONE (2026-07-18):** B13-3 root cause was the presentation layer — editor fields DID write the draft and PUT correctly, but applyTheme() only ever ADDED CSS custom properties (clearing a sparse override never removed the stale inline variable, so preview and runtime looked stuck) and several gallery specimens consumed only part of their editable variables (foreground/outline/shadow/font/accent edits changed data invisibly). applyTheme now removes stale variables on reapplication and every specimen consumes all of its editable keys; edit → draft → preview → PUT → runtime is covered end-to-end in the theme suites (90 runtime assertions). B13-4: loading music calls play() immediately; on autoplay-policy rejection it retries once on the first pointerdown/keydown (guarded so it can't fire late over map music); the tap-to-start control hides once playback succeeds. Config stays in data/loading.json. NOTE: the one-line main.ts wiring rode along in the B13-5 commit (concurrent work).
+
+## B13-6. BUG: Theme Editor still broken — Colors, Shapes, and Element gallery cards render EMPTY (headers/hints only, no fields). Screenshot: Capture.PNG.
+
+## B13-7. Autonomy: tunable decision delay after game launch / map change / return from work etc., so the sim doesn't act before the player.
+
+## B13-8. Buy mode: show the actual MESH (with transparency), not just the footprint, when placing new objects.
+
+## B13-9. Lights add some comfort when ON at night (per-asset level).
+
+## B13-10. Sleep blockers: a light or sound-producing device (e.g. TV) that is ON within a radius AND in the same room (walls/doors block it) prevents sleeping.
+
+## B13-11. Work schedule: the sim should not work every day — choose days + times of the week; implement the WEEKDAY feature, weekday shown at the top of the smartphone (no dedicated tab).
+
+## B13-12. Social: visit duration depends on the relationship; PAIRED interactions that move both sims to a target asset (e.g. both go on the bed, then the action starts with per-role animations); interactions can trigger sounds.
