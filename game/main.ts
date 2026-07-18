@@ -3,7 +3,7 @@
 // Simulation (needs/autonomy/pathfinding) arrives in Phase 1 and will read the same data objects.
 
 import * as THREE from 'three';
-import { loadAll, loadAllMaps, watchData, type ActionDef, type GameData, type MapData } from './data';
+import { loadAll, loadAllMaps, setRuntimeHomeMap, watchData, type ActionDef, type GameData, type MapData } from './data';
 import { TouchCamera } from './camera';
 import { applyWallCutView, buildWorld, makeSimStandIn, makeLights, applyDayNight, applyExteriorScene, loadRiggedCharacter, normalizeMeshUrl, setAssetObjectOn } from './world';
 import { buildDoors, ExteriorDoorTransit, type ExteriorDoorTransitRequest } from './doors';
@@ -941,7 +941,7 @@ async function start() {
     stateSoundKeys = desiredSounds;
   };
   syncAssetStates();
-  audio.setMusicContext('loading', data.map, loading.music); // queued until first gesture if autoplay is locked
+  audio.setMusicContext('loading', data.map, loading.music, () => { loadingTap.hidden = true; });
   const playTunedSfx = (key: 'moveOrder' | 'actionSelect' | 'questStarted' | 'questCompleted' | 'notification' | 'skillUp' | 'moneyUp' | 'moneyDown') => {
     const path = data.tuning.audio?.[key];
     if (path) audio.playSfx(path);
@@ -1905,6 +1905,10 @@ async function start() {
       // home is NOT persisted (see the note above completePendingMove); a refresh returns to the
       // authored map until the save system lands.
       quests.vars.homeMap = mapId;
+      // B13-5: register the runtime destination with data.ts so EVERY loadAll() — this one and
+      // the 2s hot-reload poll — resolves the new home (B10-22 removed the simstate PUT, so the
+      // on-disk homeMap stays null and disk resolution alone would abort/revert the move).
+      setRuntimeHomeMap(mapId);
       // Fresh full bundle: loadAll() re-reads live data (the switched map is applied below).
       // If the server hiccups, fall back to the already-fetched Kijiji copy of the map.
       let fresh: GameData | null = null;
@@ -1918,6 +1922,7 @@ async function start() {
         // Neither source produced the destination map (deleted mid-countdown?) — abort without
         // switching; the pending state was already consumed, nothing else was applied.
         console.warn(`move-in aborted: map "${mapId}" could not be loaded`);
+        setRuntimeHomeMap(null); // don't leave the poll chasing a missing map
         return;
       }
       // Cancel whatever the sim was doing (a cancel, never a completion — no side effects) and

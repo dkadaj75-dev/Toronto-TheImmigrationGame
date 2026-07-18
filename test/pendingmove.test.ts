@@ -118,6 +118,13 @@ check('falls back to tuning.map.active without a homeMap var', resolveHomeMapId(
 check('null homeMap default falls back to tuning', resolveHomeMapId(withNullHome, tuningWithActive) === 'condo');
 check('final fallback is "condo"', resolveHomeMapId(noVars, {} as TuningData) === 'condo');
 
+// B13-5: the runtime (unpersisted) move-in override outranks both disk sources — without it the
+// post-B10-22 move-in resolved the OLD map on every loadAll() and silently aborted/reverted.
+check('runtime override wins over homeMap var', resolveHomeMapId(withHome, tuningWithActive, 'apt1') === 'apt1');
+check('runtime override wins over tuning fallback', resolveHomeMapId(noVars, tuningWithActive, 'apt1') === 'apt1');
+check('null runtime override defers to disk resolution', resolveHomeMapId(withHome, tuningWithActive, null) === 'loft');
+check('blank runtime override defers to disk resolution', resolveHomeMapId(noVars, tuningWithActive, '  ') === 'condo');
+
 // ------------------------------------------------------------------ headless map-switch smoke:
 // nav rebaked from the new map, spawn applied, sim stats preserved. Uses the same pure surfaces
 // main.ts's switch path drives (bakeNavGrid + spawn fields + an untouched SimStats) — the

@@ -854,11 +854,25 @@ async function fetchJson<T>(url: string): Promise<T> {
  *  (test/pendingmove.test.ts). NOTE the deliberate consequence, flagged in ROADMAP_APT: once
  *  homeMap is set, the Map Editor's "Play this map" (a tuning.map.active PUT) no longer changes
  *  the played map until homeMap itself is updated/cleared. */
-export function resolveHomeMapId(simstate: SimStateData, tuning: TuningData): string {
+export function resolveHomeMapId(
+  simstate: SimStateData,
+  tuning: TuningData,
+  runtimeOverride?: string | null,
+): string {
+  // B13-5: since B10-22 the move-in switch is runtime-only (no simstate PUT until the save
+  // system), so the in-memory override must win over the on-disk simstate — otherwise every
+  // loadAll() (move-in completion AND the 2s hot-reload poll) resolves the OLD map and the
+  // move silently aborts or reverts on the next designer data edit.
+  if (typeof runtimeOverride === 'string' && runtimeOverride.trim()) return runtimeOverride;
   const home = simstate.variables?.find((v) => v.id === 'homeMap')?.default;
   if (typeof home === 'string' && home.trim()) return home;
   return tuning.map?.active ?? 'condo';
 }
+
+/** B13-5: the one place main.ts records the runtime (unpersisted) move-in destination.
+ *  Cleared with null; loadAll() consults it on every call. */
+let runtimeHomeMap: string | null = null;
+export function setRuntimeHomeMap(id: string | null): void { runtimeHomeMap = id; }
 
 export async function loadAll(): Promise<GameData> {
   // tuning + simstate first — together they name the played map (R4 §6.1: simstate.homeMap wins,
@@ -867,7 +881,7 @@ export async function loadAll(): Promise<GameData> {
     fetchJson<TuningData>(FILES.tuning),
     fetchJson<SimStateData>(FILES.simstate),
   ]);
-  const homeId = resolveHomeMapId(simstate, tuning);
+  const homeId = resolveHomeMapId(simstate, tuning, runtimeHomeMap);
   let map: MapData;
   try {
     map = await fetchJson<MapData>(`/data/maps/${homeId}.json`);
