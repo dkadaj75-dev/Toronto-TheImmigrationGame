@@ -166,7 +166,15 @@ jsdom suite `tools/social-editor.test.mjs` (CRUD round-trips, whole-file PUT, ga
 **Agent: Claude (Opus).** Big tool page, but every pattern (inline script + module preview,
 condition-ish gating UI, live preview via real functions) has a shipped precedent.
 
-### S3 — NPC runtime: the visitor (`game/npc.ts` + thin layer)
+### S3 — NPC runtime: the visitor (`game/npc.ts` + thin layer) — ✅ SHIPPED (2026-07-18)
+> As-built (Codex): game/npc.ts pure lifecycle `idle→pending→entering→visiting→leaving→idle` +
+> thin runtime (tinted shared rig, own AnimController + SimAgent, exterior-door in/out).
+> Whitelist lives on the NPC def (`visitorActions` in data/npcs.json), enforced via optional
+> whitelist param in game/autonomy.ts scoring. Single normalized social/leave meter. Unreachable
+> exterior door converts the invite to a phoneGain("call") outcome + feedback, occupancy cleared
+> (decision 5). APIs — S4: endVisit/engage/setAutonomyPaused/visitorObject/visitorAgent;
+> S5: invite/canInvite/state; serialize/restore. test/npc.test.ts (25 assertions).
+> PROJECT_CONTEXT §7.44.
 - Spawn a visiting NPC: rigged character via `loadRiggedCharacter` (own mesh or tinted shared
   rig), own `AnimController`, own `SimAgent` for locomotion (it is deliberately the same agent
   class — nav, arrival, pose logic all reused; NO parallel implementation).

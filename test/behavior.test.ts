@@ -111,7 +111,7 @@ function autonomyData(withBehavior: boolean): GameData {
   } as GameData;
 }
 
-function runAutonomy(withBehavior: boolean): string | undefined {
+function runAutonomy(withBehavior: boolean, allowedActionIds?: string[]): string | undefined {
   const data = autonomyData(withBehavior);
   const world = new THREE.Group();
   const sofaObj = new THREE.Group(); sofaObj.userData.assetId = 'sofa'; sofaObj.position.set(1, 0, 0);
@@ -124,12 +124,16 @@ function runAutonomy(withBehavior: boolean): string | undefined {
     orderAction(action: ActionDef) { ordered = action.id; return true; },
   };
   const stats = new SimStats(data.stats);
-  const autonomy = new Autonomy(() => data, () => world, agent as never, stats, undefined, () => evalCtx);
+  const autonomy = new Autonomy(
+    () => data, () => world, agent as never, stats, undefined, () => evalCtx,
+    allowedActionIds ? { allowedActionIds: () => allowedActionIds } : undefined,
+  );
   autonomy.maybeAct();
   return ordered;
 }
 
 check('Autonomy utility mode chooses the farther bed with the stronger gain rate', runAutonomy(true) === 'sleep');
+check('optional visitor allow-list excludes a higher-scoring disallowed action', runAutonomy(true, ['nap']) === 'nap');
 check('absent behavior.json preserves legacy lowest-need nearest-candidate fallback', runAutonomy(false) === 'nap');
 
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }

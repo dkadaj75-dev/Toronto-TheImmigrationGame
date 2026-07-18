@@ -37,6 +37,8 @@ import { AssetStateRegistry, isAssetStateActionAvailable, isStatefulAsset, power
 import { HydroMeter, resolveAssetPower, HYDRO_BILL_ID } from './hydro';
 import { InitialLoadTracker, phraseAt } from './loading';
 import { applyTheme } from './theme';
+import { compatibility, RelationshipState } from './social';
+import { NpcVisitorController } from './npc';
 
 /** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
  *  a seat-aware action with no eligible seat in range) plays the dedicated 'sit_ground' state
@@ -288,6 +290,33 @@ async function start() {
   applyEnvironment();
 
   const autonomy = new Autonomy(() => data, () => world, agent, stats, accidents, buildEvalContext);
+
+  // --- SOCIAL S3: exactly one pending/active visitor. NpcVisitorController is the thin scene
+  // adapter; its VisitLifecycle owns all timing/gating and exposes invite/canInvite/state for S5
+  // plus endVisit/engage/autonomy-pause for S4. Unknown/missing social need ids are safe no-ops.
+  let relationships = data.social ? new RelationshipState(data.social) : null;
+  const visitors = new NpcVisitorController({
+    scene,
+    getData: () => data,
+    getWorld: () => world,
+    getGrid: () => grid,
+    getHour: () => gameSeconds / 3600,
+    getEvalContext: buildEvalContext,
+    getCompatibilityMultiplier: (npc) => data.social
+      ? compatibility(Object.fromEntries(stats.personality), npc.personality, data.social).multiplier
+      : 1,
+    exteriorDoorUsable: (doorObject, doorDef) => !accidents.isBlocked(doorObject, doorDef),
+    onCallFallback: (npc, outcome) => {
+      if (relationships) relationships.set(npc.id, relationships.get(npc.id) + outcome.relationshipDelta);
+      for (const [needId, delta] of Object.entries(outcome.needGains)) {
+        const current = stats.needs.get(needId);
+        if (current !== undefined) stats.needs.set(needId, Math.max(0, Math.min(100, current + delta)));
+      }
+    },
+    feedback: (message) => hud.showQuestToast(
+      message, 'started', data.tuning.quests.toastDurationSeconds * 1000,
+    ),
+  });
 
   // --- quest system (PROJECT_CONTEXT.md §3): runtime-only state, see quests.ts's persistence doc comment ---
   const quests = new QuestRunner(data.quests, data.simstate, data.tuning.economy.startingFunds);
@@ -1484,6 +1513,13 @@ async function start() {
     // have changed even without a context switch — setMusicContext no-ops when nothing changed)
     audio.setMusicContext(buyMode.active ? 'buymode' : 'map', data.map);
     stats.retune(data.stats, data.tuning.skills?.growthCurveExp ?? 1.5);
+    if (data.social) {
+      if (relationships) relationships.retune(data.social);
+      else relationships = new RelationshipState(data.social);
+    } else {
+      relationships = null;
+    }
+    visitors.retune();
     hud.rebuildBars();
     applyEnvironment();
     quests.retune(data.quests, data.simstate); // definitions only — runtime quest/var state is untouched
@@ -1744,6 +1780,7 @@ async function start() {
     }
 
     agent.update(sdt);
+    visitors.update(sdt, clockScale());
     // ROADMAP_NEXT B3-5: "carry to garbage" arrival check — carryState is only ever set right after
     // agent.goTo() successfully routed the sim to a can (see onActionStop above), and only ever
     // cleared early by cancelCarry() when some other order redirects the sim mid-walk. So observing

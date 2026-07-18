@@ -5,14 +5,27 @@
 // Evaluation happens on the needs-decay tick, so no extra interval constant exists.
 
 import type * as THREE from 'three';
-import type { GameData, ActionDef, AssetDef } from './data';
+import type { GameData, ActionDef, AssetDef, NeedDef } from './data';
 import type { SimAgent } from './sim';
 import { findSeatFor } from './sim';
 import { firstLegSeatAware } from './food';
-import type { SimStats } from './stats';
 import type { AccidentsController } from './accidents';
 import { isActionAvailable, type EvalContext } from './quests';
 import { pickBest, type BehaviorCandidate } from './behavior';
+
+/** The small state surface autonomy actually reads. SimStats implements it, and visitors can
+ * provide a single-meter adapter without constructing the player's full needs/skills stack. */
+export interface AutonomyStats {
+  needs: Map<string, number>;
+  skills: Map<string, number>;
+  personality: Map<string, number>;
+  lowestAutonomyNeed(): { def: NeedDef; value: number } | null;
+}
+
+export interface AutonomyOptions {
+  /** Optional data-driven allow-list. Absent preserves player autonomy exactly. */
+  allowedActionIds?: () => readonly string[];
+}
 
 export class Autonomy {
   private cooldownRemaining = 0;
@@ -29,7 +42,7 @@ export class Autonomy {
     private getData: () => GameData,
     private getWorld: () => THREE.Group,
     private agent: SimAgent,
-    private stats: SimStats,
+    private stats: AutonomyStats,
     /** Optional (§7.3): when supplied, autonomy skips any base asset currently blocked by an
      *  overlapping accident instance entirely — "impossible to cook while the kitchen is on
      *  fire" extends to the sim's own free will, not just player taps. Omitting it (e.g. older
@@ -41,6 +54,7 @@ export class Autonomy {
      *  then treated as unmet (skipped) rather than silently always-available, since there's no
      *  context to check it against. Actions with no `conditions` are unaffected either way. */
     private getEvalContext?: () => EvalContext,
+    private options: AutonomyOptions = {},
   ) {}
 
   /** Call whenever the player issues a command (go-to, action, stop). */
@@ -78,6 +92,8 @@ export class Autonomy {
     if (!behavior && (!lowest || lowest.value >= data.tuning.autonomy.seekBelowThreshold)) return null;
 
     const actionsById = new Map(data.interactions.actions.map((a) => [a.id, a]));
+    const allowed = this.options.allowedActionIds?.();
+    const allowedSet = allowed ? new Set(allowed) : null;
     const assetsById = new Map(data.assets.assets.map((a) => [a.id, a]));
     const simPos = this.agent.object.position;
     const evalCtx = this.getEvalContext?.();
@@ -91,6 +107,7 @@ export class Autonomy {
       if (!def) continue;
       if (this.accidents?.isBlocked(obj, def)) continue; // §7.3: skip a base asset blocked by an accident
       for (const actionId of def.interactions) {
+        if (allowedSet && !allowedSet.has(actionId)) continue;
         const action = actionsById.get(actionId);
         if (!action || !action.autonomyEligible) continue;
         if (!behavior && action.primaryNeed !== lowest!.def.id) continue;

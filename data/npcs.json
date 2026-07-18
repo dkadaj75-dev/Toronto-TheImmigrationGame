@@ -10,7 +10,8 @@
       "personality": { "cleanliness": 7, "intelligence": 6 },
       "availableHours": { "from": 10, "to": 22 },
       "visitDurationHours": 3,
-      "arrivalDelayMinutes": 30
+      "arrivalDelayMinutes": 30,
+      "visitorActions": ["sit", "watch_tv"]
     }
   ]
 }

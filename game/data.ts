@@ -786,6 +786,9 @@ export interface GameData {
   behavior?: BehaviorData;
   /** B8-2-E: optional for compatibility; absence applies game/theme.ts's exact legacy defaults. */
   theme?: ThemeData;
+  /** SOCIAL S3: optional for old fixtures; loadAll supplies both files in the real game. */
+  npcs?: import('./npc').NpcsData;
+  social?: import('./social').SocialData;
 }
 
 /** B7-7 boot-only presentation. Unlike tuning.json this file is intentionally not hot-reloaded. */
@@ -812,6 +815,8 @@ const FILES = {
   loading: '/data/loading.json',
   behavior: '/data/behavior.json',
   theme: '/data/theme.json',
+  npcs: '/data/npcs.json',
+  social: '/data/social.json',
 } as const;
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -851,7 +856,7 @@ export async function loadAll(): Promise<GameData> {
     if (fallbackId === homeId) throw err;
     map = await fetchJson<MapData>(`/data/maps/${fallbackId}.json`);
   }
-  const [stats, interactions, assets, quests, visas, jobs, bills, finance, happiness, loading, behavior, theme] = await Promise.all([
+  const [stats, interactions, assets, quests, visas, jobs, bills, finance, happiness, loading, behavior, theme, npcs, social] = await Promise.all([
     fetchJson<StatsData>(FILES.stats),
     fetchJson<InteractionsData>(FILES.interactions),
     fetchJson<AssetsData>(FILES.assets),
@@ -864,8 +869,10 @@ export async function loadAll(): Promise<GameData> {
     fetchJson<LoadingConfig>(FILES.loading),
     fetchOptionalJson<BehaviorData>(FILES.behavior),
     fetchOptionalJson<ThemeData>(FILES.theme),
+    fetchOptionalJson<import('./npc').NpcsData>(FILES.npcs),
+    fetchOptionalJson<import('./social').SocialData>(FILES.social),
   ]);
-  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills, finance, happiness, loading, behavior, theme };
+  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills, finance, happiness, loading, behavior, theme, npcs, social };
 }
 
 async function fetchOptionalJson<T>(url: string): Promise<T | undefined> {
