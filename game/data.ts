@@ -712,7 +712,7 @@ export interface TuningData {
    *  Kijiji rental tab — kept in DATA (phone config), not hardcoded, so the designer can rename the
    *  tab. Sparse; R3 (the phone tab UI) consumes it and falls back to "Kijiji" when absent. R1 only
    *  adds the field + typing + the data/tuning.json default. */
-  phone?: { jobListSize?: number; icon?: string; rentalTabName?: string; contactsTabName?: string };
+  phone?: { jobListSize?: number; icon?: string; rentalTabName?: string; contactsTabName?: string; saveTabName?: string };
   /** B13-11 calendar display/order. startDayIndex selects the weekday of game day 1. */
   calendar?: { dayNames?: string[]; startDayIndex?: number };
   /** B3-8/B7-5/B7-6 work tuning. Optional for old fixtures. `departureWindowHours` limits how

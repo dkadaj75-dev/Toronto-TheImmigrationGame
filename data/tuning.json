@@ -74,6 +74,7 @@
     "icon": "/icons/Smartphone.png",
     "rentalTabName": "Kijiji",
     "contactsTabName": "Contacts",
+    "saveTabName": "Save",
     "_source": "Smartphone/jobs V2 + designer HUD launcher delta (PROJECT_CONTEXT.md §7.20) — jobListSize controls hourly listings; icon is the persistent HUD button image. rentalTabName (ROADMAP_APT R1, §6.4 RESOLVED) and contactsTabName (ROADMAP_SOCIAL S5) are renameable phone-tab labels consumed by the HUD."
   },
   "calendar": {

@@ -88,7 +88,7 @@ dispatches boot) + boot check.
 **Agent: Codex.** Boot-order surgery in main.ts + autoplay/gesture interaction — integration
 risk, same reasoning as V3/S3.
 
-### T3 — Load Game screen (after SAVE V2)
+### T3 — Load Game screen (after SAVE V2) — ✅ SHIPPED (2026-07-18, merged with SAVE V4 — see ROADMAP_SAVE V4 as-built)
 Slot list from ROADMAP_SAVE V2 API (metadata cards: name, timestamp, funds, map, play time),
 load → restore boot path (SAVE V3), delete/export/import per slot. This slice and SAVE V4 are
 the same surface — whichever ships second implements/merges it (coordinate explicitly; do not

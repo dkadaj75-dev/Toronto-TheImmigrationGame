@@ -6,6 +6,7 @@
 
 import { JSDOM } from 'jsdom';
 import type { RentalCardView } from '../game/phone';
+import type { SlotCardView } from '../game/saveslots';
 
 const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>', {
   url: 'http://localhost:5173/',
@@ -130,6 +131,32 @@ check('Cancel move routes its map id to onPhoneMoveCancelRequested', cancelledId
 rentals.length = 0;
 renderRentals('Kijiji');
 check('empty rentals renders an empty-state message', !!doc.querySelector('#phone-body .phone-empty'));
+
+const saveCards: SlotCardView[] = [
+  { slotId: 'slot-1', kind: 'manual', status: 'ok', name: 'Home', savedAtLabel: 'Today', mapName: 'Condo', funds: 400, gameClockLabel: '2h 10m' },
+  { slotId: 'slot-2', kind: 'manual', status: 'empty', name: 'Slot 2', savedAtLabel: 'Empty', mapName: '—', funds: null, gameClockLabel: '0h 00m' },
+  { slotId: 'autosave', kind: 'autosave', status: 'ok', name: 'Autosave', savedAtLabel: 'Today', mapName: 'Condo', funds: 350, gameClockLabel: '1h 55m' },
+];
+hud.renderPhone({
+  tab: 'save', currentStatusName: 'Visitor', searchedJobs: false, jobs: [], currentJob: null,
+  visas: [], pending: null, currencyName: '§', bills: [], billsTotal: 0, creditScore: 700,
+  creditHistory: [], rentalTabName: 'Kijiji', contactsTabName: 'Contacts', saveTabName: 'Archive',
+  rentals: [], contacts: [], saveSlots: saveCards,
+});
+check('save tab label comes from tuning', doc.querySelector('[data-phone-tab="save"]')?.textContent === 'Archive');
+check('save tab lists every configured slot', doc.querySelectorAll('#phone-body [data-slot-id]').length === 3);
+check('temporary V3 HUD picker is gone', doc.querySelector('#save-controls') === null);
+const phoneSaveCards = [...doc.querySelectorAll<HTMLElement>('#phone-body [data-slot-id]')];
+const autoButtons = phoneSaveCards[2].querySelectorAll<HTMLButtonElement>('.save-slot-actions button');
+check('autosave cannot be manually saved or deleted', autoButtons[0].disabled && autoButtons[2].disabled);
+check('autosave remains loadable and exportable', !autoButtons[1].disabled && !autoButtons[3].disabled);
+let phoneLoaded = '';
+hud.onPhoneLoadRequested = (slotId) => { phoneLoaded = slotId; };
+(phoneSaveCards[0].querySelectorAll('.save-slot-actions button')[1] as HTMLButtonElement).click();
+check('in-game load asks to discard the active run', !!doc.querySelector('.save-confirm[role="alertdialog"]'));
+(doc.querySelector('.save-confirm-actions button:last-child') as HTMLButtonElement).click();
+check('confirmed phone Load routes the slot id', phoneLoaded === 'slot-1');
+check('one import control targets manual slots', doc.querySelectorAll('.save-import-row select option').length === 2);
 
 if (failures > 0) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }
 console.log('\nAll phone-hud.test checks passed.');

@@ -3,15 +3,16 @@
 // needs no changes. Portrait-first, collapsible panels for small screens.
 // Bar colors/names come from stats.json; action names from interactions.json.
 
-import type { ActionDef, AssetDef, JobDef, SaveConfig, VisaDef } from './data';
+import type { ActionDef, AssetDef, JobDef, VisaDef } from './data';
 import type { RentalCardView, RequirementView } from './phone';
 import type { ContactView } from './contacts';
+import { deleteDecision, loadDecision, overwriteDecision, renameDecision, type SlotCardView } from './saveslots';
 import type { SimStats } from './stats';
 import { jobLevelPay, jobLevelTitle } from './work';
 
 /** Phone overlay tabs. ROADMAP_APT R3 adds 'rentals' (the Kijiji tab; its visible label comes
  *  from tuning.phone.rentalTabName, never hardcoded). */
-export type PhoneTab = 'jobs' | 'visas' | 'bills' | 'credit' | 'rentals' | 'contacts';
+export type PhoneTab = 'jobs' | 'visas' | 'bills' | 'credit' | 'rentals' | 'contacts' | 'save';
 
 export interface ScreenPoint { x: number; y: number }
 export interface ScreenInsets { top: number; right: number; bottom: number; left: number }
@@ -252,14 +253,6 @@ const CSS = `
   border-radius: var(--theme-button-radius, 999px); padding: 9px 12px; font-size: 13px; background: rgba(20,26,40,.88);
   color: #b8c4da; cursor: pointer; pointer-events: auto; touch-action: manipulation; }
 #wall-cut-button.active { background: rgba(90,120,190,.7); color: #fff; }
-#save-controls { position: absolute; right: calc(8px + env(safe-area-inset-right, 0px));
-  bottom: calc(270px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: center; gap: 4px;
-  padding: 5px; border-radius: var(--theme-panel-radius, 10px); background: var(--theme-panel-bg, rgba(20,26,40,.88));
-  pointer-events: auto; box-shadow: var(--theme-shadow, 0 3px 14px rgba(0,0,0,.25)); }
-#save-controls select, #save-controls button { min-height: 30px; border: 0; border-radius: var(--theme-button-radius, 999px);
-  padding: 5px 8px; font: 11px var(--theme-button-font-family, system-ui, sans-serif); }
-#save-controls select { max-width: 88px; background: var(--theme-panel-bg, #20283a); color: var(--theme-panel-fg, #dfe6f2); }
-#save-controls button { background: var(--theme-button-bg, rgba(90,120,190,.55)); color: var(--theme-button-fg, #eaf0fb); cursor: pointer; }
 #funds-chip.hidden, #buy-button.hidden, #buy-button.work-hidden, #wall-cut-button.hidden { display: none; }
 .hud-panel.buy-mode-hidden { display: none; }
 
@@ -332,7 +325,7 @@ const CSS = `
 .phone-header .phone-context { max-width: 48%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   border-radius: var(--theme-button-radius, 999px); padding: 5px 9px; background: var(--theme-panel-accent, var(--theme-accent));
   color: var(--theme-panel-fg, #dfe6f2); font-size: 10px; }
-.phone-tabs { order: 3; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; padding: 7px 9px 9px;
+.phone-tabs { order: 3; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; padding: 7px 9px 9px;
   border-top: var(--theme-panel-outline-width, 1px) solid var(--theme-panel-outline, rgba(130,158,210,.45));
   background: var(--theme-panel-bg, rgba(20,26,40,.82)); }
 .phone-tabs button { min-width: 0; min-height: var(--theme-phone-tab-height, 48px); border: 0; border-radius: var(--theme-phone-tab-radius, var(--theme-button-radius, 999px)); padding: var(--theme-phone-tab-padding-y, 7px) var(--theme-phone-tab-padding-x, 3px);
@@ -357,6 +350,19 @@ const CSS = `
 .phone-card button.apply { width: 100%; min-height: 44px; margin-top: 10px; border: 0; border-radius: var(--theme-button-radius, 999px); padding: 10px;
   background: var(--theme-button-bg, rgba(90,120,190,.55)); color: var(--theme-button-fg, #eaf0fb); font: inherit; font-size: 13px; cursor: pointer; touch-action: manipulation; }
 .phone-card button.apply:disabled { opacity: .4; cursor: default; }
+.save-slot-name { flex: 1; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.save-slot-name:disabled { cursor: default; opacity: 1; }
+.save-slot-state { font-size: 11px; opacity: .72; text-transform: uppercase; }
+.save-slot-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; margin-top: 8px; }
+.save-slot-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 10px; }
+.save-slot-actions button, .save-import-row button, .save-import-row select, .save-import-row label { min-height: 44px; border: 0; border-radius: var(--theme-button-radius, 999px); padding: 8px; background: var(--theme-button-bg, rgba(90,120,190,.55)); color: var(--theme-button-fg, #eaf0fb); font: inherit; }
+.save-slot-actions button:disabled { opacity: .35; }
+.save-import-row { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; align-items: center; }
+.save-import-row label { display: grid; place-items: center; cursor: pointer; }
+.save-import-row input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.save-confirm { position: sticky; bottom: 0; z-index: 2; display: grid; gap: 8px; padding: 12px; margin-top: 10px; border: var(--theme-outline-width, 1px) solid var(--theme-outline, rgba(130,158,210,.45)); border-radius: var(--theme-panel-radius, 12px); background: var(--theme-panel-bg, #20283a); box-shadow: var(--theme-shadow, 0 6px 24px rgba(0,0,0,.45)); }
+.save-confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.save-confirm button { min-height: 44px; border: 0; border-radius: var(--theme-button-radius, 999px); background: var(--theme-button-bg, rgba(90,120,190,.55)); color: var(--theme-button-fg, #eaf0fb); }
 .phone-pending { display: inline-block; border-radius: var(--theme-button-radius, 999px); padding: 4px 8px;
   background: color-mix(in srgb, var(--theme-warn, #e0b05f) 20%, transparent); color: var(--theme-warn, #e0b05f); font-size: 10px; white-space: nowrap; }
 .phone-empty { color: var(--theme-panel-fg, #dfe6f2); opacity: .58; font-size: 12px; text-align: center; padding: 28px 10px; }
@@ -487,7 +493,6 @@ export class Hud {
   private fundsChip: HTMLElement;
   private buyButton: HTMLElement;
   private wallCutButton: HTMLButtonElement;
-  private saveSlotSelect: HTMLSelectElement;
   private buyBar: HTMLElement;
   private buyFundsEl: HTMLElement;
   private buySearchEl: HTMLInputElement;
@@ -502,8 +507,6 @@ export class Hud {
   onBuyOpen: (() => void) | null = null;
   /** fires when the player toggles the in-page Sims-style wall cut */
   onWallCutToggle: (() => void) | null = null;
-  onSaveRequested: ((slotId: string) => void) | null = null;
-  onLoadRequested: ((slotId: string) => void) | null = null;
   /** fires when the player exits buy mode (the bar's own Exit button) */
   onBuyClose: (() => void) | null = null;
   onBuyCategoryPick: ((category: string) => void) | null = null;
@@ -536,6 +539,12 @@ export class Hud {
   /** ROADMAP_APT R4: fired by the pending-move card's Cancel control. Cancellation applies
    *  NOTHING beyond clearing the pending move (side_effect_rule — see game/rental.ts). */
   onPhoneMoveCancelRequested: ((mapId: string) => void) | null = null;
+  onPhoneSaveRequested: ((slotId: string, name: string) => void) | null = null;
+  onPhoneLoadRequested: ((slotId: string) => void) | null = null;
+  onPhoneDeleteSaveRequested: ((slotId: string) => void) | null = null;
+  onPhoneRenameSaveRequested: ((slotId: string, name: string) => void) | null = null;
+  onPhoneExportSaveRequested: ((slotId: string) => void) | null = null;
+  onPhoneImportSaveRequested: ((slotId: string, jsonText: string) => void) | null = null;
   onRepoClose: (() => void) | null = null;
 
   onCancelAction: (() => void) | null = null;
@@ -578,11 +587,6 @@ export class Hud {
       <div id="funds-chip">§ 0</div>
       <button id="buy-button">🛒 Buy</button>
       <button id="wall-cut-button" aria-pressed="false" title="Cut walls down">⌂ Cut</button>
-      <div id="save-controls" aria-label="Save and load">
-        <select id="save-slot" aria-label="Save slot"></select>
-        <button id="save-game" type="button">Save</button>
-        <button id="load-game" type="button">Load</button>
-      </div>
       <button id="phone-button" aria-label="Open smartphone" title="Smartphone"><img alt="" /><span class="phone-badge" aria-label="0 unpaid bills"></span></button>
       <div id="game-over">
         <h2>Game Over</h2>
@@ -613,6 +617,7 @@ export class Hud {
             <button data-phone-tab="credit">Credit</button>
             <button data-phone-tab="rentals">Rentals</button>
             <button data-phone-tab="contacts">Contacts</button>
+            <button data-phone-tab="save">Save</button>
           </div>
           <div class="phone-home-indicator" aria-hidden="true"></div>
         </div>
@@ -693,7 +698,6 @@ export class Hud {
     this.fundsChip = root.querySelector('#funds-chip')!;
     this.buyButton = root.querySelector('#buy-button')!;
     this.wallCutButton = root.querySelector('#wall-cut-button')!;
-    this.saveSlotSelect = root.querySelector('#save-slot')!;
     this.buyBar = root.querySelector('#buy-bar')!;
     this.buyFundsEl = root.querySelector('#buy-funds')!;
     this.buySearchEl = root.querySelector('#buy-search')!;
@@ -706,8 +710,6 @@ export class Hud {
 
     this.buyButton.addEventListener('click', () => this.onBuyOpen?.());
     this.wallCutButton.addEventListener('click', () => this.onWallCutToggle?.());
-    root.querySelector('#save-game')!.addEventListener('click', () => this.onSaveRequested?.(this.saveSlotSelect.value));
-    root.querySelector('#load-game')!.addEventListener('click', () => this.onLoadRequested?.(this.saveSlotSelect.value));
     root.querySelector('#buy-exit')!.addEventListener('click', () => this.onBuyClose?.());
     this.buySearchEl.addEventListener('input', () => this.onBuySearch?.(this.buySearchEl.value));
     root.querySelector('[data-gc="rotate"]')!.addEventListener('click', () => this.onGhostRotate?.());
@@ -815,20 +817,6 @@ export class Hud {
     this.wallCutButton.classList.toggle('active', active);
     this.wallCutButton.setAttribute('aria-pressed', String(active));
     this.wallCutButton.title = active ? 'Show full walls' : 'Cut walls down';
-  }
-
-  configureSaveSlots(config: SaveConfig) {
-    this.saveSlotSelect.replaceChildren();
-    for (let index = 1; index <= Math.max(0, Math.floor(config.slots)); index++) {
-      const option = document.createElement('option');
-      option.value = `slot-${index}`;
-      option.textContent = `Slot ${index}`;
-      this.saveSlotSelect.appendChild(option);
-    }
-    const autosave = document.createElement('option');
-    autosave.value = config.autosaveSlotId;
-    autosave.textContent = 'Autosave';
-    this.saveSlotSelect.appendChild(autosave);
   }
 
   setClock(hours: number, minutes: number, weekday = '') {
@@ -1072,6 +1060,8 @@ export class Hud {
     /** ROADMAP_APT R3 (Kijiji): the tab's visible label (tuning.phone.rentalTabName). */
     rentalTabName: string;
     contactsTabName: string;
+    saveTabName?: string;
+    saveSlots?: SlotCardView[];
     /** ROADMAP_APT R3: pre-massaged rent-card view-models (game/phone.ts rentalCardViews). */
     rentals: RentalCardView[];
     contacts: ContactView[];
@@ -1083,9 +1073,15 @@ export class Hud {
     this.phoneTabs.forEach((button) => {
       if (button.dataset.phoneTab === 'rentals') button.textContent = args.rentalTabName;
       if (button.dataset.phoneTab === 'contacts') button.textContent = args.contactsTabName;
+      if (button.dataset.phoneTab === 'save') button.textContent = args.saveTabName ?? 'Save';
     });
     this.phoneTabs.forEach((button) => button.classList.toggle('active', button.dataset.phoneTab === args.tab));
     this.phoneBody.innerHTML = '';
+
+    if (args.tab === 'save') {
+      this.renderSaveSlots(args.saveSlots ?? [], args.currencyName);
+      return;
+    }
 
     if (args.tab === 'contacts') {
       if (args.contacts.length === 0) {
@@ -1402,6 +1398,71 @@ export class Hud {
 
   /** One catalog card's view-model — pure data the caller (main.ts/BuyModeController) computes
    *  from game/buymode.ts's pure catalog helpers; ui.ts only renders it. */
+  private showSaveConfirm(message: string, confirmLabel: string, action: () => void): void {
+    this.phoneBody.querySelector('.save-confirm')?.remove();
+    const dialog = document.createElement('div');
+    dialog.className = 'save-confirm'; dialog.setAttribute('role', 'alertdialog'); dialog.setAttribute('aria-label', message);
+    const text = document.createElement('div'); text.textContent = message;
+    const actions = document.createElement('div'); actions.className = 'save-confirm-actions';
+    const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel';
+    const confirm = document.createElement('button'); confirm.type = 'button'; confirm.textContent = confirmLabel;
+    cancel.addEventListener('click', () => dialog.remove());
+    confirm.addEventListener('click', () => { dialog.remove(); action(); });
+    actions.append(cancel, confirm); dialog.append(text, actions); this.phoneBody.appendChild(dialog); confirm.focus();
+  }
+
+  private renderSaveSlots(cards: SlotCardView[], currencyName: string): void {
+    for (const view of cards) {
+      const card = phoneCard(view.name); card.el.dataset.slotId = view.slotId;
+      const oldName = card.head.querySelector('.phone-card-name')!;
+      const name = document.createElement('button'); name.type = 'button'; name.className = 'phone-card-name save-slot-name';
+      name.textContent = view.name; name.disabled = renameDecision(view) === 'blocked'; name.title = name.disabled ? '' : 'Rename save';
+      name.addEventListener('click', () => {
+        const renamed = window.prompt('Save name', view.name);
+        if (renamed !== null && renamed.trim() && renamed.trim() !== view.name) this.onPhoneRenameSaveRequested?.(view.slotId, renamed.trim());
+      });
+      oldName.replaceWith(name);
+      const state = document.createElement('span'); state.className = 'save-slot-state'; state.textContent = view.kind === 'autosave' ? 'Autosave' : view.status;
+      card.head.appendChild(state);
+      const meta = document.createElement('div'); meta.className = 'phone-meta save-slot-meta';
+      for (const label of [view.savedAtLabel, `Map: ${view.mapName}`, `Funds: ${view.funds === null ? '—' : `${currencyName}${view.funds.toLocaleString()}`}`, `Played: ${view.gameClockLabel}`]) {
+        const item = document.createElement('span'); item.textContent = label; meta.appendChild(item);
+      }
+      card.el.appendChild(meta);
+      const actions = document.createElement('div'); actions.className = 'save-slot-actions';
+      const addAction = (label: string, enabled: boolean, run: () => void) => {
+        const button = document.createElement('button'); button.type = 'button'; button.textContent = label; button.disabled = !enabled;
+        button.addEventListener('click', run); actions.appendChild(button);
+      };
+      const overwrite = overwriteDecision(view);
+      addAction('Save here', overwrite !== 'blocked', () => overwrite === 'confirm'
+        ? this.showSaveConfirm(`Overwrite “${view.name}”?`, 'Overwrite', () => this.onPhoneSaveRequested?.(view.slotId, view.name))
+        : this.onPhoneSaveRequested?.(view.slotId, view.name));
+      addAction('Load', loadDecision(view, true) !== 'blocked', () => this.showSaveConfirm('Load this save and discard the current run?', 'Load', () => this.onPhoneLoadRequested?.(view.slotId)));
+      addAction('Delete', deleteDecision(view) !== 'blocked', () => this.showSaveConfirm(`Delete “${view.name}”?`, 'Delete', () => this.onPhoneDeleteSaveRequested?.(view.slotId)));
+      addAction('Export', view.status === 'ok', () => this.onPhoneExportSaveRequested?.(view.slotId));
+      card.el.appendChild(actions); this.phoneBody.appendChild(card.el);
+    }
+
+    const manualCards = cards.filter((card) => card.kind === 'manual');
+    if (manualCards.length === 0) return;
+    const row = document.createElement('div'); row.className = 'save-import-row';
+    const select = document.createElement('select'); select.setAttribute('aria-label', 'Import target slot');
+    for (const card of manualCards) { const option = document.createElement('option'); option.value = card.slotId; option.textContent = card.name; select.appendChild(option); }
+    const label = document.createElement('label'); label.textContent = 'Import file';
+    const input = document.createElement('input'); input.type = 'file'; input.accept = 'application/json,.json';
+    input.addEventListener('change', () => {
+      const file = input.files?.[0]; if (!file) return;
+      void file.text().then((json) => {
+        const target = manualCards.find((card) => card.slotId === select.value)!;
+        const proceed = () => this.onPhoneImportSaveRequested?.(target.slotId, json);
+        if (target.status === 'empty') proceed();
+        else this.showSaveConfirm(`Replace “${target.name}” with the imported save?`, 'Import', proceed);
+      });
+    });
+    label.appendChild(input); row.append(select, label); this.phoneBody.appendChild(row);
+  }
+
   renderCatalog(
     categories: { id: string; label: string }[],
     activeCategory: string,

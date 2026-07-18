@@ -47,8 +47,9 @@ import { visitGate, VisitAwayTracker, type VisitReturnEvent } from './visit';
 import { crossedNightWindowBoundary, inspectAmbience, nightEnvironmentContribution, sleepBlockDecision, type AmbienceAssetInstance } from './ambience';
 import { applyEnvelope, assembleEnvelope, SaveRegistry } from './save';
 import { SaveStore } from './savestore';
+import { exportSlot, importIntoSlot, renameSlot, slotCardViews } from './saveslots';
 import { homeMapIdFromEnvelope, registerRuntimeSaveSystems } from './savewiring';
-import { DEFAULT_TITLE_CONFIG, PreferencesStore, applyVolumes, mostRecentSlotId, type TitlePreferences } from './title';
+import { DEFAULT_TITLE_CONFIG, PreferencesStore, applyVolumes, type TitlePreferences } from './title';
 import { TitleScreen } from './title-screen';
 
 /** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
@@ -90,6 +91,7 @@ async function start(initialLoadSlotId?: string) {
     return;
   }
   const saveConfig = data.save ?? DEFAULT_SAVE_CONFIG;
+  const saveStore = new SaveStore(window.localStorage);
 
   // B7-7 presentation starts once boot data is available. The initial data fetch still uses the
   // same dark overlay; loading.json itself is boot-only and intentionally has no live retune path.
@@ -713,7 +715,7 @@ async function start(initialLoadSlotId?: string) {
   // --- smartphone jobs + visa applications (PROJECT_CONTEXT.md §7.20 V2, B3-7) ---
   const phoneJobs = new PhoneJobSearch(data.jobs, data.tuning.phone?.jobListSize);
   const bills = new FinanceState(data.bills, data.finance, data.tuning.bills?.intervalDays, 1, data.tuning.credit);
-  let phoneTab: 'jobs' | 'visas' | 'bills' | 'credit' | 'rentals' | 'contacts' = 'jobs';
+  let phoneTab: 'jobs' | 'visas' | 'bills' | 'credit' | 'rentals' | 'contacts' | 'save' = 'jobs';
   // ROADMAP_APT R3 (Kijiji): the phone tab needs EVERY map, not just the active one. Loaded
   // network-only (data.ts loadAllMaps, via GET /api/maps) and refreshed each time the tab is shown
   // so live designer map/rental edits appear. Empty until the first load resolves — the tab renders
@@ -774,6 +776,11 @@ async function start(initialLoadSlotId?: string) {
       creditHistory: bills.creditHistory,
       rentalTabName: data.tuning.phone?.rentalTabName ?? 'Kijiji',
       contactsTabName: data.tuning.phone?.contactsTabName ?? 'Contacts',
+      saveTabName: data.tuning.phone?.saveTabName ?? 'Save',
+      saveSlots: slotCardViews(saveStore, {
+        ...saveConfig,
+        mapNames: Object.fromEntries([data.map, ...allMaps].map((map) => [map.id, map.name || map.id])),
+      }),
       rentals,
       contacts: contactViews(data.npcs?.npcs ?? [], {
         relationships: socialRuntime.relationships,
@@ -2158,8 +2165,6 @@ async function start(initialLoadSlotId?: string) {
       },
     },
   });
-  const saveStore = new SaveStore(window.localStorage);
-  hud.configureSaveSlots(saveConfig);
   let autosaveFailureToasted = false;
   let lastAutosaveGameHour = gameHourNow();
 
@@ -2279,8 +2284,28 @@ async function start(initialLoadSlotId?: string) {
     }
   }
 
-  hud.onSaveRequested = (slotId) => { saveToSlot(slotId, slotId === saveConfig.autosaveSlotId ? 'Autosave' : undefined); };
-  hud.onLoadRequested = (slotId) => { void loadFromSlot(slotId); };
+  hud.onPhoneSaveRequested = (slotId, name) => { if (saveToSlot(slotId, name)) refreshPhone(); };
+  hud.onPhoneLoadRequested = (slotId) => { hud.closePhone(); void loadFromSlot(slotId); };
+  hud.onPhoneDeleteSaveRequested = (slotId) => {
+    const result = saveStore.deleteSlot(saveConfig, slotId);
+    phoneToast(result.ok ? 'Save deleted' : result.reason, result.ok);
+    refreshPhone();
+  };
+  hud.onPhoneRenameSaveRequested = (slotId, name) => {
+    const result = renameSlot(saveStore, saveConfig, slotId, name);
+    phoneToast(result.ok ? 'Save renamed' : result.reason, result.ok);
+    refreshPhone();
+  };
+  hud.onPhoneExportSaveRequested = (slotId) => {
+    const result = exportSlot(saveStore, saveConfig, slotId);
+    if (!result.ok) { phoneToast(result.error); return; }
+    downloadTextFile(result.filename, result.json);
+  };
+  hud.onPhoneImportSaveRequested = (slotId, jsonText) => {
+    const result = importIntoSlot(saveStore, saveConfig, slotId, jsonText);
+    phoneToast(result.ok ? 'Save imported' : result.reason, result.ok);
+    refreshPhone();
+  };
   (window as unknown as { CondoSave: { saveToSlot: typeof saveToSlot; loadFromSlot: typeof loadFromSlot } }).CondoSave = {
     saveToSlot,
     loadFromSlot,
@@ -2632,6 +2657,12 @@ function disposeGroup(g: THREE.Group) {
   });
 }
 
+function downloadTextFile(filename: string, text: string): void {
+  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
+  URL.revokeObjectURL(url);
+}
+
 async function enterTitle(): Promise<void> {
   const devBoot = new URLSearchParams(location.search).has('dev') || location.hash === '#dev';
   if (devBoot) { titleRoot.hidden = true; await start(); return; }
@@ -2644,8 +2675,7 @@ async function enterTitle(): Promise<void> {
   applyVolumes(activePreferences, audio);
   const saveConfig = bootstrap.save ?? DEFAULT_SAVE_CONFIG;
   const store = new SaveStore(window.localStorage);
-  const slots = store.listSlots(saveConfig).filter((slot) => slot.meta);
-  const recentSlotId = mostRecentSlotId(slots);
+  const titleSlotViews = () => slotCardViews(store, saveConfig);
   let leaving = false;
   const leave = (slotId?: string) => {
     if (leaving) return;
@@ -2661,9 +2691,22 @@ async function enterTitle(): Promise<void> {
     audio.stopMusic();
     void start(slotId);
   };
-  const screen = new TitleScreen(titleRoot, config, slots.length > 0, preferencesStore, audio, {
-    onNew: () => leave(), onLoad: () => leave(recentSlotId),
-  });
+  const screen = new TitleScreen(titleRoot, config, titleSlotViews().some((slot) => slot.status === 'ok'), preferencesStore, audio, {
+    onNew: () => leave(),
+    onLoad: (slotId) => leave(slotId),
+    onDelete: (slotId) => {
+      const result = store.deleteSlot(saveConfig, slotId);
+      if (!result.ok) console.warn(result.reason);
+    },
+    onExport: (slotId) => {
+      const result = exportSlot(store, saveConfig, slotId);
+      if (result.ok) downloadTextFile(result.filename, result.json); else console.warn(result.error);
+    },
+    onImport: (slotId, jsonText) => {
+      const result = importIntoSlot(store, saveConfig, slotId, jsonText);
+      if (!result.ok) console.warn(result.reason);
+    },
+  }, { views: titleSlotViews });
   screen.show();
   audio.setMusicContext('title', { music: [] }, config.music ?? undefined);
 }

@@ -54,6 +54,19 @@
     .title-options-fields { display: grid; gap: 20px; margin-bottom: 28px; text-align: left; }
     .title-option { display: grid; gap: 8px; font-size: 16px; }
     .title-option input[type='range'] { width: 100%; min-height: 44px; accent-color: var(--theme-title-screen-accent, #9fd08c); }
+    .title-save-list { display: grid; gap: 10px; margin-bottom: 14px; text-align: left; }
+    .title-save-card { padding: 12px; border: var(--theme-outline-width, 1px) solid var(--theme-outline, rgba(130,158,210,.4)); border-radius: var(--theme-card-radius, 12px); background: var(--theme-card-bg, rgba(43,57,86,.7)); }
+    .title-save-head { display: flex; justify-content: space-between; gap: 10px; }
+    .title-save-head span { font-size: 11px; opacity: .7; text-transform: uppercase; }
+    .title-save-meta { margin: 7px 0 10px; font-size: 12px; opacity: .8; }
+    .title-save-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .title-save-actions .title-menu-button { min-height: 44px; padding: 7px; font-size: 13px; }
+    .title-save-import { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .title-save-import select { min-height: 44px; border: 0; border-radius: var(--theme-button-radius, 999px); padding: 8px; background: var(--theme-panel-bg, #20283a); color: inherit; }
+    .title-save-import label { display: grid; place-items: center; }
+    .title-save-import input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    .title-save-confirm { position: sticky; bottom: 0; z-index: 2; display: grid; gap: 8px; padding: 12px; margin: 10px 0; border-radius: var(--theme-panel-radius, 12px); background: var(--theme-panel-bg, #20283a); box-shadow: var(--theme-shadow, 0 6px 24px rgba(0,0,0,.45)); }
+    .save-confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     #title-credits { margin-top: 22px; font-size: 12px; opacity: .65; }
     @media (orientation: landscape) and (max-height: 520px) {
       .title-card { width: min(680px, 100%); padding: 18px 28px; }
