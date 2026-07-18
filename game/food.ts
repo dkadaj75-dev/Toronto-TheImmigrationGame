@@ -20,6 +20,8 @@ export interface FoodItem extends FoodConfig {
   wasteAssetId?: string;
 }
 
+export interface FoodSaveState { items: FoodItem[]; }
+
 /** ROADMAP item 2: an action id belongs to a carried-food FAMILY when it is the base id or a
  *  `base_` variant. This lets the designer author meal-tier variants (`cook_light_meal`,
  *  `cook_large_meal`) that all spawn the same `meal` transient and differ only through their sparse
@@ -167,5 +169,20 @@ export class FoodRegistry {
       this.items.delete(item.key);
     }
     return perished;
+  }
+
+  serialize(): FoodSaveState {
+    return { items: this.all.map((item) => ({ ...item, pos: [...item.pos] })) };
+  }
+
+  /** Active carry/eat phases belong to the deliberately-unsaved in-flight action. They are
+   * discarded on load; only already-dropped food is stable, world-independent runtime state. */
+  restore(saved: FoodSaveState): void {
+    this.items.clear();
+    this.activeKey = null;
+    for (const item of saved?.items ?? []) {
+      if (item?.phase !== 'dropped' || !item.key || !item.assetId || !Array.isArray(item.pos)) continue;
+      this.items.set(item.key, { ...item, pos: [item.pos[0], item.pos[1]] });
+    }
   }
 }

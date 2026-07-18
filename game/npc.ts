@@ -262,6 +262,7 @@ export class NpcVisitorController {
   private live: LiveVisitor | null = null;
   private preload: RigPreloadState = { status: 'idle' };
   private interactionAction: ActionDef | null = null;
+  private restoringVisit = false;
 
   constructor(private options: NpcVisitorControllerOptions) {
     this.lifecycle = new VisitLifecycle(
@@ -301,7 +302,7 @@ export class NpcVisitorController {
     const npc = data.npcs?.npcs.find((entry) => entry.id === npcId);
     if (!npc || !data.social) return false;
     const accepted = this.lifecycle.invite(npcId, this.options.getCompatibilityMultiplier?.(npc) ?? 1);
-    if (accepted) this.preloadRig(npc);
+    if (accepted) { this.restoringVisit = false; this.preloadRig(npc); }
     return accepted;
   }
 
@@ -352,6 +353,7 @@ export class NpcVisitorController {
       relationshipLevel: (npc) => this.options.getRelationshipLevel?.(npc.id) ?? null,
       onCallFallback: (npc, outcome) => {
         this.clearPreload();
+        if (this.restoringVisit) { this.restoringVisit = false; return; }
         this.options.onCallFallback?.(npc, outcome);
         this.options.feedback?.(`${npc.name} couldn't reach your door, so you caught up by phone.`);
       },
@@ -390,10 +392,12 @@ export class NpcVisitorController {
     this.clearPreload();
     this.lifecycle.restore(state);
     const restored = this.lifecycle.state;
-    if (restored.phase === 'idle' || !restored.npcId) return;
+    this.restoringVisit = restored.phase !== 'idle';
+    if (restored.phase === 'idle' || !restored.npcId) { this.restoringVisit = false; return; }
     const npc = this.options.getData().npcs?.npcs.find((entry) => entry.id === restored.npcId);
     if (!npc) {
       this.lifecycle.restore(idleState());
+      this.restoringVisit = false;
       return;
     }
     // A restored visible phase must still honor the preload invariant. Re-enter through pending,

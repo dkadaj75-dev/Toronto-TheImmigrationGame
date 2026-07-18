@@ -45,6 +45,9 @@ import { mutualFacingDeg, usePoseFor } from './facing';
 import { contactViews, PhoneContactSession, phoneAutonomyCandidates } from './contacts';
 import { visitGate, VisitAwayTracker, type VisitReturnEvent } from './visit';
 import { crossedNightWindowBoundary, inspectAmbience, nightEnvironmentContribution, sleepBlockDecision, type AmbienceAssetInstance } from './ambience';
+import { applyEnvelope, assembleEnvelope, SaveRegistry } from './save';
+import { SaveStore } from './savestore';
+import { homeMapIdFromEnvelope, registerRuntimeSaveSystems } from './savewiring';
 
 /** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
  *  a seat-aware action with no eligible seat in range) plays the dedicated 'sit_ground' state
@@ -75,6 +78,13 @@ async function start() {
     boot.textContent = `data failed to load — is server.js running? (${(err as Error).message})`;
     return;
   }
+  const saveConfig = data.save ?? {
+    slots: 3,
+    autosaveSlotId: 'autosave',
+    autosaveIntervalHours: 12,
+    autosaveOnEvents: ['moveIn', 'dayRollover'],
+    storageKeyPrefix: 'condo-life-save',
+  };
 
   // B7-7 presentation starts once boot data is available. The initial data fetch still uses the
   // same dark overlay; loading.json itself is boot-only and intentionally has no live retune path.
@@ -1972,13 +1982,8 @@ async function start() {
   watchData(applyFreshData);
 
   // --- ROADMAP_APT R4: move-in completion → runtime map switch ---------------------------------
-  /** Home-map PERSISTENCE is intentionally NOT implemented yet. R4 originally wrote the new home to
-   *  data/simstate.json via a runtime PUT, but the designer does NOT want any persistence before the
-   *  save system exists — a browser refresh must always boot the authored map (tuning.map.active via
-   *  resolveHomeMapId), never the rented apartment. So the move is applied IN MEMORY only
-   *  (quests.vars.homeMap, below) and nothing is written to disk. Boot still reads resolveHomeMapId
-   *  (game/data.ts) so the future save system can restore a home by seeding that var, but no code
-   *  path writes it. */
+  /** Runtime home-map changes remain authoring-data-free: move-in updates memory only, and V3 now
+   * persists that memory inside the localStorage save envelope's homeMap system payload. */
 
   /** The move-in countdown completed (the ONLY path that switches maps — side_effect_rule).
    *  Per-system KEEP/DROP decisions for the runtime switch, each chosen against that system's
@@ -2009,37 +2014,49 @@ async function start() {
    *  Nav rebake, environment score, music restart, and door re-registration all ride the shared
    *  applyFreshData rebuild (its map-id-change branch also teleports the sim to the new spawn). */
   let mapSwitchInFlight = false;
+  /** Resolve and apply one map through the same applyFreshData rebuild used by hot reload and
+   * move-in. The caller's state mutation hook runs only after the destination bundle exists. */
+  const rebuildWorldForMap = async (mapId: string, beforeRebuild?: () => void): Promise<GameData | null> => {
+    const previousMapId = currentMapId;
+    setRuntimeHomeMap(mapId);
+    let fresh: GameData | null = null;
+    try {
+      fresh = await loadAll();
+    } catch {
+      const known = allMaps.find((map) => map.id === mapId);
+      if (known) fresh = { ...data, map: known };
+    }
+    if (!fresh || fresh.map.id !== mapId) {
+      setRuntimeHomeMap(previousMapId);
+      return null;
+    }
+    beforeRebuild?.();
+    applyFreshData(fresh);
+    return fresh;
+  };
   const completePendingMove = async (mapId: string) => {
     mapSwitchInFlight = true;
+    let moved = false;
     try {
-      // Runtime home var only — the same mechanism a quest setVar reward uses (§6.1). No PUT: the
-      // home is NOT persisted (see the note above completePendingMove); a refresh returns to the
-      // authored map until the save system lands.
-      quests.vars.homeMap = mapId;
+      // Runtime home var only — the same mechanism a quest setVar reward uses (§6.1). No authoring PUT.
       // B13-5: register the runtime destination with data.ts so EVERY loadAll() — this one and
       // the 2s hot-reload poll — resolves the new home (B10-22 removed the simstate PUT, so the
       // on-disk homeMap stays null and disk resolution alone would abort/revert the move).
-      setRuntimeHomeMap(mapId);
       // Fresh full bundle: loadAll() re-reads live data (the switched map is applied below).
       // If the server hiccups, fall back to the already-fetched Kijiji copy of the map.
-      let fresh: GameData | null = null;
-      try {
-        fresh = await loadAll();
-      } catch {
-        const known = allMaps.find((m) => m.id === mapId);
-        if (known) fresh = { ...data, map: known };
-      }
+      const fresh = await rebuildWorldForMap(mapId);
       if (!fresh || fresh.map.id !== mapId) {
         // Neither source produced the destination map (deleted mid-countdown?) — abort without
         // switching; the pending state was already consumed, nothing else was applied.
         console.warn(`move-in aborted: map "${mapId}" could not be loaded`);
-        setRuntimeHomeMap(null); // don't leave the poll chasing a missing map
         return;
       }
+      quests.vars.homeMap = mapId;
       // Cancel whatever the sim was doing (a cancel, never a completion — no side effects) and
       // drop every map-bound runtime system per the KEEP/DROP table above.
-      agent.stopAction();
+      agent.stopAction(false);
       carryState = null;
+      trashOutState = null;
       durationState = null;
       panicState = null;
       peeState = null;
@@ -2052,11 +2069,13 @@ async function start() {
       // a fresh period (the Hydro bill's base formula still rides applyFreshData's finance retune).
       hydro.reset();
       currentHydroRate = 0;
-      // One shared rebuild: world/doors/lights/nav/audio/finance retunes + the map-id-change
-      // branch (spawn teleport, action-menu close, music restart). The empty registries make the
-      // reattach calls inside it harmless no-ops. The next watchData poll will see the changed
-      // simstate/map signature and run applyFreshData once more — a routine, idempotent rebuild.
-      applyFreshData(fresh);
+      garbage.syncFillBars();
+      syncAssetStates();
+      rebakeNav();
+      applyEnvironment();
+      // rebuildWorldForMap already ran the one shared applyFreshData path; these final syncs reflect
+      // the intentional map-bound resets above without constructing another world.
+      moved = true;
       hud.showQuestToast(
         `Moved in: ${fresh.map.name || mapId}`,
         'completed',
@@ -2067,6 +2086,7 @@ async function start() {
     } finally {
       mapSwitchInFlight = false;
     }
+    if (moved) autosaveOnEvent('moveIn');
   };
 
   // --- game clock (display only in Phase 0; drives day/night in Phase 1; day count feeds quests' time.day) ---
@@ -2102,6 +2122,162 @@ async function start() {
   // day boundary. Fire is the only current consumer; kept general in case anything else ever
   // wants an unwrapping sim clock.
   let simClockSeconds = 0;
+  const saveRegistry = new SaveRegistry();
+  registerRuntimeSaveSystems(saveRegistry, {
+    stats,
+    clock: {
+      getSimClockSeconds: () => simClockSeconds,
+      setSimClockSeconds: (value) => { simClockSeconds = value; },
+    },
+    quests,
+    visa: visaMachine,
+    work,
+    finance: bills,
+    hydro,
+    buyMode,
+    assetStates,
+    garbage,
+    food,
+    accidents,
+    social: socialRuntime,
+    npcVisit: visitors,
+    visitAway,
+    pendingMove,
+    homeMap: {
+      getMapId: () => data.map.id,
+      setMapId: (mapId) => {
+        quests.vars.homeMap = mapId;
+        setRuntimeHomeMap(mapId);
+      },
+    },
+  });
+  const saveStore = new SaveStore(window.localStorage);
+  hud.configureSaveSlots(saveConfig);
+  let autosaveFailureToasted = false;
+  let lastAutosaveGameHour = gameHourNow();
+
+  const setAbsoluteGameHour = (absoluteHour: number) => {
+    const safe = Math.max(0, absoluteHour);
+    const dayIndex = Math.floor(safe / 24);
+    gameDay = dayIndex + 1;
+    gameSeconds = (safe - dayIndex * 24) * 3600;
+  };
+
+  function saveToSlot(slotId: string, name?: string, autosave = false): boolean {
+    if (mapSwitchInFlight) {
+      if (!autosave) hud.showQuestToast('Wait for the move to finish before saving', 'started', 2500);
+      return false;
+    }
+    const envelope = assembleEnvelope(saveRegistry, {
+      name,
+      mapId: data.map.id,
+      gameHour: gameHourNow(),
+      playSeconds: simClockSeconds,
+    });
+    const result = saveStore.writeSlot(saveConfig, slotId, envelope);
+    if (!result.ok) {
+      if (!autosave || !autosaveFailureToasted) {
+        hud.showQuestToast(result.reason, 'started', data.tuning.quests.toastDurationSeconds * 1000);
+      }
+      if (autosave) autosaveFailureToasted = true;
+      return false;
+    }
+    if (autosave) autosaveFailureToasted = false;
+    else hud.showQuestToast(`Saved to ${name || slotId}`, 'completed', 2500);
+    return true;
+  }
+
+  function autosaveOnEvent(event: string): void {
+    if (!saveConfig.autosaveOnEvents.includes(event) || mapSwitchInFlight || gameOverActive || buyMode.active) return;
+    lastAutosaveGameHour = gameHourNow();
+    saveToSlot(saveConfig.autosaveSlotId, 'Autosave', true);
+  }
+
+  async function loadFromSlot(slotId: string): Promise<boolean> {
+    if (mapSwitchInFlight || buyMode.active || repoOverlayActive) {
+      hud.showQuestToast('Close the current overlay before loading', 'started', 2500);
+      return false;
+    }
+    const read = saveStore.readSlot(saveConfig, slotId);
+    if (!read.ok) {
+      hud.showQuestToast(`Load failed: ${read.reason}`, 'started', data.tuning.quests.toastDurationSeconds * 1000);
+      return false;
+    }
+    const envelope = read.envelope;
+    const targetMapId = homeMapIdFromEnvelope(envelope);
+    mapSwitchInFlight = true;
+    try {
+      const fresh = await rebuildWorldForMap(targetMapId, () => {
+        exteriorDoorTransit.cancel(true);
+        agent.stopAction(false);
+        socialSession.finish(false);
+        phoneContactSession.finish(false, gameHourNow() * 60);
+        carryState = null;
+        trashOutState = null;
+        durationState = null;
+        panicState = null;
+        peeState = null;
+        pendingVisitNpcId = null;
+        foodTransitioning = false;
+        returnTransitPending = false;
+      });
+      if (!fresh) {
+        hud.showQuestToast(`Load failed: map "${targetMapId}" is unavailable`, 'started', data.tuning.quests.toastDurationSeconds * 1000);
+        return false;
+      }
+
+      // The envelope clock is authoritative and is established before any restored system can tick.
+      setAbsoluteGameHour(envelope.gameHour);
+      const applied = applyEnvelope(saveRegistry, envelope);
+      if (!applied.ok) {
+        hud.showQuestToast(`Load failed: ${applied.reason}`, 'started', data.tuning.quests.toastDurationSeconds * 1000);
+        return false;
+      }
+      for (const warning of applied.warnings) console.warn(`save load: ${warning}`);
+
+      // Restore presentation only after every pure owner has accepted its payload.
+      accidents.reattach(world);
+      buyMode.reattach(world);
+      garbage.syncFillBars();
+      syncAssetStates();
+      rebakeNav();
+      applyEnvironment();
+      agent.teleportTo(data.map.spawn.pos[0], data.map.spawn.pos[1], data.map.spawn.facingDeg);
+      const away = playerAway();
+      sim.visible = !away;
+      if (marker) marker.pivot.visible = !away;
+      if (work.isAtWork) hud.setAtWork(true);
+      else if (visitAway.isAway) {
+        const npc = data.npcs?.npcs.find((entry) => entry.id === visitAway.activeNpcId);
+        hud.setAtWork(true, npc ? `Visiting ${npc.name}` : 'Visiting');
+      } else hud.setAtWork(false);
+      gameOverActive = false;
+      debtGameOverPending = false;
+      hud.hideGameOver();
+      happiness = computeHappiness(data.happiness, buildEvalContext());
+      hud.setHappiness(happiness);
+      hud.setFunds(quests.funds, currencyName());
+      refreshVisaChip();
+      refreshPhone();
+      refreshQuestLog();
+      lastAutosaveGameHour = gameHourNow();
+      hud.showQuestToast(`Loaded ${envelope.name || slotId}`, 'completed', 2500);
+      return true;
+    } catch (error) {
+      console.warn('save load failed', error);
+      hud.showQuestToast(`Load failed: ${(error as Error).message}`, 'started', data.tuning.quests.toastDurationSeconds * 1000);
+      return false;
+    } finally {
+      mapSwitchInFlight = false;
+    }
+  }
+
+  hud.onSaveRequested = (slotId) => { saveToSlot(slotId, slotId === saveConfig.autosaveSlotId ? 'Autosave' : undefined); };
+  hud.onLoadRequested = (slotId) => { void loadFromSlot(slotId); };
+  (window as unknown as { CondoSave: { saveToSlot: typeof saveToSlot; loadFromSlot: typeof loadFromSlot } }).CondoSave = {
+    saveToSlot,
+    loadFromSlot,
+  };
   // ROADMAP_APT R4: last in-game hour the Kijiji tab was refreshed for the pending-move countdown.
   let lastPendingRefreshHour = -1;
 
@@ -2132,12 +2308,12 @@ async function start() {
     // selection is locked/preserved while away and becomes effective again on return.
     const selectedSpeed = playerAway() ? (data.tuning.work?.autoSpeed ?? 5) : hud.speed;
     const effectiveSpeed = Number.isFinite(selectedSpeed) ? Math.max(0, selectedSpeed) : 0;
-    const sdt = (initialLoadingActive || buyMode.active || repoOverlayActive || gameOverActive) ? 0 : dt * effectiveSpeed;
+    const sdt = (initialLoadingActive || mapSwitchInFlight || buyMode.active || repoOverlayActive || gameOverActive) ? 0 : dt * effectiveSpeed;
     simClockSeconds += sdt;
     // ROADMAP_NEXT item 7: sfx/action/asset loops pause whenever sim time isn't advancing (the
     // pause button OR buy mode's own freeze); music is deliberately NOT touched here (see
     // audio.ts's module doc comment on the PAUSE decision).
-    audio.setPaused(initialLoadingActive || effectiveSpeed === 0 || buyMode.active || repoOverlayActive || gameOverActive);
+    audio.setPaused(initialLoadingActive || mapSwitchInFlight || effectiveSpeed === 0 || buyMode.active || repoOverlayActive || gameOverActive);
     syncAssetStates(); // picks up newly purchased/sold stateful instances; idempotent for steady state
 
     const previousGameHour = gameSeconds / 3600;
@@ -2172,6 +2348,13 @@ async function start() {
       handleRepoIfDue();
       refreshVisaChip();
       refreshPhone();
+      autosaveOnEvent('dayRollover');
+    }
+    const autosaveInterval = saveConfig.autosaveIntervalHours;
+    if (autosaveInterval > 0 && gameHourNow() - lastAutosaveGameHour >= autosaveInterval
+      && !mapSwitchInFlight && !gameOverActive && !buyMode.active) {
+      lastAutosaveGameHour = gameHourNow();
+      saveToSlot(saveConfig.autosaveSlotId, 'Autosave', true);
     }
     // Environment is event-recomputed, never tick-fed. The clock is already advanced here for
     // the day/night sky, so compare the old/new window state and recompute only at its boundaries.

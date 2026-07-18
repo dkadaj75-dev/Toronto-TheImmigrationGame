@@ -3,7 +3,7 @@
 // needs no changes. Portrait-first, collapsible panels for small screens.
 // Bar colors/names come from stats.json; action names from interactions.json.
 
-import type { ActionDef, AssetDef, JobDef, VisaDef } from './data';
+import type { ActionDef, AssetDef, JobDef, SaveConfig, VisaDef } from './data';
 import type { RentalCardView, RequirementView } from './phone';
 import type { ContactView } from './contacts';
 import type { SimStats } from './stats';
@@ -252,6 +252,14 @@ const CSS = `
   border-radius: var(--theme-button-radius, 999px); padding: 9px 12px; font-size: 13px; background: rgba(20,26,40,.88);
   color: #b8c4da; cursor: pointer; pointer-events: auto; touch-action: manipulation; }
 #wall-cut-button.active { background: rgba(90,120,190,.7); color: #fff; }
+#save-controls { position: absolute; right: calc(8px + env(safe-area-inset-right, 0px));
+  bottom: calc(270px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: center; gap: 4px;
+  padding: 5px; border-radius: var(--theme-panel-radius, 10px); background: var(--theme-panel-bg, rgba(20,26,40,.88));
+  pointer-events: auto; box-shadow: var(--theme-shadow, 0 3px 14px rgba(0,0,0,.25)); }
+#save-controls select, #save-controls button { min-height: 30px; border: 0; border-radius: var(--theme-button-radius, 999px);
+  padding: 5px 8px; font: 11px var(--theme-button-font-family, system-ui, sans-serif); }
+#save-controls select { max-width: 88px; background: var(--theme-panel-bg, #20283a); color: var(--theme-panel-fg, #dfe6f2); }
+#save-controls button { background: var(--theme-button-bg, rgba(90,120,190,.55)); color: var(--theme-button-fg, #eaf0fb); cursor: pointer; }
 #funds-chip.hidden, #buy-button.hidden, #buy-button.work-hidden, #wall-cut-button.hidden { display: none; }
 .hud-panel.buy-mode-hidden { display: none; }
 
@@ -479,6 +487,7 @@ export class Hud {
   private fundsChip: HTMLElement;
   private buyButton: HTMLElement;
   private wallCutButton: HTMLButtonElement;
+  private saveSlotSelect: HTMLSelectElement;
   private buyBar: HTMLElement;
   private buyFundsEl: HTMLElement;
   private buySearchEl: HTMLInputElement;
@@ -493,6 +502,8 @@ export class Hud {
   onBuyOpen: (() => void) | null = null;
   /** fires when the player toggles the in-page Sims-style wall cut */
   onWallCutToggle: (() => void) | null = null;
+  onSaveRequested: ((slotId: string) => void) | null = null;
+  onLoadRequested: ((slotId: string) => void) | null = null;
   /** fires when the player exits buy mode (the bar's own Exit button) */
   onBuyClose: (() => void) | null = null;
   onBuyCategoryPick: ((category: string) => void) | null = null;
@@ -567,6 +578,11 @@ export class Hud {
       <div id="funds-chip">§ 0</div>
       <button id="buy-button">🛒 Buy</button>
       <button id="wall-cut-button" aria-pressed="false" title="Cut walls down">⌂ Cut</button>
+      <div id="save-controls" aria-label="Save and load">
+        <select id="save-slot" aria-label="Save slot"></select>
+        <button id="save-game" type="button">Save</button>
+        <button id="load-game" type="button">Load</button>
+      </div>
       <button id="phone-button" aria-label="Open smartphone" title="Smartphone"><img alt="" /><span class="phone-badge" aria-label="0 unpaid bills"></span></button>
       <div id="game-over">
         <h2>Game Over</h2>
@@ -677,6 +693,7 @@ export class Hud {
     this.fundsChip = root.querySelector('#funds-chip')!;
     this.buyButton = root.querySelector('#buy-button')!;
     this.wallCutButton = root.querySelector('#wall-cut-button')!;
+    this.saveSlotSelect = root.querySelector('#save-slot')!;
     this.buyBar = root.querySelector('#buy-bar')!;
     this.buyFundsEl = root.querySelector('#buy-funds')!;
     this.buySearchEl = root.querySelector('#buy-search')!;
@@ -689,6 +706,8 @@ export class Hud {
 
     this.buyButton.addEventListener('click', () => this.onBuyOpen?.());
     this.wallCutButton.addEventListener('click', () => this.onWallCutToggle?.());
+    root.querySelector('#save-game')!.addEventListener('click', () => this.onSaveRequested?.(this.saveSlotSelect.value));
+    root.querySelector('#load-game')!.addEventListener('click', () => this.onLoadRequested?.(this.saveSlotSelect.value));
     root.querySelector('#buy-exit')!.addEventListener('click', () => this.onBuyClose?.());
     this.buySearchEl.addEventListener('input', () => this.onBuySearch?.(this.buySearchEl.value));
     root.querySelector('[data-gc="rotate"]')!.addEventListener('click', () => this.onGhostRotate?.());
@@ -796,6 +815,20 @@ export class Hud {
     this.wallCutButton.classList.toggle('active', active);
     this.wallCutButton.setAttribute('aria-pressed', String(active));
     this.wallCutButton.title = active ? 'Show full walls' : 'Cut walls down';
+  }
+
+  configureSaveSlots(config: SaveConfig) {
+    this.saveSlotSelect.replaceChildren();
+    for (let index = 1; index <= Math.max(0, Math.floor(config.slots)); index++) {
+      const option = document.createElement('option');
+      option.value = `slot-${index}`;
+      option.textContent = `Slot ${index}`;
+      this.saveSlotSelect.appendChild(option);
+    }
+    const autosave = document.createElement('option');
+    autosave.value = config.autosaveSlotId;
+    autosave.textContent = 'Autosave';
+    this.saveSlotSelect.appendChild(autosave);
   }
 
   setClock(hours: number, minutes: number, weekday = '') {
@@ -980,6 +1013,11 @@ export class Hud {
     this.phoneButton.classList.add('hidden');
     this.gameOverText.textContent = description;
     this.gameOverEl.classList.add('open');
+  }
+
+  hideGameOver() {
+    this.gameOverEl.classList.remove('open');
+    this.phoneButton.classList.remove('hidden');
   }
 
   /** F2 non-terminal notice. The caller decides whether closing it resumes or reveals game over. */

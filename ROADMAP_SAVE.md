@@ -98,7 +98,19 @@ list/read/write/delete, export (Blob download `condo-life-save-<slot>-<date>.jso
 pure logic + thin DOM for the file pickers. `test/savestore.test.ts` with a mocked storage.
 **Agent: Claude (Sonnet).** Mechanical once V1 defines shapes.
 
-### V3 — Runtime wiring: register everything, boot restore, autosave
+### V3 — Runtime wiring: register everything, boot restore, autosave — ✅ SHIPPED (2026-07-18)
+> As-built (Codex): game/savewiring.ts + main.ts. System ids: simStats, clock, quests(+funds
+> meta), visa, work, finance, hydro, buyMode, assetStates, garbage, food, accidents, social,
+> npcVisit, visitAway, pendingMove, homeMap (weekday derives — not saved). Restore order:
+> validate slot → set home map (B13-5 setRuntimeHomeMap) → shared applyFreshData rebuild →
+> absolute clock → applyEnvelope (per-system isolation) → reattach accidents/buy/lights/garbage
+> → nav+environment rebuild → spawn teleport (actions not serialized). Corrupt slot: toast,
+> current game untouched; missing map aborts pre-restore. Autosave: sim-time interval +
+> moveIn/dayRollover, skipped during map switch/game over/buy mode, quota failure toasts once.
+> NPC rig failure on restore ends the visit silently. Minimal UI: slot picker + Save/Load in
+> the right HUD stack (TITLE/G3 replace it). Coordinator-verified live: save → page reload →
+> load restores funds/clock with zero console errors. test/save-wiring.test.ts (real system
+> classes round-trip).
 Register every system in the §1 table from main.ts (find each real serialize/restore, adapt
 where signatures drift); boot flow gains a restore path (load slot → applyFreshData-style world
 rebuild → restore payloads → resume clock) reusing the R4 map-switch machinery for maps —
