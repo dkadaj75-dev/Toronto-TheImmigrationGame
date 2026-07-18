@@ -69,8 +69,8 @@ check('picking the rentals tab marks it active', rentalsTab.classList.contains('
 check('smartphone frame has a status bar and home indicator', !!doc.querySelector('.phone-shell .phone-status-bar') && !!doc.querySelector('.phone-shell .phone-home-indicator'));
 check('content sits before bottom-tab navigation', !!doc.querySelector('.phone-header + #phone-body + .phone-tabs'));
 check('contacts tab label comes from tuning', doc.querySelector('[data-phone-tab="contacts"]')?.textContent === 'People');
-hud.setClock(9, 5);
-check('game clock is mirrored into the smartphone status bar', doc.querySelector('.phone-status')?.textContent === '09:05');
+hud.setClock(9, 5, 'Wed');
+check('weekday and game clock share the smartphone status bar', doc.querySelector('.phone-status')?.textContent === 'Wed 09:05');
 
 const cards = [...doc.querySelectorAll('#phone-body .phone-card')];
 check('every listed ad renders a card', cards.length === 3);

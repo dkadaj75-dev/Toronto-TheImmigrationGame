@@ -798,10 +798,10 @@ export class Hud {
     this.wallCutButton.title = active ? 'Show full walls' : 'Cut walls down';
   }
 
-  setClock(hours: number, minutes: number) {
+  setClock(hours: number, minutes: number, weekday = '') {
     const text = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
     this.clockEl.textContent = text;
-    this.phoneStatus.textContent = text;
+    this.phoneStatus.textContent = weekday ? `${weekday} ${text}` : text;
   }
 
   /** Screen-space contextual menu around a tapped object. `screen` is optional for old callers. */

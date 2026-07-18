@@ -76,6 +76,11 @@
     "contactsTabName": "Contacts",
     "_source": "Smartphone/jobs V2 + designer HUD launcher delta (PROJECT_CONTEXT.md §7.20) — jobListSize controls hourly listings; icon is the persistent HUD button image. rentalTabName (ROADMAP_APT R1, §6.4 RESOLVED) and contactsTabName (ROADMAP_SOCIAL S5) are renameable phone-tab labels consumed by the HUD."
   },
+  "calendar": {
+    "dayNames": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "startDayIndex": 0,
+    "_source": "B13-11 weekday calendar. dayNames defines the seven phone/editor labels in weekly order; startDayIndex (0..6) chooses the weekday of game day 1. Weekdays derive from the absolute game clock and need no save state."
+  },
   "work": {
     "autoSpeed": 5,
     "promotionHappinessFactor": 1,

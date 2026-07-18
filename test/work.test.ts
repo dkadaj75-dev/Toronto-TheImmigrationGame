@@ -8,10 +8,14 @@ import {
   decideAutoDepart,
   decideWorkReturn,
   departureWindowCloseOffset,
+  isScheduledWorkWindow,
+  isWorkDay,
   isLeaveForWorkAvailable,
   isWithinDepartureWindow,
   isWithinWorkHours,
   shouldStartVisaGrace,
+  weekdayIndex,
+  weekdayName,
   workWindowContaining,
 } from '../game/work';
 
@@ -177,6 +181,38 @@ console.log('work.test — grace trigger decision');
   check('different current status does not start grace', !shouldStartVisaGrace(dayJob, 'visitor', visitor));
   check('matching but non-losable visa does not start grace', !shouldStartVisaGrace({ ...dayJob, grantsVisa: 'visitor' }, 'visitor', visitor));
   check('job without grantsVisa does not start grace', !shouldStartVisaGrace({ ...dayJob, grantsVisa: undefined }, 'lmia', lmia));
+}
+
+console.log('work.test - B13-11 weekday derivation and sparse schedules');
+{
+  const calendar = { dayNames: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], startDayIndex: 0 };
+  check('game day 1 uses startDayIndex', weekdayIndex({ day: 1, hour: 0 }, calendar) === 0 && weekdayName({ day: 1, hour: 12 }, calendar) === 'Mon');
+  check('weekday rolls over with absolute game day', weekdayName({ day: 2, hour: 0 }, calendar) === 'Tue' && weekdayName({ day: 8, hour: 0 }, calendar) === 'Mon');
+  check('startDayIndex offsets the opening weekday', weekdayName({ day: 1, hour: 0 }, { ...calendar, startDayIndex: 2 }) === 'Wed');
+  check('absent workDays remains daily', isWorkDay(dayJob, 6, calendar));
+  const scheduled = { ...dayJob, workDays: [0, 'Wed'] };
+  check('numeric and named sparse days resolve', isWorkDay(scheduled, 0, calendar) && isWorkDay(scheduled, 2, calendar));
+  check('sparse schedule excludes other days', !isWorkDay(scheduled, 1, calendar));
+  check('empty schedule means no work days', !isWorkDay({ ...dayJob, workDays: [] }, 0, calendar));
+}
+
+console.log('work.test - B13-11 scheduled attendance pipeline');
+{
+  const calendar = { dayNames: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], startDayIndex: 0 };
+  const scheduled: JobDef = { ...dayJob, workDays: [0, 2] };
+  check('manual shift is unavailable on an off-day', !isLeaveForWorkAvailable('day', [scheduled], { day: 2, hour: 9.5 }, 2, calendar));
+  check('beginShift rejects an off-day', !new WorkTracker().beginShift(scheduled, { day: 2, hour: 9.5 }, returnPoint, 2, calendar).ok);
+  check('scheduled window helper feeds auto-depart false on off-days', !decideAutoDepart({
+    withinDepartureWindow: isScheduledWorkWindow(scheduled, { day: 2, hour: 9.5 }, calendar)
+      && isWithinDepartureWindow({ day: 2, hour: 9.5 }, scheduled.hours, 2),
+    happiness: 100, energy: 100, happinessMin: 40, energyMin: 25,
+  }));
+  const work = new WorkTracker();
+  work.syncJob(scheduled, { day: 1, hour: 8 }, calendar);
+  work.tick(scheduled, { day: 1, hour: 11 }, 2, calendar);
+  check('scheduled missed shift applies its penalty', work.skips === 1);
+  check('off-day applies no missed-shift penalty', work.tick(scheduled, { day: 2, hour: 23 }, 2, calendar).length === 0 && work.skips === 1);
+  check('next scheduled day still triggers', work.tick(scheduled, { day: 3, hour: 9 }, 2, calendar).some((event) => event.type === 'due'));
 }
 
 if (failures > 0) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }

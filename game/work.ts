@@ -1,6 +1,6 @@
 // work.ts — pure work attendance/shift logic (PROJECT_CONTEXT.md §7.20 V3, ROADMAP_NEXT B3-8).
-// No DOM or three.js dependency: hour-window math, returns/pay, missed-shift accounting, job loss,
-// and save/restore are all headless-tested in test/work.test.ts. Runtime effects (hiding the sim,
+// No DOM or three.js dependency: weekday/schedule math, hour windows, returns/pay, missed-shift
+// accounting, job loss, and save/restore are headless-tested in test/work.test.ts. Runtime effects,
 // applying funds through QuestRunner, HUD toasts, and visa grace) stay in main.ts.
 
 import type { JobDef, VisaDef } from './data';
@@ -48,6 +48,56 @@ export type WorkTickEvent =
   | { type: 'job_lost'; jobId: string; skips: number };
 
 const EPSILON = 1e-9;
+export const DEFAULT_DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
+export interface CalendarTuning { dayNames?: string[]; startDayIndex?: number }
+
+export function calendarDayNames(calendar?: CalendarTuning): string[] {
+  const authored = calendar?.dayNames?.map((name) => String(name).trim());
+  return authored?.length === 7 && authored.every(Boolean) ? authored : [...DEFAULT_DAY_NAMES];
+}
+
+function normalizeDayIndex(index: number, count = 7): number {
+  const whole = Math.floor(Number.isFinite(index) ? index : 0);
+  return ((whole % count) + count) % count;
+}
+
+/** Game day 1 is the tunable start day; the weekday is otherwise derived only from game time. */
+export function weekdayIndex(time: WorkTime, calendar?: CalendarTuning): number {
+  const names = calendarDayNames(calendar);
+  const absoluteDay = Math.floor(absoluteGameHour(time) / 24);
+  return normalizeDayIndex((calendar?.startDayIndex ?? 0) + absoluteDay - 1, names.length);
+}
+
+export function weekdayName(time: WorkTime, calendar?: CalendarTuning): string {
+  const names = calendarDayNames(calendar);
+  return names[weekdayIndex(time, calendar)];
+}
+
+export function currentWeekday(time: WorkTime, calendar?: CalendarTuning): { id: number; name: string } {
+  const id = weekdayIndex(time, calendar);
+  return { id, name: calendarDayNames(calendar)[id] };
+}
+
+/** Missing workDays is daily. An authored empty array means the job has no scheduled shifts. */
+export function isWorkDay(job: Pick<JobDef, 'workDays'>, dayIndex: number, calendar?: CalendarTuning): boolean {
+  if (job.workDays === undefined) return true;
+  const names = calendarDayNames(calendar);
+  const wanted = normalizeDayIndex(dayIndex, names.length);
+  return job.workDays.some((entry) => {
+    if (typeof entry === 'number' && Number.isFinite(entry)) return normalizeDayIndex(entry, names.length) === wanted;
+    if (typeof entry !== 'string') return false;
+    return names.findIndex((name) => name.toLocaleLowerCase() === entry.trim().toLocaleLowerCase()) === wanted;
+  });
+}
+
+function weekdayIndexAtAbsoluteHour(absHour: number, calendar?: CalendarTuning): number {
+  return weekdayIndex({ day: Math.floor(absHour / 24), hour: normalizeGameHour(absHour) }, calendar);
+}
+
+export function isScheduledWorkWindow(job: JobDef, time: WorkTime, calendar?: CalendarTuning): boolean {
+  const window = workWindowContaining(time, job.hours);
+  return !!window && isWorkDay(job, weekdayIndexAtAbsoluteHour(window.startAbsHour, calendar), calendar);
+}
 
 export function jobLevelIndex(job: JobDef, rawLevel: number): number {
   const max = Math.max(0, (job.levels?.length ?? 1) - 1);
@@ -158,10 +208,12 @@ export function isWithinDepartureWindow(time: WorkTime, hours: WorkHours, depart
  */
 export function isLeaveForWorkAvailable(
   jobId: unknown, jobs: readonly JobDef[], time: WorkTime, departureWindowHours?: number,
+  calendar?: CalendarTuning,
 ): boolean {
   if (typeof jobId !== 'string' || !jobId) return false;
   const job = jobs.find((entry) => entry.id === jobId);
   if (!job) return false;
+  if (!isScheduledWorkWindow(job, time, calendar)) return false;
   return departureWindowHours === undefined
     ? isWithinWorkHours(time, job.hours)
     : isWithinDepartureWindow(time, job.hours, departureWindowHours);
@@ -222,13 +274,27 @@ export function shouldStartVisaGrace(job: JobDef, currentStatusId: string, curre
     && currentVisa.losable === true;
 }
 
-function firstShiftStartAtOrAfter(time: WorkTime, hours: WorkHours): number {
+function firstShiftStartAtOrAfter(time: WorkTime, job: JobDef, calendar?: CalendarTuning): number | null {
   const now = absoluteGameHour(time);
-  const startHour = normalizeGameHour(hours.startHour);
+  const startHour = normalizeGameHour(job.hours.startHour);
   const day = Math.floor(now / 24);
   let candidate = day * 24 + startHour;
   if (candidate < now - EPSILON) candidate += 24;
-  return candidate;
+  const cycle = calendarDayNames(calendar).length;
+  for (let offset = 0; offset < cycle; offset++, candidate += 24) {
+    if (isWorkDay(job, weekdayIndexAtAbsoluteHour(candidate, calendar), calendar)) return candidate;
+  }
+  return null;
+}
+
+function nextShiftStartAfter(startAbsHour: number, job: JobDef, calendar?: CalendarTuning): number | null {
+  const startHour = normalizeGameHour(job.hours.startHour);
+  let candidate = (Math.floor(startAbsHour / 24) + 1) * 24 + startHour;
+  const cycle = calendarDayNames(calendar).length;
+  for (let offset = 0; offset < cycle; offset++, candidate += 24) {
+    if (isWorkDay(job, weekdayIndexAtAbsoluteHour(candidate, calendar), calendar)) return candidate;
+  }
+  return null;
 }
 
 function cloneActive(active: ActiveWorkShift | null): ActiveWorkShift | null {
@@ -243,8 +309,8 @@ function cloneActive(active: ActiveWorkShift | null): ActiveWorkShift | null {
  * Serializable runtime attendance state. `nextShiftStartAbsHour` is the first shift whose entire
  * window begins after the current job was acquired; this prevents a job accepted halfway through
  * today's hours from retroactively becoming a skip, while accepting before (or exactly at) the
- * start correctly tracks that shift. Each ended window advances the cursor by exactly 24 hours,
- * so a missed shift can increment only once even when tick() is called every frame.
+ * start correctly tracks that shift. Each ended window advances the cursor to the next scheduled
+ * weekday, so an off-day never increments skips and a missed shift can increment only once.
  */
 export class WorkTracker {
   private state: WorkSaveState = {
@@ -264,13 +330,13 @@ export class WorkTracker {
   getJobLevel(jobId: string): number { return Math.max(0, Math.floor(this.state.jobLevels[jobId] ?? 0)); }
 
   /** Changing jobs starts fresh attendance. Runtime state for the same job is left untouched. */
-  syncJob(job: JobDef | null, time: WorkTime) {
+  syncJob(job: JobDef | null, time: WorkTime, calendar?: CalendarTuning) {
     const nextId = job?.id ?? null;
     if (nextId === this.state.jobId) return;
     this.state = {
       jobId: nextId,
       skips: 0,
-      nextShiftStartAbsHour: job ? firstShiftStartAtOrAfter(time, job.hours) : null,
+      nextShiftStartAbsHour: job ? firstShiftStartAtOrAfter(time, job, calendar) : null,
       attendedShiftStartAbsHour: null,
       notifiedShiftStartAbsHour: null,
       activeShift: null,
@@ -278,11 +344,14 @@ export class WorkTracker {
     };
   }
 
-  beginShift(job: JobDef, time: WorkTime, returnPoint: WorkReturnPoint, departureWindowHours?: number): StartWorkResult {
+  beginShift(job: JobDef, time: WorkTime, returnPoint: WorkReturnPoint, departureWindowHours?: number, calendar?: CalendarTuning): StartWorkResult {
     if (this.state.activeShift) return { ok: false, reason: 'already_at_work' };
-    this.syncJob(job, time);
+    this.syncJob(job, time, calendar);
     const window = workWindowContaining(time, job.hours);
     if (!window) return { ok: false, reason: 'outside_hours' };
+    if (!isWorkDay(job, weekdayIndexAtAbsoluteHour(window.startAbsHour, calendar), calendar)) {
+      return { ok: false, reason: 'outside_hours' };
+    }
     // B7-5: even if still within overall job hours, a departure past the ~2h window is too late —
     // the walk from menu-open to the exterior door can push the sim past the deadline.
     if (departureWindowHours !== undefined && !isWithinDepartureWindow(time, job.hours, departureWindowHours)) {
@@ -313,7 +382,7 @@ export class WorkTracker {
    * window. A missed window increments once; skips > maxSkips emits job_lost and clears the tracked
    * job. The caller owns vars.job and applies that external mutation in response to the event.
    */
-  tick(job: JobDef | null, time: WorkTime, departureWindowHours?: number): WorkTickEvent[] {
+  tick(job: JobDef | null, time: WorkTime, departureWindowHours?: number, calendar?: CalendarTuning): WorkTickEvent[] {
     const events: WorkTickEvent[] = [];
 
     const returned = decideWorkReturn(this.state.activeShift, time);
@@ -326,8 +395,17 @@ export class WorkTracker {
     // hot-reload temporarily removes/changes the job definition or external vars.job changes.
     if (this.state.activeShift) return events;
 
-    this.syncJob(job, time);
-    if (!job || this.state.jobId !== job.id || this.state.nextShiftStartAbsHour === null) return events;
+    this.syncJob(job, time, calendar);
+    if (!job || this.state.jobId !== job.id) return events;
+    if (this.state.nextShiftStartAbsHour === null) {
+      this.state.nextShiftStartAbsHour = firstShiftStartAtOrAfter(time, job, calendar);
+      if (this.state.nextShiftStartAbsHour === null) return events;
+    }
+
+    if (!isWorkDay(job, weekdayIndexAtAbsoluteHour(this.state.nextShiftStartAbsHour, calendar), calendar)) {
+      this.state.nextShiftStartAbsHour = firstShiftStartAtOrAfter(time, job, calendar);
+      if (this.state.nextShiftStartAbsHour === null) return events;
+    }
 
     const now = absoluteGameHour(time);
     const duration = workWindowDuration(job.hours);
@@ -354,9 +432,10 @@ export class WorkTracker {
       const shiftStart = this.state.nextShiftStartAbsHour;
       const attended = this.state.attendedShiftStartAbsHour !== null
         && Math.abs(this.state.attendedShiftStartAbsHour - shiftStart) <= EPSILON;
-      this.state.nextShiftStartAbsHour += 24;
+      this.state.nextShiftStartAbsHour = nextShiftStartAfter(shiftStart, job, calendar);
       if (attended) {
         this.state.attendedShiftStartAbsHour = null;
+        if (this.state.nextShiftStartAbsHour === null) break;
         continue;
       }
 
@@ -370,6 +449,7 @@ export class WorkTracker {
         this.state.notifiedShiftStartAbsHour = null;
         break;
       }
+      if (this.state.nextShiftStartAbsHour === null) break;
     }
     return events;
   }

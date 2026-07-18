@@ -41,6 +41,9 @@
   .frow input[readonly] { color: #6f7fa3; }
   .inline-control { display: flex; align-items: center; gap: 8px; }
   .inline-control input[type=number] { flex: 1; }
+  .weekday-grid { display: grid; grid-template-columns: repeat(7, minmax(58px, 1fr)); gap: 7px; }
+  .weekday-check { display: flex; align-items: center; justify-content: center; gap: 5px; padding: 8px 5px;
+    background: #10182a; border: 1px solid #2c3a58; border-radius: 8px; font-size: 12px; }
   .level-row { display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:8px; align-items:end; margin:8px 0; }
   .level-field label { display:block; margin-bottom:4px; font-size:11px; color:#8fa3c8; }
   .level-field input { width:100%; padding:6px 8px; color:#dfe6f2; background:#10182a; border:1px solid #2c3a58; border-radius:6px; }
@@ -174,6 +177,24 @@ function numberInput(value, onInput, path, opts = {}) {
 function checkInput(value, onChange, path) {
   const el = document.createElement('input'); el.type = 'checkbox'; el.checked = !!value; el.dataset.path = path;
   el.addEventListener('change', () => onChange(el.checked)); return el;
+}
+function calendarDayNames() {
+  const names = state.tuning?.calendar?.dayNames;
+  return Array.isArray(names) && names.length === 7 && names.every((name) => String(name).trim())
+    ? names.map((name) => String(name).trim()) : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+}
+function selectedWorkDayIndices(job) {
+  const names = calendarDayNames();
+  if (job.workDays === undefined) return new Set(names.map((_, index) => index));
+  const selected = new Set();
+  for (const entry of job.workDays) {
+    if (typeof entry === 'number' && Number.isFinite(entry)) selected.add(((Math.floor(entry) % 7) + 7) % 7);
+    else if (typeof entry === 'string') {
+      const index = names.findIndex((name) => name.toLowerCase() === entry.trim().toLowerCase());
+      if (index >= 0) selected.add(index);
+    }
+  }
+  return selected;
 }
 function selectInput(options, value, onChange, path) {
   const el = document.createElement('select'); el.dataset.path = path;
@@ -367,6 +388,25 @@ function renderJobEditor() {
   }, 'job.minCreditScore', { min: 0, emptyValue: null })));
   details.appendChild(frow('max skips', numberInput(job.maxSkips, (v) => { job.maxSkips = v; markDirty('jobs.json'); }, 'job.maxSkips', { min: 0 })));
   root.appendChild(details);
+  const schedule = card('Weekly schedule');
+  const dayGrid = document.createElement('div'); dayGrid.className = 'weekday-grid';
+  const dayNames = calendarDayNames(), selectedDays = selectedWorkDayIndices(job);
+  dayNames.forEach((dayName, dayIndex) => {
+    const label = document.createElement('label'); label.className = 'weekday-check';
+    const input = checkInput(selectedDays.has(dayIndex), (checked) => {
+      const next = selectedWorkDayIndices(job);
+      if (checked) next.add(dayIndex); else next.delete(dayIndex);
+      if (next.size === dayNames.length) delete job.workDays;
+      else job.workDays = [...next].sort((a, b) => a - b);
+      markDirty('jobs.json'); renderJobEditor(); renderValidation();
+    }, `job.workDays.${dayIndex}`);
+    input.dataset.dayIndex = String(dayIndex);
+    label.append(input, dayName); dayGrid.appendChild(label);
+  });
+  schedule.appendChild(dayGrid);
+  const scheduleHint = document.createElement('div'); scheduleHint.className = 'hint-line';
+  scheduleHint.textContent = 'All checked is saved sparsely as daily (no workDays field). Uncheck all for no scheduled shifts.';
+  schedule.appendChild(scheduleHint); root.appendChild(schedule);
   const levels = card('Levels and promotions');
   (job.levels || []).forEach((level, index) => {
     const row = document.createElement('div'); row.className = 'level-row'; row.dataset.levelIndex = String(index);

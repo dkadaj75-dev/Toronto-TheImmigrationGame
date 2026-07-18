@@ -22,7 +22,7 @@ const visas = {
 const jobs = {
   _comment: 'fixture jobs',
   jobs: [
-    { id: 'dishwasher', name: 'Dishwasher', grantsVisa: 'lmia', hours: { startHour: 9, endHour: 17 }, payPerShift: 120, maxSkips: 3,
+    { id: 'dishwasher', name: 'Dishwasher', grantsVisa: 'lmia', hours: { startHour: 9, endHour: 17 }, payPerShift: 120, maxSkips: 3, workDays: [0, 'Wed'],
       levels: [{ suffix: 'I', payPerShift: 120, promoteChancePercent: 20 }, { suffix: 'II', payPerShift: 150, promoteChancePercent: 0 }],
       needsCost: { energy: 35, hunger: 20 } },
     { id: 'cook', name: 'Line Cook', requirements: { var: 'skills.cooking', gte: 3 }, grantsVisa: 'lmia', hours: { startHour: 15, endHour: 23 }, payPerShift: 190, maxSkips: 2, minCreditScore: 520 },
@@ -30,7 +30,7 @@ const jobs = {
       hours: { startHour: 8, endHour: 8 }, payPerShift: -5, maxSkips: 0 },
   ],
 };
-const tuning = { visa: { startStatus: 'visitor' } };
+const tuning = { visa: { startStatus: 'visitor' }, calendar: { dayNames: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], startDayIndex: 0 } };
 const stats = {
   needs: [{ id: 'hunger', name: 'Hunger' }, { id: 'energy', name: 'Energy' }],
   skills: [{ id: 'english', name: 'English' }, { id: 'cooking', name: 'Cooking' }],
@@ -83,6 +83,7 @@ assert(doc.querySelector('input[data-path="job.id"]').readOnly, 'job id is fixed
 assert(doc.querySelectorAll('.need-cost-row').length === 2 && doc.querySelector('input[data-path="job.needsCost.energy.amount"]').value === '35', 'job needsCost rows render from sparse data');
 assert(doc.querySelectorAll('.level-row').length === 2 && doc.querySelector('input[data-path="job.levels.1.payPerShift"]').value === '150', 'job level rows render ordered pay and promotion data');
 assert(doc.querySelector('input[data-path="job.minCreditScore"]').value === '', 'sparse minCreditScore renders blank');
+assert(doc.querySelectorAll('.weekday-check input:checked').length === 2 && doc.querySelector('input[data-day-index="2"]').checked, 'numeric and named workDays render as weekday checkboxes');
 assert(doc.querySelector('[data-visa-id="broken_visa"] .badge')?.textContent === 'permanent', 'permanent visa badge renders');
 
 // ================================================================= validation panel
@@ -147,6 +148,12 @@ assert(doc.querySelectorAll('.job-item').length === jobCount, 'blank job prompt 
 
 doc.querySelector('[data-job-id="cashier"]').click();
 const cashier = window.CareerEditor.state.jobs.jobs.find((job) => job.id === 'cashier');
+assert(doc.querySelectorAll('.weekday-check input:checked').length === 7 && !('workDays' in cashier), 'absent workDays renders as daily/all checked');
+for (const dayIndex of [5, 6]) { const day = doc.querySelector(`input[data-day-index="${dayIndex}"]`); day.checked = false; fire(day, 'change'); }
+assert(JSON.stringify(cashier.workDays) === JSON.stringify([0, 1, 2, 3, 4]), 'unchecking days writes a sparse sorted workDays array');
+for (const dayIndex of [5, 6]) { const day = doc.querySelector(`input[data-day-index="${dayIndex}"]`); day.checked = true; fire(day, 'change'); }
+assert(!('workDays' in cashier), 'checking all seven removes workDays for sparse daily semantics');
+for (const dayIndex of [5, 6]) { const day = doc.querySelector(`input[data-day-index="${dayIndex}"]`); day.checked = false; fire(day, 'change'); }
 const jobName = doc.querySelector('input[data-path="job.name"]'); jobName.value = 'Senior Cashier'; fire(jobName, 'input');
 const grants = doc.querySelector('select[data-path="job.grantsVisa"]'); grants.value = 'study_permit'; fire(grants, 'change');
 const start = doc.querySelector('input[data-path="job.startHour"]'); start.value = '7'; fire(start, 'input');
@@ -214,6 +221,7 @@ const savedCashier = puts['jobs.json'].jobs.find((job) => job.id === 'cashier');
 assert(savedCashier.minCreditScore === 575, 'jobs PUT preserves optional minCreditScore');
 assert(JSON.stringify(savedCashier.requirements) === JSON.stringify({ all: [{ var: 'vars.income', gte: 100 }] }), 'jobs PUT preserves exact requirements JSON');
 assert(JSON.stringify(savedCashier.needsCost) === JSON.stringify({ energy: 18 }), 'jobs PUT preserves sparse needsCost JSON');
+assert(JSON.stringify(savedCashier.workDays) === JSON.stringify([0, 1, 2, 3, 4]), 'jobs PUT preserves sparse weekly schedule JSON');
 assert(savedCashier.levels.length === 2 && savedCashier.levels[0].promoteChancePercent === 25 && savedCashier.levels[1].suffix === 'II', 'jobs PUT preserves ordered level JSON');
 assert(doc.getElementById('save').disabled, 'save button disables after both files save');
 

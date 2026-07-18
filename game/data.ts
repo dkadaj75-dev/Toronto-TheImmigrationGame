@@ -408,6 +408,8 @@ export interface JobDef {
   minCreditScore?: number;
   /** Positive amounts subtracted from matching needs when the sim returns from a completed shift. */
   needsCost?: Record<string, number>;
+  /** B13-11 sparse weekly schedule. Absent means every day; entries may be day indices or names. */
+  workDays?: Array<number | string>;
 }
 export interface JobLevelDef { suffix: string; payPerShift: number; promoteChancePercent: number; }
 export interface JobsData { jobs: JobDef[]; }
@@ -692,6 +694,8 @@ export interface TuningData {
    *  tab. Sparse; R3 (the phone tab UI) consumes it and falls back to "Kijiji" when absent. R1 only
    *  adds the field + typing + the data/tuning.json default. */
   phone?: { jobListSize?: number; icon?: string; rentalTabName?: string; contactsTabName?: string };
+  /** B13-11 calendar display/order. startDayIndex selects the weekday of game day 1. */
+  calendar?: { dayNames?: string[]; startDayIndex?: number };
   /** B3-8/B7-5/B7-6 work tuning. Optional for old fixtures. `departureWindowHours` limits how
    *  long after startHour the sim may leave; the two auto-depart floors are inclusive and must
    *  both pass. Runtime fallbacks live in main.ts (5 / 2 / 40 / 25 respectively). */

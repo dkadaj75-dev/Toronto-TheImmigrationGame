@@ -19,7 +19,7 @@ import { VisaMachine } from './visas';
 import { PhoneJobSearch, applyForJob, applyForVisa, jobListingViews, jobSwitchPrompt, pendingDaysRemaining, rentalCardViews, visaApplicationViews } from './phone';
 import { listRentals, PendingMoveTracker } from './rental';
 import { FinanceState, decideRepoSeizure } from './bills';
-import { WorkTracker, applyNeedsCost, decideAutoDepart, isLeaveForWorkAvailable, isWithinDepartureWindow, jobLevelPay, jobLevelTitle, shouldStartVisaGrace, type WorkReturnPoint, type WorkTickEvent } from './work';
+import { WorkTracker, applyNeedsCost, decideAutoDepart, isLeaveForWorkAvailable, isScheduledWorkWindow, isWithinDepartureWindow, jobLevelPay, jobLevelTitle, shouldStartVisaGrace, weekdayName, type WorkReturnPoint, type WorkTickEvent } from './work';
 import { computeHappiness } from './happiness';
 import { AccidentsController, resolveTapAssetId, shouldDespawnOnCleanup, shouldRemovePlacedOnCleanup } from './accidents';
 import { GarbageController, wasteItemCount } from './garbage';
@@ -858,7 +858,7 @@ async function start() {
       bills.creditScore,
     );
     if (result.ok) {
-      work.syncJob(currentJob(), currentWorkTime());
+      work.syncJob(currentJob(), currentWorkTime(), data.tuning.calendar);
       phoneToast(`Job accepted: ${job?.name ?? jobId}`, true);
     }
     else if (result.reason === 'requirements_unmet') phoneToast('Job requirements are not met');
@@ -1379,7 +1379,7 @@ async function start() {
         const started = work.beginShift(job, currentWorkTime(), {
           pos: [a.target.position.x, a.target.position.z],
           facingDeg: THREE.MathUtils.radToDeg(a.target.rotation.y),
-        }, data.tuning.work?.departureWindowHours ?? 2); // B7-5: reject a late (past-window) arrival
+        }, data.tuning.work?.departureWindowHours ?? 2, data.tuning.calendar); // B13-11: off-days reject too
         if (!started.ok) {
           hud.showQuestToast('Too late — you missed your shift', 'started', 2500);
           return;
@@ -1564,6 +1564,7 @@ async function start() {
               data.jobs.jobs,
               currentWorkTime(),
               data.tuning.work?.departureWindowHours ?? 2,
+              data.tuning.calendar,
             ));
         if (actions.length > 0) {
           const resolvedAsset = asset;
@@ -1738,7 +1739,8 @@ async function start() {
     const departureWindowHours = workTuning?.departureWindowHours ?? 2;
     if (!job || playerAway() || agent.pendingActionId === 'leave_for_work' || autonomy.playerCommandActive) return false;
     if (!decideAutoDepart({
-      withinDepartureWindow: isWithinDepartureWindow(currentWorkTime(), job.hours, departureWindowHours),
+      withinDepartureWindow: isScheduledWorkWindow(job, currentWorkTime(), data.tuning.calendar)
+        && isWithinDepartureWindow(currentWorkTime(), job.hours, departureWindowHours),
       happiness,
       energy: stats.needs.get('energy') ?? 0,
       happinessMin: workTuning?.autoDepartHappinessMin ?? 40,
@@ -2127,7 +2129,7 @@ async function start() {
       refreshPhone();
     }
     const h = Math.floor(gameSeconds / 3600), m = Math.floor((gameSeconds % 3600) / 60);
-    hud.setClock(h, m);
+    hud.setClock(h, m, weekdayName(currentWorkTime(), data.tuning.calendar));
     applyDayNight(lights, scene, gameSeconds / 3600, data.tuning.time.nightStartHour, data.tuning.time.nightEndHour);
 
     // Pure attendance clock: returns/pay and fully-ended missed windows are decided here after the
@@ -2136,6 +2138,7 @@ async function start() {
       currentJob(),
       currentWorkTime(),
       data.tuning.work?.departureWindowHours ?? 2,
+      data.tuning.calendar,
     )) handleWorkEvent(event);
 
     // SOCIAL S6: same "pure clock decides, main.ts applies" split as the work tick above.
