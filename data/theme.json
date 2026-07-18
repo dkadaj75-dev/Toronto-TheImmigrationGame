@@ -104,14 +104,14 @@
   "layout": {
     "needs-panel": {
       "anchor": "tl",
-      "offsetX": 8,
-      "offsetY": 8,
+      "offsetX": 10,
+      "offsetY": 10,
       "accordion": "Needs"
     },
     "skills-panel": {
       "anchor": "tr",
-      "offsetX": 6.73,
-      "offsetY": 8,
+      "offsetX": 0,
+      "offsetY": 0,
       "accordion": "Skills"
     },
     "quest-panel": {
@@ -151,8 +151,8 @@
     },
     "buy-button": {
       "anchor": "br",
-      "offsetX": 121.31,
-      "offsetY": 8.88
+      "offsetX": 125.13,
+      "offsetY": 11.43
     },
     "wall-cut-button": {
       "anchor": "br",
