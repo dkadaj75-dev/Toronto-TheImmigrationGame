@@ -1,6 +1,8 @@
 // data.ts — single entry point for the "databases" (design pillar #2: data-driven everything).
 // Loads data/*.json and, in dev, polls for changes so tuning edits hot-reload into a running game.
 
+import type { NotificationsData } from './notifications';
+
 export type ThemeAnchor = 'tl' | 'tr' | 'bl' | 'br' | 'tc' | 'bc';
 export interface ThemeFontFace {
   family: string;
@@ -818,6 +820,7 @@ export interface GameData {
   finance: FinanceData;
   happiness: HappinessData;
   loading: LoadingConfig;
+  notifications: NotificationsData;
   /** B8-1-E: missing behavior.json deliberately preserves the original lowest-need picker. */
   behavior?: BehaviorData;
   /** B8-2-E: optional for compatibility; absence applies game/theme.ts's exact legacy defaults. */
@@ -860,6 +863,7 @@ const FILES = {
   finance: '/data/finance.json',
   happiness: '/data/happiness.json',
   loading: '/data/loading.json',
+  notifications: '/data/notifications.json',
   behavior: '/data/behavior.json',
   theme: '/data/theme.json',
   npcs: '/data/npcs.json',
@@ -918,7 +922,7 @@ export async function loadAll(): Promise<GameData> {
     if (fallbackId === homeId) throw err;
     map = await fetchJson<MapData>(`/data/maps/${fallbackId}.json`);
   }
-  const [stats, interactions, assets, quests, visas, jobs, bills, finance, happiness, loading, behavior, theme, npcs, social, save] = await Promise.all([
+  const [stats, interactions, assets, quests, visas, jobs, bills, finance, happiness, loading, notifications, behavior, theme, npcs, social, save] = await Promise.all([
     fetchJson<StatsData>(FILES.stats),
     fetchJson<InteractionsData>(FILES.interactions),
     fetchJson<AssetsData>(FILES.assets),
@@ -929,13 +933,14 @@ export async function loadAll(): Promise<GameData> {
     fetchJson<FinanceData>(FILES.finance),
     fetchJson<HappinessData>(FILES.happiness),
     fetchJson<LoadingConfig>(FILES.loading),
+    fetchJson<NotificationsData>(FILES.notifications),
     fetchOptionalJson<BehaviorData>(FILES.behavior),
     fetchOptionalJson<ThemeData>(FILES.theme),
     fetchOptionalJson<import('./npc').NpcsData>(FILES.npcs),
     fetchOptionalJson<import('./social').SocialData>(FILES.social),
     fetchOptionalJson<SaveConfig>(FILES.save),
   ]);
-  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills, finance, happiness, loading, behavior, theme, npcs, social, save };
+  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills, finance, happiness, loading, notifications, behavior, theme, npcs, social, save };
 }
 
 async function fetchOptionalJson<T>(url: string): Promise<T | undefined> {

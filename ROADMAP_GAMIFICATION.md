@@ -83,7 +83,16 @@ untouched (they read the numeric value as today).
 
 ## 2. Slices
 
-### G1 — Pure notification + interruption core (`game/notifications.ts`, `game/interruptions.ts`)
+### G1 — Pure notification + interruption core — ✅ SHIPPED (2026-07-18)
+> As-built (Codex): NotificationCenter (post/dismiss/acknowledgeModal/expireTick/relativeAge;
+> modal FIFO one-visible, capped card/passive stack, unmapped→passive, action payload
+> passthrough, REAL-time cosmetic expiry/ages — documented sim-time exemption; transient, not
+> serialized). PauseStack (push/pop tokens, nested, restores the PLAYER-chosen speed exactly
+> once, double-pop safe, pausedBy). data/notifications.json seeds 47 events (modals: quest
+> received/started/completed, move-in, starvation warning; cards: visitors, work/job/promotion,
+> visa, bills, rental, save failures; passive: departures, social chatter, refusals, save/load
+> success). Auto-speed contract: pause always wins; tuning.work.autoSpeed applies only with an
+> empty stack; only the player HUD speed is remembered. 12 checks + quests regression green.
 Notification model (tier resolution from data, queue/stack with cap, sim-time relative
 timestamps, auto-expire clocks, action payloads), pause-reason stack (push/pop/nested, previous
 speed restore, work-auto-speed interaction — auditing how tuning.work.autoSpeed override
