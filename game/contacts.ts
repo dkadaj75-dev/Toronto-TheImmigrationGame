@@ -12,6 +12,7 @@ import {
   type RelationshipState,
   type SocialData,
 } from './social';
+import { visitGate, visitGateReasonLabel } from './visit';
 
 function clamp(value: number, min: number, max: number): number {
   return value < min ? min : value > max ? max : value;
@@ -35,6 +36,8 @@ export interface ContactView {
   scoreFraction: number;
   inviteEnabled: boolean;
   inviteDisabledReason: string | null;
+  visitEnabled: boolean;
+  visitDisabledReason: string | null;
   text: ContactChannelView;
   call: ContactChannelView;
 }
@@ -47,6 +50,9 @@ export interface ContactListContext {
   hourNow: number;
   canInvite: boolean;
   activeAction: { npcId: string; channel: PhoneChannel } | null;
+  /** SOCIAL S6: true while the player sim is already away (at work or already visiting someone) —
+   *  gates the new "Visit" action the same way `canInvite` gates "Invite". */
+  playerAway: boolean;
 }
 
 export function formatCooldown(minutes: number): string {
@@ -89,6 +95,15 @@ export function contactViews(npcs: readonly NpcDef[], ctx: ContactListContext): 
     const levelId = levelFor(score, ctx.data);
     const available = isNpcAvailable(ctx.hourNow, npc.availableHours);
     const inviteEnabled = available && ctx.canInvite;
+    // SOCIAL S6: same gate the accept handler re-checks (visitGate), so the disabled reason shown
+    // here can never disagree with what actually happens on click.
+    const visitReason = visitGate(npc, {
+      hourNow: ctx.hourNow,
+      relationships: ctx.relationships,
+      data: ctx.data,
+      visitorBusy: !ctx.canInvite,
+      playerAway: ctx.playerAway,
+    });
     return {
       npcId: npc.id,
       name: npc.name,
@@ -101,6 +116,8 @@ export function contactViews(npcs: readonly NpcDef[], ctx: ContactListContext): 
       inviteDisabledReason: inviteEnabled
         ? null
         : available ? 'Visitor already present' : 'Outside available hours',
+      visitEnabled: visitReason === null,
+      visitDisabledReason: visitReason ? visitGateReasonLabel(visitReason) : null,
       text: channelView(npc, 'text', ctx),
       call: channelView(npc, 'call', ctx),
     };

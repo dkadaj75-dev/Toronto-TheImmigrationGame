@@ -30,7 +30,7 @@ console.log('contacts.test — authored listing and relationship view');
   relationships.set(amara.id, 40);
   const rows = contactViews(npcs.npcs, {
     relationships, phone, data: social, nowMinutes: 0, hourNow: 12,
-    canInvite: true, activeAction: null,
+    canInvite: true, activeAction: null, playerAway: false,
   });
   check('listing contains every authored NPC', rows.length === npcs.npcs.length);
   check('listing preserves NPC id, name, and portrait', rows[0].npcId === amara.id && rows[0].name === amara.name && rows[0].portrait === amara.portrait);
@@ -43,13 +43,37 @@ console.log('contacts.test — invite and availability gating');
   const relationships = new RelationshipState(social);
   const phone = new PhoneState(social);
   const overnight: NpcDef = { ...amara, availableHours: { from: 22, to: 6 } };
-  const viewAt = (hourNow: number, canInvite: boolean) => contactViews([overnight], {
-    relationships, phone, data: social, nowMinutes: 0, hourNow, canInvite, activeAction: null,
+  const viewAt = (hourNow: number, canInvite: boolean, playerAway = false) => contactViews([overnight], {
+    relationships, phone, data: social, nowMinutes: 0, hourNow, canInvite, activeAction: null, playerAway,
   })[0];
   check('cross-midnight availability includes late evening', viewAt(23, true).inviteEnabled);
   check('cross-midnight availability includes early morning', viewAt(5, true).inviteEnabled);
   check('cross-midnight availability excludes daytime', !viewAt(12, true).inviteEnabled && viewAt(12, true).inviteDisabledReason === 'Outside available hours');
   check('canInvite false communicates visitor occupancy', !viewAt(23, false).inviteEnabled && viewAt(23, false).inviteDisabledReason === 'Visitor already present');
+}
+
+console.log('contacts.test — S6 visit gating (minLevel, hours, visitor busy, player away)');
+{
+  const relationships = new RelationshipState(social);
+  const phone = new PhoneState(social);
+  const overnight: NpcDef = { ...amara, availableHours: { from: 22, to: 6 } };
+  const viewAt = (hourNow: number, canInvite: boolean, playerAway = false) => contactViews([overnight], {
+    relationships, phone, data: social, nowMinutes: 0, hourNow, canInvite, activeAction: null, playerAway,
+  })[0];
+
+  const minIdx = social.relationship.levels.findIndex((l) => l.id === social.visitTheirPlace.minLevel);
+  const belowLevel = minIdx > 0 ? social.relationship.levels[minIdx - 1].atLeast : social.relationship.min;
+  const atLevel = social.relationship.levels[minIdx]?.atLeast ?? social.relationship.start;
+
+  relationships.set(amara.id, belowLevel);
+  check('below the authored minLevel, visit is disabled', !viewAt(23, true).visitEnabled);
+  check('below-minLevel reason is surfaced', typeof viewAt(23, true).visitDisabledReason === 'string' && viewAt(23, true).visitDisabledReason !== null);
+
+  relationships.set(amara.id, atLevel);
+  check('at the authored minLevel, visit is enabled (within hours, no guest, not away)', viewAt(23, true).visitEnabled);
+  check('outside available hours disables visit even at a high enough level', !viewAt(12, true).visitEnabled && viewAt(12, true).visitDisabledReason === 'Outside available hours');
+  check('a guest present/pending disables visit', !viewAt(23, false).visitEnabled && viewAt(23, false).visitDisabledReason === 'Visitor already present');
+  check('player already away (at work or mid-visit) disables visit', !viewAt(23, true, true).visitEnabled);
 }
 
 function makeSession() {
@@ -77,7 +101,7 @@ console.log('contacts.test — timed completion, compatibility, cooldown, and ca
   check('completion marks the per-NPC channel cooldown', !h.phone.isReady(amara.id, 'call', 100) && approx(h.phone.remainingCooldown(amara.id, 'call', 100), social.phone.call.cooldownMinutes));
   const coolingView = contactViews([amara], {
     relationships: h.relationships, phone: h.phone, data: social, nowMinutes: 101, hourNow: 12,
-    canInvite: true, activeAction: null,
+    canInvite: true, activeAction: null, playerAway: false,
   })[0];
   check('cooldown view shows remaining sim time', !coolingView.call.enabled && coolingView.call.disabledReason?.startsWith('Ready in '));
   check('cooldown blocks a new call', h.session.begin(amara, 'call', amara.personality, 12, 101) === null);

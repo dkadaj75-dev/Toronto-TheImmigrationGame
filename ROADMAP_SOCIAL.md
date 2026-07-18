@@ -236,7 +236,16 @@ is regression-prone in exactly the ways this repo's seat history demonstrated.
 **Agent: Claude (Opus).** Phone-tab and progress/feedback precedents are strong (jobs,
 bills, Kijiji R3 will have just shipped a third example).
 
-### S6 — Going to their place
+### S6 — Going to their place — ✅ SHIPPED (2026-07-18)
+> As-built (Sonnet): game/visit.ts (visitGate gating + VisitAwayTracker away clock, importing
+> work.ts time helpers — no forked timer). Contacts "Visit" button (between Invite and Text)
+> gated by minLevel (levelAllows via synthetic InteractionDef) + availableHours + no
+> visitor/away, disabled reasons shown. Departure = `visit_their_place` action on the exterior
+> door (interactions.json entry, never attached to a door's list); completion hides the sim,
+> away banner reuses the At-work chip with a parameterized label; every work.isAtWork
+> exclusivity check folded into playerAway(). Return applies visitOutcome (recomputed live, not
+> snapshotted) via SocialRuntime + needs loop (onCallFallback pattern); cancel before departure
+> applies nothing. serialize/restore. test/visit-their-place.test.ts. PROJECT_CONTEXT §7.47.
 - Contacts tab action (gated by `visitTheirPlace.minLevel`): sim walks out the exterior door and
   is hidden for `awayHours` — direct reuse of the going-to-work machinery (hide + time handling)
   with a different outcome application: needs + relationship restored per social.json, scaled by

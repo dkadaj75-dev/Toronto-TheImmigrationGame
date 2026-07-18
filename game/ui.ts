@@ -489,6 +489,8 @@ export class Hud {
   onPhoneContactInvite: ((npcId: string) => void) | null = null;
   onPhoneContactAction: ((npcId: string, channel: 'text' | 'call') => void) | null = null;
   onPhoneContactCancel: (() => void) | null = null;
+  /** SOCIAL S6: "Visit" button — walk to their place, gated by ContactView.visitEnabled. */
+  onPhoneContactVisit: ((npcId: string) => void) | null = null;
   /** ROADMAP_APT R3 hook seam: fired when the Kijiji "Rent" button is activated. R4 wires the
    *  real rent → move-in flow here (the button is enabled per RentalCardView.rentEnabled). */
   onPhoneRentRequested: ((mapId: string) => void) | null = null;
@@ -821,9 +823,12 @@ export class Hud {
 
   hideActivity() { this.chip.classList.remove('open'); }
 
-  /** V3 away-state banner + speed-control lock. The selected speed itself is never mutated. */
-  setAtWork(active: boolean) {
+  /** V3 away-state banner + speed-control lock. The selected speed itself is never mutated.
+   *  SOCIAL S6 reuses this exact banner/lock for "visiting their place" — same away-state mechanics
+   *  as going to work, just a different label (`label` defaults to the original work-only text). */
+  setAtWork(active: boolean, label = 'At work') {
     this.workSpeedLocked = active;
+    this.workChip.textContent = label;
     this.workChip.classList.toggle('open', active);
     this.timeBar.classList.toggle('work-override', active);
     this.buyButton.classList.toggle('work-hidden', active);
@@ -1038,6 +1043,12 @@ export class Hud {
         invite.title = contact.inviteDisabledReason ?? '';
         invite.addEventListener('click', () => this.onPhoneContactInvite?.(contact.npcId));
         actions.appendChild(invite);
+        const visit = document.createElement('button');
+        visit.textContent = 'Visit';
+        visit.disabled = !contact.visitEnabled;
+        visit.title = contact.visitDisabledReason ?? '';
+        visit.addEventListener('click', () => this.onPhoneContactVisit?.(contact.npcId));
+        actions.appendChild(visit);
         for (const channel of ['text', 'call'] as const) {
           const view = contact[channel];
           const button = document.createElement('button');

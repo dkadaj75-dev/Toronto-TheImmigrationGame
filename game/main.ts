@@ -19,7 +19,7 @@ import { VisaMachine } from './visas';
 import { PhoneJobSearch, applyForJob, applyForVisa, jobListingViews, jobSwitchPrompt, pendingDaysRemaining, rentalCardViews, visaApplicationViews } from './phone';
 import { listRentals, PendingMoveTracker } from './rental';
 import { FinanceState, decideRepoSeizure } from './bills';
-import { WorkTracker, applyNeedsCost, decideAutoDepart, isLeaveForWorkAvailable, isWithinDepartureWindow, jobLevelPay, jobLevelTitle, shouldStartVisaGrace, type WorkTickEvent } from './work';
+import { WorkTracker, applyNeedsCost, decideAutoDepart, isLeaveForWorkAvailable, isWithinDepartureWindow, jobLevelPay, jobLevelTitle, shouldStartVisaGrace, type WorkReturnPoint, type WorkTickEvent } from './work';
 import { computeHappiness } from './happiness';
 import { AccidentsController, resolveTapAssetId, shouldDespawnOnCleanup, shouldRemovePlacedOnCleanup } from './accidents';
 import { GarbageController, wasteItemCount } from './garbage';
@@ -37,12 +37,13 @@ import { AssetStateRegistry, isAssetStateActionAvailable, isStatefulAsset, power
 import { HydroMeter, resolveAssetPower, HYDRO_BILL_ID } from './hydro';
 import { InitialLoadTracker, phraseAt } from './loading';
 import { applyTheme } from './theme';
-import { compatibility, type InteractionDef } from './social';
+import { compatibility, visitOutcome, type InteractionDef } from './social';
 import { SocialRuntime } from './socialruntime';
 import { availableSocialInteractions, SocialInteractionSession, socialActionDef, socialAutonomyCandidates, socialScoringTarget } from './social-interactions';
 import { isNpcAvailable, NpcVisitorController, type NpcDef } from './npc';
 import { mutualFacingDeg } from './facing';
 import { contactViews, PhoneContactSession, phoneAutonomyCandidates } from './contacts';
+import { visitGate, VisitAwayTracker, type VisitReturnEvent } from './visit';
 
 /** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
  *  a seat-aware action with no eligible seat in range) plays the dedicated 'sit_ground' state
@@ -173,7 +174,7 @@ async function start() {
   // (currently the only map that exists, so always true — no extra gating needed).
   let panicState: { elapsed: number; totalSeconds: number } | null = null;
   const triggerPanic = () => {
-    if (work.isAtWork) return; // the sim is off-lot and cannot react to a home fire while away
+    if (playerAway()) return; // the sim is off-lot (work OR visiting) and cannot react to a home fire while away
     agent.stopAction(); // fires onActionStop → animation reset to idle, activity chip hidden, etc.
     cancelCarry(); // ROADMAP_NEXT B3-5: panic interrupts an in-progress carry-to-garbage walk too
     const panicSeconds = data.tuning.fire?.panicSeconds ?? 3;
@@ -416,6 +417,17 @@ async function start() {
   // effects. The current game-time/job helpers close over clock variables declared below, like the
   // existing buildEvalContext callback; they are only invoked after initialization is complete.
   const work = new WorkTracker();
+  // --- SOCIAL S6: visiting an NPC's place (ROADMAP_SOCIAL.md §3 S6). Direct clone of the going-to-
+  // work away-state: game/visit.ts's VisitAwayTracker is the pure/serializable clock (mirrors
+  // WorkTracker), main.ts owns the same scene-hide/return effects. `playerAway()` folds work AND
+  // visiting into the one "off-lot, cannot act" predicate every work.isAtWork call site already
+  // gated on, so a visit is exactly as exclusive as a work shift.
+  const visitAway = new VisitAwayTracker();
+  const playerAway = () => work.isAtWork || visitAway.isAway;
+  // Remembers which NPC the in-flight 'visit_their_place' walk-to-door action is for; read only at
+  // that action's own completion (see handleActionCompleted below) — a cancelled/interrupted walk
+  // never reaches it, so nothing needs to be undone (side_effect_rule).
+  let pendingVisitNpcId: string | null = null;
   let happiness = 0;
   const currentJob = () => data.jobs.jobs.find((job) => job.id === quests.vars.job) ?? null;
   const completedQuestLog: { name: string }[] = [];
@@ -542,6 +554,30 @@ async function start() {
     refreshPhone();
   };
 
+  // SOCIAL S6: completion-only application of S1's visitOutcome — the ONE place a visit's needs/
+  // relationship effects ever land (mirrors handleWorkEvent's 'returned' branch above, and the
+  // existing onCallFallback/socialSession pattern for applying a compat-scaled outcome onto live
+  // player needs). An npc deleted mid-hot-reload degrades gracefully: the sim still reappears, it
+  // just carries no outcome (nothing to compute it against).
+  const handleVisitReturn = (event: VisitReturnEvent) => {
+    agent.teleportTo(event.returnPoint.pos[0], event.returnPoint.pos[1], event.returnPoint.facingDeg);
+    sim.visible = true;
+    if (marker) marker.pivot.visible = true;
+    hud.setAtWork(false);
+    const npc = data.npcs?.npcs.find((entry) => entry.id === event.npcId);
+    if (npc && data.social) {
+      const compat = compatibility(Object.fromEntries(stats.personality), npc.personality, data.social);
+      const outcome = visitOutcome(event.npcId, socialRuntime.relationships, compat, data.social);
+      socialRuntime.relationships.set(npc.id, socialRuntime.relationships.get(npc.id) + outcome.relationshipDelta);
+      for (const [needId, delta] of Object.entries(outcome.needsRestored)) {
+        const current = stats.needs.get(needId);
+        if (current !== undefined) stats.needs.set(needId, Math.max(0, Math.min(100, current + delta)));
+      }
+      hud.showQuestToast(`Back from visiting ${npc.name}`, 'completed', data.tuning.quests.toastDurationSeconds * 1000);
+    }
+    refreshPhone();
+  };
+
   // --- smartphone jobs + visa applications (PROJECT_CONTEXT.md §7.20 V2, B3-7) ---
   const phoneJobs = new PhoneJobSearch(data.jobs, data.tuning.phone?.jobListSize);
   const bills = new FinanceState(data.bills, data.finance, data.tuning.bills?.intervalDays, 1, data.tuning.credit);
@@ -617,6 +653,7 @@ async function start() {
         activeAction: phoneContactSession.active
           ? { npcId: phoneContactSession.active.npc.id, channel: phoneContactSession.active.channel }
           : null,
+        playerAway: playerAway(),
       }),
       rentDisabledTitle: 'Not rentable right now',
     });
@@ -667,6 +704,35 @@ async function start() {
   };
   hud.onPhoneContactAction = (npcId, channel) => { startPhoneContact(npcId, channel); };
   hud.onPhoneContactCancel = () => { if (phoneContactSession.active) agent.stopAction(false); };
+  // SOCIAL S6: "Visit" — re-checks the SAME visitGate the Contacts-tab view used to enable the
+  // button (never trust a possibly-stale card), then walks the sim to the exterior door exactly
+  // like tryAutoDepartForWork does for leave_for_work. The away-state itself only begins once that
+  // walk-and-short-duration action actually COMPLETES (see the 'visit_their_place' branch in the
+  // action-completion handler below) — ordering it here is not itself a side effect, so cancelling
+  // mid-walk (a fresh tap/order) applies nothing, matching leave_for_work's own cancel behavior.
+  hud.onPhoneContactVisit = (npcId) => {
+    const npc = data.npcs?.npcs.find((entry) => entry.id === npcId);
+    if (!npc || !data.social) return;
+    const gate = visitGate(npc, {
+      hourNow: gameSeconds / 3600,
+      relationships: socialRuntime.relationships,
+      data: data.social,
+      visitorBusy: !visitors.canInvite(),
+      playerAway: playerAway(),
+    });
+    if (gate) return;
+    const doorTarget = findExteriorDoorObject();
+    const doorDef = doorTarget ? assetById(doorTarget.userData.assetId as string) : undefined;
+    const action = data.interactions.actions.find((entry) => entry.id === 'visit_their_place');
+    if (!doorTarget || !doorDef || !action) return;
+    autonomy.notePlayerCommand();
+    cancelCarry();
+    if (!agent.orderAction(action, doorTarget, null, doorDef)) return;
+    pendingVisitNpcId = npcId;
+    hud.hideActionMenu();
+    phoneToast(`Heading over to ${npc.name}'s place`);
+    refreshPhone();
+  };
   // ROADMAP_APT R4: renting starts a PENDING MOVE (sim-time countdown of the map's
   // rental.moveInHours). Re-validated here against a fresh listing (not the possibly-stale card
   // the click came from): must be available, not the current home, and no move already pending.
@@ -1231,6 +1297,27 @@ async function start() {
       hud.setAtWork(true);
       return;
     }
+    // SOCIAL S6: direct clone of the leave_for_work branch above — same hide/teleport effects, a
+    // different away tracker. `pendingVisitNpcId` was stamped by onPhoneContactVisit when this walk
+    // was ordered; re-resolve the NPC fresh here (not trusted from closure) in case a hot-reload
+    // removed it mid-walk, degrading to "no visit starts, nothing hidden" rather than a crash.
+    if (a.action.id === 'visit_their_place') {
+      const npcId = pendingVisitNpcId;
+      pendingVisitNpcId = null;
+      const npc = npcId ? data.npcs?.npcs.find((entry) => entry.id === npcId) : undefined;
+      if (!npc || !data.social) return;
+      const returnPoint: WorkReturnPoint = {
+        pos: [a.target.position.x, a.target.position.z],
+        facingDeg: THREE.MathUtils.radToDeg(a.target.rotation.y),
+      };
+      if (!visitAway.begin(npc.id, currentWorkTime(), data.social.visitTheirPlace.awayHours, returnPoint)) return;
+      cancelCarry();
+      agent.teleportTo(sim.position.x, sim.position.z, THREE.MathUtils.radToDeg(sim.rotation.y));
+      sim.visible = false;
+      if (marker) marker.pivot.visible = false;
+      hud.setAtWork(true, `Visiting ${npc.name}`);
+      return;
+    }
     // §7.3: roll for a new accident (normal asset finishing a use) or despawn one (a cleanup
     // action just completed on an accident instance). Non-duration actions still roll HERE (their
     // only "the sim is done with this" moment — see accidents.ts's module doc comment); duration
@@ -1311,7 +1398,7 @@ async function start() {
   };
 
   const tapInput = new TapInput(renderer.domElement, cam.camera, () => world, (hit) => {
-    if (repoOverlayActive || gameOverActive || work.isAtWork || survivalEventActive()) return; // no orders during terminal/away/collapse events
+    if (repoOverlayActive || gameOverActive || playerAway() || survivalEventActive()) return; // no orders during terminal/away/collapse events
     if (buyMode.active) { handleBuyModeTap(hit); return; }
     if (hit.object) {
       const tappedNpcId = hit.object.userData.npcId as string | undefined;
@@ -1440,7 +1527,7 @@ async function start() {
   hud.setFunds(quests.funds, currencyName());
 
   hud.onBuyOpen = () => {
-    if (repoOverlayActive || gameOverActive || work.isAtWork) return;
+    if (repoOverlayActive || gameOverActive || playerAway()) return;
     if (agent.current?.action.id === 'use_phone') agent.stopAction();
     buyMode.enter();
     hud.setBuyModeActive(true);
@@ -1539,7 +1626,7 @@ async function start() {
     const job = currentJob();
     const workTuning = data.tuning.work;
     const departureWindowHours = workTuning?.departureWindowHours ?? 2;
-    if (!job || work.isAtWork || agent.pendingActionId === 'leave_for_work' || autonomy.playerCommandActive) return false;
+    if (!job || playerAway() || agent.pendingActionId === 'leave_for_work' || autonomy.playerCommandActive) return false;
     if (!decideAutoDepart({
       withinDepartureWindow: isWithinDepartureWindow(currentWorkTime(), job.hours, departureWindowHours),
       happiness,
@@ -1711,7 +1798,7 @@ async function start() {
       loadCharacter(); // no-op unless meshPath changed
       if (!marker) {
         marker = createMarkerInstance(scene, sim, data.tuning.character);
-        marker.pivot.visible = !work.isAtWork;
+        marker.pivot.visible = !playerAway();
       }
     } else if (marker) {
       marker.dispose();
@@ -1878,7 +1965,7 @@ async function start() {
     // V3 parallels buy mode's one-line effective-speed override without mutating hud.speed: buy
     // mode multiplies by 0 (freeze), work multiplies by tuning.work.autoSpeed (default 5). The HUD
     // selection is locked/preserved while away and becomes effective again on return.
-    const selectedSpeed = work.isAtWork ? (data.tuning.work?.autoSpeed ?? 5) : hud.speed;
+    const selectedSpeed = playerAway() ? (data.tuning.work?.autoSpeed ?? 5) : hud.speed;
     const effectiveSpeed = Number.isFinite(selectedSpeed) ? Math.max(0, selectedSpeed) : 0;
     const sdt = (initialLoadingActive || buyMode.active || repoOverlayActive || gameOverActive) ? 0 : dt * effectiveSpeed;
     simClockSeconds += sdt;
@@ -1933,6 +2020,10 @@ async function start() {
       data.tuning.work?.departureWindowHours ?? 2,
     )) handleWorkEvent(event);
 
+    // SOCIAL S6: same "pure clock decides, main.ts applies" split as the work tick above.
+    const visitReturned = visitAway.tick(currentWorkTime());
+    if (visitReturned) handleVisitReturn(visitReturned);
+
     // ROADMAP_APT R4: move-in completion check. The countdown runs on the same sim-time clock as
     // food perishing (gameHourNow — pause freezes it, 2x/3x and the work auto-speed advance it).
     // The actual switch is DEFERRED while the sim is away at work (the shift's return teleport
@@ -1940,7 +2031,7 @@ async function start() {
     // while a previous switch is still in flight — the pending state simply waits, takeCompleted
     // is only called when the switch can really happen (side_effect_rule: completion is the one
     // and only trigger; cancel applies nothing).
-    if (!mapSwitchInFlight && !work.isAtWork && !buyMode.active && !repoOverlayActive && !gameOverActive
+    if (!mapSwitchInFlight && !playerAway() && !buyMode.active && !repoOverlayActive && !gameOverActive
       && pendingMove.isReady(gameHourNow())) {
       const moveMapId = pendingMove.takeCompleted(gameHourNow());
       if (moveMapId) void completePendingMove(moveMapId);
@@ -2071,7 +2162,7 @@ async function start() {
     // Explicit V3 simplification: while off-lot the sim gets neither autonomy nor needs decay (and
     // the decay/gain accumulators do not advance, so there is no catch-up burst on return). The
     // world clock/doors/fires still advance at the work auto-speed above.
-    if (!work.isAtWork) {
+    if (!playerAway()) {
       autonomy.update(sdt);
       simTick(sdt);
       if (starvation.state.phase !== 'collapse' && starvation.state.phase !== 'gameOver') {

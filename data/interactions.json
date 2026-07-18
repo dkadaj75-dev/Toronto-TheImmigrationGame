@@ -293,6 +293,18 @@
       "_note": "ROADMAP_NEXT B3-8 / PROJECT_CONTEXT.md §7.20 V3 — player-only exterior-door work departure. Existing conditions still require vars.job; game/main.ts adds the job-hours code-side gate because each job has different/cross-midnight hours. The short duration lets the stand_use animation visibly complete before the sim disappears; completed-only effects use the ordinary onActionStop path."
     },
     {
+      "id": "visit_their_place",
+      "name": "Go visit",
+      "needGains": {},
+      "skillGains": {},
+      "animation": "stand_use",
+      "autonomyEligible": false,
+      "duration": {
+        "baseSeconds": 1
+      },
+      "_note": "ROADMAP_SOCIAL.md S6 — direct clone of leave_for_work's shape: a short duration lets the stand_use animation finish before game/main.ts hides the sim and starts VisitAwayTracker. Ordered ONLY from the Contacts tab's Visit button (game/main.ts's hud.onPhoneContactVisit), never attached to a door asset's interactions list, so it never appears in the ordinary tap menu and needs no vars.job-style condition — visitGate (game/visit.ts) does all the gating before this is ever ordered."
+    },
+    {
       "id": "clean_up",
       "name": "Clean up",
       "needGains": {},
