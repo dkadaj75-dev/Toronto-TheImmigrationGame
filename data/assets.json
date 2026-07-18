@@ -359,7 +359,9 @@
       "interactions": [
         "watch_tv",
         "turn_on",
-        "turn_off"
+        "turn_off",
+        "watch_colombian_telenovelas",
+        "watch_tv_radio_canada"
       ],
       "meshFit": {
         "yawOffsetDeg": 0
@@ -373,7 +375,11 @@
         "defaultOn": false
       },
       "_powerNote": "B6-12: sound and screen-glow light persist while this placed TV is ON. Watch TV auto-turns it on and leaves it on.",
-      "icon": "/public/icons/tv.png"
+      "icon": "/public/icons/tv.png",
+      "combustibility": {
+        "chancePercent": 50,
+        "delaySeconds": 5
+      }
     },
     {
       "id": "bookshelf",
@@ -395,11 +401,14 @@
       ],
       "meshFit": {
         "yawOffsetDeg": 90,
-        "scale": 2
+        "scale": 2,
+        "xOffset": 0,
+        "yOffset": 0,
+        "zOffset": 0.25
       },
       "combustibility": {
-        "chancePercent": 60,
-        "delaySeconds": 8
+        "chancePercent": 80,
+        "delaySeconds": 3
       },
       "icon": "/public/icons/bookshelf.png"
     },
@@ -504,13 +513,13 @@
       "environmentScore": 0,
       "footprint": [
         1,
-        0.12
+        0.25
       ],
       "interactions": [],
       "buyable": false,
       "door": {
         "hingeOffset": [
-          -0.5,
+          0.5,
           0
         ],
         "openSeconds": 0.1,
@@ -523,7 +532,7 @@
           1.8
         ],
         "yOffset": 0,
-        "xOffset": -0.16
+        "xOffset": 0
       }
     },
     {

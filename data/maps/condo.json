@@ -308,7 +308,7 @@
     {
       "at": [
         4,
-        6.5
+        7.5
       ],
       "orientation": "vertical",
       "assetId": "door_basic"
@@ -327,7 +327,7 @@
   ],
   "spawn": {
     "pos": [
-      5.25,
+      2,
       3
     ],
     "facingDeg": 180
@@ -353,9 +353,9 @@
       "asset": "sink",
       "pos": [
         5.5,
-        6.75
+        5.5
       ],
-      "rotDeg": 270
+      "rotDeg": 0
     },
     {
       "asset": "toilet",
@@ -408,8 +408,8 @@
     {
       "asset": "bookshelf",
       "pos": [
-        1.25,
-        0.35
+        1.5,
+        0.5
       ],
       "rotDeg": 0
     },

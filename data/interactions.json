@@ -92,12 +92,12 @@
     },
     {
       "id": "watch_tv",
-      "name": "Watch TV (CBC News)",
+      "name": "Watch CBC News",
       "needGains": {
-        "fun": 2.5
+        "fun": 1
       },
       "skillGains": {
-        "english": 0.02
+        "english": 0.03
       },
       "animation": "sit_idle",
       "autonomyEligible": true,
@@ -392,12 +392,29 @@
     },
     {
       "id": "watch_tv_radio_canada",
-      "name": "Watch TV (Radio Canada)",
-      "needGains": {},
+      "name": "Watch Radio Canada",
+      "needGains": {
+        "fun": 1
+      },
+      "skillGains": {
+        "french": 0.03
+      },
+      "animation": "sit_idle",
+      "autonomyEligible": true,
+      "primaryNeed": "fun",
+      "seatAware": true
+    },
+    {
+      "id": "watch_colombian_telenovelas",
+      "name": "Watch Colombian Telenovelas",
+      "needGains": {
+        "fun": 2
+      },
       "skillGains": {},
       "animation": "sit_idle",
       "autonomyEligible": true,
-      "primaryNeed": null
+      "primaryNeed": "fun",
+      "seatAware": true
     }
   ]
 }
