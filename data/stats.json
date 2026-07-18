@@ -89,7 +89,7 @@
       "name": "Charisma",
       "color": "#8e44ad",
       "default": 0,
-      "max": 10
+      "max": 100
     },
     {
       "id": "cooking",
@@ -117,8 +117,8 @@
       "name": "French",
       "color": "#c0392b",
       "default": 0,
-      "max": 10,
-      "enabled": false,
+      "max": 100,
+      "enabled": true,
       "_note": "Planned — disabled until Phase 4 decision (open decision #4)."
     },
     {
@@ -126,7 +126,7 @@
       "name": "Intelligence",
       "color": "#f39c12",
       "default": 0,
-      "max": 10,
+      "max": 100,
       "_note": "ROADMAP_NEXT B2-5 — drives extinguish's duration modifier (smarter sims extinguish fires faster). No gain activity maps to it yet; designer edits later."
     }
   ],
