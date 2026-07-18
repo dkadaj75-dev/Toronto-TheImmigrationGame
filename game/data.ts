@@ -638,6 +638,8 @@ export interface TuningData {
   /** B13-9/B13-10 shared room-aware light/sound range and feature gates. */
   ambience?: { radiusMeters?: number; nightComfortEnabled?: boolean; comfortNeedId?: string; sleepBlockingEnabled?: boolean };
   economy: { startingFunds: number; currencyName: string };
+  /** B13-8 Buy Mode actual-asset ghost. Opacity is clamped to 0..1; absent defaults to 0.5. */
+  buy?: { ghostOpacity?: number };
   /** F3 credit score, consequences, debt-window scaling, and phone history length. */
   credit?: CreditTuning;
   movement: { walkSpeed: number; arrivalRadius: number };

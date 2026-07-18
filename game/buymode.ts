@@ -34,7 +34,10 @@
 import * as THREE from 'three';
 import type { AssetDef, AssetsData, GameData } from './data';
 import { footprintRect, rectsOverlap, type Rect } from './accidents';
-import { applyAssetPlacement, attachAssetLight, attachMesh, makeStandIn } from './world';
+import {
+  applyAssetPlacement, attachAssetLight, attachMesh, makeStandIn,
+  resolveAssetPlacementTransform, resolveMeshFitTransform,
+} from './world';
 
 // ==================================================================== catalog (pure)
 
@@ -490,7 +493,31 @@ function clampRect(v: number, lo: number, hi: number): number { return Math.min(
 
 const GHOST_VALID_COLOR = 0x6fe36f;
 const GHOST_INVALID_COLOR = 0xe35a5a;
-const GHOST_OPACITY = 0.55;
+export const DEFAULT_GHOST_OPACITY = 0.5;
+
+export interface GhostAppearance {
+  opacity: number;
+  tint: number | null;
+  depthWrite: false;
+}
+
+/** Pure validity/tuning state machine used by both model and sprite ghost materials. */
+export function resolveGhostAppearance(valid: boolean, requestedOpacity?: number): GhostAppearance {
+  const finite = Number.isFinite(requestedOpacity) ? requestedOpacity! : DEFAULT_GHOST_OPACITY;
+  return {
+    opacity: Math.min(1, Math.max(0, finite)),
+    tint: valid ? null : GHOST_INVALID_COLOR,
+    depthWrite: false,
+  };
+}
+
+/** Pure descriptor backed by the same numeric resolvers world.ts uses for live assets. */
+export function ghostTransformFor(def: AssetDef, pos: [number, number], rotDeg: number) {
+  return {
+    placement: resolveAssetPlacementTransform(def, pos, rotDeg),
+    meshFit: resolveMeshFitTransform(def.meshFit),
+  };
+}
 
 function disposeGroupLocal(g: THREE.Object3D) {
   g.traverse((o) => {
@@ -502,10 +529,8 @@ function disposeGroupLocal(g: THREE.Object3D) {
   });
 }
 
-/** Tints every mesh under `group` a flat validity color (green/red), independent of whatever
- *  material the stand-in/GLB actually uses — a cheap, robust "ghost" look without needing a
- *  dedicated ghost material per asset. */
-function tintGhost(group: THREE.Object3D, valid: boolean) {
+/** Keeps the original footprint-sized stand-in as the immediate green/red validity layer. */
+function tintFootprint(group: THREE.Object3D, valid: boolean, opacity: number) {
   const color = valid ? GHOST_VALID_COLOR : GHOST_INVALID_COLOR;
   group.traverse((o) => {
     if (o instanceof THREE.Mesh) {
@@ -513,11 +538,64 @@ function tintGhost(group: THREE.Object3D, valid: boolean) {
       for (const m of mats) {
         if ('color' in m) (m as THREE.MeshBasicMaterial).color.setHex(color);
         m.transparent = true;
-        m.opacity = GHOST_OPACITY;
+        m.opacity = opacity;
         m.depthWrite = false;
       }
     }
   });
+}
+
+function disableGhostRaycasts(group: THREE.Object3D) {
+  group.traverse((o) => { o.raycast = () => {}; });
+}
+
+/** GLB clones share template materials, so clone before styling to protect placed furniture. */
+function styleGhostVisual(group: THREE.Object3D, appearance: GhostAppearance) {
+  group.traverse((o) => {
+    o.raycast = () => {};
+    if (!(o instanceof THREE.Mesh || o instanceof THREE.Sprite)) return;
+    if (!o.userData.ghostMaterialsCloned) {
+      const source = Array.isArray(o.material) ? o.material : [o.material];
+      const cloned = source.map((material) => {
+        const copy = material.clone();
+        copy.userData.ghostOwnedMaterial = true;
+        if ('color' in copy) copy.userData.ghostBaseColor = (copy as THREE.MeshBasicMaterial).color.getHex();
+        return copy;
+      });
+      o.material = Array.isArray(o.material) ? cloned : cloned[0];
+      o.userData.ghostMaterialsCloned = true;
+    }
+    const materials = Array.isArray(o.material) ? o.material : [o.material];
+    for (const material of materials) {
+      if ('color' in material) {
+        const colored = material as THREE.MeshBasicMaterial;
+        const base = material.userData.ghostBaseColor as number | undefined;
+        colored.color.setHex(appearance.tint ?? base ?? 0xffffff);
+      }
+      material.transparent = true;
+      material.opacity = appearance.opacity;
+      material.depthWrite = appearance.depthWrite;
+      material.needsUpdate = true;
+    }
+  });
+}
+
+function disposeGhostVisual(group: THREE.Object3D) {
+  group.traverse((o) => {
+    if (!(o instanceof THREE.Mesh || o instanceof THREE.Sprite)) return;
+    if (o instanceof THREE.Mesh && !o.userData.sharedResource) o.geometry.dispose();
+    const materials = Array.isArray(o.material) ? o.material : [o.material];
+    for (const material of materials) {
+      if (material.userData.ghostOwnedMaterial || !o.userData.sharedResource) material.dispose();
+    }
+  });
+}
+
+interface GhostCacheEntry {
+  visual: THREE.Group;
+  ready?: Promise<void>;
+  appearance: GhostAppearance;
+  disposed: boolean;
 }
 
 export type BuyModeSelection =
@@ -537,6 +615,8 @@ export class BuyModeController {
   readonly overlay = new BuyOverlay();
   private additionGroups = new Map<string, THREE.Group>();
   private ghost: THREE.Group | null = null;
+  private ghostVisualId: string | null = null;
+  private ghostCache = new Map<string, GhostCacheEntry>();
   private gridOverlay: THREE.GridHelper | null = null;
 
   active = false;
@@ -636,7 +716,7 @@ export class BuyModeController {
     const excludeKey = this.selection.kind === 'moving' ? this.selection.inst.key : undefined;
     const valid = this.checkValidity(pos, rotDeg, def, excludeKey);
     this.selection = { ...this.selection, pos, rotDeg, valid };
-    if (this.ghost) { applyAssetPlacement(this.ghost, def, pos, rotDeg); tintGhost(this.ghost, valid); }
+    if (this.ghost) { applyAssetPlacement(this.ghost, def, pos, rotDeg); this.updateGhostAppearance(valid); }
   }
 
   rotateGhost() {
@@ -646,7 +726,7 @@ export class BuyModeController {
     const excludeKey = this.selection.kind === 'moving' ? this.selection.inst.key : undefined;
     const valid = this.checkValidity(this.selection.pos, rotDeg, def, excludeKey);
     this.selection = { ...this.selection, rotDeg, valid };
-    if (this.ghost) { this.ghost.rotation.y = THREE.MathUtils.degToRad(rotDeg); tintGhost(this.ghost, valid); }
+    if (this.ghost) { applyAssetPlacement(this.ghost, def, this.selection.pos, rotDeg); this.updateGhostAppearance(valid); }
   }
 
   /** Confirms the pending placement (new purchase) or move. Returns the result so the caller
@@ -776,18 +856,74 @@ export class BuyModeController {
   // -------------------------------------------------------------- rendering
 
   private buildGhost(def: AssetDef, pos: [number, number], rotDeg: number, valid: boolean) {
-    const ghost = makeStandIn(def);
+    const ghost = new THREE.Group();
+    ghost.name = `buy-ghost:${def.id}`;
+    const footprint = makeStandIn(def);
+    footprint.userData.buyGhostFootprint = true;
+    const appearance = resolveGhostAppearance(valid, this.getData().tuning.buy?.ghostOpacity);
+    tintFootprint(footprint, valid, appearance.opacity);
+    disableGhostRaycasts(footprint);
+    ghost.add(footprint);
+
+    let entry = this.ghostCache.get(def.id);
+    if (!entry) {
+      const visual = new THREE.Group();
+      visual.name = `buy-ghost-visual:${def.id}`;
+      entry = { visual, appearance, disposed: false };
+      this.ghostCache.set(def.id, entry);
+      entry.ready = attachMesh(visual, def);
+      if (entry.ready) {
+        const captured = entry;
+        void entry.ready.then(() => {
+          if (captured.disposed) { disposeGhostVisual(captured.visual); return; }
+          styleGhostVisual(captured.visual, captured.appearance);
+        });
+      }
+    }
+    entry.appearance = appearance;
+    styleGhostVisual(entry.visual, appearance);
+    ghost.add(entry.visual);
+    this.ghostVisualId = def.id;
     applyAssetPlacement(ghost, def, pos, rotDeg);
-    tintGhost(ghost, valid);
+    disableGhostRaycasts(ghost);
     this.ghost = ghost;
     this.getWorld().add(ghost);
   }
 
+  private updateGhostAppearance(valid: boolean) {
+    if (!this.ghost || !this.ghostVisualId) return;
+    const appearance = resolveGhostAppearance(valid, this.getData().tuning.buy?.ghostOpacity);
+    const footprint = this.ghost.children.find((child) => child.userData.buyGhostFootprint);
+    if (footprint) tintFootprint(footprint, valid, appearance.opacity);
+    const entry = this.ghostCache.get(this.ghostVisualId);
+    if (entry) {
+      entry.appearance = appearance;
+      styleGhostVisual(entry.visual, appearance);
+    }
+  }
+
   private clearGhost() {
     if (!this.ghost) return;
+    if (this.ghostVisualId) {
+      const cached = this.ghostCache.get(this.ghostVisualId);
+      if (cached?.visual.parent === this.ghost) this.ghost.remove(cached.visual);
+    }
     this.ghost.parent?.remove(this.ghost);
     disposeGroupLocal(this.ghost);
     this.ghost = null;
+    this.ghostVisualId = null;
+  }
+
+  /** Cancel and dispose pending/cached visuals before the old world graph is torn down. */
+  prepareForWorldRebuild() {
+    this.clearGhost();
+    this.selection = null;
+    for (const entry of this.ghostCache.values()) {
+      entry.disposed = true;
+      entry.visual.parent?.remove(entry.visual);
+      disposeGhostVisual(entry.visual);
+    }
+    this.ghostCache.clear();
   }
 
   private buildAdditionGroup(addition: OverlayAddition, def: AssetDef) {
@@ -872,9 +1008,7 @@ export class BuyModeController {
     this.removeFromWorld(world, removed);
     for (const group of this.additionGroups.values()) world.add(group);
     if (this.gridOverlay && this.active) world.add(this.gridOverlay);
-    // a pending ghost (placing/moving) also lived under the OLD world group — reattach it too,
-    // e.g. a designer tuning/asset edit landing while the player has a ghost mid-placement.
-    if (this.ghost) world.add(this.ghost);
+    // prepareForWorldRebuild deliberately cancels pending ghosts before this reattach path.
   }
 
   serialize(): BuyOverlaySaveState { return this.overlay.serialize(); }

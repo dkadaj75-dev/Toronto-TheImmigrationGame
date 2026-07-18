@@ -1855,6 +1855,9 @@ async function start() {
     data = fresh;
     applyTheme(data.theme);
     exteriorDoorTransit.cancel(true);
+    // A pending Buy Mode ghost belongs to the old asset/map snapshot. Detach and dispose its
+    // cached translucent visual before disposeGroup(world) tears down the old scene graph.
+    buyMode.prepareForWorldRebuild();
     scene.remove(world);
     disposeGroup(world);
     world = buildWorld(data);

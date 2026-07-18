@@ -42,6 +42,10 @@
     "currencyName": "$",
     "_source": "PLACEHOLDER — open decision #1 (Phase 3)"
   },
+  "buy": {
+    "ghostOpacity": 0.5,
+    "_source": "ROADMAP_NEXT B13-8: opacity of the actual asset mesh/sprite shown beside the green/red footprint while placing or moving in Buy Mode. Clamped to 0..1; game default is 0.5 when absent."
+  },
   "credit": {
     "min": 300,
     "max": 900,

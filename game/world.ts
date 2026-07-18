@@ -120,11 +120,9 @@ export function normalizeModelToFootprint(model: THREE.Object3D, footprint: [num
  */
 export function applyMeshFit(model: THREE.Object3D, fit: AssetDef['meshFit']) {
   if (!fit) return;
-  if (fit.scale !== undefined) {
-    if (Array.isArray(fit.scale)) model.scale.set(model.scale.x * fit.scale[0], model.scale.y * fit.scale[1], model.scale.z * fit.scale[2]);
-    else model.scale.multiplyScalar(fit.scale);
-  }
-  if (fit.yawOffsetDeg) model.rotation.y += THREE.MathUtils.degToRad(fit.yawOffsetDeg);
+  const resolved = resolveMeshFitTransform(fit);
+  model.scale.multiply(new THREE.Vector3(...resolved.scale));
+  model.rotation.y += resolved.yawRadians;
   // Re-anchor to the footprint center + ground plane AFTER scale/yaw. Both of those transform
   // about the model's LOCAL origin, which for most GLBs is NOT its bounding-box center — so either
   // one drifts the mesh off the footprint center normalizeModelToFootprint just established (a
@@ -140,9 +138,24 @@ export function applyMeshFit(model: THREE.Object3D, fit: AssetDef['meshFit']) {
     model.position.z -= center.z;
     model.position.y -= box.min.y;
   }
-  if (fit.xOffset) model.position.x += fit.xOffset;
-  if (fit.yOffset) model.position.y += fit.yOffset;
-  if (fit.zOffset) model.position.z += fit.zOffset;
+  model.position.x += resolved.offset[0];
+  model.position.y += resolved.offset[1];
+  model.position.z += resolved.offset[2];
+}
+
+/** Pure numeric half of applyMeshFit, also consumed by Buy Mode's ghost-transform descriptor. */
+export function resolveMeshFitTransform(fit: AssetDef['meshFit']): {
+  scale: [number, number, number]; yawRadians: number; offset: [number, number, number];
+} {
+  const authoredScale = fit?.scale;
+  const scale: [number, number, number] = Array.isArray(authoredScale)
+    ? [authoredScale[0], authoredScale[1], authoredScale[2]]
+    : typeof authoredScale === 'number' ? [authoredScale, authoredScale, authoredScale] : [1, 1, 1];
+  return {
+    scale,
+    yawRadians: THREE.MathUtils.degToRad(fit?.yawOffsetDeg ?? 0),
+    offset: [fit?.xOffset ?? 0, fit?.yOffset ?? 0, fit?.zOffset ?? 0],
+  };
 }
 
 /** public/ serves at root — normalize "models/x.glb" → "/models/x.glb"; leave absolute/http(s) alone. */
@@ -172,7 +185,7 @@ export function normalizeMeshUrl(mesh: string): string {
  * (see main.ts), so any group anywhere in the scene graph gets its frames advanced with zero
  * additional per-call-site wiring.
  */
-export function attachMesh(group: THREE.Group, def: AssetDef, opts: { allowSprite?: boolean; trackInitialLoad?: TrackInitialLoad } = {}) {
+export function attachMesh(group: THREE.Group, def: AssetDef, opts: { allowSprite?: boolean; trackInitialLoad?: TrackInitialLoad } = {}): Promise<void> | undefined {
   if (!def.mesh) return;
   const url = normalizeMeshUrl(def.mesh);
   if (classifyMeshPath(url) === 'image') {
@@ -189,8 +202,9 @@ export function attachMesh(group: THREE.Group, def: AssetDef, opts: { allowSprit
         group.userData.spriteUpdate = (dt: number) => inst.update(dt);
       })
       .catch(() => console.warn(`Could not load sprite image for "${def.id}" (${url}) — keeping stand-in.`));
-    void (opts.trackInitialLoad ? opts.trackInitialLoad(ready) : ready);
-    return;
+    const tracked = opts.trackInitialLoad ? opts.trackInitialLoad(ready) : ready;
+    void tracked;
+    return tracked;
   }
   const ready = loadMeshTemplate(url)
     .then((template) => {
@@ -211,7 +225,9 @@ export function attachMesh(group: THREE.Group, def: AssetDef, opts: { allowSprit
       group.add(model, ...persistent);
     })
     .catch(() => console.warn(`Could not load mesh for "${def.id}" (${url}) — keeping stand-in.`));
-  void (opts.trackInitialLoad ? opts.trackInitialLoad(ready) : ready);
+  const tracked = opts.trackInitialLoad ? opts.trackInitialLoad(ready) : ready;
+  void tracked;
+  return tracked;
 }
 
 /** B6-12 thin THREE layer: runtime state lives in the pure AssetStateRegistry. */
@@ -237,9 +253,19 @@ export function setAssetObjectOn(group: THREE.Object3D, on: boolean): void {
   group.userData.assetOn = on;
 }
 
+export function resolveAssetPlacementTransform(def: Pick<AssetDef, 'wallMounted'>, pos: [number, number], rotDeg: number): {
+  position: [number, number, number]; yawRadians: number;
+} {
+  return {
+    position: [pos[0], def.wallMounted ? (def.wallMounted.heightY ?? 1.5) : 0, pos[1]],
+    yawRadians: THREE.MathUtils.degToRad(rotDeg),
+  };
+}
+
 export function applyAssetPlacement(group: THREE.Object3D, def: AssetDef, pos: [number, number], rotDeg: number): void {
-  group.position.set(pos[0], def.wallMounted ? (def.wallMounted.heightY ?? 1.5) : 0, pos[1]);
-  group.rotation.y = THREE.MathUtils.degToRad(rotDeg);
+  const transform = resolveAssetPlacementTransform(def, pos, rotDeg);
+  group.position.set(...transform.position);
+  group.rotation.y = transform.yawRadians;
 }
 
 /**

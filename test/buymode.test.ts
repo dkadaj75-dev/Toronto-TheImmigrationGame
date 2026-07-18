@@ -8,6 +8,7 @@ import {
   BuyOverlay, BuyModeController, effectiveInstances, effectivePlacedObjects, isSelectableForSell,
   attemptBuy, attemptSell, attemptMove, attemptDestroy,
   iconFallbackColor, iconFallbackInitials,
+  ghostTransformFor, resolveGhostAppearance, DEFAULT_GHOST_OPACITY,
   type OtherInstance, type PlacedLike, type EffectiveInstance, type FloorDef, type WallSeg,
 } from '../game/buymode';
 import { footprintRect } from '../game/accidents';
@@ -54,6 +55,30 @@ function asset(over: Partial<AssetDef> = {}): AssetDef {
 
 const noUnlocks = () => false;
 const allUnlocked = () => true;
+
+console.log('buymode.test — B13-8 actual-asset ghost transform + appearance');
+{
+  const def = asset({
+    wallMounted: { heightY: 1.8 },
+    meshFit: { scale: [1.2, 0.8, 1.4], yawOffsetDeg: -30, xOffset: 0.1, yOffset: 0.2, zOffset: -0.3 },
+  });
+  const composed = ghostTransformFor(def, [2.25, 4.5], 90);
+  check('ghost placement uses world position including wall mount height',
+    JSON.stringify(composed.placement.position) === JSON.stringify([2.25, 1.8, 4.5]));
+  check('ghost placement uses world yaw convention', approx(composed.placement.yawRadians, Math.PI / 2));
+  check('ghost meshFit uses world non-uniform scale', JSON.stringify(composed.meshFit.scale) === JSON.stringify([1.2, 0.8, 1.4]));
+  check('ghost meshFit uses world yaw correction', approx(composed.meshFit.yawRadians, -Math.PI / 6));
+  check('ghost meshFit uses all world offsets', JSON.stringify(composed.meshFit.offset) === JSON.stringify([0.1, 0.2, -0.3]));
+
+  const valid = resolveGhostAppearance(true, 0.42);
+  check('valid ghost preserves real asset color', valid.tint === null);
+  check('ghost opacity comes from tuning and disables depth writes', valid.opacity === 0.42 && valid.depthWrite === false);
+  const invalid = resolveGhostAppearance(false, 0.42);
+  check('invalid ghost gains red tint without changing opacity', invalid.tint === 0xe35a5a && invalid.opacity === 0.42);
+  check('missing opacity uses documented default', resolveGhostAppearance(true).opacity === DEFAULT_GHOST_OPACITY);
+  check('opacity is clamped low/high', resolveGhostAppearance(true, -2).opacity === 0 && resolveGhostAppearance(true, 3).opacity === 1);
+  check('non-finite opacity falls back', resolveGhostAppearance(true, Number.NaN).opacity === DEFAULT_GHOST_OPACITY);
+}
 
 console.log('buymode.test — catalog: isPurchasable / isAffordable');
 {
