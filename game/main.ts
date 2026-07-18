@@ -40,8 +40,9 @@ import { applyTheme } from './theme';
 import { compatibility, type InteractionDef } from './social';
 import { SocialRuntime } from './socialruntime';
 import { availableSocialInteractions, SocialInteractionSession, socialActionDef, socialAutonomyCandidates, socialScoringTarget } from './social-interactions';
-import { NpcVisitorController, type NpcDef } from './npc';
+import { isNpcAvailable, NpcVisitorController, type NpcDef } from './npc';
 import { mutualFacingDeg } from './facing';
+import { contactViews, PhoneContactSession, phoneAutonomyCandidates } from './contacts';
 
 /** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
  *  a seat-aware action with no eligible seat in range) plays the dedicated 'sit_ground' state
@@ -339,6 +340,18 @@ async function start() {
     },
   );
 
+  const phoneContactSession = new PhoneContactSession(
+    socialRuntime.relationships,
+    socialRuntime.phone,
+    () => data.social!,
+    {
+      applyPlayerNeed: (needId, delta) => {
+        const current = stats.needs.get(needId);
+        if (current !== undefined) stats.needs.set(needId, Math.max(0, Math.min(100, current + delta)));
+      },
+    },
+  );
+
   const currentVisitor = (): NpcDef | null => {
     const id = visitors.state.npcId;
     return id ? data.npcs?.npcs.find((npc) => npc.id === id) ?? null : null;
@@ -361,15 +374,36 @@ async function start() {
     () => data, () => world, agent, stats, accidents, buildEvalContext,
     {
       extraCandidates: () => {
-        if (!data.social || visitors.state.phase !== 'visiting' || socialSession.active) return [];
-        const npc = currentVisitor();
-        const object = visitors.visitorObject;
-        if (!npc || !object) return [];
-        return socialAutonomyCandidates(npc, socialRuntime.relationships, data.social).map((candidate) => ({
-          object,
+        if (!data.social || socialSession.active || phoneContactSession.active) return [];
+        if (visitors.state.phase === 'visiting') {
+          const npc = currentVisitor();
+          const object = visitors.visitorObject;
+          if (!npc || !object) return [];
+          return socialAutonomyCandidates(npc, socialRuntime.relationships, data.social).map((candidate) => ({
+            object,
+            action: candidate.action,
+            scoringAsset: candidate.target,
+            order: () => orderSocialInteraction(npc, candidate.interaction),
+          }));
+        }
+        const evalContext = buildEvalContext();
+        return phoneAutonomyCandidates(data.npcs?.npcs ?? [], {
+          phone: socialRuntime.phone,
+          data: data.social,
+          behavior: data.behavior,
+          eval: evalContext,
+          nowMinutes: gameHourNow() * 60,
+          hourNow: gameSeconds / 3600,
+          visitorBusy: visitors.state.phase !== 'idle',
+          canInvite: visitors.canInvite(),
+          actionBusy: false,
+        }).map((candidate) => ({
+          object: sim,
           action: candidate.action,
           scoringAsset: candidate.target,
-          order: () => orderSocialInteraction(npc, candidate.interaction),
+          order: () => candidate.kind === 'invite'
+            ? visitors.invite(candidate.npcId)
+            : startPhoneContact(candidate.npcId, candidate.kind),
         }));
       },
     },
@@ -511,7 +545,7 @@ async function start() {
   // --- smartphone jobs + visa applications (PROJECT_CONTEXT.md §7.20 V2, B3-7) ---
   const phoneJobs = new PhoneJobSearch(data.jobs, data.tuning.phone?.jobListSize);
   const bills = new FinanceState(data.bills, data.finance, data.tuning.bills?.intervalDays, 1, data.tuning.credit);
-  let phoneTab: 'jobs' | 'visas' | 'bills' | 'credit' | 'rentals' = 'jobs';
+  let phoneTab: 'jobs' | 'visas' | 'bills' | 'credit' | 'rentals' | 'contacts' = 'jobs';
   // ROADMAP_APT R3 (Kijiji): the phone tab needs EVERY map, not just the active one. Loaded
   // network-only (data.ts loadAllMaps, via GET /api/maps) and refreshed each time the tab is shown
   // so live designer map/rental edits appear. Empty until the first load resolves — the tab renders
@@ -571,7 +605,19 @@ async function start() {
       creditScore: bills.creditScore,
       creditHistory: bills.creditHistory,
       rentalTabName: data.tuning.phone?.rentalTabName ?? 'Kijiji',
+      contactsTabName: data.tuning.phone?.contactsTabName ?? 'Contacts',
       rentals,
+      contacts: contactViews(data.npcs?.npcs ?? [], {
+        relationships: socialRuntime.relationships,
+        phone: socialRuntime.phone,
+        data: data.social!,
+        nowMinutes: gameHourNow() * 60,
+        hourNow: gameSeconds / 3600,
+        canInvite: visitors.canInvite(),
+        activeAction: phoneContactSession.active
+          ? { npcId: phoneContactSession.active.npc.id, channel: phoneContactSession.active.channel }
+          : null,
+      }),
       rentDisabledTitle: 'Not rentable right now',
     });
     hud.setPhoneBadge(bills.outstanding.length);
@@ -581,8 +627,26 @@ async function start() {
     completed ? 'completed' : 'started',
     data.tuning.quests.toastDurationSeconds * 1000,
   );
+  function startPhoneContact(npcId: string, channel: 'text' | 'call'): boolean {
+    const npc = data.npcs?.npcs.find((entry) => entry.id === npcId);
+    if (!npc || !data.social) return false;
+    const order = phoneContactSession.begin(
+      npc,
+      channel,
+      Object.fromEntries(stats.personality),
+      gameSeconds / 3600,
+      gameHourNow() * 60,
+    );
+    if (!order) return false;
+    if (!agent.orderAction(order.action, sim)) {
+      phoneContactSession.finish(false, gameHourNow() * 60);
+      return false;
+    }
+    refreshPhone();
+    return true;
+  }
   hud.onPhoneClose = () => {
-    if (agent.current?.action.id === 'use_phone') agent.stopAction();
+    if (phoneContactSession.active || agent.current?.action.id === 'use_phone') agent.stopAction();
   };
   hud.onPhoneOpen = () => {
     if (buyMode.active || repoOverlayActive || gameOverActive) return;
@@ -595,6 +659,14 @@ async function start() {
     if (tab === 'rentals') reloadRentalMaps(); // pull fresh maps/rental edits each time the tab opens
     refreshPhone();
   };
+  hud.onPhoneContactInvite = (npcId) => {
+    const npc = data.npcs?.npcs.find((entry) => entry.id === npcId);
+    if (!npc || !isNpcAvailable(gameSeconds / 3600, npc.availableHours) || !visitors.canInvite()) return;
+    if (visitors.invite(npcId)) phoneToast(`${npc.name} is on the way`, true);
+    refreshPhone();
+  };
+  hud.onPhoneContactAction = (npcId, channel) => { startPhoneContact(npcId, channel); };
+  hud.onPhoneContactCancel = () => { if (phoneContactSession.active) agent.stopAction(false); };
   // ROADMAP_APT R4: renting starts a PENDING MOVE (sim-time countdown of the map's
   // rental.moveInHours). Re-validated here against a fresh listing (not the possibly-stale card
   // the click came from): must be available, not the current home, and no move already pending.
@@ -1089,6 +1161,7 @@ async function start() {
   };
   agent.onActionStop = (a, completed) => {
     const socialStop = socialSession.active?.action === a.action;
+    const phoneContactStop = phoneContactSession.active?.action === a.action;
     hud.hideActivity();
     anim?.play('idle');
     durationState = null;
@@ -1099,6 +1172,14 @@ async function start() {
     if (socialStop) {
       socialSession.finish(completed);
       if (!completed) agent.halt();
+      return;
+    }
+    if (phoneContactStop) {
+      const name = phoneContactSession.active!.npc.name;
+      const channel = phoneContactSession.active!.channel;
+      const applied = phoneContactSession.finish(completed, gameHourNow() * 60);
+      if (applied) phoneToast(`${channel === 'text' ? 'Texted' : 'Called'} ${name}`, true);
+      refreshPhone();
       return;
     }
     if (a.action.id === 'use_phone') hud.closePhone();

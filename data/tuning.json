@@ -61,7 +61,8 @@
     "jobListSize": 3,
     "icon": "/icons/Smartphone.png",
     "rentalTabName": "Kijiji",
-    "_source": "Smartphone/jobs V2 + designer HUD launcher delta (PROJECT_CONTEXT.md §7.20) — jobListSize controls hourly listings; icon is the persistent HUD button image. rentalTabName (ROADMAP_APT R1, §6.4 RESOLVED) is the in-game brand string for the future Kijiji rental tab, kept in data (not code) so it is renameable; R3's phone tab UI consumes it."
+    "contactsTabName": "Contacts",
+    "_source": "Smartphone/jobs V2 + designer HUD launcher delta (PROJECT_CONTEXT.md §7.20) — jobListSize controls hourly listings; icon is the persistent HUD button image. rentalTabName (ROADMAP_APT R1, §6.4 RESOLVED) and contactsTabName (ROADMAP_SOCIAL S5) are renameable phone-tab labels consumed by the HUD."
   },
   "work": {
     "autoSpeed": 5,

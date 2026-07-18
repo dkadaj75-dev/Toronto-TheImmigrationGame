@@ -214,7 +214,17 @@ the highest-complexity slice of this batch.
 **Agent: Codex.** Two-agent choreography (mutual facing, paused autonomy, interruption safety)
 is regression-prone in exactly the ways this repo's seat history demonstrated.
 
-### S5 — Phone: Contacts tab (invite / text / call)
+### S5 — Phone: Contacts tab (invite / text / call) — ✅ SHIPPED (2026-07-18)
+> As-built (started by Opus, completed by Codex after a session-limit cutoff): game/contacts.ts
+> pure tab logic (contact view-models, cooldown formatting, availability; PhoneContactSession
+> rides the existing ActionDef duration/progress/stopAction(completed) pipeline — no parallel
+> timer). Contacts tab: portraits (initials fallback), relationship label + normalized bar,
+> invite gated by availableHours + canInvite() with reasons shown; text/call sim-time with
+> cooldown display and Cancel; completion-only gains via SocialRuntime (applyGain + markUsed),
+> missing social need = safe no-op. tuning.phone.contactsTabName ("Contacts"). behavior.json
+> seeds: phone_text (social≤20, +3.5), phone_call (≤12, +3), phone_invite (≤6, +2.5), all
+> disableable; phoneAutonomyCandidates feed the existing scorer (visitor presence suppresses).
+> test/contacts.test.ts (26 assertions). PROJECT_CONTEXT §7.46.
 - New phone tab "Contacts": NPC list with portrait, name, relationship status label + score bar.
 - **Invite home:** available inside NPC hours, starts S3's lifecycle; disabled while a visit or
   pending arrival exists.

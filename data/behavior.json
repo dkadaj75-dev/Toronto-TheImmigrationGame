@@ -71,6 +71,51 @@
         "all": []
       },
       "action": "read_book"
+    },
+    {
+      "id": "low_social_texts_contact",
+      "name": "Text a contact when social is low",
+      "action": "phone_text",
+      "conditions": {
+        "all": [
+          {
+            "var": "needs.social",
+            "lte": 20
+          }
+        ]
+      },
+      "scoreBonus": 3.5,
+      "enabled": true
+    },
+    {
+      "id": "very_low_social_calls_contact",
+      "name": "Call a contact when social is very low",
+      "action": "phone_call",
+      "conditions": {
+        "all": [
+          {
+            "var": "needs.social",
+            "lte": 12
+          }
+        ]
+      },
+      "scoreBonus": 3,
+      "enabled": true
+    },
+    {
+      "id": "critical_social_invites_contact",
+      "name": "Invite a contact when social is critical",
+      "action": "phone_invite",
+      "conditions": {
+        "all": [
+          {
+            "var": "needs.social",
+            "lte": 6
+          }
+        ]
+      },
+      "scoreBonus": 2.5,
+      "enabled": true
     }
   ]
 }

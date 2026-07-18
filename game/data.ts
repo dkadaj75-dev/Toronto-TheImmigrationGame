@@ -665,7 +665,7 @@ export interface TuningData {
    *  Kijiji rental tab — kept in DATA (phone config), not hardcoded, so the designer can rename the
    *  tab. Sparse; R3 (the phone tab UI) consumes it and falls back to "Kijiji" when absent. R1 only
    *  adds the field + typing + the data/tuning.json default. */
-  phone?: { jobListSize?: number; icon?: string; rentalTabName?: string };
+  phone?: { jobListSize?: number; icon?: string; rentalTabName?: string; contactsTabName?: string };
   /** B3-8/B7-5/B7-6 work tuning. Optional for old fixtures. `departureWindowHours` limits how
    *  long after startHour the sim may leave; the two auto-depart floors are inclusive and must
    *  both pass. Runtime fallbacks live in main.ts (5 / 2 / 40 / 25 respectively). */

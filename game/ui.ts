@@ -5,12 +5,13 @@
 
 import type { ActionDef, AssetDef, JobDef, VisaDef } from './data';
 import type { RentalCardView, RequirementView } from './phone';
+import type { ContactView } from './contacts';
 import type { SimStats } from './stats';
 import { jobLevelPay, jobLevelTitle } from './work';
 
 /** Phone overlay tabs. ROADMAP_APT R3 adds 'rentals' (the Kijiji tab; its visible label comes
  *  from tuning.phone.rentalTabName, never hardcoded). */
-export type PhoneTab = 'jobs' | 'visas' | 'bills' | 'credit' | 'rentals';
+export type PhoneTab = 'jobs' | 'visas' | 'bills' | 'credit' | 'rentals' | 'contacts';
 
 export interface ScreenPoint { x: number; y: number }
 export interface ScreenInsets { top: number; right: number; bottom: number; left: number }
@@ -398,6 +399,19 @@ const CSS = `
   #phone-button { bottom: calc(190px + env(safe-area-inset-bottom, 0px)) !important; }
   .buy-card { width: 78px; }
 }
+.phone-contact-head { align-items: center; }
+.phone-contact-portrait { position: relative; flex: 0 0 48px; width: 48px; height: 48px;
+  border-radius: 50%; overflow: hidden; background: #26344d; display: grid; place-items: center;
+  color: #b9c7df; font-weight: 800; }
+.phone-contact-portrait img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.phone-contact-level { color: #b9c7df; font-size: 11px; margin-top: 3px; }
+.phone-contact-score { height: 7px; border-radius: 999px; overflow: hidden; background: #111827; margin: 9px 0; }
+.phone-contact-score > span { display: block; height: 100%; background: #73a2ff; }
+.phone-contact-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.phone-contact-actions button { border: 0; border-radius: 9px; padding: 9px 5px; background: #30466d;
+  color: #fff; font: inherit; font-size: 11px; cursor: pointer; }
+.phone-contact-actions button:disabled { opacity: .42; cursor: default; }
+.phone-contact-reason { min-height: 14px; margin: 7px 0 0; color: #e0b56f; font-size: 10px; }
 `;
 
 export class Hud {
@@ -472,6 +486,9 @@ export class Hud {
   onPhoneVisaApply: ((statusId: string) => void) | null = null;
   onPhoneBillPay: ((key: string) => void) | null = null;
   onPhoneBillsPayAll: (() => void) | null = null;
+  onPhoneContactInvite: ((npcId: string) => void) | null = null;
+  onPhoneContactAction: ((npcId: string, channel: 'text' | 'call') => void) | null = null;
+  onPhoneContactCancel: (() => void) | null = null;
   /** ROADMAP_APT R3 hook seam: fired when the Kijiji "Rent" button is activated. R4 wires the
    *  real rent → move-in flow here (the button is enabled per RentalCardView.rentEnabled). */
   onPhoneRentRequested: ((mapId: string) => void) | null = null;
@@ -545,6 +562,7 @@ export class Hud {
             <button data-phone-tab="bills">Bills</button>
             <button data-phone-tab="credit">Credit</button>
             <button data-phone-tab="rentals">Rentals</button>
+            <button data-phone-tab="contacts">Contacts</button>
           </div>
           <div id="phone-body"></div>
         </div>
@@ -958,8 +976,10 @@ export class Hud {
     creditHistory: { day: number; delta: number; reason: string; score: number }[];
     /** ROADMAP_APT R3 (Kijiji): the tab's visible label (tuning.phone.rentalTabName). */
     rentalTabName: string;
+    contactsTabName: string;
     /** ROADMAP_APT R3: pre-massaged rent-card view-models (game/phone.ts rentalCardViews). */
     rentals: RentalCardView[];
+    contacts: ContactView[];
     /** Tooltip shown only on a DISABLED Rent button (gated/current/move-pending ads). */
     rentDisabledTitle?: string;
   }) {
@@ -967,9 +987,80 @@ export class Hud {
     // The Kijiji tab's label is data-driven (tuning.phone.rentalTabName), never hardcoded.
     this.phoneTabs.forEach((button) => {
       if (button.dataset.phoneTab === 'rentals') button.textContent = args.rentalTabName;
+      if (button.dataset.phoneTab === 'contacts') button.textContent = args.contactsTabName;
     });
     this.phoneTabs.forEach((button) => button.classList.toggle('active', button.dataset.phoneTab === args.tab));
     this.phoneBody.innerHTML = '';
+
+    if (args.tab === 'contacts') {
+      if (args.contacts.length === 0) {
+        this.phoneBody.appendChild(phoneEmpty('No contacts yet.'));
+        return;
+      }
+      for (const contact of args.contacts) {
+        const card = phoneCard(contact.name);
+        card.head.classList.add('phone-contact-head');
+        const portrait = document.createElement('div');
+        portrait.className = 'phone-contact-portrait';
+        portrait.textContent = contact.name.trim().slice(0, 1).toUpperCase() || '?';
+        if (contact.portrait) {
+          const image = document.createElement('img');
+          image.alt = `${contact.name} portrait`;
+          image.src = contact.portrait;
+          image.addEventListener('error', () => image.remove());
+          portrait.appendChild(image);
+        }
+        card.head.insertBefore(portrait, card.head.firstChild);
+        const title = card.head.querySelector('.phone-card-name')!;
+        const identity = document.createElement('div');
+        identity.className = 'phone-card-name';
+        identity.textContent = contact.name;
+        const level = document.createElement('div');
+        level.className = 'phone-contact-level';
+        level.textContent = `${contact.levelLabel} · ${Math.round(contact.score)}`;
+        identity.appendChild(level);
+        title.replaceWith(identity);
+
+        const bar = document.createElement('div');
+        bar.className = 'phone-contact-score';
+        bar.setAttribute('role', 'progressbar');
+        bar.setAttribute('aria-valuenow', String(contact.score));
+        const fill = document.createElement('span');
+        fill.style.width = `${Math.round(contact.scoreFraction * 100)}%`;
+        bar.appendChild(fill);
+        card.el.appendChild(bar);
+
+        const actions = document.createElement('div');
+        actions.className = 'phone-contact-actions';
+        const invite = document.createElement('button');
+        invite.textContent = 'Invite';
+        invite.disabled = !contact.inviteEnabled;
+        invite.title = contact.inviteDisabledReason ?? '';
+        invite.addEventListener('click', () => this.onPhoneContactInvite?.(contact.npcId));
+        actions.appendChild(invite);
+        for (const channel of ['text', 'call'] as const) {
+          const view = contact[channel];
+          const button = document.createElement('button');
+          button.textContent = view.active ? `Cancel ${channel}` : channel === 'text' ? 'Text' : 'Call';
+          button.disabled = !view.enabled && !view.active;
+          button.title = view.disabledReason ?? '';
+          button.addEventListener('click', () => view.active
+            ? this.onPhoneContactCancel?.()
+            : this.onPhoneContactAction?.(contact.npcId, channel));
+          actions.appendChild(button);
+        }
+        card.el.appendChild(actions);
+        const reason = document.createElement('div');
+        reason.className = 'phone-contact-reason';
+        reason.textContent = contact.inviteDisabledReason
+          ?? contact.text.disabledReason
+          ?? contact.call.disabledReason
+          ?? '';
+        card.el.appendChild(reason);
+        this.phoneBody.appendChild(card.el);
+      }
+      return;
+    }
 
     if (args.tab === 'rentals') {
       if (args.rentals.length === 0) {
