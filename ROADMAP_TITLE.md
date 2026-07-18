@@ -53,7 +53,7 @@ the themed button styles) so the B13-1 Theme Editor gallery picks them up.
 
 ## 2. Slices
 
-### T1 — Pure title core + config (`game/title.ts` + `data/title.json`)
+### T1 — Pure title core + config — ✅ SHIPPED (2026-07-18, with T2)
 Menu model from data (entries, enabled/disabled resolution — Load's availability comes from a
 `hasSaves` input, wired later), options model (definitions + current values), prefs store
 read/write (localStorage adapter injected, jsdom-able), volume application contract with
@@ -62,7 +62,18 @@ add per-channel gain if missing, THIN). `test/title.test.ts`: menu resolution, o
 defaults/clamping, prefs round-trip, disabled-Load logic.
 **Agent: Claude (Sonnet).** Small pure module, clear contracts.
 
-### T2 — Title screen UI + boot-order rework
+### T2 — Title screen UI + boot-order rework — ✅ SHIPPED (2026-07-18)
+> T1+T2 as-built (Codex): data/title.json (logo/background/music/menu/options/credits, sparse);
+> game/title.ts pure core (resolveMenu w/ hasSaves gating, option clamping, PreferencesStore
+> over injected storage at "condo-life-prefs", applyVolumes contract); game/title-screen.ts
+> TitleScreen + EXPORTED OptionsPanel (G3 reuses it). Boot: title paints instantly (index.html
+> markup + theme components.titleScreen keys, gallery-discovered) → New Game = existing loading
+> gate; Load = newest valid slot → V3 restore (T3 replaces with the slot screen); Options =
+> live master/music/feedback gains (thin audio channel gains added; UI feedback separate from
+> world SFX) persisted to localStorage prefs. Title music = B13-4 autoplay pattern, stops on
+> leave. ?dev/#dev bypass preserved. Coordinator-verified live: title renders, Load boots+
+> restores in ~2s, ?dev skips, zero console errors. Suites: title, title-screen, theme(+editor),
+> audio, loading, savestore, save-wiring; prod build green.
 DOM overlay first paint before asset loading starts; New Game → existing boot path (loading
 screen unchanged); Options → panel from T1 definitions, applying live (volume slider audible
 immediately if music playing); background/logo/music from data/title.json (music obeys the

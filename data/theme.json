@@ -100,6 +100,15 @@
       "radiusPx": 999,
       "paddingXPx": 11,
       "paddingYPx": 7
+    },
+    "titleScreen": {
+      "background": "rgba(20,26,40,.88)",
+      "foreground": "#eaf0fb",
+      "accent": "#9fd08c",
+      "outline": "rgba(130,158,210,.55)",
+      "radiusPx": 18,
+      "outlineWidthPx": 1,
+      "shadow": "0 10px 40px rgba(0,0,0,.45)"
     }
   },
   "layout": {

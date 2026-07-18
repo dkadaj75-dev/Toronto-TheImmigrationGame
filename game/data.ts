@@ -51,10 +51,21 @@ export interface ThemeData {
     phoneShell?: ThemeComponentOverrides;
     phoneTab?: ThemeComponentOverrides;
     accordionHeader?: ThemeComponentOverrides;
+    titleScreen?: ThemeComponentOverrides;
     [name: string]: ThemeComponentOverrides | undefined;
   };
   layout: Record<string, ThemeLayoutItem>;
   accordions?: { name: string; collapsedByDefault?: boolean; icon?: string; showText?: boolean }[];
+}
+
+export interface TitleMenuDef { id: string; label: string; enabled?: boolean; }
+export interface TitleOptionDef {
+  id: string; type: 'slider' | 'toggle'; label: string;
+  min?: number; max?: number; step?: number; default: number | boolean;
+}
+export interface TitleConfig {
+  logoText?: string; logoImage?: string | null; background?: string | null; music?: string | null;
+  menu: TitleMenuDef[]; options: TitleOptionDef[]; credits?: string | null;
 }
 
 export interface NeedDef { id: string; name: string; color: string; default: number; decayPerTick: number; autonomy: boolean; computed?: string; }
@@ -830,6 +841,8 @@ export interface GameData {
   social?: import('./social').SocialData;
   /** Save settings are optional so older test fixtures and deployments remain compatible. */
   save?: SaveConfig;
+  /** T1: optional so an older deployment resolves to the built-in title defaults. */
+  title?: TitleConfig;
 }
 
 /** Runtime-save policy only; authored data remains outside save envelopes. */
@@ -869,12 +882,21 @@ const FILES = {
   npcs: '/data/npcs.json',
   social: '/data/social.json',
   save: '/data/save.json',
+  title: '/data/title.json',
 } as const;
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { cache: 'no-cache' });
   if (!res.ok) throw new Error(`Failed to load ${url}: ${res.status}`);
   return res.json() as Promise<T>;
+}
+
+/** Title-only static bootstrap: no world data and no /api dependency. */
+export async function loadTitleBootstrap(): Promise<{ title?: TitleConfig; theme?: ThemeData; save?: SaveConfig }> {
+  const [title, theme, save] = await Promise.all([
+    fetchOptionalJson<TitleConfig>(FILES.title), fetchOptionalJson<ThemeData>(FILES.theme), fetchOptionalJson<SaveConfig>(FILES.save),
+  ]);
+  return { title, theme, save };
 }
 
 /** ROADMAP_APT R4 (§6.1 RESOLVED): which map the engine plays. The `homeMap` simstate variable —
@@ -922,7 +944,7 @@ export async function loadAll(): Promise<GameData> {
     if (fallbackId === homeId) throw err;
     map = await fetchJson<MapData>(`/data/maps/${fallbackId}.json`);
   }
-  const [stats, interactions, assets, quests, visas, jobs, bills, finance, happiness, loading, notifications, behavior, theme, npcs, social, save] = await Promise.all([
+  const [stats, interactions, assets, quests, visas, jobs, bills, finance, happiness, loading, notifications, behavior, theme, npcs, social, save, title] = await Promise.all([
     fetchJson<StatsData>(FILES.stats),
     fetchJson<InteractionsData>(FILES.interactions),
     fetchJson<AssetsData>(FILES.assets),
@@ -939,8 +961,9 @@ export async function loadAll(): Promise<GameData> {
     fetchOptionalJson<import('./npc').NpcsData>(FILES.npcs),
     fetchOptionalJson<import('./social').SocialData>(FILES.social),
     fetchOptionalJson<SaveConfig>(FILES.save),
+    fetchOptionalJson<TitleConfig>(FILES.title),
   ]);
-  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills, finance, happiness, loading, notifications, behavior, theme, npcs, social, save };
+  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills, finance, happiness, loading, notifications, behavior, theme, npcs, social, save, title };
 }
 
 async function fetchOptionalJson<T>(url: string): Promise<T | undefined> {
@@ -980,7 +1003,7 @@ export function watchData(onChange: (data: GameData) => void, intervalMs = 2000)
       const data = await loadAll();
       // loading.json is boot-only: editing it prepares the next boot without rebuilding a live
       // world just because a phrase/color changed.
-      const { loading: _bootOnlyLoading, ...hotReloadable } = data;
+      const { loading: _bootOnlyLoading, title: _bootOnlyTitle, ...hotReloadable } = data;
       const sig = JSON.stringify(hotReloadable);
       if (last && sig !== last) onChange(data);
       last = sig;

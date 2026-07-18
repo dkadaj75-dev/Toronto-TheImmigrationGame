@@ -78,7 +78,7 @@ export function effectiveVolume(audio: AudioTuning, category: 'music' | 'sfx'): 
   return audio.masterVolume * (category === 'music' ? audio.musicVolume : audio.sfxVolume);
 }
 
-export type MusicContext = 'map' | 'buymode' | 'loading';
+export type MusicContext = 'map' | 'buymode' | 'loading' | 'title';
 
 /** What SHOULD be playing for a given context, independent of what IS currently playing (the
  *  AudioManager below diffs against its own current state to decide whether to crossfade).
@@ -87,7 +87,7 @@ export type MusicContext = 'map' | 'buymode' | 'loading';
  *  (silence is this context's valid "track"). 'buymode': tuning.audio.buyModeMusic; 'loading':
  *  the boot-only argument supplied by main.ts. Either fixed context may resolve to silence. */
 export function trackForContext(context: MusicContext, map: Pick<MapData, 'music'>, audio: AudioTuning, playlistIndex: number, loadingMusic?: string): string | null {
-  if (context === 'loading') return loadingMusic || null;
+  if (context === 'loading' || context === 'title') return loadingMusic || null;
   if (context === 'buymode') return audio.buyModeMusic ?? null;
   const list = map.music ?? [];
   if (list.length === 0) return null;
@@ -158,6 +158,9 @@ export class AudioManager {
   private audio: AudioTuning;
   private readonly playback = new AutoplayGate();
   private paused = false;
+  private preferenceMaster = 1;
+  private preferenceMusic = 1;
+  private preferenceFeedback = 1;
 
   private readonly loops = new Map<string, HTMLAudioElement>(); // sfx/asset/action loop channels, keyed by caller-chosen id
   private musicA: HTMLAudioElement | null = null;
@@ -194,9 +197,23 @@ export class AudioManager {
    *  anim.ts's/camera.ts's retune(). */
   retune(tuning: Pick<TuningData, 'audio'>): void {
     this.audio = resolveAudioTuning(tuning);
-    for (const el of this.loops.values()) el.volume = effectiveVolume(this.audio, 'sfx');
+    this.refreshVolumes();
+  }
+
+  setMasterVolume(value: number): void { this.preferenceMaster = clamp01(Number.isFinite(value) ? value : 1); this.refreshVolumes(); }
+  setMusicVolume(value: number): void { this.preferenceMusic = clamp01(Number.isFinite(value) ? value : 1); this.refreshVolumes(); }
+  setFeedbackVolume(value: number): void { this.preferenceFeedback = clamp01(Number.isFinite(value) ? value : 1); }
+
+  private channelVolume(category: 'music' | 'sfx' | 'feedback'): number {
+    const base = category === 'music' ? effectiveVolume(this.audio, 'music') : effectiveVolume(this.audio, 'sfx');
+    const categoryPreference = category === 'music' ? this.preferenceMusic : category === 'feedback' ? this.preferenceFeedback : 1;
+    return base * this.preferenceMaster * categoryPreference;
+  }
+
+  private refreshVolumes(): void {
+    for (const el of this.loops.values()) el.volume = this.channelVolume('sfx');
     const active = this.musicActiveIsA ? this.musicA : this.musicB;
-    if (active) active.volume = effectiveVolume(this.audio, 'music');
+    if (active) active.volume = this.channelVolume('music');
   }
 
   private whenUnlocked(fn: () => void): void {
@@ -207,8 +224,17 @@ export class AudioManager {
   playSfx(path: string): void {
     this.whenUnlocked(() => {
       const el = new Audio(normalizeSoundUrl(path));
-      el.volume = effectiveVolume(this.audio, 'sfx');
+      el.volume = this.channelVolume('sfx');
       el.play().catch(() => {}); // autoplay-policy or 404 — silently drop, never throws into caller
+    });
+  }
+
+  /** Discrete HUD/title cues have their own player preference without changing world/action SFX. */
+  playFeedback(path: string): void {
+    this.whenUnlocked(() => {
+      const el = new Audio(normalizeSoundUrl(path));
+      el.volume = this.channelVolume('feedback');
+      el.play().catch(() => {});
     });
   }
 
@@ -222,7 +248,7 @@ export class AudioManager {
     this.stopLoop(key);
     const el = new Audio(normalizeSoundUrl(path));
     el.loop = true;
-    el.volume = effectiveVolume(this.audio, 'sfx');
+    el.volume = this.channelVolume('sfx');
     el.dataset.src = path;
     this.loops.set(key, el);
     if (!this.paused) this.whenUnlocked(() => el.play().catch(() => {}));
@@ -275,12 +301,12 @@ export class AudioManager {
       const start = () => incoming.play();
       const stillWanted = () => this.musicContext === context && this.musicTrack === path
         && (this.musicActiveIsA ? this.musicA : this.musicB) === incoming;
-      if (context === 'loading') this.playback.bestEffort(start, stillWanted, onStarted);
+      if (context === 'loading' || context === 'title') this.playback.bestEffort(start, stillWanted, onStarted);
       else this.whenUnlocked(() => { if (stillWanted()) start().catch(() => {}); });
     }
 
     const seconds = this.audio.musicCrossfadeSeconds;
-    const targetVol = effectiveVolume(this.audio, 'music');
+    const targetVol = this.channelVolume('music');
     if (this.fadeRaf !== null) cancelAnimationFrame(this.fadeRaf);
     if (seconds <= 0 || typeof requestAnimationFrame === 'undefined') {
       if (outgoing) { outgoing.pause(); }
@@ -300,6 +326,16 @@ export class AudioManager {
       }
     };
     this.fadeRaf = requestAnimationFrame(step);
+  }
+
+  /** Title exit is a hard boundary: do not let its track bleed into the loading presentation. */
+  stopMusic(): void {
+    if (this.fadeRaf !== null) cancelAnimationFrame(this.fadeRaf);
+    this.fadeRaf = null;
+    for (const el of [this.musicA, this.musicB]) if (el) { el.pause(); el.currentTime = 0; }
+    this.musicA = this.musicB = null;
+    this.musicContext = null;
+    this.musicTrack = null;
   }
 
   private onTrackEnded(context: MusicContext, map: Pick<MapData, 'music'>): void {

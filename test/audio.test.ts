@@ -51,6 +51,7 @@ console.log('audio.test — trackForContext');
   check('buymode context with no buyModeMusic set returns null', trackForContext('buymode', map, noBuy, 0) === null);
   check('loading context returns its boot-only track', trackForContext('loading', map, audio, 0, 'sounds/loading.wav') === 'sounds/loading.wav');
   check('loading context may be silent', trackForContext('loading', map, audio, 0) === null);
+  check('title context uses its title-only track', trackForContext('title', map, audio, 0, 'sounds/title.wav') === 'sounds/title.wav');
 
   check('map context index 0 returns first track', trackForContext('map', map, audio, 0) === 'sounds/a.wav');
   check('map context index 1 returns second track', trackForContext('map', map, audio, 1) === 'sounds/b.wav');

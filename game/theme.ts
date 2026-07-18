@@ -27,6 +27,7 @@ export const DEFAULT_THEME: ThemeData = {
     phoneShell: { radiusPx: 30, outlineWidthPx: 2 },
     phoneTab: { radiusPx: 999, paddingXPx: 3, paddingYPx: 7, heightPx: 48 },
     accordionHeader: { radiusPx: 999, paddingXPx: 11, paddingYPx: 7 },
+    titleScreen: { background: 'rgba(20,26,40,.88)', foreground: '#eaf0fb', accent: '#9fd08c', outline: 'rgba(130,158,210,.55)', radiusPx: 18, outlineWidthPx: 1, shadow: '0 10px 40px rgba(0,0,0,.45)' },
   },
   layout: {
     'needs-panel': { anchor: 'tl', offsetX: 8, offsetY: 8 },
@@ -51,7 +52,7 @@ function finite(value: number | undefined, fallback: number): number {
   return Number.isFinite(value) ? value! : fallback;
 }
 
-const COMPONENT_NAMES = ['panel', 'button', 'toast', 'actionMenu', 'card', 'bar', 'phoneShell', 'phoneTab', 'accordionHeader'] as const;
+const COMPONENT_NAMES = ['panel', 'button', 'toast', 'actionMenu', 'card', 'bar', 'phoneShell', 'phoneTab', 'accordionHeader', 'titleScreen'] as const;
 const appliedVariables = new WeakMap<Document, Set<string>>();
 function componentPrefix(name: string): string {
   return `--theme-${name.replace(/[A-Z]/g, (letter) => '-' + letter.toLowerCase())}`;

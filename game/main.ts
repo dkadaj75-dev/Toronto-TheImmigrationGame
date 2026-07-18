@@ -3,7 +3,7 @@
 // Simulation (needs/autonomy/pathfinding) arrives in Phase 1 and will read the same data objects.
 
 import * as THREE from 'three';
-import { loadAll, loadAllMaps, setRuntimeHomeMap, watchData, type ActionDef, type AssetDef, type GameData, type MapData } from './data';
+import { loadAll, loadAllMaps, loadTitleBootstrap, setRuntimeHomeMap, watchData, type ActionDef, type AssetDef, type GameData, type MapData, type SaveConfig } from './data';
 import { TouchCamera } from './camera';
 import { applyWallCutView, buildWorld, makeSimStandIn, makeLights, applyDayNight, applyExteriorScene, loadRiggedCharacter, normalizeMeshUrl, setAssetObjectOn } from './world';
 import { buildDoors, ExteriorDoorTransit, type ExteriorDoorTransitRequest } from './doors';
@@ -48,6 +48,8 @@ import { crossedNightWindowBoundary, inspectAmbience, nightEnvironmentContributi
 import { applyEnvelope, assembleEnvelope, SaveRegistry } from './save';
 import { SaveStore } from './savestore';
 import { homeMapIdFromEnvelope, registerRuntimeSaveSystems } from './savewiring';
+import { DEFAULT_TITLE_CONFIG, PreferencesStore, applyVolumes, mostRecentSlotId, type TitlePreferences } from './title';
+import { TitleScreen } from './title-screen';
 
 /** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
  *  a seat-aware action with no eligible seat in range) plays the dedicated 'sit_ground' state
@@ -69,8 +71,17 @@ const loadingTrack = document.getElementById('loading-track')!;
 const loadingFill = document.getElementById('loading-fill')!;
 const loadingCount = document.getElementById('loading-count')!;
 const loadingTap = document.getElementById('loading-tap') as HTMLButtonElement;
+const titleRoot = document.getElementById('title-screen')!;
+const audio = new AudioManager({});
+const preferencesStore = new PreferencesStore(window.localStorage);
+let activePreferences: TitlePreferences = preferencesStore.read(DEFAULT_TITLE_CONFIG.options);
+applyVolumes(activePreferences, audio);
+const DEFAULT_SAVE_CONFIG: SaveConfig = {
+  slots: 3, autosaveSlotId: 'autosave', autosaveIntervalHours: 12,
+  autosaveOnEvents: ['moveIn', 'dayRollover'], storageKeyPrefix: 'condo-life-save',
+};
 
-async function start() {
+async function start(initialLoadSlotId?: string) {
   let data: GameData;
   try {
     data = await loadAll();
@@ -78,13 +89,7 @@ async function start() {
     boot.textContent = `data failed to load — is server.js running? (${(err as Error).message})`;
     return;
   }
-  const saveConfig = data.save ?? {
-    slots: 3,
-    autosaveSlotId: 'autosave',
-    autosaveIntervalHours: 12,
-    autosaveOnEvents: ['moveIn', 'dayRollover'],
-    storageKeyPrefix: 'condo-life-save',
-  };
+  const saveConfig = data.save ?? DEFAULT_SAVE_CONFIG;
 
   // B7-7 presentation starts once boot data is available. The initial data fetch still uses the
   // same dark overlay; loading.json itself is boot-only and intentionally has no live retune path.
@@ -1002,7 +1007,8 @@ async function start() {
   // Thin HTMLAudioElement layer (game/audio.ts) — construction is safe pre-gesture (it only queues
   // playback attempts behind the module's own pointerdown/keydown unlock listener), so it can be
   // built here unconditionally like every other subsystem.
-  const audio = new AudioManager(data.tuning);
+  audio.retune(data.tuning);
+  applyVolumes(activePreferences, audio);
   let stateSoundKeys = new Set<string>();
   /** B6-12: one traversal synchronizes pure per-instance state into PointLights and persistent
    * asset loops. Stable designer/player keys survive hot-reload world rebuilds and are save-ready. */
@@ -1040,7 +1046,7 @@ async function start() {
   audio.setMusicContext('loading', data.map, loading.music, () => { loadingTap.hidden = true; });
   const playTunedSfx = (key: 'moveOrder' | 'actionSelect' | 'questStarted' | 'questCompleted' | 'notification' | 'skillUp' | 'moneyUp' | 'moneyDown') => {
     const path = data.tuning.audio?.[key];
-    if (path) audio.playSfx(path);
+    if (path) audio.playFeedback(path);
   };
   hud.onActionSelected = () => playTunedSfx('actionSelect');
   hud.onToast = (cue) => playTunedSfx(cue);
@@ -1937,6 +1943,7 @@ async function start() {
     cam.retune(data.tuning.camera, data.map);
     rebakeNav();
     audio.retune(data.tuning); // ROADMAP_NEXT item 7: volumes/crossfade/buyModeMusic may have changed
+    applyVolumes(activePreferences, audio); // player preferences remain authoritative across designer retunes
     if (data.map.id !== currentMapId) {
       // map switch (tuning.map.active changed) — respawn the sim on the new map
       currentMapId = data.map.id;
@@ -2606,6 +2613,7 @@ async function start() {
   });
 
   await initialLoads.done; // success and stand-in fallback both settle the real boot gate
+  if (initialLoadSlotId) await loadFromSlot(initialLoadSlotId);
   initialLoadingActive = false;
   window.clearInterval(phraseTimer);
   audio.setMusicContext('map', data.map);
@@ -2624,4 +2632,40 @@ function disposeGroup(g: THREE.Group) {
   });
 }
 
-void start();
+async function enterTitle(): Promise<void> {
+  const devBoot = new URLSearchParams(location.search).has('dev') || location.hash === '#dev';
+  if (devBoot) { titleRoot.hidden = true; await start(); return; }
+  let bootstrap: Awaited<ReturnType<typeof loadTitleBootstrap>> = {};
+  try { bootstrap = await loadTitleBootstrap(); }
+  catch (error) { console.warn('title config failed; using defaults', error); }
+  const config = bootstrap.title ?? DEFAULT_TITLE_CONFIG;
+  applyTheme(bootstrap.theme);
+  activePreferences = preferencesStore.read(config.options);
+  applyVolumes(activePreferences, audio);
+  const saveConfig = bootstrap.save ?? DEFAULT_SAVE_CONFIG;
+  const store = new SaveStore(window.localStorage);
+  const slots = store.listSlots(saveConfig).filter((slot) => slot.meta);
+  const recentSlotId = mostRecentSlotId(slots);
+  let leaving = false;
+  const leave = (slotId?: string) => {
+    if (leaving) return;
+    leaving = true;
+    // Point the ordinary initial asset gate at the save's map. The V3 restore still performs its
+    // authoritative rebuild/apply path later, but the loading screen now tracks the right map's
+    // first asset population instead of briefly loading the fresh-game map first.
+    if (slotId) {
+      const read = store.readSlot(saveConfig, slotId);
+      if (read.ok) setRuntimeHomeMap(homeMapIdFromEnvelope(read.envelope));
+    }
+    screen.hide();
+    audio.stopMusic();
+    void start(slotId);
+  };
+  const screen = new TitleScreen(titleRoot, config, slots.length > 0, preferencesStore, audio, {
+    onNew: () => leave(), onLoad: () => leave(recentSlotId),
+  });
+  screen.show();
+  audio.setMusicContext('title', { music: [] }, config.music ?? undefined);
+}
+
+void enterTitle();

@@ -20,6 +20,7 @@ equal(variables['--theme-panel-radius'], '10px', 'maps panel component radius ov
 equal(variables['--theme-button-radius'], '999px', 'maps pill button component radius override');
 equal(variables['--theme-toast-accent'], '#5a9fd6', 'maps toast component accent');
 equal(variables['--theme-action-menu-outline-width'], '1px', 'maps action-menu outline width');
+equal(variables['--theme-title-screen-bg'], 'rgba(20,26,40,.88)', 'maps title-screen component background');
 equal(resolveActionMenuStyle(), { marginPx: 0, paddingXPx: 10, paddingYPx: 7, buttonWidthPx: 116, buttonHeightPx: 48, centerRadiusPx: 106 }, 'missing radial keys reproduce the legacy geometry');
 equal(resolveActionMenuStyle({ ...DEFAULT_THEME, components: { actionMenu: { marginPx: 5, paddingXPx: 14, widthPx: 150, centerRadiusPx: 125 } } }), {
   marginPx: 5, paddingXPx: 14, paddingYPx: 7, buttonWidthPx: 150, buttonHeightPx: 48, centerRadiusPx: 125,
