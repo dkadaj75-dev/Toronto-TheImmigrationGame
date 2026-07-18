@@ -12,7 +12,7 @@
   "autonomy": {
     "seekBelowThreshold": 30,
     "stopAtThreshold": 95,
-    "postPlayerCommandCooldownSeconds": 10,
+    "postPlayerCommandCooldownSeconds": 15,
     "_source": "seek/stop from roadmap §2; cooldown PLACEHOLDER — verify vs CLAUDE.md"
   },
   "time": {
@@ -73,7 +73,7 @@
     "_source": "Going to work V3 + B6-5 (§7.20/§7.28). autoSpeed applies while away. Promotion chance = level promoteChancePercent × happiness/100 × promotionHappinessFactor, clamped to 0..100. B7-5: departureWindowHours = hours after startHour the sim may LEAVE for work (clamped to the shift duration); past it the shift is MISSED (skip registers at window close). B7-6 (deterministic auto-departure): while the window is open the sim leaves on its own iff happiness >= autoDepartHappinessMin AND energy >= autoDepartEnergyMin; below either it stays home."
   },
   "bills": {
-    "intervalDays": 1,
+    "intervalDays": 4,
     "_source": "Bills system (PROJECT_CONTEXT.md §7.22) — in-game days between recurring arrivals from data/bills.json."
   },
   "movement": {

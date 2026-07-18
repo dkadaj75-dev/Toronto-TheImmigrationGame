@@ -1,6 +1,6 @@
 {
   "id": "Apt1",
-  "name": "Apt1",
+  "name": "Scarborough 1 Bedroom",
   "propertyType": "condo",
   "gridSize": 0.5,
   "snapStep": 0.25,
@@ -8,7 +8,146 @@
     "w": 14,
     "h": 10
   },
-  "floors": [],
+  "floors": [
+    {
+      "id": "floor_1",
+      "polygon": [
+        [
+          4,
+          0.5
+        ],
+        [
+          5.5,
+          0.5
+        ],
+        [
+          5.5,
+          4.5
+        ],
+        [
+          4,
+          4.5
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/ShittyFloor.jpg"
+    },
+    {
+      "id": "floor_5",
+      "polygon": [
+        [
+          1,
+          9
+        ],
+        [
+          5.5,
+          9
+        ],
+        [
+          5.5,
+          10.5
+        ],
+        [
+          1,
+          10.5
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/Concrete.jpg"
+    },
+    {
+      "id": "floor_3",
+      "polygon": [
+        [
+          1,
+          2.5
+        ],
+        [
+          4,
+          2.5
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          1,
+          5
+        ]
+      ],
+      "material": "carpet",
+      "texture": "textures/Carpet1.jpg"
+    },
+    {
+      "id": "floor_4",
+      "polygon": [
+        [
+          4,
+          4.5
+        ],
+        [
+          5.5,
+          4.5
+        ],
+        [
+          5.5,
+          5
+        ],
+        [
+          4,
+          5
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/ShittyFloor.jpg"
+    },
+    {
+      "id": "floor_6",
+      "polygon": [
+        [
+          1,
+          5
+        ],
+        [
+          5.5,
+          5
+        ],
+        [
+          5.5,
+          9
+        ],
+        [
+          1,
+          9
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/ShittyFloor.jpg"
+    },
+    {
+      "id": "floor_2",
+      "polygon": [
+        [
+          1,
+          0.5
+        ],
+        [
+          4,
+          0.5
+        ],
+        [
+          4,
+          2.5
+        ],
+        [
+          1,
+          2.5
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/Tiling.jpg"
+    }
+  ],
   "walls": [
     {
       "from": [
@@ -42,16 +181,80 @@
     },
     {
       "from": [
-        3,
+        1,
+        9
+      ],
+      "to": [
+        5.5,
+        9
+      ],
+      "kind": "curtainWall"
+    },
+    {
+      "from": [
+        4,
+        5
+      ],
+      "to": [
+        4,
+        0.5
+      ]
+    },
+    {
+      "from": [
+        1,
         2.5
       ],
       "to": [
-        1,
+        4,
         2.5
+      ]
+    },
+    {
+      "from": [
+        1,
+        5
+      ],
+      "to": [
+        4,
+        5
       ]
     }
   ],
-  "doors": [],
+  "doors": [
+    {
+      "at": [
+        4,
+        1.25
+      ],
+      "orientation": "vertical",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        4,
+        3.5
+      ],
+      "orientation": "vertical",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        5,
+        0.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_exterior"
+    },
+    {
+      "at": [
+        4.75,
+        9
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    }
+  ],
   "windows": [],
   "spawn": {
     "pos": [
@@ -60,12 +263,59 @@
     ],
     "facingDeg": 0
   },
-  "placedObjects": [],
+  "placedObjects": [
+    {
+      "asset": "toilet",
+      "pos": [
+        1.5,
+        1
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "shower",
+      "pos": [
+        1.5,
+        2
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "sink",
+      "pos": [
+        3,
+        2
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "stove",
+      "pos": [
+        1.5,
+        6.5
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "fridge",
+      "pos": [
+        1.5,
+        5.5
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "sink",
+      "pos": [
+        1.5,
+        7.5
+      ],
+      "rotDeg": 90
+    }
+  ],
   "rental": {
     "listed": true,
-    "adTitle": "test",
-    "adText": "test",
-    "moveInHours": 1,
-    "rentPriceOverride": 10
+    "adTitle": "Scarborough 1 Bedroom",
+    "moveInHours": 1
   }
 }

@@ -81,11 +81,78 @@
       "requiresLevelAtMost": null,
       "autonomyEligible": false,
       "censor": false
+    },
+    {
+      "id": "Slap",
+      "name": "Slap in the face",
+      "animation": "",
+      "durationSeconds": 5,
+      "needGains": {
+        "social": -15,
+        "fun": -15
+      },
+      "relationshipGain": -50,
+      "requiresLevelAtLeast": null,
+      "requiresLevelAtMost": "acquaintance",
+      "autonomyEligible": false,
+      "censor": false
+    },
+    {
+      "id": "Kiss",
+      "name": "Kiss lightly",
+      "animation": "",
+      "durationSeconds": 5,
+      "needGains": {
+        "social": 15
+      },
+      "relationshipGain": 25,
+      "requiresLevelAtLeast": "good_friend",
+      "requiresLevelAtMost": null,
+      "autonomyEligible": true,
+      "censor": false
+    },
+    {
+      "id": "FRkiss",
+      "name": "French Kiss",
+      "animation": "",
+      "durationSeconds": 10,
+      "needGains": {
+        "social": 25
+      },
+      "relationshipGain": 0,
+      "requiresLevelAtLeast": "beloved",
+      "requiresLevelAtMost": null,
+      "autonomyEligible": true,
+      "censor": false
+    },
+    {
+      "id": "foreplay",
+      "name": "Foreplay with the seal",
+      "animation": "",
+      "durationSeconds": 10,
+      "needGains": {},
+      "relationshipGain": 0,
+      "requiresLevelAtLeast": "beloved",
+      "requiresLevelAtMost": null,
+      "autonomyEligible": true,
+      "censor": true
+    },
+    {
+      "id": "bed",
+      "name": "Put the seal on the bed",
+      "animation": "",
+      "durationSeconds": 20,
+      "needGains": {},
+      "relationshipGain": 0,
+      "requiresLevelAtLeast": "beloved",
+      "requiresLevelAtMost": null,
+      "autonomyEligible": true,
+      "censor": true
     }
   ],
   "phone": {
     "text": {
-      "durationSeconds": 10,
+      "durationSeconds": 3,
       "needGains": {
         "social": 1
       },
@@ -95,7 +162,8 @@
     "call": {
       "durationSeconds": 45,
       "needGains": {
-        "social": 2.5
+        "social": 25,
+        "fun": 10
       },
       "relationshipGain": 2,
       "cooldownMinutes": 120
@@ -105,7 +173,11 @@
     "awayHours": 4,
     "needsRestored": {
       "social": 60,
-      "fun": 30
+      "fun": 30,
+      "hunger": 15,
+      "hygiene": -15,
+      "energy": -15,
+      "bladder": -15
     },
     "relationshipGain": 8,
     "minLevel": "friend"

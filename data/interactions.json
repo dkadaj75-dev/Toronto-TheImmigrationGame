@@ -109,7 +109,9 @@
     {
       "id": "cook",
       "name": "Cook a light meal",
-      "needGains": {},
+      "needGains": {
+        "hunger": 25
+      },
       "skillGains": {
         "cooking": 0.05
       },
@@ -430,6 +432,24 @@
       "primaryNeed": "fun",
       "seatAware": true,
       "powersOnTarget": true
+    },
+    {
+      "id": "cook_a_large_meal",
+      "name": "Cook a large meal",
+      "needGains": {
+        "hunger": 25
+      },
+      "skillGains": {},
+      "animation": "stand_use",
+      "autonomyEligible": true,
+      "primaryNeed": null,
+      "cost": 25,
+      "duration": {
+        "baseSeconds": 20,
+        "atMaxSeconds": 10,
+        "skillVar": "skills.cooking"
+      },
+      "producesWaste": "dirty_dishes"
     }
   ]
 }

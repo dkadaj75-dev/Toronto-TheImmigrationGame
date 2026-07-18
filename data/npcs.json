@@ -15,12 +15,30 @@
         "from": 1,
         "to": 23
       },
-      "visitDurationHours": 3,
+      "visitDurationHours": 8,
       "arrivalDelayMinutes": 30,
       "visitorActions": [
         "sit",
         "watch_tv"
       ]
+    },
+    {
+      "id": "Mahmoud",
+      "name": "Mahmoud",
+      "portrait": "",
+      "mesh": "/models/character.glb",
+      "tint": "#1d1207",
+      "clipMap": null,
+      "personality": {
+        "cleanliness": 1,
+        "intelligence": 1
+      },
+      "availableHours": {
+        "from": 10,
+        "to": 22
+      },
+      "visitDurationHours": 6,
+      "arrivalDelayMinutes": 60
     }
   ]
 }

@@ -22,7 +22,7 @@
       "sellPrice": 340,
       "environmentScore": 3,
       "footprint": [
-        3,
+        2,
         1
       ],
       "seats": 2,
@@ -52,7 +52,10 @@
         "chancePercent": 45,
         "delaySeconds": 12
       },
-      "icon": "/public/icons/sofa.png"
+      "icon": "/public/icons/sofa.png",
+      "needMultipliers": {
+        "comfort": 1.25
+      }
     },
     {
       "id": "armchair",
@@ -80,6 +83,9 @@
       "combustibility": {
         "chancePercent": 50,
         "delaySeconds": 10
+      },
+      "needMultipliers": {
+        "comfort": 1.1
       }
     },
     {
@@ -107,6 +113,9 @@
       "combustibility": {
         "chancePercent": 60,
         "delaySeconds": 10
+      },
+      "needMultipliers": {
+        "comfort": 0.8
       }
     },
     {
@@ -119,14 +128,19 @@
       "environmentScore": 3,
       "survivalImportance": 100,
       "footprint": [
-        2,
-        3
+        1.75,
+        2.5
       ],
       "interactions": [
         "sleep"
       ],
       "meshFit": {
-        "yawOffsetDeg": -90
+        "yawOffsetDeg": -90,
+        "scale": [
+          1.45,
+          1.15,
+          1.15
+        ]
       },
       "usePose": {
         "lie": {
@@ -147,7 +161,10 @@
         "chancePercent": 35,
         "delaySeconds": 15
       },
-      "icon": "/public/icons/bed.png"
+      "icon": "/public/icons/bed.png",
+      "needMultipliers": {
+        "comfort": 1.5
+      }
     },
     {
       "id": "fridge",
@@ -169,7 +186,7 @@
         "yawOffsetDeg": -90,
         "scale": [
           1,
-          1,
+          0.85,
           1
         ]
       },
@@ -189,7 +206,8 @@
         0.7
       ],
       "interactions": [
-        "cook"
+        "cook",
+        "cook_a_large_meal"
       ],
       "accidents": [
         {
@@ -212,7 +230,17 @@
         "chancePercent": 25,
         "delaySeconds": 10
       },
-      "icon": "/public/icons/stove.png"
+      "icon": "/public/icons/stove.png",
+      "meshFit": {
+        "scale": [
+          1.15,
+          1.15,
+          1.15
+        ]
+      },
+      "needMultipliers": {
+        "hunger": 2
+      }
     },
     {
       "id": "counter",
@@ -228,7 +256,11 @@
       ],
       "interactions": [],
       "meshFit": {
-        "scale": 0.9
+        "scale": [
+          1.02,
+          1,
+          1.02
+        ]
       },
       "combustibility": {
         "chancePercent": 10,
@@ -323,7 +355,10 @@
         }
       },
       "_usePoseNote": "ROADMAP_NEXT B2-3: offset [0,0] = footprint center = inside the shower stall (the shower action's animation is 'stand_use', a standing pose — without this explicit usePose.use entry the sim would stay at its walk-up approach spot just outside the footprint, per usePoseFor's 'no default for use' rule).",
-      "icon": "/public/icons/shower.png"
+      "icon": "/public/icons/shower.png",
+      "needMultipliers": {
+        "hygiene": 0.8
+      }
     },
     {
       "id": "sink",
@@ -340,7 +375,16 @@
       "interactions": [
         "wash_hands"
       ],
-      "icon": "/public/icons/sink.png"
+      "icon": "/public/icons/sink.png",
+      "meshFit": {
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "xOffset": 0,
+        "zOffset": -0.18
+      }
     },
     {
       "id": "tv",
@@ -381,6 +425,9 @@
       },
       "power": {
         "ratePerHour": 0.25
+      },
+      "needMultipliers": {
+        "fun": 1
       }
     },
     {
@@ -412,7 +459,10 @@
         "chancePercent": 80,
         "delaySeconds": 3
       },
-      "icon": "/public/icons/bookshelf.png"
+      "icon": "/public/icons/bookshelf.png",
+      "needMultipliers": {
+        "fun": 0.8
+      }
     },
     {
       "id": "phone",
@@ -461,6 +511,9 @@
       },
       "power": {
         "ratePerHour": 0.1
+      },
+      "needMultipliers": {
+        "environment": 1.2
       }
     },
     {
@@ -492,6 +545,9 @@
       "icon": "/public/icons/walllight.png",
       "power": {
         "ratePerHour": 0.05
+      },
+      "needMultipliers": {
+        "environment": 0.5
       }
     },
     {

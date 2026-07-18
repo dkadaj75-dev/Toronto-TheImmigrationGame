@@ -104,30 +104,30 @@
   "layout": {
     "needs-panel": {
       "anchor": "tl",
-      "offsetX": 10,
+      "offsetX": 5,
       "offsetY": 10,
       "accordion": "Needs"
     },
     "skills-panel": {
-      "anchor": "tr",
-      "offsetX": 0,
-      "offsetY": 0,
+      "anchor": "tl",
+      "offsetX": 150,
+      "offsetY": 10,
       "accordion": "Skills"
     },
     "quest-panel": {
       "anchor": "bl",
-      "offsetX": 8,
-      "offsetY": 40
+      "offsetX": 5,
+      "offsetY": 5
     },
     "time-bar": {
-      "anchor": "br",
-      "offsetX": 1.44,
-      "offsetY": 12.49
+      "anchor": "tc",
+      "offsetX": 0,
+      "offsetY": 5
     },
     "activity-chip": {
       "anchor": "bc",
-      "offsetX": -5.09,
-      "offsetY": 104.39
+      "offsetX": 0,
+      "offsetY": 80
     },
     "work-chip": {
       "anchor": "bc",
@@ -136,28 +136,28 @@
     },
     "quest-toasts": {
       "anchor": "tc",
-      "offsetX": -10.18,
-      "offsetY": 154.03
+      "offsetX": 0,
+      "offsetY": 80
     },
     "visa-chip": {
       "anchor": "br",
-      "offsetX": 8,
-      "offsetY": 168
+      "offsetX": 5,
+      "offsetY": 10
     },
     "funds-chip": {
-      "anchor": "tr",
-      "offsetX": 94.58,
-      "offsetY": 13.43
+      "anchor": "br",
+      "offsetX": 90,
+      "offsetY": 10
     },
     "buy-button": {
       "anchor": "br",
-      "offsetX": 125.13,
-      "offsetY": 11.43
+      "offsetX": 5,
+      "offsetY": 5
     },
     "wall-cut-button": {
-      "anchor": "br",
-      "offsetX": 92,
-      "offsetY": 84
+      "anchor": "tr",
+      "offsetX": 5,
+      "offsetY": 50
     },
     "phone-button": {
       "anchor": "br",
