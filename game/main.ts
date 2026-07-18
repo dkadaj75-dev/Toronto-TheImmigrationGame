@@ -37,8 +37,11 @@ import { AssetStateRegistry, isAssetStateActionAvailable, isStatefulAsset, power
 import { HydroMeter, resolveAssetPower, HYDRO_BILL_ID } from './hydro';
 import { InitialLoadTracker, phraseAt } from './loading';
 import { applyTheme } from './theme';
-import { compatibility, RelationshipState } from './social';
-import { NpcVisitorController } from './npc';
+import { compatibility, type InteractionDef } from './social';
+import { SocialRuntime } from './socialruntime';
+import { availableSocialInteractions, SocialInteractionSession, socialActionDef, socialAutonomyCandidates, socialScoringTarget } from './social-interactions';
+import { NpcVisitorController, type NpcDef } from './npc';
+import { mutualFacingDeg } from './facing';
 
 /** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
  *  a seat-aware action with no eligible seat in range) plays the dedicated 'sit_ground' state
@@ -289,12 +292,15 @@ async function start() {
   const applyEnvironment = () => { const id = envNeedId(); if (id) stats.setComputed(id, environmentScore()); };
   applyEnvironment();
 
-  const autonomy = new Autonomy(() => data, () => world, agent, stats, accidents, buildEvalContext);
+  if (!data.social) throw new Error('social.json failed to load');
+  // Shared SOCIAL S4 state owner. S5 reuses this same instance for phone cooldowns/contacts;
+  // serialize/restore stay exposed without coupling persistence to main.ts.
+  const socialRuntime = new SocialRuntime(data.social);
+  let autonomy: Autonomy;
 
   // --- SOCIAL S3: exactly one pending/active visitor. NpcVisitorController is the thin scene
   // adapter; its VisitLifecycle owns all timing/gating and exposes invite/canInvite/state for S5
   // plus endVisit/engage/autonomy-pause for S4. Unknown/missing social need ids are safe no-ops.
-  let relationships = data.social ? new RelationshipState(data.social) : null;
   const visitors = new NpcVisitorController({
     scene,
     getData: () => data,
@@ -307,7 +313,7 @@ async function start() {
       : 1,
     exteriorDoorUsable: (doorObject, doorDef) => !accidents.isBlocked(doorObject, doorDef),
     onCallFallback: (npc, outcome) => {
-      if (relationships) relationships.set(npc.id, relationships.get(npc.id) + outcome.relationshipDelta);
+      socialRuntime.relationships.set(npc.id, socialRuntime.relationships.get(npc.id) + outcome.relationshipDelta);
       for (const [needId, delta] of Object.entries(outcome.needGains)) {
         const current = stats.needs.get(needId);
         if (current !== undefined) stats.needs.set(needId, Math.max(0, Math.min(100, current + delta)));
@@ -317,6 +323,57 @@ async function start() {
       message, 'started', data.tuning.quests.toastDurationSeconds * 1000,
     ),
   });
+
+  const socialSession = new SocialInteractionSession(
+    socialRuntime.relationships,
+    () => data.social!,
+    {
+      setNpcAutonomyPaused: (paused) => visitors.setAutonomyPaused(paused),
+      stopNpcAction: () => visitors.stopInteraction(),
+      applyPlayerNeed: (needId, delta) => {
+        const current = stats.needs.get(needId);
+        if (current !== undefined) stats.needs.set(needId, Math.max(0, Math.min(100, current + delta)));
+      },
+      adjustNpcMeter: (delta) => visitors.adjustSocialMeter(delta),
+      endVisit: (completed) => visitors.endVisit(completed),
+    },
+  );
+
+  const currentVisitor = (): NpcDef | null => {
+    const id = visitors.state.npcId;
+    return id ? data.npcs?.npcs.find((npc) => npc.id === id) ?? null : null;
+  };
+
+  const orderSocialInteraction = (npc: NpcDef, interaction: InteractionDef): boolean => {
+    const target = visitors.visitorObject;
+    if (!target || visitors.state.phase !== 'visiting' || currentVisitor()?.id !== npc.id) return false;
+    socialSession.finish(false);
+    const order = socialSession.begin(npc, interaction, Object.fromEntries(stats.personality));
+    if (!agent.orderAction(order.action, target)) {
+      socialSession.finish(false);
+      return false;
+    }
+    cue.showAt(target.position.x, target.position.z);
+    return true;
+  };
+
+  autonomy = new Autonomy(
+    () => data, () => world, agent, stats, accidents, buildEvalContext,
+    {
+      extraCandidates: () => {
+        if (!data.social || visitors.state.phase !== 'visiting' || socialSession.active) return [];
+        const npc = currentVisitor();
+        const object = visitors.visitorObject;
+        if (!npc || !object) return [];
+        return socialAutonomyCandidates(npc, socialRuntime.relationships, data.social).map((candidate) => ({
+          object,
+          action: candidate.action,
+          scoringAsset: candidate.target,
+          order: () => orderSocialInteraction(npc, candidate.interaction),
+        }));
+      },
+    },
+  );
 
   // --- quest system (PROJECT_CONTEXT.md §3): runtime-only state, see quests.ts's persistence doc comment ---
   const quests = new QuestRunner(data.quests, data.simstate, data.tuning.economy.startingFunds);
@@ -929,6 +986,18 @@ async function start() {
       }
       return;
     }
+    const socialOrder = socialSession.active;
+    if (socialOrder?.action === a.action) {
+      const visitor = visitors.visitorObject;
+      if (!visitor) { agent.stopAction(false); return; }
+      const [playerDeg, visitorDeg] = mutualFacingDeg(
+        [sim.position.x, sim.position.z],
+        [visitor.position.x, visitor.position.z],
+      );
+      sim.rotation.y = THREE.MathUtils.degToRad(playerDeg);
+      visitor.rotation.y = THREE.MathUtils.degToRad(visitorDeg);
+      visitors.playInteraction(a.action.animation);
+    }
     if (a.action.id !== FOOD_EATING_ACTION_ID && !quests.spend(a.action.cost ?? 0)) {
       hud.showQuestToast('Not enough funds for that action', 'started', 2500);
       agent.stopAction();
@@ -1019,6 +1088,7 @@ async function start() {
     }
   };
   agent.onActionStop = (a, completed) => {
+    const socialStop = socialSession.active?.action === a.action;
     hud.hideActivity();
     anim?.play('idle');
     durationState = null;
@@ -1026,6 +1096,11 @@ async function start() {
     // both keys are harmless no-ops to stop if they weren't the one actually playing.
     audio.stopLoop(`asset:${a.target.uuid}`);
     audio.stopLoop(`action:${a.action.id}`);
+    if (socialStop) {
+      socialSession.finish(completed);
+      if (!completed) agent.halt();
+      return;
+    }
     if (a.action.id === 'use_phone') hud.closePhone();
     if (a.action.id === FOOD_EATING_ACTION_ID) {
       const active = food.active;
@@ -1158,6 +1233,25 @@ async function start() {
     if (repoOverlayActive || gameOverActive || work.isAtWork || survivalEventActive()) return; // no orders during terminal/away/collapse events
     if (buyMode.active) { handleBuyModeTap(hit); return; }
     if (hit.object) {
+      const tappedNpcId = hit.object.userData.npcId as string | undefined;
+      const npc = tappedNpcId && visitors.state.phase === 'visiting'
+        ? data.npcs?.npcs.find((entry) => entry.id === tappedNpcId)
+        : undefined;
+      if (npc && data.social) {
+        const interactions = availableSocialInteractions(npc.id, socialRuntime.relationships, data.social);
+        const actions = interactions.map(socialActionDef);
+        if (actions.length > 0) {
+          setSelected(hit.object);
+          hud.showActionMenu(socialScoringTarget(npc), actions, (action) => {
+            const interaction = interactions.find((entry) => entry.id === action.id);
+            if (!interaction) return;
+            autonomy.notePlayerCommand();
+            cancelCarry();
+            orderSocialInteraction(npc, interaction);
+          }, quests.funds, currencyName(), hit.screen);
+          return;
+        }
+      }
       const assetId = hit.object.userData.assetId as string;
       let asset = data.assets.assets.find((a) => a.id === assetId);
       let target = hit.object;
@@ -1235,7 +1329,7 @@ async function start() {
       const ok = agent.goTo(hit.ground.x, hit.ground.z);
       if (ok) { cue.showAt(hit.ground.x, hit.ground.z); playTunedSfx('moveOrder'); }
     }
-  });
+  }, () => visitors.visitorObject ? [visitors.visitorObject] : []);
   tapInput.onHover = setHover;
 
   // --- Buy/Sell mode HUD wiring (§7.6) ---
@@ -1439,7 +1533,9 @@ async function start() {
         const gainMultipliers = gainAssetId
           ? data.assets.assets.find((d) => d.id === gainAssetId)?.needMultipliers
           : undefined;
-        stats.applyGains(active.action, gainMultipliers);
+        // Social interaction gains are atomic completion effects (SOCIAL S4), never per-tick.
+        // Their needGains remain on ActionDef solely so the ordinary behavior scorer can rank them.
+        if (socialSession.active?.action !== active.action) stats.applyGains(active.action, gainMultipliers);
         const skillsAfter = Object.fromEntries(stats.skills);
         for (const up of skillLevelUps(skillsBefore, skillsAfter)) {
           const name = data.stats.skills.find((def) => def.id === up.id)?.name ?? up.id;
@@ -1448,7 +1544,8 @@ async function start() {
         }
         // auto-stop when the action's primary need is satisfied
         const pn = active.action.primaryNeed;
-        if (pn && (stats.needs.get(pn) ?? 0) >= data.tuning.autonomy.stopAtThreshold) {
+        if (socialSession.active?.action !== active.action
+          && pn && (stats.needs.get(pn) ?? 0) >= data.tuning.autonomy.stopAtThreshold) {
           agent.stopAction(true); // ROADMAP_NEXT B3-4: natural finish, not a cancel
         }
       }
@@ -1513,12 +1610,7 @@ async function start() {
     // have changed even without a context switch — setMusicContext no-ops when nothing changed)
     audio.setMusicContext(buyMode.active ? 'buymode' : 'map', data.map);
     stats.retune(data.stats, data.tuning.skills?.growthCurveExp ?? 1.5);
-    if (data.social) {
-      if (relationships) relationships.retune(data.social);
-      else relationships = new RelationshipState(data.social);
-    } else {
-      relationships = null;
-    }
+    if (data.social) socialRuntime.retune(data.social);
     visitors.retune();
     hud.rebuildBars();
     applyEnvironment();
@@ -1781,6 +1873,11 @@ async function start() {
 
     agent.update(sdt);
     visitors.update(sdt, clockScale());
+    // A timed/availability departure can preempt an approach or active conversation. Route that
+    // through the ordinary completed=false stop so no social effects land and both Sims clean up.
+    if (socialSession.active && visitors.state.phase !== 'visiting') agent.stopAction(false);
+    // Relationship drift follows the same authored in-world clock as visits (sim-time, not real-time).
+    socialRuntime.decay((sdt * clockScale()) / (24 * 60 * 60));
     // ROADMAP_NEXT B3-5: "carry to garbage" arrival check — carryState is only ever set right after
     // agent.goTo() successfully routed the sim to a can (see onActionStop above), and only ever
     // cleared early by cancelCarry() when some other order redirects the sim mid-walk. So observing

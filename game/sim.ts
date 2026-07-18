@@ -166,6 +166,22 @@ export class SimAgent {
       // spot in a blocked cell, retain the safe-center fallback instead.
       return this.route(sx, sz, isWalkable(this.grid, exactCell) ? [fx, fz] : null);
     };
+    const routeBesideSim = (obj: THREE.Object3D): boolean => {
+      const occupied = worldToCell(this.grid, obj.position.x, obj.position.z);
+      const candidates: { pos: [number, number]; distance: number }[] = [];
+      for (let rowOffset = -1; rowOffset <= 1; rowOffset++) {
+        for (let colOffset = -1; colOffset <= 1; colOffset++) {
+          if (rowOffset === 0 && colOffset === 0) continue;
+          const cell = { col: occupied.col + colOffset, row: occupied.row + rowOffset };
+          if (!isWalkable(this.grid, cell)) continue;
+          const pos = cellCenter(this.grid, cell);
+          candidates.push({ pos, distance: Math.hypot(pos[0] - this.object.position.x, pos[1] - this.object.position.z) });
+        }
+      }
+      candidates.sort((a, b) => a.distance - b.distance);
+      for (const candidate of candidates) if (this.route(candidate.pos[0], candidate.pos[1])) return true;
+      return routeToPivot(obj);
+    };
     if (seat) {
       const seatDef = this.assetsById.get(seat.userData?.assetId as string);
       const reachedSeat = seatDef ? routeToTargetFront(seat, seatDef) : routeToPivot(seat);
@@ -174,7 +190,9 @@ export class SimAgent {
         return true;
       }
     }
-    const reachedTarget = targetDef ? routeToTargetFront(target, targetDef) : routeToPivot(target);
+    const reachedTarget = target.userData?.npcId !== undefined
+      ? routeBesideSim(target)
+      : targetDef ? routeToTargetFront(target, targetDef) : routeToPivot(target);
     if (reachedTarget) {
       this.queued = { action, target, seat: null, groundSit: seatAware };
       return true;
@@ -194,6 +212,25 @@ export class SimAgent {
       this.current = null;
       this.restorePose();
       this.onActionStop?.(a, completed);
+    } else if (this.queued) {
+      // A queued social order pauses the visitor before the player reaches them. Surface an
+      // override/cancel through the same completed=false callback so that engagement can unwind.
+      const a = this.queued;
+      this.queued = null;
+      this.actionArrival = null;
+      this.onActionStop?.(a, false);
+    }
+  }
+
+  /** Stop locomotion without manufacturing another action callback. Used after an interrupted
+   * queued two-Sim action so both agents are genuinely idle, not still walking to a cancelled use. */
+  halt(): void {
+    this.path = [];
+    this.pathIndex = 0;
+    this.actionArrival = null;
+    if (this.wasMoving) {
+      this.wasMoving = false;
+      this.onLocomotionChange?.(false);
     }
   }
 

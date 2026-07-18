@@ -30,6 +30,8 @@ export class TapInput {
     private camera: THREE.Camera,
     private getWorld: () => THREE.Group,
     private onTap: (hit: TapResult) => void,
+    /** Optional top-level tappables outside the rebuilt furniture world (e.g. a visiting Sim). */
+    private getAdditionalObjects: () => readonly THREE.Object3D[] = () => [],
   ) {
     el.addEventListener('pointerdown', (e) => {
       // right (and other non-left) buttons drive camera rotation (camera.ts), never a tap
@@ -69,12 +71,12 @@ export class TapInput {
     );
     this.raycaster.setFromCamera(ndc, this.camera);
 
-    // objects first: walk up from the hit mesh to the group carrying userData.assetId
+    // objects first: walk up from the hit mesh to a tappable asset or visiting-Sim root
     let object: THREE.Object3D | null = null;
-    const hits = this.raycaster.intersectObjects(this.getWorld().children, true);
+    const hits = this.raycaster.intersectObjects([...this.getWorld().children, ...this.getAdditionalObjects()], true);
     for (const hit of hits) {
       let o: THREE.Object3D | null = hit.object;
-      while (o && o.userData?.assetId === undefined) o = o.parent;
+      while (o && o.userData?.assetId === undefined && o.userData?.npcId === undefined) o = o.parent;
       if (o) { object = o; break; }
       break; // first hit was a wall/floor/door — nothing tappable in front
     }

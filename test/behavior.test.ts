@@ -136,5 +136,34 @@ check('Autonomy utility mode chooses the farther bed with the stronger gain rate
 check('optional visitor allow-list excludes a higher-scoring disallowed action', runAutonomy(true, ['nap']) === 'nap');
 check('absent behavior.json preserves legacy lowest-need nearest-candidate fallback', runAutonomy(false) === 'nap');
 
+console.log('behavior.test — extra social candidates share the utility scorer');
+{
+  const data = autonomyData(true);
+  const world = new THREE.Group();
+  const bedObj = new THREE.Group(); bedObj.userData.assetId = 'bed'; bedObj.position.set(1, 0, 0); world.add(bedObj);
+  const visitor = new THREE.Group(); visitor.userData.npcId = 'amara'; visitor.position.set(2, 0, 0);
+  const chat: ActionDef = {
+    id: 'chat', name: 'Chat', animation: 'stand_talk', needGains: { social: 4 }, skillGains: {},
+    autonomyEligible: true, primaryNeed: null, duration: { baseSeconds: 20 },
+  };
+  const simTarget: AssetDef = {
+    ...sofa, id: 'npc:amara', name: 'Amara', category: 'sim', interactions: [], footprint: [0, 0],
+    needMultipliers: undefined,
+  };
+  let ordered = '';
+  const fakeAgent = {
+    isBusy: false,
+    object: new THREE.Group(),
+    orderAction(action: ActionDef) { ordered = action.id; return true; },
+  };
+  const socialEval = { ...evalCtx, needs: { ...evalCtx.needs, social: 0 } };
+  const autonomy = new Autonomy(
+    () => data, () => world, fakeAgent as never, new SimStats(data.stats), undefined, () => socialEval,
+    { extraCandidates: () => [{ object: visitor, action: chat, scoringAsset: simTarget, order: () => { ordered = 'chat'; return true; } }] },
+  );
+  autonomy.maybeAct();
+  check('social deficit lets a visiting-Sim action outrank the ordinary asset candidate', ordered === 'chat');
+}
+
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }
 console.log('\nAll behavior.test checks passed.');

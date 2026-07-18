@@ -34,6 +34,17 @@ export function facingVector(worldDeg: number): [number, number] {
   return [Math.sin(rad), Math.cos(rad)];
 }
 
+/** World yaw from one XZ point toward another, using the same 0 = +Z convention as SimAgent. */
+export function facingDegToward(from: [number, number], to: [number, number]): number {
+  const deg = Math.atan2(to[0] - from[0], to[1] - from[1]) * 180 / Math.PI;
+  return ((deg % 360) + 360) % 360;
+}
+
+/** Mutual-facing pair for two Sims. Kept pure so two-agent choreography is not reimplemented. */
+export function mutualFacingDeg(a: [number, number], b: [number, number]): [number, number] {
+  return [facingDegToward(a, b), facingDegToward(b, a)];
+}
+
 /** Footprint half-extents as actually placed: swapped on a 90°-ish instance rotation, same
  *  90°-step rule bakeNavGrid() and the Map Editor's objectRect() already use. facingDeg is a
  *  direction, not a placement rotation, so it never resizes the footprint. */

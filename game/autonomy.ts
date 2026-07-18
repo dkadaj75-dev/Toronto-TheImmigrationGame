@@ -25,6 +25,16 @@ export interface AutonomyStats {
 export interface AutonomyOptions {
   /** Optional data-driven allow-list. Absent preserves player autonomy exactly. */
   allowedActionIds?: () => readonly string[];
+  /** Extra candidates (S4 visiting Sims) join the ordinary utility list and may provide their
+   * own order hook for engagement setup. Absent preserves asset-only autonomy exactly. */
+  extraCandidates?: () => readonly AutonomyExtraCandidate[];
+}
+
+export interface AutonomyExtraCandidate {
+  object: THREE.Object3D;
+  action: ActionDef;
+  scoringAsset: AssetDef;
+  order?: () => boolean;
 }
 
 export class Autonomy {
@@ -99,7 +109,7 @@ export class Autonomy {
     const evalCtx = this.getEvalContext?.();
 
     // Collect every eligible triple for utility mode; legacy mode retains its primary-need filter.
-    const candidates: { obj: THREE.Object3D; action: ActionDef; def: AssetDef; dist: number }[] = [];
+    const candidates: { obj: THREE.Object3D; action: ActionDef; def: AssetDef; dist: number; order?: () => boolean }[] = [];
     for (const obj of this.getWorld().children) {
       const assetId = obj.userData?.assetId as string | undefined;
       if (!assetId) continue;
@@ -119,6 +129,17 @@ export class Autonomy {
         const dx = obj.position.x - simPos.x, dz = obj.position.z - simPos.z;
         candidates.push({ obj, action, def, dist: Math.hypot(dx, dz) });
       }
+    }
+
+    // SOCIAL S4: visiting-Sim actions are already presence/level filtered by their pure provider,
+    // then pass the same authored autonomy flag and the same behavior score/pick loop as assets.
+    for (const extra of this.options.extraCandidates?.() ?? []) {
+      if (!extra.action.autonomyEligible) continue;
+      const dx = extra.object.position.x - simPos.x, dz = extra.object.position.z - simPos.z;
+      candidates.push({
+        obj: extra.object, action: extra.action, def: extra.scoringAsset,
+        dist: Math.hypot(dx, dz), order: extra.order,
+      });
     }
 
     if (behavior) {
@@ -146,7 +167,7 @@ export class Autonomy {
         const c = best.candidate.value!;
         const legSeatAware = firstLegSeatAware(c.action);
         const seat = legSeatAware ? findSeatFor(this.getWorld(), data, c.obj) : null;
-        if (this.agent.orderAction(c.action, c.obj, seat, c.def, legSeatAware)) {
+        if ((c.order ? c.order() : this.agent.orderAction(c.action, c.obj, seat, c.def, legSeatAware))) {
           return { action: c.action, target: c.obj };
         }
         remaining.splice(remaining.indexOf(best.candidate), 1);
@@ -162,7 +183,7 @@ export class Autonomy {
       // carry/eat second leg — the first leg must reach the source (see game/food.ts firstLegSeatAware).
       const legSeatAware = firstLegSeatAware(c.action);
       const seat = legSeatAware ? findSeatFor(this.getWorld(), data, c.obj) : null;
-      if (this.agent.orderAction(c.action, c.obj, seat, c.def, legSeatAware)) {
+      if ((c.order ? c.order() : this.agent.orderAction(c.action, c.obj, seat, c.def, legSeatAware))) {
         return { action: c.action, target: c.obj };
       }
     }

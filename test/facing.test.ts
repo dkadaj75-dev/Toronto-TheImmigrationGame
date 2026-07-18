@@ -1,6 +1,6 @@
 // facing.test.ts — game/facing.ts pure logic (PROJECT_CONTEXT.md §7.2 as-built).
 // Run: npx tsx test/facing.test.ts
-import { worldFacingDeg, facingVector, useSpotFor, isInFrontHalfSpace, viewingPointFor, type FacingInstance } from '../game/facing';
+import { worldFacingDeg, facingVector, useSpotFor, isInFrontHalfSpace, viewingPointFor, mutualFacingDeg, type FacingInstance } from '../game/facing';
 import type { AssetDef, TuningData } from '../game/data';
 
 let failures = 0;
@@ -36,6 +36,13 @@ console.log('facing.test — facingVector (rotation.y=0 → +Z, matching sim.ts/
   [x, z] = facingVector(90); check('90° → +X', approx(x, 1) && approx(z, 0), `${x},${z}`);
   [x, z] = facingVector(180); check('180° → -Z', approx(x, 0) && approx(z, -1), `${x},${z}`);
   [x, z] = facingVector(270); check('270° → -X', approx(x, -1) && approx(z, 0), `${x},${z}`);
+}
+
+console.log('facing.test — mutual Sim facing');
+{
+  const [a, b] = mutualFacingDeg([1, 1], [3, 1]);
+  check('first Sim faces +X toward second', approx(a, 90), `${a}`);
+  check('second Sim faces -X toward first', approx(b, 270), `${b}`);
 }
 
 console.log('facing.test — useSpotFor (footprint edge along facing + clearance)');

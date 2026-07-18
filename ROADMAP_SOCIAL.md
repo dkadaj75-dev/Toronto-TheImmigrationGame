@@ -190,7 +190,17 @@ condition-ish gating UI, live preview via real functions) has a shipped preceden
 **Agent: Codex.** Second animated agent in the world touching nav, doors, autonomy, animation —
 the highest-complexity slice of this batch.
 
-### S4 — Sim-to-sim contextual interactions
+### S4 — Sim-to-sim contextual interactions — ✅ SHIPPED (2026-07-18)
+> As-built (Codex): game/social-interactions.ts + game/socialruntime.ts (SocialRuntime =
+> central RelationshipState + PhoneState store in main.ts; retune/decay/serialize/restore —
+> the single surface S5 reuses). NPC tap → existing radial menu recomputed from current level
+> via real levelFor/levelAllows; ask_to_leave always visible. Choreography: route to free
+> neighboring nav cell → mutual facing → authored animation on the normal sim-time
+> duration/progress-bar path. Side effects (needs, NPC meter mirror, compat-scaled relationship,
+> endVisit) fire only from stopAction(true); every cancel path applies nothing and resumes NPC
+> autonomy; timed departure interrupts conversations safely. autonomyEligible interactions join
+> the behavior candidate list only when a visitor is present+engageable.
+> test/social-interactions.test.ts (27 assertions). PROJECT_CONTEXT §7.45.
 - Tapping the visiting NPC opens the radial menu (contextmenu precedent) listing social.json
   interactions filtered by CURRENT relationship level (S1 gating) — contextual exactly like
   The Sims.

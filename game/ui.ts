@@ -750,7 +750,7 @@ export class Hud {
   }
 
   /** Screen-space contextual menu around a tapped object. `screen` is optional for old callers. */
-  showActionMenu(asset: AssetDef, actions: ActionDef[], onPick: (a: ActionDef) => void, funds = Infinity, currencyName = '§', screen?: ScreenPoint) {
+  showActionMenu(asset: Pick<AssetDef, 'name'>, actions: ActionDef[], onPick: (a: ActionDef) => void, funds = Infinity, currencyName = '§', screen?: ScreenPoint) {
     this.hideActivity();
     this.menu.innerHTML = `<div class="am-title">${asset.name}</div>`;
     for (const action of actions) {

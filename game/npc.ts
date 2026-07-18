@@ -228,6 +228,11 @@ export class NpcVisitorController {
   get visitorObject(): THREE.Group | null { return this.live?.root ?? null; }
   get visitorAgent(): SimAgent | null { return this.live?.agent ?? null; }
 
+  /** S4 presentation/meter adapters. State math remains owned by VisitLifecycle. */
+  playInteraction(animation: string): void { this.live?.anim?.play(animation || 'idle'); }
+  stopInteraction(): void { this.live?.anim?.play(this.live?.agent.isMoving ? 'walk' : 'idle'); }
+  adjustSocialMeter(delta: number): void { this.lifecycle.adjustSocialMeter(delta); }
+
   invite(npcId: string): boolean {
     const data = this.options.getData();
     const npc = data.npcs?.npcs.find((entry) => entry.id === npcId);
@@ -332,6 +337,7 @@ export class NpcVisitorController {
 
     const root = makeSimStandIn();
     root.name = `npc:${npc.id}`;
+    root.userData.npcId = npc.id;
     tintObject(root, npc.tint);
     root.position.set(routeIn ? points.outside[0] : points.inside[0], 0, routeIn ? points.outside[1] : points.inside[1]);
     const agent = new SimAgent(root, this.options.getGrid(), data.tuning, assetMap(data));
