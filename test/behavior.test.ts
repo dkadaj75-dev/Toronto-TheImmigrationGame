@@ -111,7 +111,7 @@ function autonomyData(withBehavior: boolean): GameData {
   } as GameData;
 }
 
-function runAutonomy(withBehavior: boolean, allowedActionIds?: string[]): string | undefined {
+function runAutonomy(withBehavior: boolean, allowedActionIds?: string[], blockSleep = false): string | undefined {
   const data = autonomyData(withBehavior);
   const world = new THREE.Group();
   const sofaObj = new THREE.Group(); sofaObj.userData.assetId = 'sofa'; sofaObj.position.set(1, 0, 0);
@@ -126,7 +126,10 @@ function runAutonomy(withBehavior: boolean, allowedActionIds?: string[]): string
   const stats = new SimStats(data.stats);
   const autonomy = new Autonomy(
     () => data, () => world, agent as never, stats, undefined, () => evalCtx,
-    allowedActionIds ? { allowedActionIds: () => allowedActionIds } : undefined,
+    {
+      ...(allowedActionIds ? { allowedActionIds: () => allowedActionIds } : {}),
+      candidateAvailable: (action) => !blockSleep || (action.id !== 'sleep' && action.id !== 'nap'),
+    },
   );
   autonomy.maybeAct();
   return ordered;
@@ -134,6 +137,7 @@ function runAutonomy(withBehavior: boolean, allowedActionIds?: string[]): string
 
 check('Autonomy utility mode chooses the farther bed with the stronger gain rate', runAutonomy(true) === 'sleep');
 check('optional visitor allow-list excludes a higher-scoring disallowed action', runAutonomy(true, ['nap']) === 'nap');
+check('runtime candidate veto makes autonomy skip blocked bed sleep/nap', runAutonomy(true, undefined, true) === undefined);
 check('absent behavior.json preserves legacy lowest-need nearest-candidate fallback', runAutonomy(false) === 'nap');
 
 console.log('behavior.test — extra social candidates share the utility scorer');

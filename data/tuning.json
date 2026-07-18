@@ -22,6 +22,13 @@
     "nightEndHour": 6,
     "_source": "60 s/day is the Unreal DEBUG speed — open decision #2, retune in Phase 1"
   },
+  "ambience": {
+    "radiusMeters": 5,
+    "nightComfortEnabled": true,
+    "comfortNeedId": "comfort",
+    "sleepBlockingEnabled": true,
+    "_source": "B13-9/B13-10 shared room-aware ambience. radiusMeters is the maximum sim-to-device range for both night light comfort and sleep blockers. Walls and closed doors block; open apertures connect. nightComfortEnabled and sleepBlockingEnabled are independent master switches; comfortNeedId names the need receiving each light's sparse light.comfortBonus per needs tick."
+  },
   "textures": {
     "metersPerTile": 1,
     "_source": "ROADMAP_NEXT B9-1 (floor/wall image textures). metersPerTile = how many meters of surface one texture repeat spans, so a tiled floor/wall reads at a physical scale regardless of the room size. Per-surface texture image paths live on data/maps/<map>.floors[].texture / walls[].texture. See game/textures.ts (repeat math) + world.ts (loader/UV wiring)."

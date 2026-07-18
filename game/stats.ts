@@ -105,12 +105,13 @@ export class SimStats {
   get skillDefs(): SkillDef[] { return this.defs.skills.filter((s) => s.enabled !== false); }
   get personalityDefs(): PersonalityDef[] { return this.defs.personality ?? []; }
 
-  /** One needs-decay tick. Computed needs (Environment) don't decay — they're set externally. */
-  decayTick() {
+  /** One needs-decay tick. Optional ambient gains are continuous tick modifiers (B13-9), not
+   * one-shot action effects. Computed needs (Environment) ignore both and stay externally set. */
+  decayTick(gainModifiers: Readonly<Record<string, number>> = {}) {
     for (const def of this.defs.needs) {
       if (def.computed) continue;
       const v = this.needs.get(def.id) ?? def.default;
-      this.needs.set(def.id, clamp(v - def.decayPerTick, 0, 100));
+      this.needs.set(def.id, clamp(v - def.decayPerTick + (gainModifiers[def.id] ?? 0), 0, 100));
     }
   }
 

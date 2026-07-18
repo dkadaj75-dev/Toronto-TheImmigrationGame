@@ -28,6 +28,19 @@ const stats = new SimStats(defs, 1.5);
 stats.applyGains(action);
 check('SimStats.applyGains uses the non-linear helper', approx(stats.skills.get('cooking')!, 90 + scaleSkillGain(raw, 90, 100, 1.5)));
 
+{
+  const ambientStats = new SimStats({
+    needs: [
+      { id: 'comfort', name: 'Comfort', color: '#fff', default: 50, decayPerTick: 1 },
+      { id: 'environment', name: 'Environment', color: '#fff', default: 50, decayPerTick: 1, computed: true },
+    ],
+    skills: [],
+  });
+  ambientStats.decayTick({ comfort: 1.5, environment: 99 });
+  check('decay tick applies continuous ambient gain modifier', ambientStats.needs.get('comfort') === 50.5);
+  check('computed needs ignore ambient gain modifiers', ambientStats.needs.get('environment') === 50);
+}
+
 // --- effectiveNeedGain: the ONE shared helper the sim tick and the autonomy scorer both use.
 check('effectiveNeedGain defaults to 1x when no multipliers map is given', effectiveNeedGain('comfort', 4) === 4);
 check('effectiveNeedGain defaults to 1x for a need absent from the map', effectiveNeedGain('comfort', 4, { energy: 2 }) === 4);

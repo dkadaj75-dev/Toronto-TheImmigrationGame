@@ -44,6 +44,7 @@ import { isNpcAvailable, NpcVisitorController, type NpcDef } from './npc';
 import { mutualFacingDeg } from './facing';
 import { contactViews, PhoneContactSession, phoneAutonomyCandidates } from './contacts';
 import { visitGate, VisitAwayTracker, type VisitReturnEvent } from './visit';
+import { inspectAmbience, nightComfortBonus, sleepBlockDecision, type AmbienceAssetInstance } from './ambience';
 
 /** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
  *  a seat-aware action with no eligible seat in range) plays the dedicated 'sit_ground' state
@@ -293,6 +294,52 @@ async function start() {
   const applyEnvironment = () => { const id = envNeedId(); if (id) stats.setComputed(id, environmentScore()); };
   applyEnvironment();
 
+  const sleepAction = (action: Pick<ActionDef, 'id'>) => action.id === 'sleep' || action.id === 'nap';
+  /** Live placed light/sound roots. Sold/destroyed objects are detached by BuyModeController, and
+   * stable assetStateKey de-duplicates any nested meshes during this traversal. */
+  const ambienceInstances = (): AmbienceAssetInstance[] => {
+    const byId = assetsById(data);
+    const seen = new Set<string>();
+    const result: AmbienceAssetInstance[] = [];
+    world.traverse((obj) => {
+      const key = obj.userData.assetStateKey as string | undefined;
+      const assetId = obj.userData.assetId as string | undefined;
+      if (!key || !assetId || seen.has(key) || !obj.visible) return;
+      const def = byId.get(assetId);
+      if (!def || (!def.light && !def.sound)) return;
+      seen.add(key);
+      const p = obj.getWorldPosition(new THREE.Vector3());
+      result.push({ key, def, position: [p.x, p.z] });
+    });
+    return result;
+  };
+  const ambienceMatchesAt = (position: [number, number]) => {
+    const byId = assetsById(data);
+    const room = {
+      walls: data.map.walls,
+      doors: data.map.doors,
+      assetForDoor: (assetId: string | undefined) => assetId ? byId.get(assetId) : undefined,
+      // A map doorway with no animated panel is a permanent aperture. An actual panel connects
+      // rooms as soon as it has begun opening and blocks again when fully closed.
+      isDoorOpen: (door: MapData['doors'][number]) =>
+        doors.instances.find((instance) => instance.entry === door)?.isOpen() ?? true,
+    };
+    const radius = data.tuning.ambience?.radiusMeters ?? 5;
+    return ambienceInstances().map((instance) => inspectAmbience(position, instance, assetStates, room, radius));
+  };
+  const sleepDecisionAt = (position: [number, number]) => sleepBlockDecision(
+    ambienceMatchesAt(position), data.tuning.ambience?.sleepBlockingEnabled ?? true,
+  );
+  const ambientComfortGain = () => {
+    if (data.tuning.ambience?.nightComfortEnabled === false) return 0;
+    return nightComfortBonus(
+      gameSeconds / 3600,
+      data.tuning.time.nightStartHour,
+      data.tuning.time.nightEndHour,
+      ambienceMatchesAt([sim.position.x, sim.position.z]),
+    );
+  };
+
   if (!data.social) throw new Error('social.json failed to load');
   // Shared SOCIAL S4 state owner. S5 reuses this same instance for phone cooldowns/contacts;
   // serialize/restore stay exposed without coupling persistence to main.ts.
@@ -378,6 +425,8 @@ async function start() {
   autonomy = new Autonomy(
     () => data, () => world, agent, stats, accidents, buildEvalContext,
     {
+      candidateAvailable: (action, object) => !sleepAction(action)
+        || !sleepDecisionAt([object.position.x, object.position.z]).blocked,
       extraCandidates: () => {
         if (!data.social || socialSession.active || phoneContactSession.active) return [];
         if (visitors.state.phase === 'visiting') {
@@ -1159,6 +1208,14 @@ async function start() {
       }
       return;
     }
+    if (sleepAction(a.action)) {
+      const decision = sleepDecisionAt([sim.position.x, sim.position.z]);
+      if (decision.blocked) {
+        agent.stopAction(false);
+        hud.showQuestToast(decision.reason!, 'started', data.tuning.quests.toastDurationSeconds * 1000);
+        return;
+      }
+    }
     const socialOrder = socialSession.active;
     if (socialOrder?.action === a.action) {
       const visitor = visitors.visitorObject;
@@ -1534,7 +1591,10 @@ async function start() {
             const seat = legSeatAware ? findSeatFor(world, data, target) : null;
             if (agent.orderAction(action, target, seat, resolvedAsset, legSeatAware)) cue.showAt(target.position.x, target.position.z);
             else console.log('no path to object', resolvedAsset.id);
-          }, quests.funds, currencyName(), hit.screen);
+          }, quests.funds, currencyName(), hit.screen, (action) => {
+            if (!sleepAction(action)) return null;
+            return sleepDecisionAt([target.position.x, target.position.z]).reason;
+          });
           return; // object tap opens the menu; don't also walk to the tap point
         }
       }
@@ -1703,7 +1763,8 @@ async function start() {
     const decayEvery = data.tuning.simulation.needsDecayTickSeconds;
     while (decayAcc >= decayEvery) {
       decayAcc -= decayEvery;
-      stats.decayTick();
+      const comfortNeedId = data.tuning.ambience?.comfortNeedId ?? 'comfort';
+      stats.decayTick({ [comfortNeedId]: ambientComfortGain() });
       applyEnvironment();
       happiness = computeHappiness(data.happiness, buildEvalContext());
       hud.setHappiness(happiness);
@@ -2098,6 +2159,15 @@ async function start() {
     }
 
     agent.update(sdt);
+    // Re-evaluate during sleep so a newly switched-on device, hot-reloaded default, or door that
+    // closes between rooms interrupts through the ordinary CANCEL path (completed=false).
+    if (agent.current && sleepAction(agent.current.action)) {
+      const decision = sleepDecisionAt([sim.position.x, sim.position.z]);
+      if (decision.blocked) {
+        agent.stopAction(false);
+        hud.showQuestToast(decision.reason!, 'started', data.tuning.quests.toastDurationSeconds * 1000);
+      }
+    }
     visitors.update(sdt, clockScale());
     // A timed/availability departure can preempt an approach or active conversation. Route that
     // through the ordinary completed=false stop so no social effects land and both Sims clean up.

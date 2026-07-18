@@ -305,11 +305,14 @@ export function isAnimatedDoor(door: DoorEntry, byId: Map<string, AssetDef>, tun
 export interface DoorInstance {
   readonly pivot: THREE.Group;
   readonly config: DoorConfig;
+  /** Authored entry identity lets pure room queries pair runtime openness with map geometry. */
+  readonly entry: DoorEntry;
   /** `simPos`/`simPath` are world XZ; `simPath` is the sim's current remaining route
    *  (SimAgent.getPathPoints()) — empty while the sim isn't moving. */
   update(dt: number, simPos: [number, number], simPath: [number, number][]): void;
   setTransitOpen(open: boolean | null): void;
   isFullyOpen(): boolean;
+  isOpen(): boolean;
   isFullyClosed(): boolean;
   forceClosed(): void;
 }
@@ -435,6 +438,7 @@ export function createDoorInstance(door: DoorEntry, def: AssetDef, tuning: Tunin
     return {
       pivot,
       config,
+      entry: door,
       update(dt, simPos, simPath) {
         const within = distanceToDoor(simPos, door) < config.triggerDistance;
         const crosses = within && pathCrossesDoorway(simPath, door);
@@ -444,6 +448,7 @@ export function createDoorInstance(door: DoorEntry, def: AssetDef, tuning: Tunin
       },
       setTransitOpen(value) { transitOpen = value; },
       isFullyOpen: () => angle === config.openAngleDeg,
+      isOpen: () => angle > 0,
       isFullyClosed: () => angle === 0,
       forceClosed() {
         transitOpen = false; open = false; angle = 0;
@@ -590,6 +595,7 @@ export function createDoorInstance(door: DoorEntry, def: AssetDef, tuning: Tunin
   return {
     pivot: root,
     config,
+    entry: door,
     update(dt, simPos, simPath) {
       const within = distanceToDoor(simPos, door) < config.triggerDistance;
       const crosses = within && pathCrossesDoorway(simPath, door);
@@ -599,6 +605,7 @@ export function createDoorInstance(door: DoorEntry, def: AssetDef, tuning: Tunin
     },
     setTransitOpen(value) { transitOpen = value; },
     isFullyOpen: () => angle === config.openAngleDeg,
+    isOpen: () => angle > 0,
     isFullyClosed: () => angle === 0,
     forceClosed() {
       transitOpen = false; open = false; angle = 0;

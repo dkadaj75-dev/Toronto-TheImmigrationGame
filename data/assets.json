@@ -503,7 +503,8 @@
         "intensity": 2.4,
         "distance": 5,
         "yOffset": 1.5,
-        "defaultOn": false
+        "defaultOn": false,
+        "comfortBonus": 0.08
       },
       "icon": "/public/icons/lamp.png",
       "meshFit": {
@@ -540,7 +541,8 @@
         "intensity": 2,
         "distance": 4.5,
         "yOffset": 0,
-        "defaultOn": false
+        "defaultOn": false,
+        "comfortBonus": 0.06
       },
       "icon": "/public/icons/walllight.png",
       "power": {

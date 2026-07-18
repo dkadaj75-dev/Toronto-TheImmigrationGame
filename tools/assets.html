@@ -612,7 +612,7 @@ function renderEditor() {
   // --- B6-12 light: block presence emits a PointLight; every setting is sparse.
   const cardLight = document.createElement('div');
   cardLight.className = 'card';
-  cardLight.innerHTML = '<h2>Light</h2><div class="hint">Enable to emit a PointLight. Turn On/Off actions drive it per placed instance. Fields are sparse; defaults are warm white, intensity 2, distance 5m, y offset 1.2m, initially off.</div>';
+  cardLight.innerHTML = '<h2>Light</h2><div class="hint">Enable to emit a PointLight. Turn On/Off actions drive it per placed instance. Night comfort is gained per needs tick while this light is ON, nearby, and in the same room. Fields are sparse; defaults are warm white, intensity 2, distance 5m, y offset 1.2m, initially off.</div>';
   cardLight.appendChild(frow('emits light', checkInput(
     () => !!a.light,
     (v) => { if (v) a.light ??= {}; else delete a.light; },
@@ -631,6 +631,11 @@ function renderEditor() {
       `light.${key}`,
     )));
   }
+  cardLight.appendChild(frow('night comfort / needs tick', numInput(
+    () => a.light?.comfortBonus,
+    (v) => { if (v === undefined) { if (a.light) delete a.light.comfortBonus; } else ensureLight().comfortBonus = v; },
+    'light.comfortBonus',
+  )));
   cardLight.appendChild(frow('default ON', checkInput(
     () => a.light?.defaultOn,
     (v) => { if (v) ensureLight().defaultOn = true; else if (a.light) delete a.light.defaultOn; },

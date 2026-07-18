@@ -28,6 +28,9 @@ export interface AutonomyOptions {
   /** Extra candidates (S4 visiting Sims) join the ordinary utility list and may provide their
    * own order hook for engagement setup. Absent preserves asset-only autonomy exactly. */
   extraCandidates?: () => readonly AutonomyExtraCandidate[];
+  /** Optional live runtime veto for code-side state that is not expressible in quest conditions
+   *  (B13-10: a bed sleep/nap candidate while room ambience blocks sleeping). */
+  candidateAvailable?: (action: ActionDef, object: THREE.Object3D, asset: AssetDef) => boolean;
 }
 
 export interface AutonomyExtraCandidate {
@@ -120,6 +123,7 @@ export class Autonomy {
         if (allowedSet && !allowedSet.has(actionId)) continue;
         const action = actionsById.get(actionId);
         if (!action || !action.autonomyEligible) continue;
+        if (this.options.candidateAvailable && !this.options.candidateAvailable(action, obj, def)) continue;
         if (!behavior && action.primaryNeed !== lowest!.def.id) continue;
         // ROADMAP_NEXT B2-1: unmet conditions make this action ineligible for autonomy, same as
         // it being hidden from the tap menu — evaluated from one fresh snapshot per autonomy scan

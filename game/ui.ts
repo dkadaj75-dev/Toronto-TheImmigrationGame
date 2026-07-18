@@ -805,14 +805,20 @@ export class Hud {
   }
 
   /** Screen-space contextual menu around a tapped object. `screen` is optional for old callers. */
-  showActionMenu(asset: Pick<AssetDef, 'name'>, actions: ActionDef[], onPick: (a: ActionDef) => void, funds = Infinity, currencyName = '§', screen?: ScreenPoint) {
+  showActionMenu(asset: Pick<AssetDef, 'name'>, actions: ActionDef[], onPick: (a: ActionDef) => void, funds = Infinity, currencyName = '§', screen?: ScreenPoint, disabledReason?: (a: ActionDef) => string | null) {
     this.hideActivity();
     this.menu.innerHTML = `<div class="am-title">${asset.name}</div>`;
     for (const action of actions) {
       const b = document.createElement('button');
       const cost = Math.max(0, action.cost ?? 0);
       b.textContent = cost > 0 ? `${action.name} (${currencyName}${cost})` : action.name;
-      b.disabled = funds < cost;
+      const reason = disabledReason?.(action) ?? null;
+      b.disabled = funds < cost || !!reason;
+      if (reason) {
+        b.title = reason;
+        b.setAttribute('aria-label', `${action.name}. ${reason}`);
+        b.dataset.disabledReason = reason;
+      }
       b.addEventListener('click', () => { this.onActionSelected?.(); this.hideActionMenu(); onPick(action); });
       this.menu.appendChild(b);
     }

@@ -274,7 +274,7 @@ export interface AssetDef {
   /** B6-12: sparse point-light + per-instance power defaults. Presence emits a THREE.PointLight;
    *  every subfield is optional so the Asset Editor can opt into useful defaults with an empty
    *  object. `defaultOn` seeds AssetStateRegistry the first time an instance is seen. */
-  light?: { color?: string | number; intensity?: number; distance?: number; yOffset?: number; defaultOn?: boolean };
+  light?: { color?: string | number; intensity?: number; distance?: number; yOffset?: number; defaultOn?: boolean; comfortBonus?: number };
   /** Sparse metered power draw (2026-07-17 hydro slice). `ratePerHour` = currency charged per
    *  sim-hour the instance is ON (its AssetStateRegistry ON/OFF state, the same one that drives the
    *  light — a TV/console/lamp accrues while on, nothing while off). game/hydro.ts accumulates
@@ -635,6 +635,8 @@ export interface TuningData {
   skills?: { growthCurveExp?: number };
   autonomy: { seekBelowThreshold: number; stopAtThreshold: number; postPlayerCommandCooldownSeconds: number; decisionGraceSeconds?: number };
   time: { secondsPerGameDay: number; nightStartHour: number; nightEndHour: number };
+  /** B13-9/B13-10 shared room-aware light/sound range and feature gates. */
+  ambience?: { radiusMeters?: number; nightComfortEnabled?: boolean; comfortNeedId?: string; sleepBlockingEnabled?: boolean };
   economy: { startingFunds: number; currencyName: string };
   /** F3 credit score, consequences, debt-window scaling, and phone history length. */
   credit?: CreditTuning;

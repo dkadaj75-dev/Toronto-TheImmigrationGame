@@ -189,6 +189,9 @@ const lightColor = doc.querySelector('input[data-path="light.color"]');
 lightColor.value = '#ffeeaa'; lightColor.dispatchEvent(new window.Event('input', { bubbles: true }));
 const lightIntensity = doc.querySelector('input[data-path="light.intensity"]');
 lightIntensity.value = '3.5'; lightIntensity.dispatchEvent(new window.Event('input', { bubbles: true }));
+const lightComfort = doc.querySelector('input[data-path="light.comfortBonus"]');
+assert(lightComfort && lightComfort.value === '', 'night comfort is sparse and blank by default');
+lightComfort.value = '0.08'; lightComfort.dispatchEvent(new window.Event('input', { bubbles: true }));
 const lightDefault = doc.querySelector('input[data-path="light.defaultOn"]');
 lightDefault.checked = true; lightDefault.dispatchEvent(new window.Event('change', { bubbles: true }));
 
@@ -508,7 +511,7 @@ assert(!('sit' in savedStoveUsePose.usePose), 'stove usePose.use set without eve
 assert(savedCouch.requiresQuestUnlock === true, 'PUT carries checked requiresQuestUnlock');
 assert(savedCouch.icon === '/models/icons/sofa.png', 'PUT carries edited icon path');
 assert(savedCouch.sound === '/sounds/couch_creak.wav', 'PUT carries edited sound path');
-assert(savedCouch.light.color === '#ffeeaa' && savedCouch.light.intensity === 3.5 && savedCouch.light.defaultOn === true, 'PUT carries sparse Light card fields');
+assert(savedCouch.light.color === '#ffeeaa' && savedCouch.light.intensity === 3.5 && savedCouch.light.comfortBonus === 0.08 && savedCouch.light.defaultOn === true, 'PUT carries sparse Light card fields including night comfort');
 assert(!('distance' in savedCouch.light) && !('yOffset' in savedCouch.light), 'untouched Light fields stay absent');
 assert(savedCouch.wallMounted.heightY === 1.8, 'PUT carries wall-mounted height');
 const savedLamp = saved.assets.find((a) => a.id === 'lamp');
