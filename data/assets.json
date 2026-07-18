@@ -404,7 +404,7 @@
         "scale": 2,
         "xOffset": 0,
         "yOffset": 0,
-        "zOffset": 0.25
+        "zOffset": -0.25
       },
       "combustibility": {
         "chancePercent": 80,
@@ -527,9 +527,9 @@
       },
       "meshFit": {
         "scale": [
-          1.5,
-          1.75,
-          1.8
+          1,
+          1,
+          1
         ],
         "yOffset": 0,
         "xOffset": 0
@@ -545,7 +545,7 @@
       "environmentScore": 0,
       "footprint": [
         1,
-        0.12
+        0.25
       ],
       "_note": "ROADMAP_NEXT item 9: does NOT open/close on path-crossing (game/doors.ts skips it in the tick, see door.exterior) — it's a tappable interactable instead. 'leave_for_work' remains a placeholder; 'empty_garbage' (ROADMAP_NEXT item 10) is wired — see game/garbage.ts.",
       "interactions": [
@@ -562,11 +562,12 @@
       },
       "meshFit": {
         "scale": [
-          1.5,
-          1.75,
-          1.8
+          1,
+          1,
+          1
         ],
-        "yOffset": 0
+        "yOffset": 0,
+        "xOffset": 0
       }
     },
     {
