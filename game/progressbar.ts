@@ -211,6 +211,26 @@ export function skillLabelWorldSize(canvasWidth: number, canvasHeight: number, w
   return { width: worldHeight * aspect, height: worldHeight };
 }
 
+// --- Label texture lifecycle (2026-07-18 "always English N/100" bug fix) ----------------------
+// The label bug: the skill bar label ALWAYS showed the FIRST skill it ever drew (e.g. 'English
+// 15/100:') no matter which action ran, even though game/main.ts hands createSkillBarInstance the
+// correct per-skill label string. Root cause is NOT the label string — it is the CanvasTexture.
+// three r166 backs a THREE.CanvasTexture with IMMUTABLE GPU storage (texStorage2D), allocated ONCE
+// at the texture's first-seen canvas dimensions; every subsequent `needsUpdate` re-upload goes
+// through texSubImage2D INTO that original-sized storage. redrawLabel RESIZES the backing canvas per
+// label (skillLabelCanvasSize) to fit the measured text, so once the first label is uploaded the
+// GPU texture is frozen at that size/image and later resized canvases never take — the first label
+// sticks on screen forever. Fix: when the canvas dimensions change, dispose the stale texture and
+// assign a fresh CanvasTexture to the sprite material (a new texture re-runs the first-upload
+// allocation path at the new size); only when dimensions are unchanged is a plain needsUpdate valid.
+
+/** Whether a resized label canvas requires a brand-new CanvasTexture rather than an in-place
+ *  re-upload. See the note above: three's immutable texStorage2D allocation can't be grown, so any
+ *  dimension change must swap the texture, not just flag needsUpdate. Pure/testable. */
+export function skillLabelTextureNeedsRecreate(prevWidth: number, prevHeight: number, nextWidth: number, nextHeight: number): boolean {
+  return prevWidth !== nextWidth || prevHeight !== nextHeight;
+}
+
 export interface SkillBarInstance {
   update(characterRoot: THREE.Object3D, active: boolean, fraction: number, label: string, heightMeters: number, config: SkillBarConfig): void;
   dispose(): void;
@@ -236,7 +256,9 @@ export function createSkillBarInstance(scene: THREE.Object3D): SkillBarInstance 
   const canvas = document.createElement('canvas');
   canvas.width = SKILL_LABEL_MIN_WIDTH_PX; canvas.height = SKILL_LABEL_HEIGHT_PX;
   const ctx = canvas.getContext('2d');
-  const labelTex = new THREE.CanvasTexture(canvas);
+  // `let`, not `const`: a resized canvas needs a FRESH CanvasTexture (immutable GPU storage can't be
+  // grown — see skillLabelTextureNeedsRecreate), so redrawLabel reassigns this on dimension changes.
+  let labelTex = new THREE.CanvasTexture(canvas);
   const labelMat = new THREE.SpriteMaterial({ map: labelTex, depthTest: false, transparent: true });
   const labelSprite = new THREE.Sprite(labelMat);
   labelSprite.renderOrder = 1000;
@@ -245,6 +267,7 @@ export function createSkillBarInstance(scene: THREE.Object3D): SkillBarInstance 
     if (!ctx) return;
     ctx.font = SKILL_LABEL_FONT;
     const size = skillLabelCanvasSize(ctx.measureText(text).width);
+    const recreate = skillLabelTextureNeedsRecreate(canvas.width, canvas.height, size.width, size.height);
     // Resizing the canvas resets ALL 2D context state (font/align/styles), so re-apply after.
     canvas.width = size.width; canvas.height = size.height;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -256,7 +279,18 @@ export function createSkillBarInstance(scene: THREE.Object3D): SkillBarInstance 
     ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
     ctx.fillStyle = '#ffffff';
     ctx.fillText(text, canvas.width / 2, canvas.height / 2);
-    labelTex.needsUpdate = true;
+    if (recreate) {
+      // Dimensions changed: three's immutable texStorage2D allocation can't grow, so an in-place
+      // texSubImage2D re-upload would freeze the first label forever. Swap in a fresh texture whose
+      // first upload re-runs the allocation path at the new size, then dispose the stale one.
+      const stale = labelTex;
+      labelTex = new THREE.CanvasTexture(canvas);
+      labelMat.map = labelTex;
+      labelMat.needsUpdate = true;
+      stale.dispose();
+    } else {
+      labelTex.needsUpdate = true;
+    }
   };
 
   pivot.add(bg, fill, labelSprite);

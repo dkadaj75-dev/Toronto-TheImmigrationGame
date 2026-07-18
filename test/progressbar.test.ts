@@ -22,6 +22,7 @@ import {
   SKILL_BAR_DEFAULTS, resolveSkillBarConfig, skillBarAnchorHeight,
   skillLabelCanvasSize, skillLabelWorldSize,
   SKILL_LABEL_PAD_PX, SKILL_LABEL_HEIGHT_PX, SKILL_LABEL_MIN_WIDTH_PX,
+  skillLabelTextureNeedsRecreate,
 } from '../game/progressbar';
 
 let failures = 0;
@@ -262,6 +263,31 @@ console.log('progressbar.test — skill label world sizing (aspect-preserving, n
   check('height unchanged when width grows', w2.height === w1.height);
   // Degenerate canvas height falls back to a 1:1 aspect rather than dividing by zero.
   check('zero canvas height → 1:1 aspect fallback', skillLabelWorldSize(256, 0, worldH).width === worldH);
+}
+
+// Skill label texture lifecycle (2026-07-18 "always English N/100" bug fix) — the render step needs
+// a WebGL context, but the DECISION that fixes it is pure: a resized label canvas needs a fresh
+// CanvasTexture (three's immutable texStorage2D allocation can't be grown in place), while an
+// unchanged size only needs needsUpdate. This is what stops the first label sticking on screen.
+console.log('progressbar.test — skill label texture recreate decision');
+{
+  check('unchanged canvas size → no recreate (plain needsUpdate is enough)',
+    skillLabelTextureNeedsRecreate(320, 64, 320, 64) === false);
+  check('wider label (new skill) → must recreate the texture',
+    skillLabelTextureNeedsRecreate(320, 64, 360, 64) === true);
+  check('narrower label → must recreate the texture',
+    skillLabelTextureNeedsRecreate(360, 64, 320, 64) === true);
+  check('height change → must recreate the texture',
+    skillLabelTextureNeedsRecreate(320, 64, 320, 96) === true);
+  // The real failure path: two different skills whose labels measure to different canvas widths must
+  // NOT share one immutable texture. Using skillLabelCanvasSize (pure) to model the two widths.
+  {
+    const englishW = skillLabelCanvasSize(300).width; // e.g. 'English 15/100:'
+    const cookingW = skillLabelCanvasSize(260).width; // e.g. 'Cooking 5/100:'
+    check('two differently-sized skill labels force a texture swap (root-cause guard)',
+      englishW !== cookingW && skillLabelTextureNeedsRecreate(englishW, 64, cookingW, 64) === true,
+      `english=${englishW} cooking=${cookingW}`);
+  }
 }
 
 if (failures > 0) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }
