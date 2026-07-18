@@ -145,7 +145,13 @@ outcome computation (needs/relationship deltas from level + compatibility). Full
 gains cutting deeper on bad matches.
 **Agent: Claude (Opus).** Formula/API design quality here determines every later slice.
 
-### S2 — Social Editor (`tools/social.html`) — the dedicated tool page
+### S2 — Social Editor (`tools/social.html`) — the dedicated tool page — ✅ SHIPPED (2026-07-18)
+> As-built: tools/social.html (window.SocialTool inline + module script injecting REAL
+> game/social.ts fns via setSocial — Behavior Editor precedent), 6 cards exactly per spec;
+> trait/need lists fetched from stats.json, level-gate dropdowns fed by the levels list,
+> Windows-path normalization, warn-on-blank animation. tools/social-editor.test.mjs (37 checks);
+> nav.js + toolnav test extended to 12 tools. Player personality read from stats.json defaults
+> (same source as game/stats.ts seeding). PROJECT_CONTEXT §7.43.
 Per the explicit request, everything social lives on its OWN page (added to tools/nav.js):
 - NPC CRUD: name, portrait, mesh/tint/clipMap, personality sliders (trait list imported from
   stats.json — never duplicated), availability, visit durations.

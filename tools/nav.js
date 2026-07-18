@@ -40,6 +40,7 @@
       { id: 'career', label: 'Career', href: '/tools/career.html' },
       { id: 'finance', label: 'Finance', href: '/tools/finance.html' },
       { id: 'behavior', label: 'Behavior', href: '/tools/behavior.html' },
+      { id: 'social', label: 'Social', href: '/tools/social.html' },
       { id: 'theme', label: 'Theme', href: '/tools/theme.html' },
     ];
 

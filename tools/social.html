@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Condo Life — Social Editor</title>
+<style>
+  :root{color-scheme:dark;--bg:#0d1119;--panel:#161c28;--line:#2a3448;--text:#e7edf8;--muted:#91a0ba;--accent:#73a7ff}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:14px system-ui,-apple-system,sans-serif}
+  header{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:14px;padding:14px 20px;background:#111722;border-bottom:1px solid var(--line)}
+  header h1{font-size:18px;margin:0;flex:1}
+  button{border:1px solid #4777c5;background:#285fae;color:#fff;border-radius:7px;padding:8px 13px;cursor:pointer} button.danger{border-color:#8c4351;background:#6f2d39} button.mini{padding:4px 8px;font-size:11px} button:disabled{opacity:.45;cursor:default}
+  main{max-width:1320px;margin:0 auto;padding:20px;display:grid;grid-template-columns:minmax(520px,1.15fr) minmax(360px,.85fr);gap:18px} .stack{display:grid;gap:18px;align-content:start}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px} .card h2{font-size:15px;margin:0 0 12px} .card h3{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:16px 0 8px}
+  .hint{color:var(--muted);font-size:12px;margin:0 0 12px} .status{min-width:120px;text-align:right;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:minmax(150px,1fr) minmax(90px,160px);gap:9px 14px;align-items:center}
+  label{color:#c5d0e4} input,select{width:100%;padding:7px 9px;border-radius:6px;border:1px solid #35425a;background:#0d131d;color:var(--text)} input:focus,select:focus{outline:1px solid var(--accent)} input[type=checkbox]{width:auto} input[type=range]{padding:0} input[type=color]{padding:2px;height:34px}
+  .checkline{display:flex;gap:7px;align-items:center}
+  .entity{border-top:1px solid var(--line);padding-top:14px;margin-top:14px} .entity:first-of-type{border-top:0;padding-top:0;margin-top:0}
+  .entity-head{display:flex;gap:9px;align-items:center;margin-bottom:10px} .entity-head strong{flex:1}
+  .slider-row{display:grid;grid-template-columns:minmax(120px,1fr) 1fr 48px;gap:10px;align-items:center;margin:5px 0} .slider-row .sv{text-align:right;font-variant-numeric:tabular-nums;color:#b9d2ff}
+  .hint-line.warn{color:#e0a44a;font-size:12px;margin-top:5px}
+  .level-row{display:grid;grid-template-columns:1fr 110px auto auto auto;gap:8px;align-items:center;margin:6px 0}
+  .need-row{display:grid;grid-template-columns:minmax(120px,1fr) 110px;gap:8px 12px;align-items:center;margin:5px 0}
+  .preview-meta{color:var(--muted);font-size:12px;margin:0 0 10px} .compat-line{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #252e3f} .compat-line strong{color:#b9d2ff;font-variant-numeric:tabular-nums}
+  .lvl-block{margin-top:10px} .lvl-block .lvl-name{font-weight:650;color:#e7edf8;margin-bottom:3px} .lvl-block .lvl-acts{color:var(--muted);font-size:12px} .lvl-block .lvl-acts.none{color:#6f7b95;font-style:italic}
+  @media(max-width:960px){main{grid-template-columns:1fr;padding:12px}.status{display:none}}
+</style>
+</head>
+<body>
+<header><h1>Social Editor</h1><span id="status" class="status">Loading…</span><button id="save" disabled>Save NPCs + social</button></header>
+<main>
+  <div class="stack">
+    <section class="card">
+      <h2>NPCs</h2>
+      <p class="hint">Non-player Sims. Personality traits share the vocabulary from the Tuning Editor (stats.json) — the slider list is fetched, never duplicated.</p>
+      <button id="addNpc" class="mini">+ Add NPC</button>
+      <div id="npcs"></div>
+    </section>
+    <section class="card">
+      <h2>Relationship levels</h2>
+      <p class="hint">Sims-style named statuses, ordered low → high (order is the ranking used for gating). Reorder with ↑/↓; the interaction gates below stay bound to the level id.</p>
+      <div id="relBounds" class="grid"></div>
+      <h3>Levels</h3>
+      <div id="levels"></div>
+      <button id="addLevel" class="mini">+ Add level</button>
+    </section>
+    <section class="card">
+      <h2>Compatibility</h2>
+      <p class="hint">Per-trait weights (same fetched trait list). Only positive weights influence the score. Range normalizes the trait scale; multipliers scale relationship gains/losses.</p>
+      <h3>Trait weights</h3>
+      <div id="traitWeights" class="grid"></div>
+      <h3>Tuning</h3>
+      <div id="compatTuning" class="grid"></div>
+    </section>
+    <section class="card">
+      <h2>Sim-to-sim interactions</h2>
+      <p class="hint">Contextual actions gated by relationship level. Gains apply before the compatibility multiplier. Need gains use the fetched need list.</p>
+      <button id="addInteraction" class="mini">+ Add interaction</button>
+      <div id="interactions"></div>
+    </section>
+    <section class="card">
+      <h2>Phone tuning</h2>
+      <p class="hint">Text / call fill the social need (slower) with a small compatibility-scaled relationship delta and a per-channel cooldown.</p>
+      <div id="phoneFields"></div>
+    </section>
+    <section class="card">
+      <h2>Visit their place</h2>
+      <p class="hint">The sim disappears for a few hours; needs + relationship restore on return, scaled by level + compatibility.</p>
+      <div id="visitFields" class="grid"></div>
+    </section>
+  </div>
+  <aside class="stack">
+    <section class="card">
+      <h2>Live preview</h2>
+      <p id="previewMeta" class="preview-meta">Waiting for the real social core…</p>
+      <div class="grid"><label>NPC</label><select id="previewNpc"></select></div>
+      <div id="previewCompat"></div>
+      <h3>Available interactions per level</h3>
+      <div id="previewLevels"></div>
+    </section>
+  </aside>
+</main>
+<script>
+(() => {
+'use strict';
+const API = '/api/data/';
+const NPCS_FILE = 'npcs.json', SOCIAL_FILE = 'social.json';
+const state = { npcs:null, social:null, stats:null, dirty:new Set(), fns:null, previewNpcId:null };
+const $ = (id) => document.getElementById(id);
+
+function markDirty(file){ state.dirty.add(file); $('save').disabled=false; $('status').textContent='Unsaved changes'; }
+function personalityDefs(){ return state.stats.personality || []; }
+function needDefs(){ return state.stats.needs || []; }
+
+// Best-effort Windows-path → public/ URL normalization (map.html / animations.html precedent).
+// A path containing a "public" segment keeps everything after it; otherwise the drive letter is
+// dropped and a leading slash added, so we never store an unfetchable "D:\..." string.
+function normalizeSourcePath(raw){
+  let p = String(raw ?? '').trim();
+  if (!p) return '';
+  const looksWindows = /^[a-zA-Z]:[\\/]/.test(p) || p.includes('\\');
+  if (looksWindows){
+    const unified = p.replace(/\\/g,'/');
+    const m = /\/public(\/.+)$/i.exec(unified);
+    p = m ? m[1] : unified.replace(/^\/?[a-zA-Z]:\//,'');
+  }
+  if (!/^(\/|https?:)/.test(p)) p = '/' + p;
+  return p;
+}
+
+function appendField(root,labelText,input){ const l=document.createElement('label'); l.textContent=labelText; root.append(l,input); return input; }
+function numberInput(value,onValue,file,options={}){
+  const input=document.createElement('input'); input.type='number'; input.step=options.step||'any'; input.value=String(value??0);
+  if(options.min!==undefined) input.min=String(options.min); if(options.max!==undefined) input.max=String(options.max);
+  input.addEventListener('input',()=>{ const n=Number(input.value); if(!Number.isFinite(n)) return; onValue(n); markDirty(file); renderPreview(); });
+  return input;
+}
+function textInput(value,onValue,file,options={}){
+  const input=document.createElement('input'); input.type='text'; input.value=value??''; if(options.placeholder) input.placeholder=options.placeholder;
+  input.addEventListener('input',()=>{ onValue(input.value); markDirty(file); if(options.onInput) options.onInput(input); renderPreview(); });
+  return input;
+}
+function checkboxInput(checked,onValue,file){
+  const input=document.createElement('input'); input.type='checkbox'; input.checked=!!checked;
+  input.addEventListener('change',()=>{ onValue(input.checked); markDirty(file); renderPreview(); });
+  return input;
+}
+// Rows: [value,label] pairs. blankLabel adds a leading "" option (used for the null level gates / special).
+function selectInput(rows,current,onValue,file,blankLabel){
+  const select=document.createElement('select');
+  if(blankLabel!==undefined){ const o=document.createElement('option'); o.value=''; o.textContent=blankLabel; select.appendChild(o); }
+  for(const [value,label] of rows){ const o=document.createElement('option'); o.value=value; o.textContent=label; select.appendChild(o); }
+  if(current && !rows.some(([v])=>v===current)){ const o=document.createElement('option'); o.value=current; o.textContent=current+' (unknown)'; select.appendChild(o); }
+  select.value=current||'';
+  select.addEventListener('change',()=>{ onValue(select.value); markDirty(file); renderPreview(); });
+  return select;
+}
+function uniqueId(prefix,existing){ const used=new Set(existing); let n=existing.length+1; while(used.has(prefix+n)) n++; return prefix+n; }
+function levelRows(){ return state.social.relationship.levels.map((l)=>[l.id,l.id]); }
+
+// ---------------------------------------------------------------------------------------------- NPCs
+function renderNpcs(){
+  const root=$('npcs'); root.innerHTML='';
+  state.npcs.npcs.forEach((npc,index)=>{
+    const box=document.createElement('div'); box.className='entity'; box.dataset.npcIndex=String(index);
+    const head=document.createElement('div'); head.className='entity-head';
+    const title=document.createElement('strong'); title.textContent=(npc.name||npc.id)+' ('+npc.id+')';
+    const del=document.createElement('button'); del.className='danger mini'; del.dataset.action='remove-npc'; del.textContent='Delete';
+    del.addEventListener('click',()=>{ state.npcs.npcs.splice(index,1); markDirty(NPCS_FILE); renderNpcs(); renderPreview(); });
+    head.append(title,del); box.appendChild(head);
+
+    const grid=document.createElement('div'); grid.className='grid';
+    appendField(grid,'ID',textInput(npc.id,(v)=>{ npc.id=v; title.textContent=(npc.name||npc.id)+' ('+npc.id+')'; },NPCS_FILE));
+    appendField(grid,'Name',textInput(npc.name,(v)=>{ npc.name=v; title.textContent=(npc.name||npc.id)+' ('+npc.id+')'; },NPCS_FILE));
+    // Portrait — normalize pasted Windows paths on blur.
+    const portrait=textInput(npc.portrait,(v)=>{ npc.portrait=v; },NPCS_FILE,{placeholder:'npcs/amara.png'});
+    portrait.addEventListener('blur',()=>{ const norm=normalizeSourcePath(portrait.value); if(norm!==portrait.value){ portrait.value=norm; npc.portrait=norm; markDirty(NPCS_FILE); } });
+    appendField(grid,'Portrait',portrait);
+    appendField(grid,'Mesh',textInput(npc.mesh,(v)=>npc.mesh=v,NPCS_FILE,{placeholder:'/models/character.glb'}));
+    const tint=document.createElement('input'); tint.type='color'; tint.value=/^#[0-9a-fA-F]{6}$/.test(npc.tint||'')?npc.tint:'#d9a066'; tint.addEventListener('input',()=>{ npc.tint=tint.value; markDirty(NPCS_FILE); }); appendField(grid,'Tint',tint);
+    appendField(grid,'Clip map (blank = default)',textInput(npc.clipMap??'',(v)=>{ if(v.trim()) npc.clipMap=v; else npc.clipMap=null; },NPCS_FILE));
+    appendField(grid,'Available from (h)',numberInput(npc.availableHours?.from??0,(v)=>{ (npc.availableHours||={}).from=v; },NPCS_FILE,{min:0,max:24,step:1}));
+    appendField(grid,'Available to (h)',numberInput(npc.availableHours?.to??24,(v)=>{ (npc.availableHours||={}).to=v; },NPCS_FILE,{min:0,max:24,step:1}));
+    appendField(grid,'Visit duration (h)',numberInput(npc.visitDurationHours,(v)=>npc.visitDurationHours=v,NPCS_FILE,{min:0,step:'any'}));
+    appendField(grid,'Arrival delay (min)',numberInput(npc.arrivalDelayMinutes,(v)=>npc.arrivalDelayMinutes=v,NPCS_FILE,{min:0,step:'any'}));
+    box.appendChild(grid);
+
+    const persTitle=document.createElement('h3'); persTitle.textContent='Personality'; box.appendChild(persTitle);
+    npc.personality||={};
+    for(const def of personalityDefs()){
+      const row=document.createElement('div'); row.className='slider-row';
+      const name=document.createElement('label'); name.textContent=def.name;
+      const max=Number(def.max??10);
+      const slider=document.createElement('input'); slider.type='range'; slider.min='0'; slider.max=String(max); slider.step='1'; slider.value=String(npc.personality[def.id]??def.default??0);
+      slider.dataset.trait=def.id;
+      const sv=document.createElement('span'); sv.className='sv'; sv.textContent=slider.value;
+      slider.addEventListener('input',()=>{ npc.personality[def.id]=Number(slider.value); sv.textContent=slider.value; markDirty(NPCS_FILE); renderPreview(); });
+      row.append(name,slider,sv); box.appendChild(row);
+    }
+    root.appendChild(box);
+  });
+}
+
+// -------------------------------------------------------------------------------------- Relationship
+function renderRelationship(){
+  const rel=state.social.relationship;
+  const bounds=$('relBounds'); bounds.innerHTML='';
+  appendField(bounds,'Min score',numberInput(rel.min,(v)=>rel.min=v,SOCIAL_FILE,{step:'any'}));
+  appendField(bounds,'Max score',numberInput(rel.max,(v)=>rel.max=v,SOCIAL_FILE,{step:'any'}));
+  appendField(bounds,'Start score',numberInput(rel.start,(v)=>rel.start=v,SOCIAL_FILE,{step:'any'}));
+  appendField(bounds,'Decay / day (0 = off)',numberInput(rel.decayPerDay,(v)=>rel.decayPerDay=v,SOCIAL_FILE,{min:0,step:'any'}));
+
+  const root=$('levels'); root.innerHTML='';
+  rel.levels.forEach((level,index)=>{
+    const row=document.createElement('div'); row.className='level-row'; row.dataset.levelIndex=String(index);
+    const id=textInput(level.id,(v)=>{ level.id=v; },SOCIAL_FILE); id.placeholder='level id';
+    const atLeast=numberInput(level.atLeast,(v)=>level.atLeast=v,SOCIAL_FILE,{step:'any'});
+    const up=document.createElement('button'); up.className='mini'; up.dataset.action='level-up'; up.textContent='↑'; up.disabled=index===0;
+    up.addEventListener('click',()=>{ const a=rel.levels; [a[index-1],a[index]]=[a[index],a[index-1]]; markDirty(SOCIAL_FILE); renderRelationship(); renderInteractions(); renderVisit(); renderPreview(); });
+    const down=document.createElement('button'); down.className='mini'; down.dataset.action='level-down'; down.textContent='↓'; down.disabled=index===rel.levels.length-1;
+    down.addEventListener('click',()=>{ const a=rel.levels; [a[index+1],a[index]]=[a[index],a[index+1]]; markDirty(SOCIAL_FILE); renderRelationship(); renderInteractions(); renderVisit(); renderPreview(); });
+    const del=document.createElement('button'); del.className='danger mini'; del.dataset.action='remove-level'; del.textContent='✕';
+    del.addEventListener('click',()=>{ rel.levels.splice(index,1); markDirty(SOCIAL_FILE); renderRelationship(); renderInteractions(); renderVisit(); renderPreview(); });
+    row.append(id,atLeast,up,down,del); root.appendChild(row);
+  });
+}
+
+// ------------------------------------------------------------------------------------- Compatibility
+function renderCompatibility(){
+  const compat=state.social.compatibility; compat.traitWeights||={};
+  const weights=$('traitWeights'); weights.innerHTML='';
+  for(const def of personalityDefs()) appendField(weights,def.name,numberInput(compat.traitWeights[def.id]??0,(v)=>compat.traitWeights[def.id]=v,SOCIAL_FILE,{min:0,step:'any'}));
+  const tuning=$('compatTuning'); tuning.innerHTML='';
+  appendField(tuning,'Trait range',numberInput(compat.traitRange,(v)=>compat.traitRange=v,SOCIAL_FILE,{min:0,step:'any'}));
+  appendField(tuning,'Min multiplier',numberInput(compat.minMultiplier,(v)=>compat.minMultiplier=v,SOCIAL_FILE,{step:'any'}));
+  appendField(tuning,'Max multiplier',numberInput(compat.maxMultiplier,(v)=>compat.maxMultiplier=v,SOCIAL_FILE,{step:'any'}));
+}
+
+// --------------------------------------------------------------------------------------- Interactions
+function renderInteractions(){
+  const root=$('interactions'); root.innerHTML='';
+  const levels=levelRows();
+  state.social.interactions.forEach((it,index)=>{
+    const box=document.createElement('div'); box.className='entity'; box.dataset.interactionIndex=String(index);
+    const head=document.createElement('div'); head.className='entity-head';
+    const title=document.createElement('strong'); title.textContent=(it.name||it.id)+' ('+it.id+')';
+    const del=document.createElement('button'); del.className='danger mini'; del.dataset.action='remove-interaction'; del.textContent='Delete';
+    del.addEventListener('click',()=>{ state.social.interactions.splice(index,1); markDirty(SOCIAL_FILE); renderInteractions(); renderPreview(); });
+    head.append(title,del); box.appendChild(head);
+
+    const grid=document.createElement('div'); grid.className='grid';
+    appendField(grid,'ID',textInput(it.id,(v)=>{ it.id=v; title.textContent=(it.name||it.id)+' ('+it.id+')'; },SOCIAL_FILE));
+    appendField(grid,'Name',textInput(it.name,(v)=>{ it.name=v; title.textContent=(it.name||it.id)+' ('+it.id+')'; },SOCIAL_FILE));
+    // Animation with warn-on-blank (interactions.html precedent).
+    const animWrap=document.createElement('div');
+    const anim=textInput(it.animation,(v)=>it.animation=v,SOCIAL_FILE,{placeholder:'stand_talk'});
+    const warn=document.createElement('div'); warn.className='hint-line warn'; warn.dataset.role='anim-warn';
+    warn.textContent='⚠ no animation set — sim will fall back to idle for this interaction';
+    const updateWarn=()=>{ warn.style.display=anim.value.trim()?'none':''; };
+    anim.addEventListener('input',updateWarn); updateWarn();
+    animWrap.append(anim,warn); appendField(grid,'Animation',animWrap);
+    appendField(grid,'Duration (s)',numberInput(it.durationSeconds,(v)=>it.durationSeconds=v,SOCIAL_FILE,{min:0,step:'any'}));
+    appendField(grid,'Relationship gain',numberInput(it.relationshipGain,(v)=>it.relationshipGain=v,SOCIAL_FILE,{step:'any'}));
+    appendField(grid,'Requires level ≥',selectInput(levels,it.requiresLevelAtLeast??'',(v)=>it.requiresLevelAtLeast=v||null,SOCIAL_FILE,'— none —'));
+    appendField(grid,'Requires level ≤',selectInput(levels,it.requiresLevelAtMost??'',(v)=>it.requiresLevelAtMost=v||null,SOCIAL_FILE,'— none —'));
+    appendField(grid,'Special',selectInput([['endVisit','endVisit']],it.special??'',(v)=>{ if(v) it.special=v; else delete it.special; },SOCIAL_FILE,'— none —'));
+    box.appendChild(grid);
+
+    const flags=document.createElement('div'); flags.className='grid';
+    const autoLabel=document.createElement('label'); autoLabel.className='checkline'; autoLabel.append(checkboxInput(it.autonomyEligible,(v)=>it.autonomyEligible=v,SOCIAL_FILE),document.createTextNode('Autonomy eligible'));
+    const censorLabel=document.createElement('label'); censorLabel.className='checkline'; censorLabel.append(checkboxInput(it.censor,(v)=>it.censor=v,SOCIAL_FILE),document.createTextNode('Censor'));
+    flags.append(autoLabel,censorLabel); box.appendChild(flags);
+
+    const needTitle=document.createElement('h3'); needTitle.textContent='Need gains'; box.appendChild(needTitle);
+    it.needGains||={};
+    for(const def of needDefs()){
+      const row=document.createElement('div'); row.className='need-row';
+      const name=document.createElement('label'); name.textContent=def.name;
+      const inp=numberInput(it.needGains[def.id]??0,(v)=>{ if(v) it.needGains[def.id]=v; else delete it.needGains[def.id]; },SOCIAL_FILE,{step:'any'});
+      row.append(name,inp); box.appendChild(row);
+    }
+    root.appendChild(box);
+  });
+}
+
+// --------------------------------------------------------------------------------------------- Phone
+function renderPhone(){
+  const root=$('phoneFields'); root.innerHTML=''; const phone=state.social.phone;
+  for(const channel of ['text','call']){
+    const def=phone[channel]; def.needGains||={};
+    const h=document.createElement('h3'); h.textContent=channel==='text'?'Text':'Call'; root.appendChild(h);
+    const grid=document.createElement('div'); grid.className='grid';
+    appendField(grid,'Duration (s)',numberInput(def.durationSeconds,(v)=>def.durationSeconds=v,SOCIAL_FILE,{min:0,step:'any'}));
+    appendField(grid,'Relationship gain',numberInput(def.relationshipGain,(v)=>def.relationshipGain=v,SOCIAL_FILE,{step:'any'}));
+    appendField(grid,'Cooldown (min)',numberInput(def.cooldownMinutes,(v)=>def.cooldownMinutes=v,SOCIAL_FILE,{min:0,step:'any'}));
+    root.appendChild(grid);
+    const nt=document.createElement('h3'); nt.textContent='Need gains'; nt.style.marginTop='10px'; root.appendChild(nt);
+    const ng=document.createElement('div'); ng.className='grid';
+    for(const nd of needDefs()) appendField(ng,nd.name,numberInput(def.needGains[nd.id]??0,(v)=>{ if(v) def.needGains[nd.id]=v; else delete def.needGains[nd.id]; },SOCIAL_FILE,{step:'any'}));
+    root.appendChild(ng);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------- Visit
+function renderVisit(){
+  const root=$('visitFields'); root.innerHTML=''; const v=state.social.visitTheirPlace; v.needsRestored||={};
+  appendField(root,'Away hours',numberInput(v.awayHours,(x)=>v.awayHours=x,SOCIAL_FILE,{min:0,step:'any'}));
+  appendField(root,'Relationship gain',numberInput(v.relationshipGain,(x)=>v.relationshipGain=x,SOCIAL_FILE,{step:'any'}));
+  appendField(root,'Min level',selectInput(levelRows(),v.minLevel??'',(x)=>v.minLevel=x||null,SOCIAL_FILE,'— none —'));
+  const nt=document.createElement('h3'); nt.textContent='Needs restored'; nt.style.gridColumn='1 / -1'; root.appendChild(nt);
+  for(const nd of needDefs()) appendField(root,nd.name,numberInput(v.needsRestored[nd.id]??0,(x)=>{ if(x) v.needsRestored[nd.id]=x; else delete v.needsRestored[nd.id]; },SOCIAL_FILE,{step:'any'}));
+}
+
+// -------------------------------------------------------------------------------------------- Preview
+function playerTraits(){ const t={}; for(const def of personalityDefs()) t[def.id]=Number(def.default??0); return t; }
+function renderPreviewNpcSelect(){
+  const sel=$('previewNpc'); sel.innerHTML='';
+  const npcs=state.npcs.npcs;
+  if(state.previewNpcId==null || !npcs.some((n)=>n.id===state.previewNpcId)) state.previewNpcId=npcs[0]?.id??null;
+  for(const npc of npcs){ const o=document.createElement('option'); o.value=npc.id; o.textContent=npc.name||npc.id; sel.appendChild(o); }
+  sel.value=state.previewNpcId||'';
+  sel.onchange=()=>{ state.previewNpcId=sel.value; renderPreview(); };
+}
+function renderPreview(){
+  renderPreviewNpcSelect();
+  const meta=$('previewMeta'), compatRoot=$('previewCompat'), levelsRoot=$('previewLevels');
+  compatRoot.innerHTML=''; levelsRoot.innerHTML='';
+  if(!state.fns){ meta.textContent='Waiting for the real social core (game/social.ts)…'; return; }
+  const npc=state.npcs.npcs.find((n)=>n.id===state.previewNpcId);
+  if(!npc){ meta.textContent='No NPC to preview — add one above.'; return; }
+  const player=playerTraits();
+  const compat=state.fns.compatibility(player,npc.personality||{},state.social);
+  meta.textContent='Compatibility computed by game/social.ts vs the player personality (stats.json defaults).';
+  const add=(label,value)=>{ const row=document.createElement('div'); row.className='compat-line'; const l=document.createElement('span'); l.textContent=label; const s=document.createElement('strong'); s.textContent=value; s.dataset.compat=label; row.append(l,s); compatRoot.appendChild(row); };
+  add('Compatibility score',compat.score.toFixed(3));
+  add('Gain multiplier',compat.multiplier.toFixed(3));
+  for(const level of state.social.relationship.levels){
+    const block=document.createElement('div'); block.className='lvl-block'; block.dataset.level=level.id;
+    const name=document.createElement('div'); name.className='lvl-name'; name.textContent=level.id+'  (≥ '+level.atLeast+')'; block.appendChild(name);
+    const allowed=state.social.interactions.filter((it)=>state.fns.levelAllows(it,level.id,state.social));
+    const acts=document.createElement('div'); acts.className='lvl-acts'+(allowed.length?'':' none');
+    acts.textContent=allowed.length?allowed.map((it)=>it.name||it.id).join(', '):'no interactions available';
+    block.appendChild(acts); levelsRoot.appendChild(block);
+  }
+}
+
+// ----------------------------------------------------------------------------------------------- Wire
+function renderAll(){ renderNpcs(); renderRelationship(); renderCompatibility(); renderInteractions(); renderPhone(); renderVisit(); renderPreview(); }
+
+async function load(){
+  try{
+    const get=async(path)=>{ const r=await fetch(API+path); if(!r.ok) throw new Error(path+': '+r.status); return r.json(); };
+    const [npcs,social,stats]=await Promise.all([get(NPCS_FILE),get(SOCIAL_FILE),get('stats.json')]);
+    Object.assign(state,{npcs,social,stats}); state.dirty.clear();
+    renderAll(); $('save').disabled=true; $('status').textContent='Loaded';
+  }catch(error){ $('status').textContent='Load failed'; console.error('[social-editor]',error); }
+}
+async function save(){
+  if(!state.dirty.size) return;
+  const files={ [NPCS_FILE]:state.npcs, [SOCIAL_FILE]:state.social };
+  for(const file of [...state.dirty]){
+    const r=await fetch(API+file,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(files[file],null,2)});
+    if(!r.ok){ $('status').textContent='Save failed'; return; }
+    state.dirty.delete(file);
+  }
+  $('save').disabled=true; $('status').textContent='Saved — game hot-reloads';
+}
+function setSocial(fns){ state.fns=fns; renderPreview(); }
+
+$('addNpc').addEventListener('click',()=>{
+  const id=uniqueId('npc',state.npcs.npcs.map((n)=>n.id));
+  const personality={}; for(const def of personalityDefs()) personality[def.id]=Number(def.default??0);
+  state.npcs.npcs.push({ id, name:'New NPC', portrait:'', mesh:'/models/character.glb', tint:'#d9a066', clipMap:null, personality, availableHours:{from:10,to:22}, visitDurationHours:3, arrivalDelayMinutes:30 });
+  markDirty(NPCS_FILE); renderNpcs(); renderPreview();
+});
+$('addLevel').addEventListener('click',()=>{
+  const id=uniqueId('level',state.social.relationship.levels.map((l)=>l.id));
+  state.social.relationship.levels.push({ id, atLeast:0 });
+  markDirty(SOCIAL_FILE); renderRelationship(); renderInteractions(); renderVisit(); renderPreview();
+});
+$('addInteraction').addEventListener('click',()=>{
+  const id=uniqueId('interaction',state.social.interactions.map((i)=>i.id));
+  state.social.interactions.push({ id, name:'New interaction', animation:'', durationSeconds:20, needGains:{}, relationshipGain:0, requiresLevelAtLeast:null, requiresLevelAtMost:null, autonomyEligible:false, censor:false });
+  markDirty(SOCIAL_FILE); renderInteractions(); renderPreview();
+});
+$('save').addEventListener('click',save);
+window.addEventListener('keydown',(event)=>{ if((event.ctrlKey||event.metaKey)&&event.key==='s'){ event.preventDefault(); save(); } });
+window.addEventListener('beforeunload',(event)=>{ if(state.dirty.size) event.preventDefault(); });
+
+window.SocialTool={ state, load, save, setSocial, renderAll, renderPreview, normalizeSourcePath };
+load();
+})();
+</script>
+<script type="module">
+import { compatibility, levelAllows, levelFor } from '/game/social.ts';
+window.SocialTool.setSocial({ compatibility, levelAllows, levelFor });
+</script>
+<script src="/tools/nav.js"></script>
+</body>
+</html>
