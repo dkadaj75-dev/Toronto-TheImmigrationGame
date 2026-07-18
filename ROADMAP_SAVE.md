@@ -123,7 +123,7 @@ world-agnostic payloads round-trip) + boot check.
 **Agent: Codex.** Touches main.ts boot order + every system — highest integration risk;
 same reasoning as S3/S4.
 
-### V4 — Save/Load UX polish + TITLE handoff
+### V4 — Save/Load UX polish + TITLE handoff — 📱 DESIGNER DECISION (2026-07-18): the in-game save surface lives in the SMARTPHONE (verbatim: "Put the save system in the smartphone"). V4 = a phone Save tab/section with the slot cards, replacing V3's temporary HUD slot picker entirely; the title screen's Load screen (T3) stays the out-of-game surface.
 Slot cards with metadata (name/rename, timestamp, funds, map, play time), confirm-overwrite and
 confirm-load-discards dialogs, export/import buttons per slot. Built wherever ROADMAP_TITLE T2
 puts the Load screen — if TITLE ships first this slice merges into it; if not, it lives in the
