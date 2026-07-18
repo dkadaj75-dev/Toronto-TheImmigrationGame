@@ -1,0 +1,10 @@
+{
+  "slots": 3,
+  "autosaveSlotId": "autosave",
+  "autosaveIntervalHours": 12,
+  "autosaveOnEvents": [
+    "moveIn",
+    "dayRollover"
+  ],
+  "storageKeyPrefix": "condo-life-save"
+}

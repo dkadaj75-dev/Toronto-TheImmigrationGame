@@ -74,7 +74,7 @@ Design principles:
 
 ## 2. Slices
 
-### V1 — Pure save core (`game/save.ts`)
+### V1 — Pure save core (`game/save.ts`) — ✅ SHIPPED (2026-07-18, with V2)
 Registry (`registerSaveable(id, {serialize, restore, defaults?})`), envelope
 assemble/disassemble, version + migration-table runner, validation (never-throw, per-system
 isolation: one corrupt payload skips that system, warns, restores its defaults, keeps loading),
@@ -83,7 +83,15 @@ and returns plain objects. `test/save.test.ts`: round-trip with fake systems, un
 system ids, migration chain old→new, corrupt-payload isolation, metadata summary.
 **Agent: Claude (Opus).** The envelope/migration design carries every future batch.
 
-### V2 — Storage surface + slots (`game/savestore.ts`)
+### V2 — Storage surface + slots (`game/savestore.ts`) — ✅ SHIPPED (2026-07-18)
+> V1+V2 as-built (Codex): envelope {version, savedAt, name?, mapId, gameHour, playSeconds?,
+> systems{id:opaque}}; SaveRegistry + assemble/apply/validateEnvelope + extractSlotMeta;
+> migrations advance exactly one version each, future versions refuse with a reason, corrupt
+> payloads isolate to per-system defaults + warnings. SaveStore over an injected StorageAdapter:
+> list/read/write/delete (result objects, never throws; corrupt slots listable+flagged, quota
+> surfaced), buildExportBlob (condo-life-save-<slot>-<date>.json), parseImport via V1
+> validation. data/save.json: 3 slots + visible autosave, 12h interval, moveIn/dayRollover
+> events, prefix condo-life-save. 19+19 assertions.
 localStorage adapter (quota-aware try/catch — a full disk must toast, not crash), slot
 list/read/write/delete, export (Blob download `condo-life-save-<slot>-<date>.json`) and import
 (file input → validate via V1 → write slot). Storage-key prefix from data/save.json. jsdom-able
