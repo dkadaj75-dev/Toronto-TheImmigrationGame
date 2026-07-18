@@ -5,7 +5,7 @@ import type { ThemeAnchor, ThemeComponentOverrides, ThemeData, ThemeLayoutItem }
 
 export const KNOWN_THEME_ELEMENT_IDS = [
   'needs-panel', 'skills-panel', 'quest-panel', 'time-bar', 'activity-chip', 'work-chip',
-  'quest-toasts', 'visa-chip', 'funds-chip', 'buy-button', 'wall-cut-button', 'phone-button',
+  'notification-stack', 'visa-chip', 'funds-chip', 'buy-button', 'wall-cut-button', 'phone-button', 'system-menu-button',
   'buy-ghost-controls', 'buy-selection-chips',
 ] as const;
 
@@ -28,6 +28,8 @@ export const DEFAULT_THEME: ThemeData = {
     phoneTab: { radiusPx: 999, paddingXPx: 3, paddingYPx: 7, heightPx: 48 },
     accordionHeader: { radiusPx: 999, paddingXPx: 11, paddingYPx: 7 },
     titleScreen: { background: 'rgba(20,26,40,.88)', foreground: '#eaf0fb', accent: '#9fd08c', outline: 'rgba(130,158,210,.55)', radiusPx: 18, outlineWidthPx: 1, shadow: '0 10px 40px rgba(0,0,0,.45)' },
+    notificationCard: { background: 'rgba(20,26,40,.92)', foreground: '#eaf0fb', accent: '#5a9fd6', outline: 'rgba(130,158,210,.45)', radiusPx: 10, outlineWidthPx: 1, shadow: '0 2px 10px rgba(0,0,0,.35)', fontSizePx: 12 },
+    notificationModal: { background: 'rgba(20,26,40,.96)', foreground: '#eaf0fb', accent: '#5a9fd6', outline: 'rgba(130,158,210,.55)', radiusPx: 16, outlineWidthPx: 1, shadow: '0 10px 40px rgba(0,0,0,.55)', fontSizePx: 14 },
   },
   layout: {
     'needs-panel': { anchor: 'tl', offsetX: 8, offsetY: 8 },
@@ -36,12 +38,13 @@ export const DEFAULT_THEME: ThemeData = {
     'time-bar': { anchor: 'tc', offsetX: 0, offsetY: 8 },
     'activity-chip': { anchor: 'bc', offsetX: 0, offsetY: 14 },
     'work-chip': { anchor: 'bc', offsetX: 0, offsetY: 14 },
-    'quest-toasts': { anchor: 'tc', offsetX: 0, offsetY: 56 },
+    'notification-stack': { anchor: 'tr', offsetX: 8, offsetY: 68 },
     'visa-chip': { anchor: 'br', offsetX: 8, offsetY: 168 },
     'funds-chip': { anchor: 'br', offsetX: 8, offsetY: 128 },
     'buy-button': { anchor: 'br', offsetX: 8, offsetY: 84 },
     'wall-cut-button': { anchor: 'br', offsetX: 92, offsetY: 84 },
     'phone-button': { anchor: 'br', offsetX: 8, offsetY: 208 },
+    'system-menu-button': { anchor: 'tr', offsetX: 8, offsetY: 8 },
     'buy-ghost-controls': { anchor: 'bc', offsetX: 0, offsetY: 14 },
     'buy-selection-chips': { anchor: 'bc', offsetX: 0, offsetY: 14 },
   },
@@ -52,7 +55,7 @@ function finite(value: number | undefined, fallback: number): number {
   return Number.isFinite(value) ? value! : fallback;
 }
 
-const COMPONENT_NAMES = ['panel', 'button', 'toast', 'actionMenu', 'card', 'bar', 'phoneShell', 'phoneTab', 'accordionHeader', 'titleScreen'] as const;
+const COMPONENT_NAMES = ['panel', 'button', 'toast', 'actionMenu', 'card', 'bar', 'phoneShell', 'phoneTab', 'accordionHeader', 'titleScreen', 'notificationCard', 'notificationModal'] as const;
 const appliedVariables = new WeakMap<Document, Set<string>>();
 function componentPrefix(name: string): string {
   return `--theme-${name.replace(/[A-Z]/g, (letter) => '-' + letter.toLowerCase())}`;

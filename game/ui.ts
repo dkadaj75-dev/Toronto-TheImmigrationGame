@@ -9,6 +9,7 @@ import type { ContactView } from './contacts';
 import { deleteDecision, loadDecision, overwriteDecision, renameDecision, type SlotCardView } from './saveslots';
 import type { SimStats } from './stats';
 import { jobLevelPay, jobLevelTitle } from './work';
+import { relativeAge, type ResolvedNotification } from './notifications';
 
 /** Phone overlay tabs. ROADMAP_APT R3 adds 'rentals' (the Kijiji tab; its visible label comes
  *  from tuning.phone.rentalTabName, never hardcoded). */
@@ -116,6 +117,13 @@ function readSafeAreaInsets(): ScreenInsets {
   return result;
 }
 
+export function formatRelativeAge(minutes: number): string {
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+}
+
 const CSS = `
 #hud { position: fixed; inset: 0; pointer-events: none;
   font-family: var(--theme-font-family, system-ui, sans-serif); font-size: var(--theme-font-size, 16px); z-index: 10; }
@@ -154,6 +162,7 @@ const CSS = `
   display: flex; align-items: center; gap: 4px; color: var(--theme-panel-fg, #dfe6f2); backdrop-filter: blur(4px); }
 #time-bar .clock { font-size: 14px; font-variant-numeric: tabular-nums; padding: 0 6px; min-width: 46px; text-align: center; }
 #time-bar.paused .clock { color: var(--theme-warn, #e0b05f); }
+#time-bar.interruption-paused .clock { color: var(--theme-warn, #e0b05f); }
 #time-bar button { border: 0; border-radius: 999px; width: 30px; height: 30px; font-size: 12px;
   background: transparent; color: #93a3c0; cursor: pointer; touch-action: manipulation; }
 #time-bar button.active { background: var(--theme-button-accent, rgba(90,120,190,.4)); color: var(--theme-button-fg, #eaf0fb); }
@@ -197,16 +206,50 @@ const CSS = `
 .quest-item .qdesc { font-size: 10px; color: #b7c1d6; }
 .quest-empty { font-size: 10px; color: #6d7996; font-style: italic; }
 
-#quest-toasts { position: absolute; top: calc(56px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%);
-  display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; z-index: 11; }
-.quest-toast { background: var(--theme-toast-bg, rgba(20,26,40,.92)); color: var(--theme-toast-fg, #eaf0fb);
-  border-radius: var(--theme-toast-radius, 10px); padding: 8px 14px;
-  font-family: var(--theme-toast-font-family, system-ui, sans-serif); font-size: var(--theme-toast-font-size, 12px);
-  box-shadow: var(--theme-toast-shadow, 0 2px 10px rgba(0,0,0,.35)); opacity: 0; transform: translateY(-6px);
-  transition: opacity .25s, transform .25s;
-  border-left: var(--theme-toast-outline-width, 3px) solid var(--theme-toast-accent, #5a9fd6); max-width: 80vw; text-align: center; }
-.quest-toast.show { opacity: 1; transform: translateY(0); }
-.quest-toast.completed { border-left-color: #6fce7a; }
+#notification-stack { position: absolute; top: calc(68px + env(safe-area-inset-top, 0px)); right: calc(8px + env(safe-area-inset-right, 0px));
+  width: min(340px, calc(100vw - 16px)); display: flex; flex-direction: column; gap: 8px; pointer-events: none; z-index: 16; }
+.notification-card { display: grid; grid-template-columns: 44px minmax(0,1fr) 44px; gap: 8px; align-items: start;
+  padding: 10px; pointer-events: auto; background: var(--theme-notification-card-bg, rgba(20,26,40,.92));
+  color: var(--theme-notification-card-fg, #eaf0fb); border: var(--theme-notification-card-outline-width, 1px) solid var(--theme-notification-card-outline, rgba(130,158,210,.45));
+  border-left: 4px solid var(--theme-notification-card-accent, #5a9fd6); border-radius: var(--theme-notification-card-radius, 10px);
+  box-shadow: var(--theme-notification-card-shadow, 0 2px 10px rgba(0,0,0,.35)); font-family: var(--theme-notification-card-font-family, system-ui, sans-serif);
+  font-size: var(--theme-notification-card-font-size, 12px); }
+.notification-card.passive { pointer-events: none; opacity: .82; grid-template-columns: 36px minmax(0,1fr); animation: notification-passive-in .2s ease-out; }
+@keyframes notification-passive-in { from { opacity: 0; transform: translateY(-5px); } }
+.notification-icon { width: 36px; height: 36px; object-fit: contain; align-self: center; }
+.notification-copy { min-width: 0; line-height: 1.3; }
+.notification-title { font-weight: 800; }
+.notification-body { margin-top: 3px; opacity: .82; white-space: pre-wrap; }
+.notification-age { margin-top: 5px; font-size: .82em; opacity: .58; }
+.notification-dismiss, .notification-action, .notification-ok { min-width: 44px; min-height: 44px; border: 0; cursor: pointer; touch-action: manipulation;
+  border-radius: var(--theme-button-radius, 999px); background: var(--theme-button-bg, rgba(90,120,190,.55)); color: var(--theme-button-fg, #eaf0fb); font: inherit; }
+.notification-dismiss { font-size: 20px; }
+.notification-action { grid-column: 2 / 4; justify-self: start; padding: 8px 16px; }
+#notification-modal { position: fixed; inset: 0; z-index: 24; display: none; place-items: center; padding: 20px; pointer-events: none; background: rgba(8,10,16,.72); }
+#notification-modal.open { display: grid; pointer-events: auto; }
+.notification-modal-card { width: min(430px, 100%); display: grid; justify-items: center; gap: 12px; padding: 22px; text-align: center;
+  background: var(--theme-notification-modal-bg, rgba(20,26,40,.96)); color: var(--theme-notification-modal-fg, #eaf0fb);
+  border: var(--theme-notification-modal-outline-width, 1px) solid var(--theme-notification-modal-outline, rgba(130,158,210,.55));
+  border-radius: var(--theme-notification-modal-radius, 16px); box-shadow: var(--theme-notification-modal-shadow, 0 10px 40px rgba(0,0,0,.55));
+  font-family: var(--theme-notification-modal-font-family, system-ui, sans-serif); font-size: var(--theme-notification-modal-font-size, 14px); }
+.notification-modal-card .notification-icon { width: 56px; height: 56px; }
+.notification-ok { min-width: 120px; padding: 10px 22px; }
+
+#system-menu-button { position: absolute; top: calc(8px + env(safe-area-inset-top, 0px)); right: calc(8px + env(safe-area-inset-right, 0px));
+  width: 44px; height: 44px; border: var(--theme-button-outline-width, 1px) solid var(--theme-button-outline, rgba(130,158,210,.55));
+  border-radius: var(--theme-button-radius, 999px); background: var(--theme-button-bg, rgba(20,26,40,.9)); color: var(--theme-button-fg, #eaf0fb);
+  font-size: 20px; pointer-events: auto; cursor: pointer; touch-action: manipulation; }
+#system-menu-overlay { position: fixed; inset: 0; z-index: 23; display: none; place-items: center; padding: 20px; pointer-events: none; background: rgba(8,10,16,.76); }
+#system-menu-overlay.open { display: grid; pointer-events: auto; }
+.system-menu-panel { width: min(380px, 100%); max-height: calc(100dvh - 40px); overflow-y: auto; display: grid; gap: 10px; padding: 22px;
+  background: var(--theme-notification-modal-bg, rgba(20,26,40,.96)); color: var(--theme-notification-modal-fg, #eaf0fb);
+  border: var(--theme-notification-modal-outline-width, 1px) solid var(--theme-notification-modal-outline, rgba(130,158,210,.55)); border-radius: var(--theme-notification-modal-radius, 16px);
+  box-shadow: var(--theme-notification-modal-shadow, 0 10px 40px rgba(0,0,0,.55)); }
+.system-menu-panel h2 { margin: 0 0 6px; text-align: center; }
+.system-menu-panel > button, .system-menu-panel .title-menu-button { min-height: 44px; border: 0; border-radius: var(--theme-button-radius, 999px);
+  background: var(--theme-button-bg, rgba(90,120,190,.55)); color: var(--theme-button-fg, #eaf0fb); font: inherit; cursor: pointer; }
+.system-quit-confirm { display: grid; gap: 10px; text-align: center; }
+.system-quit-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
 #floating-feedback { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 12; }
 .floating-feedback-item { position: absolute; transform: translate(-50%, -100%); white-space: nowrap;
@@ -219,7 +262,7 @@ const CSS = `
    top-center #time-bar (~210px wide) collides with the top-left/top-right needs/skills
    panels (168px each) — three top:8px elements can't fit side by side under ~546px of
    combined width. Fix: both side panels default to collapsed (header-only, like skills
-   already did) below the breakpoint, shrunk a bit further, and #time-bar/#quest-toasts
+   already did) below the breakpoint, shrunk a bit further, and #time-bar/#notification-stack
    drop below the now-short collapsed header row instead of sharing it. Panels remain
    tap-to-expand; a designer/player who expands one on a narrow screen may see it extend
    under the time bar, which is an accepted tradeoff of an explicit user action rather than
@@ -232,7 +275,8 @@ const CSS = `
   #time-bar { top: calc(46px + env(safe-area-inset-top, 0px)) !important; padding: 4px 6px; gap: 3px; }
   #time-bar button { width: 26px; height: 26px; }
   #time-bar .clock { min-width: 38px; font-size: 12px; padding: 0 4px; }
-  #quest-toasts { top: calc(90px + env(safe-area-inset-top, 0px)) !important; }
+  #notification-stack { top: calc(96px + env(safe-area-inset-top, 0px)) !important; left: env(safe-area-inset-left, 0px) !important; right: env(safe-area-inset-right, 0px) !important;
+    width: auto !important; padding: 0 8px; transform: none !important; }
 }
 
 /* --- Buy/Sell mode (PROJECT_CONTEXT.md §7.6) ---------------------------------------------
@@ -464,7 +508,10 @@ export class Hud {
   private workChip: HTMLElement;
   private questPanel: HTMLElement;
   private questBody: HTMLElement;
-  private questToasts: HTMLElement;
+  private notificationStack: HTMLElement;
+  private notificationModal: HTMLElement;
+  private systemMenuOverlay: HTMLElement;
+  private systemMenuPanel: HTMLElement;
   private feedbackRoot: HTMLElement;
   private feedbackItems: { el: HTMLElement; elapsed: number }[] = [];
   private fills = new Map<string, HTMLElement>();
@@ -546,17 +593,25 @@ export class Hud {
   onPhoneExportSaveRequested: ((slotId: string) => void) | null = null;
   onPhoneImportSaveRequested: ((slotId: string, jsonText: string) => void) | null = null;
   onRepoClose: (() => void) | null = null;
+  onNotificationDismiss: ((id: string) => void) | null = null;
+  onNotificationAcknowledge: (() => void) | null = null;
+  onNotificationAction: ((notification: ResolvedNotification) => void) | null = null;
+  onSystemMenuOpen: (() => void) | null = null;
+  onSystemMenuResume: (() => void) | null = null;
+  onSystemMenuSave: (() => void) | null = null;
+  onSystemMenuOptions: (() => void) | null = null;
+  onSystemMenuQuit: (() => void) | null = null;
 
   onCancelAction: (() => void) | null = null;
   /** fires whenever the action menu closes (pick, cancel, or tap-away) */
   onMenuHidden: (() => void) | null = null;
   onActionSelected: (() => void) | null = null;
-  onToast: ((cue: 'questStarted' | 'questCompleted' | 'notification') => void) | null = null;
 
   /** Simulation speed multiplier: 0 (paused), 1, 2, or 3. */
   speed = 1;
   private lastRunningSpeed = 1;
   private workSpeedLocked = false;
+  private interruptionPaused = false;
   private timeBar!: HTMLElement;
   private clockEl!: HTMLElement;
 
@@ -581,13 +636,18 @@ export class Hud {
       <div id="action-menu"></div>
       <div id="activity-chip"><span id="activity-label"></span><button>Stop</button></div>
       <div id="work-chip">At work</div>
-      <div id="quest-toasts"></div>
+      <div id="notification-stack" aria-live="polite"></div>
+      <div id="notification-modal" aria-live="assertive"></div>
       <div id="floating-feedback"></div>
       <div id="visa-chip"></div>
       <div id="funds-chip">§ 0</div>
       <button id="buy-button">🛒 Buy</button>
       <button id="wall-cut-button" aria-pressed="false" title="Cut walls down">⌂ Cut</button>
       <button id="phone-button" aria-label="Open smartphone" title="Smartphone"><img alt="" /><span class="phone-badge" aria-label="0 unpaid bills"></span></button>
+      <button id="system-menu-button" aria-label="Open system menu" title="Menu">⚙</button>
+      <div id="system-menu-overlay" role="dialog" aria-modal="true" aria-label="System menu">
+        <div class="system-menu-panel"></div>
+      </div>
       <div id="game-over">
         <h2>Game Over</h2>
         <p id="game-over-text"></p>
@@ -658,9 +718,13 @@ export class Hud {
     this.workChip = root.querySelector('#work-chip')!;
     this.questPanel = root.querySelector('#quest-panel')!;
     this.questBody = root.querySelector('#quest-body')!;
-    this.questToasts = root.querySelector('#quest-toasts')!;
+    this.notificationStack = root.querySelector('#notification-stack')!;
+    this.notificationModal = root.querySelector('#notification-modal')!;
+    this.systemMenuOverlay = root.querySelector('#system-menu-overlay')!;
+    this.systemMenuPanel = root.querySelector('.system-menu-panel')!;
     this.feedbackRoot = root.querySelector('#floating-feedback')!;
     this.chip.querySelector('button')!.addEventListener('click', () => this.onCancelAction?.());
+    root.querySelector('#system-menu-button')!.addEventListener('click', () => this.onSystemMenuOpen?.());
 
     // --- Visa status + terminal game-over UI (§7.20 B3-6) ---
     this.visaChip = root.querySelector('#visa-chip')!;
@@ -687,7 +751,6 @@ export class Hud {
     this.setPhoneIcon('/icons/Smartphone.png');
     root.querySelector('.phone-close')!.addEventListener('click', () => {
       this.closePhone();
-      this.onPhoneClose?.();
     });
     this.phoneTabs.forEach((button) => button.addEventListener('click', () => {
       const tab = button.dataset.phoneTab as PhoneTab;
@@ -730,7 +793,11 @@ export class Hud {
       if (e.repeat) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
-      if (e.code === 'Space') { e.preventDefault(); this.togglePause(); }
+      if (e.key === 'Escape' && (window.matchMedia?.('(pointer: fine)').matches ?? true)) {
+        e.preventDefault();
+        if (this.systemMenuOverlay.classList.contains('open')) this.onSystemMenuResume?.();
+        else this.onSystemMenuOpen?.();
+      } else if (e.code === 'Space') { e.preventDefault(); this.togglePause(); }
       else if (e.key === '1' || e.key === '2' || e.key === '3') this.setSpeed(Number(e.key));
     });
 
@@ -802,7 +869,7 @@ export class Hud {
   }
 
   setSpeed(s: number) {
-    if (this.workSpeedLocked) return;
+    if (this.workSpeedLocked || this.interruptionPaused) return;
     this.speed = s;
     if (s > 0) this.lastRunningSpeed = s;
     this.timeBar.classList.toggle('paused', s === 0);
@@ -812,6 +879,15 @@ export class Hud {
   }
 
   togglePause() { this.setSpeed(this.speed === 0 ? this.lastRunningSpeed : 0); }
+
+  setInterruptionPaused(paused: boolean): void {
+    this.interruptionPaused = paused;
+    this.timeBar.classList.toggle('interruption-paused', paused);
+    this.timeBar.querySelectorAll<HTMLButtonElement>('button').forEach((button) => {
+      button.disabled = paused;
+      button.classList.toggle('active', Number(button.dataset.speed) === (paused ? 0 : this.speed));
+    });
+  }
 
   setWallCutActive(active: boolean) {
     this.wallCutButton.classList.toggle('active', active);
@@ -948,19 +1024,81 @@ export class Hud {
     }
   }
 
-  /** Transient toast for a quest trigger/completion. Duration comes from tuning.quests.toastDurationSeconds. */
-  showQuestToast(text: string, kind: 'started' | 'completed', durationMs: number, cue: 'questStarted' | 'questCompleted' | 'notification' = 'notification') {
-    this.onToast?.(cue);
-    const el = document.createElement('div');
-    el.className = kind === 'completed' ? 'quest-toast completed' : 'quest-toast';
-    el.textContent = text;
-    this.questToasts.appendChild(el);
-    requestAnimationFrame(() => el.classList.add('show'));
-    setTimeout(() => {
-      el.classList.remove('show');
-      setTimeout(() => el.remove(), 300);
-    }, durationMs);
+  renderNotifications(stack: readonly ResolvedNotification[], modal: ResolvedNotification | null, nowRealMs = Date.now()): void {
+    this.notificationStack.replaceChildren();
+    for (const notification of [...stack].reverse()) {
+      const card = document.createElement('article');
+      card.className = `notification-card${notification.tier === 'passive' ? ' passive' : ''}`;
+      card.dataset.notificationId = notification.id;
+      if (notification.tier === 'passive' && Number.isFinite(notification.tierConfig.autoExpireSeconds)) {
+        const lifetimeMs = Math.max(1, notification.tierConfig.autoExpireSeconds! * 1000);
+        const remaining = Math.max(0, 1 - (nowRealMs - notification.createdAtRealMs) / lifetimeMs);
+        card.style.opacity = String(0.2 + remaining * 0.62);
+      }
+      if (notification.icon) {
+        const icon = document.createElement('img'); icon.className = 'notification-icon'; icon.src = notification.icon; icon.alt = '';
+        card.appendChild(icon);
+      } else {
+        const spacer = document.createElement('span'); spacer.className = 'notification-icon'; card.appendChild(spacer);
+      }
+      const copy = document.createElement('div'); copy.className = 'notification-copy';
+      const title = document.createElement('div'); title.className = 'notification-title'; title.textContent = notification.title; copy.appendChild(title);
+      if (notification.body) { const body = document.createElement('div'); body.className = 'notification-body'; body.textContent = notification.body; copy.appendChild(body); }
+      const age = document.createElement('div'); age.className = 'notification-age'; age.textContent = formatRelativeAge(relativeAge(notification, nowRealMs).minutes); copy.appendChild(age);
+      card.appendChild(copy);
+      if (notification.tier === 'card') {
+        const dismiss = document.createElement('button'); dismiss.type = 'button'; dismiss.className = 'notification-dismiss'; dismiss.setAttribute('aria-label', 'Dismiss notification'); dismiss.textContent = '×';
+        dismiss.addEventListener('click', () => this.onNotificationDismiss?.(notification.id)); card.appendChild(dismiss);
+        if (notification.action) {
+          const action = document.createElement('button'); action.type = 'button'; action.className = 'notification-action'; action.textContent = notification.action.label;
+          action.addEventListener('click', () => this.onNotificationAction?.(notification)); card.appendChild(action);
+        }
+      }
+      this.notificationStack.appendChild(card);
+    }
+
+    this.notificationModal.replaceChildren();
+    this.notificationModal.classList.toggle('open', !!modal);
+    if (!modal) return;
+    const card = document.createElement('section'); card.className = 'notification-modal-card'; card.dataset.notificationId = modal.id;
+    if (modal.icon) { const icon = document.createElement('img'); icon.className = 'notification-icon'; icon.src = modal.icon; icon.alt = ''; card.appendChild(icon); }
+    const title = document.createElement('div'); title.className = 'notification-title'; title.textContent = modal.title; card.appendChild(title);
+    if (modal.body) { const body = document.createElement('div'); body.className = 'notification-body'; body.textContent = modal.body; card.appendChild(body); }
+    const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'notification-ok'; ok.textContent = 'OK'; ok.addEventListener('click', () => this.onNotificationAcknowledge?.());
+    card.appendChild(ok); this.notificationModal.appendChild(card); ok.focus();
   }
+
+  openQuestLog(): void { this.questPanel.classList.remove('collapsed'); }
+
+  showSystemMenu(): void {
+    this.systemMenuOverlay.classList.add('open');
+    this.showSystemMenuEntries();
+  }
+
+  hideSystemMenu(): void { this.systemMenuOverlay.classList.remove('open'); }
+
+  showSystemMenuEntries(): void {
+    this.systemMenuPanel.replaceChildren();
+    const heading = document.createElement('h2'); heading.textContent = 'Menu'; this.systemMenuPanel.appendChild(heading);
+    const entries: [string, (() => void) | null][] = [
+      ['Resume', this.onSystemMenuResume], ['Save', this.onSystemMenuSave], ['Options', this.onSystemMenuOptions], ['Quit to title', () => this.showQuitConfirm()],
+    ];
+    for (const [label, run] of entries) { const button = document.createElement('button'); button.type = 'button'; button.textContent = label; button.addEventListener('click', () => run?.()); this.systemMenuPanel.appendChild(button); }
+  }
+
+  showSystemOptions(render: (root: HTMLElement) => void): void { render(this.systemMenuPanel); }
+
+  private showQuitConfirm(): void {
+    this.systemMenuPanel.replaceChildren();
+    const wrap = document.createElement('div'); wrap.className = 'system-quit-confirm';
+    const text = document.createElement('div'); text.textContent = 'Quit to the title screen? Unsaved progress will be lost.';
+    const actions = document.createElement('div'); actions.className = 'system-quit-actions';
+    const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel'; cancel.addEventListener('click', () => this.showSystemMenuEntries());
+    const quit = document.createElement('button'); quit.type = 'button'; quit.textContent = 'Quit'; quit.addEventListener('click', () => this.onSystemMenuQuit?.());
+    actions.append(cancel, quit); wrap.append(text, actions); this.systemMenuPanel.appendChild(wrap); quit.focus();
+  }
+
+  isPhoneOpen(): boolean { return this.phoneOverlay.classList.contains('open'); }
 
   showFloatingFeedback(text: string, kind: 'skill' | 'money-up' | 'money-down'): void {
     const el = document.createElement('div');
@@ -1033,7 +1171,11 @@ export class Hud {
     this.phoneOverlay.classList.add('open');
   }
 
-  closePhone() { this.phoneOverlay.classList.remove('open'); }
+  closePhone() {
+    const wasOpen = this.phoneOverlay.classList.contains('open');
+    this.phoneOverlay.classList.remove('open');
+    if (wasOpen) this.onPhoneClose?.();
+  }
 
   setPhoneIcon(path: string) { this.phoneIcon.src = path || '/icons/Smartphone.png'; }
 

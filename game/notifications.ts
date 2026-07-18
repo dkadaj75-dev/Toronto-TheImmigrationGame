@@ -60,7 +60,10 @@ export class NotificationCenter {
   readonly stack: ResolvedNotification[] = [];
   private sequence = 0;
 
-  constructor(private readonly data: NotificationsData) {}
+  constructor(private data: NotificationsData) {}
+
+  /** Live designer retuning affects future posts; already-posted entries retain their resolved tier. */
+  retune(data: NotificationsData): void { this.data = data; }
 
   post<TActionPayload>(eventId: string, content: NotificationContent<TActionPayload>, nowRealMs: number): ResolvedNotification<TActionPayload> {
     const event = this.data.events[eventId];

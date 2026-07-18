@@ -52,6 +52,8 @@ export interface ThemeData {
     phoneTab?: ThemeComponentOverrides;
     accordionHeader?: ThemeComponentOverrides;
     titleScreen?: ThemeComponentOverrides;
+    notificationCard?: ThemeComponentOverrides;
+    notificationModal?: ThemeComponentOverrides;
     [name: string]: ThemeComponentOverrides | undefined;
   };
   layout: Record<string, ThemeLayoutItem>;

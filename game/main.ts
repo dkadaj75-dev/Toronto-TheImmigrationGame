@@ -50,7 +50,9 @@ import { SaveStore } from './savestore';
 import { exportSlot, importIntoSlot, renameSlot, slotCardViews } from './saveslots';
 import { homeMapIdFromEnvelope, registerRuntimeSaveSystems } from './savewiring';
 import { DEFAULT_TITLE_CONFIG, PreferencesStore, applyVolumes, type TitlePreferences } from './title';
-import { TitleScreen } from './title-screen';
+import { OptionsPanel, TitleScreen } from './title-screen';
+import { NotificationCenter, type ResolvedNotification } from './notifications';
+import { PauseStack, type PauseToken } from './interruptions';
 
 /** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
  *  a seat-aware action with no eligible seat in range) plays the dedicated 'sit_ground' state
@@ -287,6 +289,38 @@ async function start(initialLoadSlotId?: string) {
 
   const stats = new SimStats(data.stats, data.tuning.skills?.growthCurveExp ?? 1.5);
   const hud = new Hud(stats);
+  const notifications = new NotificationCenter(data.notifications);
+  const pauses = new PauseStack();
+  let modalPauseToken: PauseToken | null = null;
+  let phonePauseToken: PauseToken | null = null;
+  let systemMenuPauseToken: PauseToken | null = null;
+  let buyModePauseToken: PauseToken | null = null;
+  let playNotificationSound: (sound: string | undefined) => void = () => {};
+  const syncPauseState = () => {
+    const paused = pauses.isPaused();
+    hud.setInterruptionPaused(paused);
+    if (!paused) {
+      const restore = pauses.speedToRestore();
+      if (restore !== null) hud.setSpeed(restore);
+    }
+  };
+  const pushPause = (reason: string) => { pauses.rememberSpeed(hud.speed); return pauses.push(reason); };
+  const renderNotifications = () => hud.renderNotifications(notifications.stack, notifications.currentModal, Date.now());
+  const postNotification = (eventId: string, title: string, body?: string) => {
+    const item = notifications.post(eventId, { title, ...(body ? { body } : {}) }, Date.now());
+    playNotificationSound(item.sound);
+    if (item.tier === 'modal' && !modalPauseToken) modalPauseToken = pushPause('notification:modal');
+    syncPauseState();
+    renderNotifications();
+    return item;
+  };
+  hud.onNotificationDismiss = (id) => { notifications.dismiss(id); renderNotifications(); };
+  hud.onNotificationAcknowledge = () => {
+    notifications.acknowledgeModal();
+    if (!notifications.currentModal && modalPauseToken) { pauses.pop(modalPauseToken); modalPauseToken = null; }
+    syncPauseState();
+    renderNotifications();
+  };
   applyTheme(data.theme);
   hud.setPhoneIcon(data.tuning.phone?.icon ?? '/icons/Smartphone.png');
   hud.onWallCutToggle = () => {
@@ -394,10 +428,9 @@ async function start(initialLoadSlotId?: string) {
         if (current !== undefined) stats.needs.set(needId, Math.max(0, Math.min(100, current + delta)));
       }
     },
-    feedback: (message) => hud.showQuestToast(
-      message, 'started', data.tuning.quests.toastDurationSeconds * 1000,
-    ),
+    feedback: (message) => postNotification('callFallback', message),
   });
+  let announcedVisitorId: string | null = null;
 
   let pairedSocial: {
     playerAction: ActiveAction['action']; npcAction: ActiveAction['action'];
@@ -449,7 +482,7 @@ async function start(initialLoadSlotId?: string) {
       candidates.sort((a, b) => sim.position.distanceToSquared(a.object.position) - sim.position.distanceToSquared(b.object.position));
       const chosen = candidates[0];
       if (!chosen) {
-        hud.showQuestToast(`No ${interaction.targetAsset} is available`, 'started', 2500);
+        postNotification('actionTargetUnavailable', `No ${interaction.targetAsset} is available`);
         return false;
       }
       target = chosen.object;
@@ -545,11 +578,11 @@ async function start(initialLoadSlotId?: string) {
     hud.setQuestLog(active, completedQuestLog, data.tuning.quests.completedLogLimit);
   };
   quests.onQuestStarted = (q) => {
-    hud.showQuestToast(`Quest started: ${q.name}`, 'started', data.tuning.quests.toastDurationSeconds * 1000, 'questStarted');
+    postNotification('questStarted', `Quest started: ${q.name}`, q.description);
     refreshQuestLog();
   };
   quests.onQuestCompleted = (q) => {
-    hud.showQuestToast(`Quest completed: ${q.name}`, 'completed', data.tuning.quests.toastDurationSeconds * 1000, 'questCompleted');
+    postNotification('questCompleted', `Quest completed: ${q.name}`);
     completedQuestLog.push({ name: q.name });
     refreshQuestLog();
   };
@@ -598,11 +631,7 @@ async function start(initialLoadSlotId?: string) {
       const totalMinutes = Math.round(depart * 60) % (24 * 60);
       const hh = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
       const mm = String(totalMinutes % 60).padStart(2, '0');
-      hud.showQuestToast(
-        `Time for work! Leave through the suite door before ${hh}:${mm} or you'll miss the shift`,
-        'started',
-        data.tuning.quests.toastDurationSeconds * 1000,
-      );
+      postNotification('workDue', `Time for work! Leave through the suite door before ${hh}:${mm} or you'll miss the shift`);
       return;
     }
     if (event.type === 'returned') {
@@ -622,17 +651,13 @@ async function start(initialLoadSlotId?: string) {
         const nextNeeds = applyNeedsCost(Object.fromEntries(stats.needs), event.needsCost);
         for (const [needId, value] of Object.entries(nextNeeds)) stats.needs.set(needId, value);
         hud.setFunds(quests.funds, data.tuning.economy.currencyName);
-        hud.showQuestToast(
-          `+${data.tuning.economy.currencyName}${event.pay.toLocaleString()}`,
-          'completed',
-          data.tuning.quests.toastDurationSeconds * 1000,
-        );
+        postNotification('workReturned', `Back from work · +${data.tuning.economy.currencyName}${event.pay.toLocaleString()}`);
         const job = data.jobs.jobs.find((entry) => entry.id === event.jobId);
         if (job) {
           const promotion = work.rollPromotion(job, happiness, data.tuning.work?.promotionHappinessFactor ?? 1);
           if (promotion.promoted) {
             const pay = `${promotion.payIncrease >= 0 ? '+' : ''}${data.tuning.economy.currencyName}${promotion.payIncrease}`;
-            hud.showQuestToast(`Promoted to ${promotion.title}! ${pay}`, 'completed', data.tuning.quests.toastDurationSeconds * 1000);
+            postNotification('promotion', `Promoted to ${promotion.title}! ${pay}`);
             // Keep the income quest var current with the new level's pay (see phone.ts applyForJob).
             quests.vars.income = jobLevelPay(job, work.getJobLevel(job.id));
           }
@@ -655,11 +680,7 @@ async function start(initialLoadSlotId?: string) {
       if (agent.pendingActionId === 'leave_for_work') {
         agent.teleportTo(sim.position.x, sim.position.z, THREE.MathUtils.radToDeg(sim.rotation.y));
       }
-      hud.showQuestToast(
-        'You missed your shift',
-        'started',
-        data.tuning.quests.toastDurationSeconds * 1000,
-      );
+      postNotification('workMissed', 'You missed your shift');
       return;
     }
 
@@ -668,11 +689,7 @@ async function start(initialLoadSlotId?: string) {
     if (job && shouldStartVisaGrace(job, visaMachine.statusId, visaMachine.currentDef())) {
       visaMachine.startGrace(gameDay);
     }
-    hud.showQuestToast(
-      `Job lost: ${job?.name ?? event.jobId}`,
-      'started',
-      data.tuning.quests.toastDurationSeconds * 1000,
-    );
+    postNotification('jobLost', `Job lost: ${job?.name ?? event.jobId}`);
     refreshVisaChip();
     refreshPhone();
   };
@@ -704,7 +721,7 @@ async function start(initialLoadSlotId?: string) {
           const current = stats.needs.get(needId);
           if (current !== undefined) stats.needs.set(needId, Math.max(0, Math.min(100, current + delta)));
         }
-        hud.showQuestToast(`Back from visiting ${npc.name}`, 'completed', data.tuning.quests.toastDurationSeconds * 1000);
+        postNotification('visitReturned', `Back from visiting ${npc.name}`);
       }
       refreshPhone();
     };
@@ -798,11 +815,17 @@ async function start(initialLoadSlotId?: string) {
     });
     hud.setPhoneBadge(bills.outstanding.length);
   };
-  const phoneToast = (text: string, completed = false) => hud.showQuestToast(
-    text,
-    completed ? 'completed' : 'started',
-    data.tuning.quests.toastDurationSeconds * 1000,
-  );
+  const openPhoneAt = (tab: typeof phoneTab) => {
+    if (repoOverlayActive || gameOverActive) return;
+    phoneTab = tab;
+    if (tab === 'rentals') reloadRentalMaps();
+    refreshPhone();
+    if (!hud.isPhoneOpen()) {
+      phonePauseToken = pushPause('phone');
+      hud.openPhone();
+      syncPauseState();
+    }
+  };
   function startPhoneContact(npcId: string, channel: 'text' | 'call'): boolean {
     const npc = data.npcs?.npcs.find((entry) => entry.id === npcId);
     if (!npc || !data.social) return false;
@@ -823,12 +846,11 @@ async function start(initialLoadSlotId?: string) {
   }
   hud.onPhoneClose = () => {
     if (phoneContactSession.active || agent.current?.action.id === 'use_phone') agent.stopAction();
+    if (phonePauseToken) { pauses.pop(phonePauseToken); phonePauseToken = null; syncPauseState(); }
   };
   hud.onPhoneOpen = () => {
     if (buyMode.active || repoOverlayActive || gameOverActive) return;
-    phoneTab = 'jobs';
-    refreshPhone();
-    hud.openPhone();
+    openPhoneAt('jobs');
   };
   hud.onPhoneTabPick = (tab) => {
     phoneTab = tab;
@@ -838,7 +860,7 @@ async function start(initialLoadSlotId?: string) {
   hud.onPhoneContactInvite = (npcId) => {
     const npc = data.npcs?.npcs.find((entry) => entry.id === npcId);
     if (!npc || !isNpcAvailable(gameSeconds / 3600, npc.availableHours) || !visitors.canInvite()) return;
-    if (visitors.invite(npcId)) phoneToast(`${npc.name} is on the way`, true);
+    if (visitors.invite(npcId)) postNotification('visitorInvited', `${npc.name} is on the way`);
     refreshPhone();
   };
   hud.onPhoneContactAction = (npcId, channel) => { startPhoneContact(npcId, channel); };
@@ -869,7 +891,7 @@ async function start(initialLoadSlotId?: string) {
     if (!agent.orderAction(action, doorTarget, null, doorDef)) return;
     pendingVisitNpcId = npcId;
     hud.hideActionMenu();
-    phoneToast(`Heading over to ${npc.name}'s place`);
+    postNotification('headingToVisit', `Heading over to ${npc.name}'s place`);
     refreshPhone();
   };
   // ROADMAP_APT R4: renting starts a PENDING MOVE (sim-time countdown of the map's
@@ -887,14 +909,14 @@ async function start(initialLoadSlotId?: string) {
     if (!listing || !listing.available || listing.isCurrentHome) return;
     if (!pendingMove.start(mapId, listing.moveInHours, gameHourNow())) return;
     const hours = Math.max(0, Math.ceil(listing.moveInHours));
-    phoneToast(`Rented: ${listing.title || mapId} — moving in ${hours}h`, true);
+    postNotification('rentalAccepted', `Rented: ${listing.title || mapId} — moving in ${hours}h`);
     refreshPhone();
   };
   // R4: cancel applies NOTHING beyond clearing the pending move (side_effect_rule — completion is
   // the only thing that ever switches maps). No refund because renting charged nothing up front.
   hud.onPhoneMoveCancelRequested = () => {
     if (!pendingMove.cancel()) return;
-    phoneToast('Move cancelled');
+    postNotification('moveCancelled', 'Move cancelled');
     refreshPhone();
   };
   reloadRentalMaps(); // warm the Kijiji listing in the background so the first open isn't empty
@@ -917,29 +939,66 @@ async function start(initialLoadSlotId?: string) {
     );
     if (result.ok) {
       work.syncJob(currentJob(), currentWorkTime(), data.tuning.calendar);
-      phoneToast(`Job accepted: ${job?.name ?? jobId}`, true);
+      postNotification('jobAccepted', `Job accepted: ${job?.name ?? jobId}`);
     }
-    else if (result.reason === 'requirements_unmet') phoneToast('Job requirements are not met');
+    else if (result.reason === 'requirements_unmet') postNotification('jobRequirementsUnmet', 'Job requirements are not met');
     refreshVisaChip();
     refreshPhone();
   };
   hud.onPhoneVisaApply = (statusId) => {
     const result = applyForVisa(statusId, data.visas, buildEvalContext(), (id, day) => visaMachine.apply(id, day));
     const visa = data.visas.visas.find((entry) => entry.id === statusId);
-    if (result.ok) phoneToast(`Application submitted: ${visa?.name ?? statusId}`, true);
-    else if (result.reason === 'requirements_unmet') phoneToast('Visa requirements are not met');
-    else if (result.reason === 'application_rejected') phoneToast('Another visa application is already pending');
+    if (result.ok) postNotification('visaApplicationSubmitted', `Application submitted: ${visa?.name ?? statusId}`);
+    else if (result.reason === 'requirements_unmet') postNotification('visaRequirementsUnmet', 'Visa requirements are not met');
+    else if (result.reason === 'application_rejected') postNotification('visaApplicationRejected', 'Another visa application is already pending');
     refreshPhone();
   };
   const applyBillPayment = (result: ReturnType<FinanceState['pay']>) => {
     if (!result.ok) return;
     quests.funds = result.remainingFunds;
     hud.setFunds(quests.funds, data.tuning.economy.currencyName);
-    phoneToast(`Bills paid: §${result.paid.toLocaleString()}`, true);
+    postNotification('billPaid', `Bills paid: §${result.paid.toLocaleString()}`);
     refreshPhone();
   };
   hud.onPhoneBillPay = (key) => applyBillPayment(bills.pay(key, quests.funds, gameDay));
   hud.onPhoneBillsPayAll = () => applyBillPayment(bills.payAll(quests.funds, gameDay));
+
+  const closeSystemMenu = () => {
+    hud.hideSystemMenu();
+    if (systemMenuPauseToken) { pauses.pop(systemMenuPauseToken); systemMenuPauseToken = null; }
+    syncPauseState();
+  };
+  hud.onSystemMenuOpen = () => {
+    if (repoOverlayActive || gameOverActive || systemMenuPauseToken) return;
+    systemMenuPauseToken = pushPause('system-menu');
+    hud.showSystemMenu();
+    syncPauseState();
+  };
+  hud.onSystemMenuResume = closeSystemMenu;
+  hud.onSystemMenuSave = () => { closeSystemMenu(); openPhoneAt('save'); };
+  hud.onSystemMenuOptions = () => {
+    const definitions = (data.title ?? DEFAULT_TITLE_CONFIG).options;
+    const optionsRoot = document.createElement('div');
+    const panel = new OptionsPanel(
+      optionsRoot, definitions, preferencesStore, audio,
+      () => {
+        activePreferences = preferencesStore.read(definitions);
+        hud.showSystemMenuEntries();
+      },
+    );
+    hud.showSystemOptions((root) => {
+      root.replaceChildren(optionsRoot);
+      panel.render();
+    });
+  };
+  hud.onSystemMenuQuit = () => location.reload();
+  hud.onNotificationAction = (notification: ResolvedNotification) => {
+    const action = notification.action;
+    if (action?.type === 'phoneTab' && typeof action.tab === 'string') {
+      const tab = action.tab as typeof phoneTab;
+      if (['jobs', 'visas', 'bills', 'credit', 'rentals', 'contacts', 'save'].includes(tab)) openPhoneAt(tab);
+    } else if (action?.type === 'questLog') hud.openQuestLog();
+  };
 
   hud.onRepoClose = () => {
     repoOverlayActive = false;
@@ -1056,7 +1115,11 @@ async function start(initialLoadSlotId?: string) {
     if (path) audio.playFeedback(path);
   };
   hud.onActionSelected = () => playTunedSfx('actionSelect');
-  hud.onToast = (cue) => playTunedSfx(cue);
+  playNotificationSound = (sound) => {
+    if (!sound) return;
+    const path = (data.tuning.audio as unknown as Record<string, string | undefined> | undefined)?.[sound];
+    if (path) audio.playFeedback(path);
+  };
   let observedFunds = quests.funds;
   const feedbackAnchor = new THREE.Vector3();
   const observeFundsFeedback = () => {
@@ -1271,7 +1334,7 @@ async function start(initialLoadSlotId?: string) {
       const decision = sleepDecisionAt([sim.position.x, sim.position.z]);
       if (decision.blocked) {
         agent.stopAction(false);
-        hud.showQuestToast(decision.reason!, 'started', data.tuning.quests.toastDurationSeconds * 1000);
+        postNotification('sleepBlocked', decision.reason!);
         return;
       }
     }
@@ -1296,7 +1359,7 @@ async function start(initialLoadSlotId?: string) {
       visitors.playInteraction(socialAnimationFor(socialOrder.interaction, 'npc'));
     }
     if (a.action.id !== FOOD_EATING_ACTION_ID && !quests.spend(a.action.cost ?? 0)) {
-      hud.showQuestToast('Not enough funds for that action', 'started', 2500);
+      postNotification('insufficientFunds', 'Not enough funds for that action');
       agent.stopAction();
       return;
     }
@@ -1338,9 +1401,7 @@ async function start(initialLoadSlotId?: string) {
       accidents.rollFor(a.target, startAssetDef, buildEvalContext(), simClockSeconds);
     }
     if (a.action.id === 'use_phone') {
-      phoneTab = 'jobs';
-      refreshPhone();
-      hud.openPhone();
+      openPhoneAt('jobs');
     }
     const foodAssetId = foodAssetForActionEvent(a.action.id, 'arrival');
     if (foodAssetId) startCarriedFood(foodAssetId, false, a.action);
@@ -1374,7 +1435,7 @@ async function start(initialLoadSlotId?: string) {
       recoveryThreshold: cfg?.recoveryThreshold ?? 0,
     });
     if (event === 'warning') {
-      hud.showQuestToast('Starving! Eat before the countdown expires.', 'started', data.tuning.quests.toastDurationSeconds * 1000);
+      postNotification('starvationWarning', 'Starving! Eat before the countdown expires.');
     } else if (event === 'collapse') {
       // Starvation is terminal and takes precedence if its countdown expires during energy sleep.
       exteriorDoorTransit.cancel();
@@ -1407,7 +1468,7 @@ async function start(initialLoadSlotId?: string) {
       const name = phoneContactSession.active!.npc.name;
       const channel = phoneContactSession.active!.channel;
       const applied = phoneContactSession.finish(completed, gameHourNow() * 60);
-      if (applied) phoneToast(`${channel === 'text' ? 'Texted' : 'Called'} ${name}`, true);
+      if (applied) postNotification('socialContactCompleted', `${channel === 'text' ? 'Texted' : 'Called'} ${name}`);
       refreshPhone();
       return;
     }
@@ -1449,7 +1510,7 @@ async function start(initialLoadSlotId?: string) {
           facingDeg: THREE.MathUtils.radToDeg(a.target.rotation.y),
         }, data.tuning.work?.departureWindowHours ?? 2, data.tuning.calendar); // B13-11: off-days reject too
         if (!started.ok) {
-          hud.showQuestToast('Too late — you missed your shift', 'started', 2500);
+          postNotification('workMissed', 'Too late — you missed your shift');
           return;
         }
         cancelCarry();
@@ -1508,7 +1569,7 @@ async function start(initialLoadSlotId?: string) {
           // No reachable non-full can right now — reuse the existing "reuse quest toast" refusal
           // pattern (garbage.ts's own module doc comment / the clean_up order-time pre-check
           // below). The transient is untouched: still there, still dirty, can fill unchanged.
-          hud.showQuestToast('No empty garbage can available', 'started', 2500);
+          postNotification('garbageUnavailable', 'No empty garbage can available');
         }
       } else if (!accidents.maybeCleanup(a.target, a.action.id)) {
         // ROADMAP_NEXT item 2: the mop completed but the target was NOT a runtime AccidentRegistry
@@ -1645,7 +1706,7 @@ async function start(initialLoadSlotId?: string) {
             // (A can can still go full between now and completion — the render-loop carry check
             // re-verifies and shows the same toast then, transient left untouched either way.)
             if (CARRY_TO_GARBAGE_ACTIONS.has(action.id) && !garbage.hasNonFullCan()) {
-              hud.showQuestToast('No empty garbage can available', 'started', 2500);
+              postNotification('garbageUnavailable', 'No empty garbage can available');
               return;
             }
             autonomy.notePlayerCommand();
@@ -1709,6 +1770,8 @@ async function start(initialLoadSlotId?: string) {
     if (repoOverlayActive || gameOverActive || playerAway()) return;
     if (agent.current?.action.id === 'use_phone') agent.stopAction();
     buyMode.enter();
+    if (!buyModePauseToken) buyModePauseToken = pushPause('buy-mode');
+    syncPauseState();
     hud.setBuyModeActive(true);
     audio.setMusicContext('buymode', data.map); // ROADMAP_NEXT item 7: crossfade to the buy-mode track
     buyActiveCategory = '';
@@ -1719,6 +1782,7 @@ async function start(initialLoadSlotId?: string) {
   };
   hud.onBuyClose = () => {
     buyMode.exit();
+    if (buyModePauseToken) { pauses.pop(buyModePauseToken); buyModePauseToken = null; syncPauseState(); }
     hud.setBuyModeActive(false);
     audio.setMusicContext('map', data.map); // ROADMAP_NEXT item 7: crossfade back to the map's music
     // Safety net: sim-time freeze means the agent never advances while shopping, but it may have
@@ -1825,7 +1889,7 @@ async function start(initialLoadSlotId?: string) {
     cancelCarry();
     if (!agent.orderAction(action, target, null, targetDef)) return false;
     hud.hideActionMenu();
-    hud.showQuestToast('Your Sim is leaving for work', 'started', data.tuning.quests.toastDurationSeconds * 1000);
+    postNotification('offToWork', 'Your Sim is leaving for work');
     return true;
   };
   const simTick = (dt: number) => {
@@ -1900,6 +1964,7 @@ async function start(initialLoadSlotId?: string) {
   };
 
   let hudAcc = 0;
+  let notificationUiAcc = 0;
 
   const handleResize = () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -1921,6 +1986,7 @@ async function start(initialLoadSlotId?: string) {
   // wiping map-bound runtime state.
   const applyFreshData = (fresh: GameData) => {
     data = fresh;
+    notifications.retune(data.notifications);
     applyTheme(data.theme);
     exteriorDoorTransit.cancel(true);
     // A pending Buy Mode ghost belongs to the old asset/map snapshot. Detach and dispose its
@@ -2090,12 +2156,7 @@ async function start(initialLoadSlotId?: string) {
       // rebuildWorldForMap already ran the one shared applyFreshData path; these final syncs reflect
       // the intentional map-bound resets above without constructing another world.
       moved = true;
-      hud.showQuestToast(
-        `Moved in: ${fresh.map.name || mapId}`,
-        'completed',
-        data.tuning.quests.toastDurationSeconds * 1000,
-        'questCompleted',
-      );
+      postNotification('moveInCompleted', `Moved in: ${fresh.map.name || mapId}`);
       refreshPhone();
     } finally {
       mapSwitchInFlight = false;
@@ -2177,7 +2238,7 @@ async function start(initialLoadSlotId?: string) {
 
   function saveToSlot(slotId: string, name?: string, autosave = false): boolean {
     if (mapSwitchInFlight) {
-      if (!autosave) hud.showQuestToast('Wait for the move to finish before saving', 'started', 2500);
+      if (!autosave) postNotification('saveBlocked', 'Wait for the move to finish before saving');
       return false;
     }
     const envelope = assembleEnvelope(saveRegistry, {
@@ -2189,13 +2250,13 @@ async function start(initialLoadSlotId?: string) {
     const result = saveStore.writeSlot(saveConfig, slotId, envelope);
     if (!result.ok) {
       if (!autosave || !autosaveFailureToasted) {
-        hud.showQuestToast(result.reason, 'started', data.tuning.quests.toastDurationSeconds * 1000);
+        postNotification(autosave ? 'autosaveFailure' : 'saveFailed', result.reason);
       }
       if (autosave) autosaveFailureToasted = true;
       return false;
     }
     if (autosave) autosaveFailureToasted = false;
-    else hud.showQuestToast(`Saved to ${name || slotId}`, 'completed', 2500);
+    else postNotification('saveCompleted', `Saved to ${name || slotId}`);
     return true;
   }
 
@@ -2207,12 +2268,12 @@ async function start(initialLoadSlotId?: string) {
 
   async function loadFromSlot(slotId: string): Promise<boolean> {
     if (mapSwitchInFlight || buyMode.active || repoOverlayActive) {
-      hud.showQuestToast('Close the current overlay before loading', 'started', 2500);
+      postNotification('loadBlocked', 'Close the current overlay before loading');
       return false;
     }
     const read = saveStore.readSlot(saveConfig, slotId);
     if (!read.ok) {
-      hud.showQuestToast(`Load failed: ${read.reason}`, 'started', data.tuning.quests.toastDurationSeconds * 1000);
+      postNotification('loadFailed', `Load failed: ${read.reason}`);
       return false;
     }
     const envelope = read.envelope;
@@ -2234,7 +2295,7 @@ async function start(initialLoadSlotId?: string) {
         returnTransitPending = false;
       });
       if (!fresh) {
-        hud.showQuestToast(`Load failed: map "${targetMapId}" is unavailable`, 'started', data.tuning.quests.toastDurationSeconds * 1000);
+        postNotification('loadFailed', `Load failed: map "${targetMapId}" is unavailable`);
         return false;
       }
 
@@ -2242,7 +2303,7 @@ async function start(initialLoadSlotId?: string) {
       setAbsoluteGameHour(envelope.gameHour);
       const applied = applyEnvelope(saveRegistry, envelope);
       if (!applied.ok) {
-        hud.showQuestToast(`Load failed: ${applied.reason}`, 'started', data.tuning.quests.toastDurationSeconds * 1000);
+        postNotification('loadFailed', `Load failed: ${applied.reason}`);
         return false;
       }
       for (const warning of applied.warnings) console.warn(`save load: ${warning}`);
@@ -2273,11 +2334,11 @@ async function start(initialLoadSlotId?: string) {
       refreshPhone();
       refreshQuestLog();
       lastAutosaveGameHour = gameHourNow();
-      hud.showQuestToast(`Loaded ${envelope.name || slotId}`, 'completed', 2500);
+      postNotification('loadCompleted', `Loaded ${envelope.name || slotId}`);
       return true;
     } catch (error) {
       console.warn('save load failed', error);
-      hud.showQuestToast(`Load failed: ${(error as Error).message}`, 'started', data.tuning.quests.toastDurationSeconds * 1000);
+      postNotification('loadFailed', `Load failed: ${(error as Error).message}`);
       return false;
     } finally {
       mapSwitchInFlight = false;
@@ -2288,22 +2349,22 @@ async function start(initialLoadSlotId?: string) {
   hud.onPhoneLoadRequested = (slotId) => { hud.closePhone(); void loadFromSlot(slotId); };
   hud.onPhoneDeleteSaveRequested = (slotId) => {
     const result = saveStore.deleteSlot(saveConfig, slotId);
-    phoneToast(result.ok ? 'Save deleted' : result.reason, result.ok);
+    postNotification(result.ok ? 'saveCompleted' : 'saveFailed', result.ok ? 'Save deleted' : result.reason);
     refreshPhone();
   };
   hud.onPhoneRenameSaveRequested = (slotId, name) => {
     const result = renameSlot(saveStore, saveConfig, slotId, name);
-    phoneToast(result.ok ? 'Save renamed' : result.reason, result.ok);
+    postNotification(result.ok ? 'saveCompleted' : 'saveFailed', result.ok ? 'Save renamed' : result.reason);
     refreshPhone();
   };
   hud.onPhoneExportSaveRequested = (slotId) => {
     const result = exportSlot(saveStore, saveConfig, slotId);
-    if (!result.ok) { phoneToast(result.error); return; }
+    if (!result.ok) { postNotification('saveFailed', result.error); return; }
     downloadTextFile(result.filename, result.json);
   };
   hud.onPhoneImportSaveRequested = (slotId, jsonText) => {
     const result = importIntoSlot(saveStore, saveConfig, slotId, jsonText);
-    phoneToast(result.ok ? 'Save imported' : result.reason, result.ok);
+    postNotification(result.ok ? 'saveCompleted' : 'saveFailed', result.ok ? 'Save imported' : result.reason);
     refreshPhone();
   };
   (window as unknown as { CondoSave: { saveToSlot: typeof saveToSlot; loadFromSlot: typeof loadFromSlot } }).CondoSave = {
@@ -2338,14 +2399,15 @@ async function start(initialLoadSlotId?: string) {
     // V3 parallels buy mode's one-line effective-speed override without mutating hud.speed: buy
     // mode multiplies by 0 (freeze), work multiplies by tuning.work.autoSpeed (default 5). The HUD
     // selection is locked/preserved while away and becomes effective again on return.
-    const selectedSpeed = playerAway() ? (data.tuning.work?.autoSpeed ?? 5) : hud.speed;
+    pauses.rememberSpeed(hud.speed);
+    const selectedSpeed = pauses.isPaused() ? 0 : playerAway() ? (data.tuning.work?.autoSpeed ?? 5) : hud.speed;
     const effectiveSpeed = Number.isFinite(selectedSpeed) ? Math.max(0, selectedSpeed) : 0;
-    const sdt = (initialLoadingActive || mapSwitchInFlight || buyMode.active || repoOverlayActive || gameOverActive) ? 0 : dt * effectiveSpeed;
+    const sdt = (initialLoadingActive || mapSwitchInFlight || repoOverlayActive || gameOverActive) ? 0 : dt * effectiveSpeed;
     simClockSeconds += sdt;
     // ROADMAP_NEXT item 7: sfx/action/asset loops pause whenever sim time isn't advancing (the
     // pause button OR buy mode's own freeze); music is deliberately NOT touched here (see
     // audio.ts's module doc comment on the PAUSE decision).
-    audio.setPaused(initialLoadingActive || mapSwitchInFlight || effectiveSpeed === 0 || buyMode.active || repoOverlayActive || gameOverActive);
+    audio.setPaused(initialLoadingActive || mapSwitchInFlight || effectiveSpeed === 0 || repoOverlayActive || gameOverActive);
     syncAssetStates(); // picks up newly purchased/sold stateful instances; idempotent for steady state
 
     const previousGameHour = gameSeconds / 3600;
@@ -2370,11 +2432,7 @@ async function start(initialLoadSlotId?: string) {
       // (tick returns null on non-billing days, leaving the accumulator to keep growing.)
       if (billArrival) hydro.reset();
       if (billArrival?.arrived.length) {
-        hud.showQuestToast(
-          `Bills arrived: §${billArrival.total.toLocaleString()}`,
-          'started',
-          data.tuning.quests.toastDurationSeconds * 1000,
-        );
+        postNotification('billsArrived', `Bills arrived: §${billArrival.total.toLocaleString()}`);
       }
       bills.observeFunds(gameDay, quests.funds);
       handleRepoIfDue();
@@ -2439,10 +2497,19 @@ async function start(initialLoadSlotId?: string) {
       const decision = sleepDecisionAt([sim.position.x, sim.position.z]);
       if (decision.blocked) {
         agent.stopAction(false);
-        hud.showQuestToast(decision.reason!, 'started', data.tuning.quests.toastDurationSeconds * 1000);
+        postNotification('sleepBlocked', decision.reason!);
       }
     }
     visitors.update(sdt, clockScale());
+    if (visitors.state.phase === 'visiting' && announcedVisitorId !== visitors.state.npcId) {
+      announcedVisitorId = visitors.state.npcId;
+      const npc = data.npcs?.npcs.find((entry) => entry.id === announcedVisitorId);
+      postNotification('visitorArrived', `${npc?.name ?? announcedVisitorId} arrived`);
+    } else if (visitors.state.phase === 'idle' && announcedVisitorId) {
+      const npc = data.npcs?.npcs.find((entry) => entry.id === announcedVisitorId);
+      postNotification('visitorLeft', `${npc?.name ?? announcedVisitorId} left`);
+      announcedVisitorId = null;
+    }
     // Paired social rendezvous: both agents used their normal orderAction/usePose route. Only now
     // do the authored role clips, one shared sim-time duration, and interaction sound begin.
     if (pairedSocial && !pairedSocial.started && agent.current?.action === pairedSocial.playerAction
@@ -2500,7 +2567,7 @@ async function start(initialLoadSlotId?: string) {
       trashOutState = null;
       const doorDef = assetById(ts.doorTarget.userData.assetId as string);
       if (!agent.orderAction(ts.action, ts.doorTarget, null, doorDef)) {
-        hud.showQuestToast('No path to the door', 'started', 2500);
+        postNotification('doorPathUnavailable', 'No path to the door');
       }
     }
     // B4-2: dropped food ages in monotonic in-game hours; pause freezes it and crossing midnight
@@ -2623,6 +2690,12 @@ async function start(initialLoadSlotId?: string) {
     );
     hudAcc += dt;
     if (hudAcc >= 0.25) { hudAcc = 0; hud.refresh(); hud.setFunds(quests.funds, currencyName()); } // 4 Hz is plenty for bars/funds
+    notificationUiAcc += dt;
+    if (notificationUiAcc >= 1) {
+      notificationUiAcc = 0;
+      notifications.expireTick(Date.now());
+      renderNotifications();
+    }
 
     // ITEM 1: throttled garbage fill-bar occlusion — recompute on camera move/rotate or every 0.25s.
     occAcc += dt;

@@ -63,5 +63,12 @@ check('action definition and caller payload pass through unchanged', () => {
   const item = new NotificationCenter(data).post('visitorArrived', { title: 'Alex arrived', actionPayload: payload }, 0);
   assert.equal(item.action?.type, 'phoneTab'); assert.equal(item.actionPayload, payload);
 });
+check('live retune applies to future posts without rewriting existing entries', () => {
+  const center = new NotificationCenter(data);
+  const before = center.post('visitorArrived', { title: 'Before' }, 0);
+  center.retune({ ...data, events: { ...data.events, visitorArrived: { tier: 'modal' } } });
+  const after = center.post('visitorArrived', { title: 'After' }, 1);
+  assert.equal(before.tier, 'card'); assert.equal(after.tier, 'modal'); assert.equal(center.currentModal?.id, after.id);
+});
 
 console.log(`notifications.test: ${checks} checks passed`);

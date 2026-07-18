@@ -101,7 +101,7 @@ existing toast/sound event. Suites: `test/notifications.test.ts`, `test/interrup
 (nesting, restore-to-2x, modal-while-phone-open, expiry on sim time never real time).
 **Agent: Claude (Opus).** The tier/pause semantics are the batch's design core.
 
-### G2 — Notification UI + migration of existing events
+### G2 — Notification UI + migration of existing events — ✅ SHIPPED (2026-07-18, with G3)
 Card stack (screenshot layout: icon, rich text, timestamp, X, optional action button), modal
 overlay with OK (hard pause via G1), passive fade. Themable (`components.notificationCard`,
 `notificationModal` keys — B13-1 gallery picks them up), smartphone-responsive (stack becomes
@@ -110,7 +110,22 @@ call site (quest toasts, move-in, call-fallback, feedback floats stay separate �
 world-space) through the pipeline; delete the old one-off toast paths when empty.
 **Agent: Codex.** Many call sites + overlay/z-order/pause integration risk.
 
-### G3 — Phone pause + system menu
+### G3 — Phone pause + system menu — ✅ SHIPPED (2026-07-18)
+> G2+G3 as-built (Codex): notification card stack (icon/body/real-time age/X/action buttons
+> routing to phone tabs/quest panel; passives fade control-free; mobile full-width top sheet)
+> + FIFO modal overlay w/ OK owning a PauseStack token; components.notificationCard/-Modal
+> theme keys (gallery-discovered); showQuestToast DELETED — every event migrated to seeded
+> NotificationCenter ids (quests, move-in, visitors/social, work/jobs/promotion, visas, bills,
+> rentals, sleep/starvation warnings, save/load/autosave); world-space money/skill floats
+> unchanged. ONE PauseStack composes modal/phone/system-menu/buy-mode tokens; pause outranks
+> work auto-speed; player speed captured at first push, restored after last pop. System menu:
+> #system-menu-button gear + desktop Esc → Resume / Save (opens phone Save tab) / Options
+> (reuses title OptionsPanel, live volumes) / Quit to title (confirm + location.reload —
+> chosen because start() has no full teardown API; in-page return would risk duplicate
+> runtimes). Coordinator-verified live: gear menu shows all four entries; phone-open pause
+> held across menu open/Resume and closing the phone restored 1× (correct token nesting);
+> zero console errors. Suites: notifications 8, interruptions 5, new notification-ui,
+> phone-hud nesting + frozen countdown, theme 91.
 Phone open/close pushes/pops a pause reason (restores chosen speed; the Kijiji countdown and
 cooldown labels must render correctly while paused — they read sim time, which is frozen: fine,
 assert it). System menu button + Esc: Resume / Save(disabled until SAVE) / Options(shared

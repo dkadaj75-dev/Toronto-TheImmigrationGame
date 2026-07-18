@@ -7,6 +7,7 @@
 import { JSDOM } from 'jsdom';
 import type { RentalCardView } from '../game/phone';
 import type { SlotCardView } from '../game/saveslots';
+import { PauseStack, type PauseToken } from '../game/interruptions';
 
 const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>', {
   url: 'http://localhost:5173/',
@@ -157,6 +158,34 @@ check('in-game load asks to discard the active run', !!doc.querySelector('.save-
 (doc.querySelector('.save-confirm-actions button:last-child') as HTMLButtonElement).click();
 check('confirmed phone Load routes the slot id', phoneLoaded === 'slot-1');
 check('one import control targets manual slots', doc.querySelectorAll('.save-import-row select option').length === 2);
+
+hud.renderPhone({
+  tab: 'rentals', currentStatusName: 'Visitor', searchedJobs: false, jobs: [], currentJob: null,
+  visas: [], pending: null, currencyName: '§', bills: [], billsTotal: 0, creditScore: 700,
+  creditHistory: [], rentalTabName: 'Kijiji', contactsTabName: 'Contacts', rentals: pendingRentals,
+  rentDisabledTitle: 'Not rentable right now',
+});
+const frozenCountdown = doc.querySelector('.phone-rental-countdown')?.textContent;
+
+// G3 wiring smoke: the real HUD open/close hooks own independent PauseStack tokens. A nested
+// system menu releases only itself, and closing the phone restores the player's selected 2x.
+const pauses = new PauseStack(); pauses.rememberSpeed(2);
+let phonePause: PauseToken | null = null;
+let menuPause: PauseToken | null = null;
+hud.onPhoneOpen = () => { if (!phonePause) phonePause = pauses.push('phone'); hud.openPhone(); };
+hud.onPhoneClose = () => { if (phonePause) pauses.pop(phonePause); phonePause = null; };
+hud.onSystemMenuOpen = () => { if (!menuPause) menuPause = pauses.push('system-menu'); hud.showSystemMenu(); };
+hud.onSystemMenuResume = () => { hud.hideSystemMenu(); if (menuPause) pauses.pop(menuPause); menuPause = null; };
+(doc.querySelector('#phone-button') as HTMLButtonElement).click();
+check('opening the phone pushes a pause and opens its shell', pauses.isPaused() && !!doc.querySelector('#phone-overlay.open'));
+check('Kijiji countdown remains rendered while phone pause is active', frozenCountdown === 'Moving in 3h...' && doc.querySelector('.phone-rental-countdown')?.textContent === frozenCountdown);
+(doc.querySelector('#system-menu-button') as HTMLButtonElement).click();
+check('system menu nests over the phone as a second pause reason', pauses.pausedBy().join('|') === 'phone|system-menu');
+hud.onSystemMenuResume();
+check('resuming the system menu leaves the phone pause active', pauses.pausedBy().join('|') === 'phone');
+(doc.querySelector('.phone-close') as HTMLButtonElement).click();
+check('closing the phone releases its hook exactly once', !pauses.isPaused() && !doc.querySelector('#phone-overlay.open'));
+check('final phone close restores the selected 2x speed', pauses.speedToRestore() === 2);
 
 if (failures > 0) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }
 console.log('\nAll phone-hud.test checks passed.');
