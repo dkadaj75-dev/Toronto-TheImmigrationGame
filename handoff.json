@@ -13,6 +13,8 @@
     "ROADMAP_NEXT.md": "Designer request batches 1-6, each item marked DONE with pointers. Append new designer requests here verbatim before building.",
     "WEB_GAME_ROADMAP.md": "Original phase plan (historical; superseded where PROJECT_CONTEXT disagrees).",
     "ROADMAP_APT.md": "Batch 11 PLAN (no code yet): Kijiji rental tab, move-in map switch, door-in-plain-wall holes, frame/pane split, curtain wall/balcony provisions, simplified 3D exteriors — slices R1-R5/D1-D4 with per-slice agent assignments and open decisions. Read before building any B11 slice.",
+    "ROADMAP_SAVE.md": "Batch 14 track A PLAN (no code yet): save system — versioned envelope over the existing per-system serialize()/restore(), localStorage slots + file export/import (STATIC-HOSTING SAFE, no /api dependence), boot restore + autosave, slices V1-V5 with agent assignments. Blocks ROADMAP_TITLE's Load screen.",
+    "ROADMAP_TITLE.md": "Batch 14 track B PLAN (no code yet): pre-boot DOM title screen (New Game/Load/Options), data/title.json + theme-driven, smartphone-responsive, player prefs in localStorage, static-hosting readiness audit (Netlify/GitHub Pages, netlify.toml + HOSTING.md), slices T1-T5. T3/Load depends on ROADMAP_SAVE V2.",
     "ROADMAP_SOCIAL.md": "Batch 12 — S1-S6 SHIPPED 2026-07-18 (per-slice as-built notes inline; PROJECT_CONTEXT 7.42-7.47): pure social core, Social Editor, NPC visitor runtime, sim-to-sim interactions + SocialRuntime store, phone Contacts (invite/text/call + autonomy rules), visit-their-place away flow. S7 designer authoring remains (NPCs/portraits, interaction set, `social` need in stats.json via Tuning Editor, tuning of behavior rules)."
   },
   "designer": {
