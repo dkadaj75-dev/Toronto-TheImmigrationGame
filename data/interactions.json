@@ -109,9 +109,7 @@
     {
       "id": "cook",
       "name": "Cook a light meal",
-      "needGains": {
-        "hunger": 25
-      },
+      "needGains": {},
       "skillGains": {
         "cooking": 0.05
       },
@@ -436,9 +434,7 @@
     {
       "id": "cook_a_large_meal",
       "name": "Cook a large meal",
-      "needGains": {
-        "hunger": 25
-      },
+      "needGains": {},
       "skillGains": {},
       "animation": "stand_use",
       "autonomyEligible": true,

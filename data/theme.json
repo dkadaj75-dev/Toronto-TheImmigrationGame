@@ -1,7 +1,7 @@
 {
   "fonts": {
     "family": "Loucos Lyne",
-    "sizePx": 14,
+    "sizePx": 12,
     "faces": [
       {
         "family": "Loucos Lyne",
@@ -36,9 +36,10 @@
     "panel": {
       "background": "rgba(20,26,40,.82)",
       "foreground": "#dfe6f2",
-      "radiusPx": 10,
+      "radiusPx": 18,
       "shadow": "none",
-      "fontFamily": "Loucos Lyne"
+      "fontFamily": "Loucos Lyne",
+      "fontSizePx": 9
     },
     "button": {
       "background": "#c7a4f2",
@@ -54,8 +55,8 @@
       "background": "rgba(20,26,40,.92)",
       "foreground": "#eaf0fb",
       "accent": "#5a9fd6",
-      "radiusPx": 10,
-      "outlineWidthPx": 3,
+      "radiusPx": 16,
+      "outlineWidthPx": -1,
       "shadow": "0 2px 10px rgba(0,0,0,.35)",
       "fontSizePx": 9,
       "fontFamily": "Loucos Lyne"
@@ -65,17 +66,17 @@
       "foreground": "rgba(0,0,0,0.75)",
       "accent": "rgba(90,120,190,.4)",
       "outline": "rgba(0,0,0,0.75)",
-      "radiusPx": 12,
-      "outlineWidthPx": 2,
+      "radiusPx": 13,
+      "outlineWidthPx": 0,
       "shadow": "0 4px 16px rgba(0,0,0,.4)",
-      "fontSizePx": 9,
+      "fontSizePx": 10,
       "fontFamily": "Loucos Lyne",
       "marginPx": 0,
-      "paddingXPx": 10,
-      "paddingYPx": 7,
-      "widthPx": 116,
-      "heightPx": 48,
-      "centerRadiusPx": 106
+      "paddingXPx": 3,
+      "paddingYPx": 2,
+      "widthPx": 102,
+      "heightPx": 26,
+      "centerRadiusPx": 120
     },
     "card": {
       "radiusPx": 10

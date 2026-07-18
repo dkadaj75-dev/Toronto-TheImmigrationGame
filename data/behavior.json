@@ -2,15 +2,15 @@
   "weights": {
     "needDeficit": 0.1,
     "distance": 1,
-    "personalityAffinity": 1
+    "personalityAffinity": 2
   },
-  "decisionThreshold": 2,
+  "decisionThreshold": 1,
   "needWeights": {
-    "hunger": 0.9,
+    "hunger": 0.5,
     "comfort": 0.7,
     "bladder": 0.5,
     "energy": 1.2,
-    "fun": 1.25,
+    "fun": 1.65,
     "social": 0.6,
     "hygiene": 0.3,
     "environment": 0.3
