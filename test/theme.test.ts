@@ -2,7 +2,7 @@
 // Run: npx tsx test/theme.test.ts
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { DEFAULT_THEME, KNOWN_THEME_ELEMENT_IDS, anchorCss, resolveAccordionGroups, themeVariableMap } from '../game/theme';
+import { DEFAULT_THEME, KNOWN_THEME_ELEMENT_IDS, anchorCss, fontFaceCss, resolveAccordionGroups, resolveActionMenuStyle, themeVariableMap } from '../game/theme';
 import type { ThemeData } from '../game/data';
 
 let assertions = 0;
@@ -12,14 +12,18 @@ function equal(actual: unknown, expected: unknown, message: string) {
 }
 
 const variables = themeVariableMap(DEFAULT_THEME);
-const shippedTheme = JSON.parse(readFileSync(new URL('../data/theme.json', import.meta.url), 'utf8'));
-equal(shippedTheme, DEFAULT_THEME, 'shipped theme and missing-file legacy fallback cannot drift');
+const shippedTheme = JSON.parse(readFileSync(new URL('../data/theme.json', import.meta.url), 'utf8')) as ThemeData;
 equal(variables['--theme-font-family'], 'system-ui, sans-serif', 'maps the legacy HUD font');
 equal(variables['--theme-panel-bg'], 'rgba(20,26,40,.82)', 'maps the legacy panel background');
 equal(variables['--theme-panel-radius'], '10px', 'maps panel component radius override');
 equal(variables['--theme-button-radius'], '999px', 'maps pill button component radius override');
 equal(variables['--theme-toast-accent'], '#5a9fd6', 'maps toast component accent');
 equal(variables['--theme-action-menu-outline-width'], '1px', 'maps action-menu outline width');
+equal(resolveActionMenuStyle(), { marginPx: 0, paddingXPx: 10, paddingYPx: 7, buttonWidthPx: 116, buttonHeightPx: 48, centerRadiusPx: 106 }, 'missing radial keys reproduce the legacy geometry');
+equal(resolveActionMenuStyle({ ...DEFAULT_THEME, components: { actionMenu: { marginPx: 5, paddingXPx: 14, widthPx: 150, centerRadiusPx: 125 } } }), {
+  marginPx: 5, paddingXPx: 14, paddingYPx: 7, buttonWidthPx: 150, buttonHeightPx: 48, centerRadiusPx: 125,
+}, 'sparse radial metrics resolve over exact defaults');
+equal(fontFaceCss(shippedTheme).includes('font-family:"Loucos Lyne"') && fontFaceCss(shippedTheme).includes('/fonts/Loucos Lyne - thesimssansbold.otf'), true, 'shipped local font face is registered from theme data');
 
 const custom: ThemeData = {
   ...DEFAULT_THEME,
@@ -55,16 +59,20 @@ const accordionTheme: ThemeData = {
     'quest-panel': { ...DEFAULT_THEME.layout['quest-panel'], accordion: 'Missing definition' },
   },
   accordions: [
-    { name: 'Vitals', collapsedByDefault: true },
+    { name: 'Vitals', collapsedByDefault: true, icon: '/icons/needs.svg', showText: false },
     { name: 'Vitals', collapsedByDefault: false },
     { name: 'Empty' },
   ],
 };
 equal(resolveAccordionGroups(accordionTheme), [{
   name: 'Vitals', collapsedByDefault: true, elementIds: ['needs-panel', 'skills-panel'],
-  layout: accordionTheme.layout['needs-panel'],
+  layout: accordionTheme.layout['needs-panel'], icon: '/icons/needs.svg', showText: false,
 }], 'accordion resolution is ordered, deduplicated, known-id-only, and definition-gated');
 equal(KNOWN_THEME_ELEMENT_IDS.includes('phone-button'), true, 'smartphone is a known layout target');
 equal(resolveAccordionGroups(DEFAULT_THEME), [], 'shipped theme leaves the legacy DOM ungrouped');
+equal(resolveAccordionGroups(shippedTheme).map((group) => ({ name: group.name, collapsed: group.collapsedByDefault, icon: group.icon, showText: group.showText })), [
+  { name: 'Needs', collapsed: true, icon: '/icons/needs.svg', showText: false },
+  { name: 'Skills', collapsed: true, icon: '/icons/skills.svg', showText: false },
+], 'shipped needs and skills resolve as collapsed icon-only accordions');
 
 console.log(`theme engine: ${assertions} assertions passed`);

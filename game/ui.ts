@@ -22,6 +22,12 @@ export interface ContextMenuLayout {
   title: ContextMenuItemLayout;
   items: ContextMenuItemLayout[];
 }
+export interface ContextMenuStyle {
+  marginPx?: number;
+  buttonWidthPx?: number;
+  buttonHeightPx?: number;
+  centerRadiusPx?: number;
+}
 
 const MENU_EDGE_GAP = 8;
 const MENU_BUTTON_HEIGHT = 48;
@@ -36,6 +42,7 @@ export function layoutContextMenu(
   itemCount: number,
   viewport: { width: number; height: number },
   insets: Partial<ScreenInsets> = {},
+  style: ContextMenuStyle = {},
 ): ContextMenuLayout {
   const safe: ScreenInsets = {
     top: Math.max(0, insets.top ?? 0), right: Math.max(0, insets.right ?? 0),
@@ -48,14 +55,16 @@ export function layoutContextMenu(
   const usableWidth = Math.max(1, maxX - minX);
   const usableHeight = Math.max(1, maxY - minY);
   const mode: 'radial' | 'list' = itemCount <= 5 ? 'radial' : 'list';
-  const buttonWidth = Math.min(mode === 'radial' ? 116 : 160, usableWidth);
-  const buttonHeight = Math.min(MENU_BUTTON_HEIGHT, usableHeight);
+  const margin = Math.max(0, Number.isFinite(style.marginPx) ? style.marginPx! : 0);
+  const buttonWidth = Math.min(mode === 'radial' ? Math.max(1, style.buttonWidthPx ?? 116) : 160, Math.max(1, usableWidth - margin * 2));
+  const buttonHeight = Math.min(Math.max(1, style.buttonHeightPx ?? MENU_BUTTON_HEIGHT), Math.max(1, usableHeight - margin * 2));
   const titleWidth = Math.min(120, usableWidth);
   const titleHeight = Math.min(34, usableHeight);
   const desired: ScreenPoint[] = [];
 
   if (mode === 'radial') {
-    const radius = Math.min(106, Math.max(52, Math.min(usableWidth - buttonWidth, usableHeight - buttonHeight) / 2));
+    const requestedRadius = Math.max(0, style.centerRadiusPx ?? 106);
+    const radius = Math.min(requestedRadius, Math.max(52, Math.min(usableWidth - buttonWidth - margin * 2, usableHeight - buttonHeight - margin * 2) / 2));
     for (let i = 0; i < itemCount; i++) {
       const angle = -Math.PI / 2 + (i * Math.PI * 2) / Math.max(1, itemCount);
       desired.push({ x: point.x + Math.cos(angle) * radius, y: point.y + Math.sin(angle) * radius });
@@ -72,8 +81,8 @@ export function layoutContextMenu(
     }
   }
 
-  const halfW = buttonWidth / 2;
-  const halfH = buttonHeight / 2;
+  const halfW = buttonWidth / 2 + margin;
+  const halfH = buttonHeight / 2 + margin;
   const boundsPoints = [...desired, point];
   let left = Math.min(...boundsPoints.map((p, i) => p.x - (i < desired.length ? halfW : titleWidth / 2)));
   let right = Math.max(...boundsPoints.map((p, i) => p.x + (i < desired.length ? halfW : titleWidth / 2)));
@@ -128,8 +137,8 @@ const CSS = `
 .happiness-gauge .bar-fill { background:linear-gradient(90deg,#8e62cf,#e475b9); }
 .bar-row { display: grid; grid-template-columns: 58px 1fr; gap: 6px; align-items: center; margin: 3px 0; }
 .bar-row label { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bar-track { position: relative; height: 14px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; }
-.bar-fill { height: 100%; border-radius: 4px; transition: width .3s; }
+.bar-track { position: relative; height: var(--theme-bar-height, 14px); border-radius: var(--theme-bar-radius, 4px); background: var(--theme-bar-bg, rgba(255,255,255,.12)); overflow: hidden; }
+.bar-fill { height: 100%; border-radius: var(--theme-bar-radius, 4px); transition: width .3s; }
 .bar-fill.low { animation: hud-blink 1s infinite; }
 /* ITEM 4: the live level shown INSIDE the bar (e.g. "54/100" for a need, "3/10" for a skill).
    Overlaid, right-aligned, theme-aware panel text with a dark halo so it stays readable over any
@@ -156,7 +165,7 @@ const CSS = `
   background: rgba(20,26,40,.88); box-shadow: 0 3px 14px rgba(0,0,0,.35); backdrop-filter: blur(6px);
   font-size: 11px; color: #b8c4da; text-align: center; overflow: hidden; }
 #action-menu button { pointer-events: auto; border: var(--theme-action-menu-outline-width, 1px) solid var(--theme-action-menu-outline, rgba(130,158,210,.35));
-  border-radius: var(--theme-action-menu-radius, 999px); padding: 7px 10px;
+  border-radius: var(--theme-action-menu-radius, 999px); padding: var(--theme-action-menu-padding-y, 7px) var(--theme-action-menu-padding-x, 10px); margin: var(--theme-action-menu-margin, 0px);
   font-family: var(--theme-action-menu-font-family, system-ui, sans-serif); font-size: var(--theme-action-menu-font-size, 13px);
   line-height: 1.15; font-weight: 650; background: var(--theme-action-menu-bg, rgba(43,57,86,.96));
   color: var(--theme-action-menu-fg, #eaf0fb); cursor: pointer;
@@ -298,11 +307,11 @@ const CSS = `
   background: color-mix(in srgb, var(--theme-panel-bg, rgba(20,26,40,.82)) 55%, transparent); pointer-events: none; }
 #phone-overlay.open { display: flex; pointer-events: auto; }
 .phone-shell { width: min(390px, 100%); height: min(780px, calc(100dvh - 16px)); overflow: hidden;
-  display: flex; flex-direction: column; border-radius: calc(var(--theme-panel-radius, 10px) + var(--theme-panel-radius, 10px) + var(--theme-panel-radius, 10px));
-  background: var(--theme-panel-bg, rgba(20,26,40,.82));
-  border: max(var(--theme-panel-outline-width, 1px), 2px) solid var(--theme-panel-outline, rgba(130,158,210,.45));
-  box-shadow: var(--theme-panel-shadow, var(--theme-shadow, 0 3px 14px rgba(0,0,0,.35)));
-  color: var(--theme-panel-fg, #dfe6f2); font-family: var(--theme-panel-font-family, var(--theme-font-family)); }
+  display: flex; flex-direction: column; border-radius: var(--theme-phone-shell-radius, calc(var(--theme-panel-radius, 10px) + var(--theme-panel-radius, 10px) + var(--theme-panel-radius, 10px)));
+  background: var(--theme-phone-shell-bg, var(--theme-panel-bg, rgba(20,26,40,.82)));
+  border: var(--theme-phone-shell-outline-width, 2px) solid var(--theme-phone-shell-outline, var(--theme-panel-outline, rgba(130,158,210,.45)));
+  box-shadow: var(--theme-phone-shell-shadow, var(--theme-panel-shadow, var(--theme-shadow, 0 3px 14px rgba(0,0,0,.35))));
+  color: var(--theme-phone-shell-fg, var(--theme-panel-fg, #dfe6f2)); font-family: var(--theme-phone-shell-font-family, var(--theme-panel-font-family, var(--theme-font-family))); }
 .phone-status-bar { min-height: 34px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
   padding: 5px 12px 2px 16px; font-size: 11px; font-variant-numeric: tabular-nums; }
 .phone-status-bar::after { content: ''; width: 54px; height: 5px; border-radius: var(--theme-button-radius, 999px);
@@ -319,18 +328,18 @@ const CSS = `
 .phone-tabs { order: 3; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; padding: 7px 9px 9px;
   border-top: var(--theme-panel-outline-width, 1px) solid var(--theme-panel-outline, rgba(130,158,210,.45));
   background: var(--theme-panel-bg, rgba(20,26,40,.82)); }
-.phone-tabs button { min-width: 0; min-height: 48px; border: 0; border-radius: var(--theme-button-radius, 999px); padding: 7px 3px;
-  overflow: hidden; text-overflow: ellipsis; background: transparent; color: var(--theme-panel-fg, #dfe6f2);
-  opacity: .66; font: inherit; font-size: 10px; cursor: pointer; touch-action: manipulation; }
-.phone-tabs button.active { background: var(--theme-button-bg, rgba(90,120,190,.55)); color: var(--theme-button-fg, #eaf0fb); opacity: 1; }
+.phone-tabs button { min-width: 0; min-height: var(--theme-phone-tab-height, 48px); border: 0; border-radius: var(--theme-phone-tab-radius, var(--theme-button-radius, 999px)); padding: var(--theme-phone-tab-padding-y, 7px) var(--theme-phone-tab-padding-x, 3px);
+  overflow: hidden; text-overflow: ellipsis; background: var(--theme-phone-tab-bg, transparent); color: var(--theme-phone-tab-fg, var(--theme-panel-fg, #dfe6f2));
+  opacity: .66; font: inherit; font-family: var(--theme-phone-tab-font-family, inherit); font-size: var(--theme-phone-tab-font-size, 10px); cursor: pointer; touch-action: manipulation; }
+.phone-tabs button.active { background: var(--theme-phone-tab-accent, var(--theme-button-bg, rgba(90,120,190,.55))); color: var(--theme-phone-tab-fg, var(--theme-button-fg, #eaf0fb)); opacity: 1; }
 .phone-home-indicator { order: 4; align-self: center; width: 34%; height: 5px; margin: 0 0 7px;
   border-radius: var(--theme-button-radius, 999px); background: var(--theme-panel-fg, #dfe6f2); opacity: .35; }
 #phone-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 14px 16px; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .phone-search { width: 100%; min-height: 46px; border: 0; border-radius: var(--theme-button-radius, 999px); padding: 12px 14px; margin-bottom: 10px;
   background: var(--theme-button-bg, rgba(90,120,190,.55)); color: var(--theme-button-fg, #eaf0fb); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
-.phone-card { background: color-mix(in srgb, var(--theme-panel-bg, rgba(20,26,40,.82)) 82%, var(--theme-panel-fg, #dfe6f2));
-  border: var(--theme-panel-outline-width, 1px) solid var(--theme-panel-outline, rgba(130,158,210,.45));
-  border-radius: var(--theme-panel-radius, 10px); padding: 12px;
+.phone-card { background: var(--theme-card-bg, color-mix(in srgb, var(--theme-panel-bg, rgba(20,26,40,.82)) 82%, var(--theme-panel-fg, #dfe6f2)));
+  border: var(--theme-card-outline-width, var(--theme-panel-outline-width, 1px)) solid var(--theme-card-outline, var(--theme-panel-outline, rgba(130,158,210,.45)));
+  border-radius: var(--theme-card-radius, var(--theme-panel-radius, 10px)); box-shadow: var(--theme-card-shadow, none); color: var(--theme-card-fg, var(--theme-panel-fg)); font-family: var(--theme-card-font-family, inherit); padding: 12px;
   margin: 9px 0; }
 .phone-card-head { display: flex; align-items: flex-start; gap: 10px; }
 .phone-card-name { flex: 1; font-size: 14px; font-weight: 700; }
@@ -402,10 +411,12 @@ const CSS = `
 #buy-selection-chips .sel-name { font-size: 12px; color: #93a3c0; padding: 0 4px; white-space: nowrap; }
 
 .theme-accordion { pointer-events: auto; display: grid; gap: 6px; min-width: 136px; }
-.theme-accordion-toggle { border: var(--theme-button-outline-width, 0px) solid var(--theme-button-outline, transparent);
-  border-radius: var(--theme-button-radius, 999px); padding: 7px 11px;
-  background: var(--theme-button-bg, rgba(90,120,190,.55)); color: var(--theme-button-fg, #eaf0fb);
-  font-family: var(--theme-button-font-family, system-ui, sans-serif); cursor: pointer; touch-action: manipulation; }
+.theme-accordion-toggle { border: var(--theme-accordion-header-outline-width, var(--theme-button-outline-width, 0px)) solid var(--theme-accordion-header-outline, var(--theme-button-outline, transparent));
+  border-radius: var(--theme-accordion-header-radius, var(--theme-button-radius, 999px)); padding: var(--theme-accordion-header-padding-y, 7px) var(--theme-accordion-header-padding-x, 11px);
+  background: var(--theme-accordion-header-bg, var(--theme-button-bg, rgba(90,120,190,.55))); color: var(--theme-accordion-header-fg, var(--theme-button-fg, #eaf0fb)); box-shadow: var(--theme-accordion-header-shadow, none);
+  font-family: var(--theme-accordion-header-font-family, var(--theme-button-font-family, system-ui, sans-serif)); font-size: var(--theme-accordion-header-font-size, inherit); cursor: pointer; touch-action: manipulation; display:flex; align-items:center; justify-content:center; gap:6px; }
+.theme-accordion-icon { width: 24px; height: 24px; object-fit: contain; pointer-events:none; }
+.theme-accordion-body > .hud-panel > h3 { display:none; }
 .theme-accordion-body { display: grid; gap: 8px; }
 .theme-accordion.collapsed .theme-accordion-body { display: none; }
 
@@ -811,11 +822,22 @@ export class Hud {
     cancel.textContent = 'Cancel';
     cancel.addEventListener('click', () => this.hideActionMenu());
     this.menu.appendChild(cancel);
+    const rootStyle = getComputedStyle(document.documentElement);
+    const cssNumber = (name: string, fallback: number) => {
+      const value = Number.parseFloat(rootStyle.getPropertyValue(name));
+      return Number.isFinite(value) ? value : fallback;
+    };
     const layout = layoutContextMenu(
       screen ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 },
       actions.length + 1,
       { width: window.innerWidth, height: window.innerHeight },
       readSafeAreaInsets(),
+      {
+        marginPx: cssNumber('--theme-action-menu-margin', 0),
+        buttonWidthPx: cssNumber('--theme-action-menu-width', 116),
+        buttonHeightPx: cssNumber('--theme-action-menu-height', 48),
+        centerRadiusPx: cssNumber('--theme-action-menu-center-radius', 106),
+      },
     );
     const title = this.menu.querySelector<HTMLElement>('.am-title')!;
     Object.assign(title.style, {

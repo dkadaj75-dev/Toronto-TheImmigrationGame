@@ -20,6 +20,13 @@ check(radial.items.length === 5, 'radial layout returns every bubble');
 check(new Set(radial.items.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`)).size === 5, 'radial bubble positions are distinct');
 assertInside(radial, 375, 812, noSafe);
 
+const styled = layoutContextMenu({ x: 300, y: 300 }, 4, { width: 600, height: 600 }, {}, {
+  marginPx: 6, buttonWidthPx: 140, buttonHeightPx: 60, centerRadiusPx: 130,
+});
+check(styled.items.every((item) => item.width === 140 && item.height === 60), 'theme metrics set radial button width and height');
+const styledDistance = Math.hypot(styled.items[0].x - styled.center.x, styled.items[0].y - styled.center.y);
+check(Math.abs(styledDistance - 130) < 0.001, 'theme center radius controls button distance from menu center');
+
 const safe = { top: 47, right: 9, bottom: 34, left: 7 };
 for (const point of [{ x: 0, y: 0 }, { x: 375, y: 0 }, { x: 0, y: 812 }, { x: 375, y: 812 }]) {
   const edge = layoutContextMenu(point, 4, { width: 375, height: 812 }, safe);

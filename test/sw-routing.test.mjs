@@ -15,6 +15,8 @@ ok('/data/*.json matches', isDataOrApiPath('/data/tuning.json'));
 ok('/data/maps/*.json matches', isDataOrApiPath('/data/maps/condo.json'));
 ok('/api/data/*.json matches', isDataOrApiPath('/api/data/assets.json'));
 ok('/api/maps matches', isDataOrApiPath('/api/maps'));
+ok('/api/fonts matches', isDataOrApiPath('/api/fonts'));
+ok('/api/icons matches', isDataOrApiPath('/api/icons'));
 ok('root / does not match', !isDataOrApiPath('/'));
 ok('/index.html does not match', !isDataOrApiPath('/index.html'));
 ok('/tools/assets.html does not match', !isDataOrApiPath('/tools/assets.html'));

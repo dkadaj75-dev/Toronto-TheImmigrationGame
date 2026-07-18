@@ -11,7 +11,11 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, 'data');
 const TEXTURES_DIR = path.join(__dirname, 'public', 'textures');
+const FONTS_DIR = path.join(__dirname, 'public', 'fonts');
+const ICONS_DIR = path.join(__dirname, 'public', 'icons');
 const TEXTURE_RE = /\.(png|jpe?g|webp)$/i;
+const FONT_RE = /\.(woff2?|ttf|otf)$/i;
+const ICON_RE = /\.(png|jpe?g|webp|gif|svg)$/i;
 const PORT = process.env.PORT || 5173;
 
 // Only files under data/ may be read/written, and only .json.
@@ -48,6 +52,20 @@ const server = http.createServer(async (req, res) => {
       const files = (await readdir(TEXTURES_DIR)).filter((f) => TEXTURE_RE.test(f)).sort();
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(files.map((f) => 'textures/' + f)));
+    } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('[]'); }
+    return;
+  }
+
+  // --- theme asset listings (B13-1: font-face + accordion/icon pickers) ---
+  if ((url.pathname === '/api/fonts' || url.pathname === '/api/icons') && req.method === 'GET') {
+    const isFonts = url.pathname === '/api/fonts';
+    const directory = isFonts ? FONTS_DIR : ICONS_DIR;
+    const pattern = isFonts ? FONT_RE : ICON_RE;
+    const prefix = isFonts ? 'fonts/' : 'icons/';
+    try {
+      const files = (await readdir(directory)).filter((file) => pattern.test(file)).sort();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(files.map((file) => prefix + file)));
     } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('[]'); }
     return;
   }
@@ -119,5 +137,6 @@ server.listen(PORT, () => {
   console.log(`Condo Life dev server → http://localhost:${PORT}`);
   console.log('  game:   /');
   console.log('  tools:  /tools/ (Phase 2+)');
+  console.log('  assets: GET /api/textures · GET /api/fonts · GET /api/icons');
   console.log('  data:   GET/PUT /api/data/<file>.json · DELETE maps only · GET /api/maps');
 });

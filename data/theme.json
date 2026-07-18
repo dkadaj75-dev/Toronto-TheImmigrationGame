@@ -1,7 +1,21 @@
 {
   "fonts": {
-    "family": "/fonts/Loucos Lyne - thesimssansbold.otf",
-    "sizePx": 14
+    "family": "Loucos Lyne",
+    "sizePx": 14,
+    "faces": [
+      {
+        "family": "Loucos Lyne",
+        "src": "/fonts/Loucos Lyne - thesimssansbold.otf",
+        "weight": "700",
+        "style": "normal"
+      },
+      {
+        "family": "Loucos Lyne Small Caps",
+        "src": "/fonts/Loucos Lyne - thesimssansboldsc.otf",
+        "weight": "700",
+        "style": "normal"
+      }
+    ]
   },
   "colors": {
     "panelBg": "#5e5ee8",
@@ -24,7 +38,7 @@
       "foreground": "#dfe6f2",
       "radiusPx": 10,
       "shadow": "none",
-      "fontFamily": "/fonts/Loucos Lyne - thesimssansbold.otf"
+      "fontFamily": "Loucos Lyne"
     },
     "button": {
       "background": "#c7a4f2",
@@ -34,7 +48,7 @@
       "radiusPx": 999,
       "outlineWidthPx": 0,
       "shadow": "none",
-      "fontFamily": "/fonts/Loucos Lyne - thesimssansbold.otf"
+      "fontFamily": "Loucos Lyne"
     },
     "toast": {
       "background": "rgba(20,26,40,.92)",
@@ -44,30 +58,61 @@
       "outlineWidthPx": 3,
       "shadow": "0 2px 10px rgba(0,0,0,.35)",
       "fontSizePx": 9,
-      "fontFamily": "/fonts/Loucos Lyne - thesimssansbold.otf"
+      "fontFamily": "Loucos Lyne"
     },
     "actionMenu": {
       "background": "#dfe6f2",
       "foreground": "rgba(0,0,0,0.75)",
       "accent": "rgba(90,120,190,.4)",
       "outline": "rgba(0,0,0,0.75)",
-      "radiusPx": 15,
+      "radiusPx": 12,
       "outlineWidthPx": 2,
       "shadow": "0 4px 16px rgba(0,0,0,.4)",
       "fontSizePx": 9,
-      "fontFamily": "/fonts/Loucos Lyne - thesimssansbold.otf"
+      "fontFamily": "Loucos Lyne",
+      "marginPx": 0,
+      "paddingXPx": 10,
+      "paddingYPx": 7,
+      "widthPx": 116,
+      "heightPx": 48,
+      "centerRadiusPx": 106
+    },
+    "card": {
+      "radiusPx": 10
+    },
+    "bar": {
+      "background": "rgba(255,255,255,.12)",
+      "radiusPx": 4,
+      "heightPx": 14
+    },
+    "phoneShell": {
+      "radiusPx": 30,
+      "outlineWidthPx": 2
+    },
+    "phoneTab": {
+      "radiusPx": 999,
+      "paddingXPx": 3,
+      "paddingYPx": 7,
+      "heightPx": 48
+    },
+    "accordionHeader": {
+      "radiusPx": 999,
+      "paddingXPx": 11,
+      "paddingYPx": 7
     }
   },
   "layout": {
     "needs-panel": {
       "anchor": "tl",
       "offsetX": 8,
-      "offsetY": 8
+      "offsetY": 8,
+      "accordion": "Needs"
     },
     "skills-panel": {
       "anchor": "tr",
-      "offsetX": 8,
-      "offsetY": 8
+      "offsetX": 6.73,
+      "offsetY": 8,
+      "accordion": "Skills"
     },
     "quest-panel": {
       "anchor": "bl",
@@ -75,14 +120,14 @@
       "offsetY": 40
     },
     "time-bar": {
-      "anchor": "tc",
-      "offsetX": 0,
-      "offsetY": 8
+      "anchor": "br",
+      "offsetX": 1.44,
+      "offsetY": 12.49
     },
     "activity-chip": {
       "anchor": "bc",
-      "offsetX": 0,
-      "offsetY": 14
+      "offsetX": -5.09,
+      "offsetY": 104.39
     },
     "work-chip": {
       "anchor": "bc",
@@ -91,8 +136,8 @@
     },
     "quest-toasts": {
       "anchor": "tc",
-      "offsetX": 0,
-      "offsetY": 56
+      "offsetX": -10.18,
+      "offsetY": 154.03
     },
     "visa-chip": {
       "anchor": "br",
@@ -100,14 +145,14 @@
       "offsetY": 168
     },
     "funds-chip": {
-      "anchor": "br",
-      "offsetX": 8,
-      "offsetY": 128
+      "anchor": "tr",
+      "offsetX": 94.58,
+      "offsetY": 13.43
     },
     "buy-button": {
       "anchor": "br",
-      "offsetX": 8,
-      "offsetY": 84
+      "offsetX": 121.31,
+      "offsetY": 8.88
     },
     "wall-cut-button": {
       "anchor": "br",
@@ -130,5 +175,18 @@
       "offsetY": 14
     }
   },
-  "accordions": []
+  "accordions": [
+    {
+      "name": "Needs",
+      "collapsedByDefault": true,
+      "icon": "/icons/needs.svg",
+      "showText": false
+    },
+    {
+      "name": "Skills",
+      "collapsedByDefault": true,
+      "icon": "/icons/skills.svg",
+      "showText": false
+    }
+  ]
 }
