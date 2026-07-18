@@ -366,7 +366,7 @@
       "needGains": {},
       "skillGains": {},
       "animation": "stand_use",
-      "autonomyEligible": false,
+      "autonomyEligible": true,
       "primaryNeed": null,
       "duration": {
         "baseSeconds": 0.2
