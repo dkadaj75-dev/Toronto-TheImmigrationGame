@@ -5,6 +5,7 @@ import {
   doorCutsWall, apertureSizeFor, doorAlongWall, aperturesForWall, wallSegments,
   walkableSpans, lintelVisibleUnderCut,
   DEFAULT_MULLION_SPACING, isCurtainWall, resolveMullionSpacing, mullionPositions,
+  gapDoorLintel,
   type ApertureDoorEntry, type WallLike, type Aperture,
 } from '../game/wallaperture';
 import { textureRepeat } from '../game/textures';
@@ -370,6 +371,71 @@ console.log('wallaperture.test — a balcony door on a curtain wall uses the SAM
   const mulls = mullionPositions(8, 1.2, apsCurtain);
   check('mullions never fall inside the balcony doorway',
     !mulls.some((p) => p > apsCurtain[0].start - 1e-6 && p < apsCurtain[0].end + 1e-6), mulls.join(','));
+}
+
+// ------------------------------------------------------------------ gapDoorLintel (2026-07-17)
+// The entrance/exterior door bug: a GAP-ENCODED door (opening = gap between two separate wall
+// segments) never matched aperturesForWall, so wallSegments emitted no lintel and the doorway read
+// as a full-height void above the panel. gapDoorLintel derives the missing header from the flanking
+// walls so a gap door reads identically to an ON-WALL D1 door.
+console.log('wallaperture.test — gapDoorLintel (gap-encoded door headers)');
+{
+  // The real condo.json entrance geometry: a vertical exterior door at x=0 sitting in the gap
+  // between walls [0,6]->[0,2.5] and [0,1.5]->[0,0] (gap z=1.5..2.5).
+  const entranceWalls: WallLike[] = [
+    { from: [0, 6], to: [0, 2.5] },
+    { from: [0, 1.5], to: [0, 0] },
+  ];
+  const entrance: ApertureDoorEntry = { at: [0, 2.17], orientation: 'vertical', assetId: 'door_exterior' };
+  const def = makeDoorAsset({ id: 'door_exterior', door: { hingeOffset: [-0.5, 0], exterior: true } });
+  const spec = gapDoorLintel(entrance, entranceWalls, def, WALL_H);
+  check('gap door yields a header spec', spec !== null);
+  if (spec) {
+    check('header spans the full flanking gap (1.5..2.5 => length 1.0)', approx(spec.length, 1.0), String(spec.length));
+    check('header is centred on the gap midpoint (z=2.0)', approx(spec.center[1], 2.0) && approx(spec.center[0], 0), spec.center.join(','));
+    check('header keeps the door orientation', spec.orientation === 'vertical');
+    // aperture height defaults to 2.1 (no explicit door.apertureHeight), wall top 2.5 => 0.4 header.
+    check('header height = wall top - aperture height (2.5 - 2.1)', approx(spec.height, 0.4), String(spec.height));
+    check('header hangs above the aperture, centred between 2.1 and 2.5', approx(spec.yCenter, 2.3), String(spec.yCenter));
+  }
+
+  // A horizontal gap door (constant Z, runs along X) works symmetrically.
+  const hWalls: WallLike[] = [
+    { from: [0, 4], to: [3, 4] },
+    { from: [4, 4], to: [8, 4] },
+  ];
+  const hDoor: ApertureDoorEntry = { at: [3.5, 4], orientation: 'horizontal', assetId: 'd' };
+  const hSpec = gapDoorLintel(hDoor, hWalls, makeDoorAsset(), WALL_H);
+  check('horizontal gap door yields a header', hSpec !== null);
+  if (hSpec) {
+    check('horizontal header spans gap 3..4 (length 1.0)', approx(hSpec.length, 1.0), String(hSpec.length));
+    check('horizontal header centred at x=3.5, z=4', approx(hSpec.center[0], 3.5) && approx(hSpec.center[1], 4), hSpec.center.join(','));
+  }
+
+  // An ON-WALL door (sits on a continuous wall) returns null — aperturesForWall handles those.
+  const contWall: WallLike[] = [{ from: [4, 9], to: [4, 6] }];
+  const onWall: ApertureDoorEntry = { at: [4, 7.5], orientation: 'vertical', assetId: 'd' };
+  check('on-wall door returns null (handled by aperturesForWall)', gapDoorLintel(onWall, contWall, makeDoorAsset(), WALL_H) === null);
+  // Sanity: that same door DOES match a wall via doorAlongWall (proving it is the on-wall form).
+  check('on-wall door matches its wall via doorAlongWall', doorAlongWall(contWall[0], onWall) !== null);
+
+  // cutsWall:false opts out entirely.
+  check('cutsWall:false opts out of a header', gapDoorLintel({ ...entrance, cutsWall: false }, entranceWalls, def, WALL_H) === null);
+
+  // A floating door with no collinear flanking walls gets no header (nothing to derive from).
+  check('door with no flanking walls => null', gapDoorLintel(entrance, [], def, WALL_H) === null);
+  check('door flanked on only one side => null', gapDoorLintel(entrance, [entranceWalls[0]], def, WALL_H) === null);
+
+  // An explicit full-height aperture leaves no room for a header.
+  const tallDef = makeDoorAsset({ door: { hingeOffset: [-0.5, 0], apertureHeight: WALL_H } });
+  check('aperture already at wall top => null header', gapDoorLintel(entrance, entranceWalls, tallDef, WALL_H) === null);
+
+  // A collinear wall too far off the door's line (beyond tolerance) is not counted as flanking.
+  const offLine: WallLike[] = [
+    { from: [0.5, 6], to: [0.5, 2.5] },
+    { from: [0.5, 1.5], to: [0.5, 0] },
+  ];
+  check('walls off the door line (> tolerance) => null', gapDoorLintel(entrance, offLine, def, WALL_H) === null);
 }
 
 if (failures) { console.error(`${failures} failure(s)`); process.exit(1); }

@@ -13,7 +13,7 @@ import { resolveWindowConfig, windowFacePositions, windowPaneRect } from './wind
 import { wallCutShownHeight } from './wallview';
 import { resolveAssetLight } from './assetstate';
 import { resolveMetersPerTile, effectiveMetersPerTile, textureRepeat, polygonBounds } from './textures';
-import { aperturesForWall, wallSegments, lintelVisibleUnderCut, isCurtainWall, resolveMullionSpacing, mullionPositions } from './wallaperture';
+import { aperturesForWall, wallSegments, gapDoorLintel, lintelVisibleUnderCut, isCurtainWall, resolveMullionSpacing, mullionPositions } from './wallaperture';
 
 // ------------------------------------------------------------------ GLB furniture
 // Templates are cached per URL and cloned per placement; clones share geometry/materials
@@ -422,6 +422,26 @@ export function buildWorld(data: GameData, trackInitialLoad?: TrackInitialLoad):
         root.add(mullion);
       }
     }
+  }
+
+  // --- gap-door headers (lintels): a GAP-ENCODED door (legacy form — the doorway is a real gap
+  // between two separate wall segments, so aperturesForWall never matched it and wallSegments
+  // emitted no lintel above it) left a full-height void above the panel. gapDoorLintel derives the
+  // missing header purely from the flanking walls, so a gap door now reads identically to an ON-WALL
+  // D1 door. Same plain wall material + shared black top face as a wall lintel; tagged 'lintel' so
+  // the wall-cut view HIDES it exactly like the on-wall lintels (lintelVisibleUnderCut).
+  for (const door of map.doors) {
+    const spec = gapDoorLintel(door, map.walls, doorDefFor(door.assetId), WALL_H);
+    if (!spec) continue;
+    const geo = new THREE.BoxGeometry(spec.length, spec.height, WALL_T);
+    const mats: THREE.Material[] = [wallMat, wallMat, wallTopMat, wallMat, wallMat, wallMat];
+    const mesh = new THREE.Mesh(geo, mats);
+    mesh.position.set(spec.center[0], spec.yCenter, spec.center[1]);
+    mesh.rotation.y = spec.orientation === 'vertical' ? -Math.PI / 2 : 0;
+    mesh.userData.wallCutVisual = 'lintel';
+    mesh.userData.wallCutFullHeight = WALL_H;
+    mesh.castShadow = true;
+    root.add(mesh);
   }
 
   // --- doors: a bare frame-marker box UNLESS the door links to a door-capable asset (has an

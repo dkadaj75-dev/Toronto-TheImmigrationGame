@@ -20,6 +20,8 @@ import {
   fillMargin, fillInnerWidth, fillInnerHeight, fillLeftEdge, fillScaleX, fillCenterX,
   createProgressBarInstance,
   SKILL_BAR_DEFAULTS, resolveSkillBarConfig, skillBarAnchorHeight,
+  skillLabelCanvasSize, skillLabelWorldSize,
+  SKILL_LABEL_PAD_PX, SKILL_LABEL_HEIGHT_PX, SKILL_LABEL_MIN_WIDTH_PX,
 } from '../game/progressbar';
 
 let failures = 0;
@@ -223,6 +225,43 @@ console.log('progressbar.test — isometric camera projection (B7-3 regression)'
       - (progressBarAnchorHeight(h, PROGRESS_BAR_DEFAULTS.yOffset) + SKILL_BAR_DEFAULTS.gapMeters)) < 1e-9);
   check('skill bar anchor is strictly higher than the action bar anchor',
     skillBarAnchorHeight(h, SKILL_BAR_DEFAULTS.gapMeters) > progressBarAnchorHeight(h, PROGRESS_BAR_DEFAULTS.yOffset));
+}
+
+// Skill label canvas sizing (2026-07-17 caption-clipping fix) — the render step needs a real 2D
+// context, but the SIZE math (what stopped 'English 15/100:' clipping) is pure and tested here.
+console.log('progressbar.test — skill label canvas sizing');
+{
+  // A wide measured text grows the canvas to fit it PLUS symmetric padding on both sides.
+  const wide = skillLabelCanvasSize(300);
+  check('canvas width = ceil(text) + 2*pad for a wide label', wide.width === 300 + SKILL_LABEL_PAD_PX * 2, String(wide.width));
+  check('canvas height is the fixed single-line height', wide.height === SKILL_LABEL_HEIGHT_PX, String(wide.height));
+  check('wide label is wider than the old fixed 256px canvas (would have clipped before)', wide.width > 256, String(wide.width));
+
+  // A tiny/zero/degenerate measure never collapses below the floor.
+  check('short text floors at the min width', skillLabelCanvasSize(5).width === SKILL_LABEL_MIN_WIDTH_PX, String(skillLabelCanvasSize(5).width));
+  check('zero width floors at the min width', skillLabelCanvasSize(0).width === SKILL_LABEL_MIN_WIDTH_PX);
+  check('NaN width floors at the min width (defensive)', skillLabelCanvasSize(NaN).width === SKILL_LABEL_MIN_WIDTH_PX);
+
+  // Fractional measured widths round UP so the last glyph column is never cut.
+  check('fractional text width rounds up', skillLabelCanvasSize(120.2).width === 121 + SKILL_LABEL_PAD_PX * 2, String(skillLabelCanvasSize(120.2).width));
+
+  // Monotonic: a longer label never yields a narrower canvas.
+  check('wider text never shrinks the canvas', skillLabelCanvasSize(500).width >= skillLabelCanvasSize(300).width);
+}
+
+console.log('progressbar.test — skill label world sizing (aspect-preserving, no stretch)');
+{
+  const worldH = 0.125;
+  // World height is held constant; width follows the canvas aspect exactly (no glyph stretch).
+  const w1 = skillLabelWorldSize(256, 64, worldH);
+  check('world height equals the requested line height', w1.height === worldH);
+  check('world width = height * canvas aspect', Math.abs(w1.width - worldH * (256 / 64)) < 1e-9, String(w1.width));
+  // A wider canvas → proportionally wider label, same height (constant on-screen text size).
+  const w2 = skillLabelWorldSize(512, 64, worldH);
+  check('doubling canvas width doubles world width', Math.abs(w2.width - w1.width * 2) < 1e-9, `${w2.width} vs ${w1.width}`);
+  check('height unchanged when width grows', w2.height === w1.height);
+  // Degenerate canvas height falls back to a 1:1 aspect rather than dividing by zero.
+  check('zero canvas height → 1:1 aspect fallback', skillLabelWorldSize(256, 0, worldH).width === worldH);
 }
 
 if (failures > 0) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }

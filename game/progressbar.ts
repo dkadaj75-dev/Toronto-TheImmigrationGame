@@ -170,6 +170,47 @@ export function skillBarAnchorHeight(heightMeters: number, gapMeters: number): n
   return progressBarAnchorHeight(heightMeters, PROGRESS_BAR_DEFAULTS.yOffset) + gapMeters;
 }
 
+// --- Label canvas sizing (2026-07-17 bug fix) ------------------------------------------------
+// The label was drawn onto a FIXED 256x64 canvas, centered with textAlign:'center'. Once the label
+// grew from a bare '<Skill>:' to '<Skill> <level>/<max>:' (e.g. 'English 15/100:'), a bold 40px
+// string overran 256px and its first/last glyphs were clipped at the canvas edges (the designer's
+// "caption cut off" report). Fix: measure the text (ctx.measureText) and size the canvas to fit it
+// with symmetric padding, redrawing whenever the text changes, then scale the sprite from the
+// canvas aspect so glyphs never stretch however wide the label grows. The canvas-render step needs
+// a real 2D context (unavailable under jsdom), so the SIZING math lives in these pure helpers with
+// their own tests; redrawLabel just wires them to measureText + the sprite scale.
+
+/** Font used for the in-world skill label; shared by the measure pass and the draw pass. */
+export const SKILL_LABEL_FONT = 'bold 40px sans-serif';
+/** Horizontal padding (px) kept on EACH side of the measured text so the outline stroke and glyph
+ *  side-bearings never touch the canvas edge. */
+export const SKILL_LABEL_PAD_PX = 16;
+/** Canvas height (px) — one 40px line plus room for its 6px outline stroke. */
+export const SKILL_LABEL_HEIGHT_PX = 64;
+/** Floor on canvas width so a very short label still gets a sane texture. */
+export const SKILL_LABEL_MIN_WIDTH_PX = 64;
+/** World-height of the label line as a fraction of the bar width — reproduces the legacy
+ *  0.125m line height at the default 0.5m bar width (0.5 * 0.25). Width then follows the canvas
+ *  aspect (see skillLabelWorldSize), so the on-screen text height stays constant across labels. */
+export const SKILL_LABEL_WORLD_HEIGHT_RATIO = 0.25;
+
+/** Canvas pixel size that fits a measured label without clipping: width = ceil(measured text) +
+ *  symmetric padding (never below a floor), height fixed for a single line + its outline. Pure. */
+export function skillLabelCanvasSize(textWidthPx: number): { width: number; height: number } {
+  const w = Number.isFinite(textWidthPx) && textWidthPx > 0 ? textWidthPx : 0;
+  return {
+    width: Math.max(SKILL_LABEL_MIN_WIDTH_PX, Math.ceil(w) + SKILL_LABEL_PAD_PX * 2),
+    height: SKILL_LABEL_HEIGHT_PX,
+  };
+}
+
+/** World-space size of the label sprite: a fixed world line height, with width following the canvas
+ *  aspect so glyphs are never stretched however wide the text grows. Pure. */
+export function skillLabelWorldSize(canvasWidth: number, canvasHeight: number, worldHeight: number): { width: number; height: number } {
+  const aspect = canvasHeight > 0 ? canvasWidth / canvasHeight : 1;
+  return { width: worldHeight * aspect, height: worldHeight };
+}
+
 export interface SkillBarInstance {
   update(characterRoot: THREE.Object3D, active: boolean, fraction: number, label: string, heightMeters: number, config: SkillBarConfig): void;
   dispose(): void;
@@ -189,9 +230,11 @@ export function createSkillBarInstance(scene: THREE.Object3D): SkillBarInstance 
   fill.renderOrder = 999;
   fill.center.set(0.5, 0.5);
 
-  // Label — a canvas-texture sprite redrawn only when the text changes (cheap steady state).
+  // Label — a canvas-texture sprite redrawn only when the text changes (cheap steady state). The
+  // canvas is RESIZED per label to fit the measured text (see skillLabelCanvasSize) so long labels
+  // like 'English 15/100:' are never clipped at the edges.
   const canvas = document.createElement('canvas');
-  canvas.width = 256; canvas.height = 64;
+  canvas.width = SKILL_LABEL_MIN_WIDTH_PX; canvas.height = SKILL_LABEL_HEIGHT_PX;
   const ctx = canvas.getContext('2d');
   const labelTex = new THREE.CanvasTexture(canvas);
   const labelMat = new THREE.SpriteMaterial({ map: labelTex, depthTest: false, transparent: true });
@@ -200,8 +243,12 @@ export function createSkillBarInstance(scene: THREE.Object3D): SkillBarInstance 
   let lastLabel = '';
   const redrawLabel = (text: string) => {
     if (!ctx) return;
+    ctx.font = SKILL_LABEL_FONT;
+    const size = skillLabelCanvasSize(ctx.measureText(text).width);
+    // Resizing the canvas resets ALL 2D context state (font/align/styles), so re-apply after.
+    canvas.width = size.width; canvas.height = size.height;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.font = 'bold 40px sans-serif';
+    ctx.font = SKILL_LABEL_FONT;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.lineWidth = 6;
@@ -226,11 +273,12 @@ export function createSkillBarInstance(scene: THREE.Object3D): SkillBarInstance 
       fill.scale.set(fillScaleX(config.widthMeters, config.heightMeters, fraction), fillInnerHeight(config.heightMeters), 1);
       fill.center.x = fillCenterX(fraction); // camera-space left anchor (same B7-3 lesson)
       if (label !== lastLabel) { lastLabel = label; redrawLabel(label); }
-      // Label sits just above the bar; canvas is 4:1, so keep that aspect in world units.
-      const labelW = config.widthMeters;
-      const labelH = labelW * (canvas.height / canvas.width);
-      labelSprite.scale.set(labelW, labelH, 1);
-      labelSprite.position.set(0, config.heightMeters / 2 + labelH / 2 + 0.02, 0);
+      // Label sits just above the bar. Its world size follows the (now text-fitted) canvas aspect
+      // so the line height stays constant while the width grows to fit longer labels — no clipping,
+      // no stretching (see skillLabelWorldSize).
+      const world = skillLabelWorldSize(canvas.width, canvas.height, config.widthMeters * SKILL_LABEL_WORLD_HEIGHT_RATIO);
+      labelSprite.scale.set(world.width, world.height, 1);
+      labelSprite.position.set(0, config.heightMeters / 2 + world.height / 2 + 0.02, 0);
     },
     dispose() {
       scene.remove(pivot);

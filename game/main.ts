@@ -34,6 +34,7 @@ import { FoodRegistry, foodAssetForActionEvent, firstLegSeatAware, actionAfterSo
 import { initEnergyCollapseState, StarvationTracker, tickEnergyCollapse } from './survival';
 import { formatMoneyChange, formatSkillUp, skillLevelUps } from './feedback';
 import { AssetStateRegistry, isAssetStateActionAvailable, isStatefulAsset, powerStateForAction } from './assetstate';
+import { HydroMeter, resolveAssetPower, HYDRO_BILL_ID } from './hydro';
 import { InitialLoadTracker, phraseAt } from './loading';
 import { applyTheme } from './theme';
 
@@ -111,6 +112,11 @@ async function start() {
   scene.background = new THREE.Color(0x2a3346);
 
   const assetStates = new AssetStateRegistry();
+  // Hydro usage meter (2026-07-17): accumulates ON-hours x per-asset power rate across a billing
+  // period; folded onto the Hydro bill each cycle (see the day-boundary bill tick). syncAssetStates
+  // recomputes the combined rate of ON metered assets each frame into currentHydroRate.
+  const hydro = new HydroMeter();
+  let currentHydroRate = 0;
   let wallCutActive = false; // in-page preference only; deliberately not serialized
   let world = buildWorld(data, trackInitialLoad);
   let doors = buildDoors(data, trackInitialLoad);
@@ -650,6 +656,11 @@ async function start() {
   const syncAssetStates = () => {
     const desiredSounds = new Set<string>();
     const byId = assetsById(data);
+    // Combined hydro draw of the ON metered assets this frame, summed per UNIQUE instance key so a
+    // multi-mesh asset can't be counted twice (accrual is independent of visibility — a TV left on
+    // while the sim is away at work still costs hydro).
+    let hydroRate = 0;
+    const meteredSeen = new Set<string>();
     world.traverse((obj) => {
       const key = obj.userData.assetStateKey as string | undefined;
       const assetId = obj.userData.assetId as string | undefined;
@@ -658,12 +669,17 @@ async function start() {
       if (!def) return;
       const on = assetStates.isOn(key, def);
       setAssetObjectOn(obj, on);
+      if (on && !meteredSeen.has(key)) {
+        const power = resolveAssetPower(def);
+        if (power) { hydroRate += power.ratePerHour; meteredSeen.add(key); }
+      }
       if (obj.visible && on && isStatefulAsset(def) && def.sound) {
         const soundKey = `asset-state:${key}`;
         audio.startLoop(soundKey, def.sound);
         desiredSounds.add(soundKey);
       }
     });
+    currentHydroRate = hydroRate;
     for (const key of stateSoundKeys) if (!desiredSounds.has(key)) audio.stopLoop(key);
     stateSoundKeys = desiredSounds;
   };
@@ -1570,6 +1586,10 @@ async function start() {
       buyMode.restore({ additions: [], overrides: [], seq: 0 });
       garbage.emptyAll();
       assetStates.restore({ on: {} });
+      // DROP accrued Hydro usage: it was metered against the OLD home's assets; the new home starts
+      // a fresh period (the Hydro bill's base formula still rides applyFreshData's finance retune).
+      hydro.reset();
+      currentHydroRate = 0;
       // One shared rebuild: world/doors/lights/nav/audio/finance retunes + the map-id-change
       // branch (spawn teleport, action-menu close, music restart). The empty registries make the
       // reattach calls inside it harmless no-ops. The next watchData poll will see the changed
@@ -1659,7 +1679,11 @@ async function start() {
     audio.setPaused(initialLoadingActive || effectiveSpeed === 0 || buyMode.active || repoOverlayActive || gameOverActive);
     syncAssetStates(); // picks up newly purchased/sold stateful instances; idempotent for steady state
 
-    gameSeconds += sdt * clockScale();
+    const gameSecondsDelta = sdt * clockScale();
+    gameSeconds += gameSecondsDelta;
+    // Hydro: accrue this frame's ON metered draw over the sim-hours elapsed. Paused/loading frames
+    // have sdt = 0, so nothing accrues; the charge is folded onto the Hydro bill at each cycle below.
+    hydro.accrue(gameSecondsDelta / 3600, currentHydroRate);
     while (gameSeconds >= 86400) {
       gameSeconds -= 86400;
       gameDay++;
@@ -1671,7 +1695,10 @@ async function start() {
         map: data.map,
         assets: data.assets,
         placedObjects: buyMode.effectivePlacedObjectsList(),
-      });
+      }, { [HYDRO_BILL_ID]: hydro.accruedCharge });
+      // A bill arrived => the accrued Hydro usage was folded onto it; reset for the next period.
+      // (tick returns null on non-billing days, leaving the accumulator to keep growing.)
+      if (billArrival) hydro.reset();
       if (billArrival?.arrived.length) {
         hud.showQuestToast(
           `Bills arrived: §${billArrival.total.toLocaleString()}`,

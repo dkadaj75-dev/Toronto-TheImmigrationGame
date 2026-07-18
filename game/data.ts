@@ -253,6 +253,13 @@ export interface AssetDef {
    *  every subfield is optional so the Asset Editor can opt into useful defaults with an empty
    *  object. `defaultOn` seeds AssetStateRegistry the first time an instance is seen. */
   light?: { color?: string | number; intensity?: number; distance?: number; yOffset?: number; defaultOn?: boolean };
+  /** Sparse metered power draw (2026-07-17 hydro slice). `ratePerHour` = currency charged per
+   *  sim-hour the instance is ON (its AssetStateRegistry ON/OFF state, the same one that drives the
+   *  light — a TV/console/lamp accrues while on, nothing while off). game/hydro.ts accumulates
+   *  ON-hours x rate on sim time; the accrued charge is ADDED onto the `hydro` bill each billing
+   *  cycle (game/bills.ts) and the accumulator resets. Absent = draws no metered power. Set via the
+   *  Asset Editor (near the Light block). */
+  power?: { ratePerHour: number };
   /** B6-13: presence makes placement wall-only. Buy Mode/Map Editor share buymode.ts's pure wall
    *  snap, which faces the asset into the room. heightY is the visual anchor height (default 1.5m). */
   wallMounted?: { heightY?: number };

@@ -189,14 +189,23 @@ export function computeFinancePreview(finance: FinanceData, context: BillFormula
   return { floorTileCount, totalAssetValue, rent, bills };
 }
 
-/** Applies formulas to the ordered bills.json identity/display list. Unknown formulas cost zero. */
-export function computeBillAmounts(data: BillsData, finance: FinanceData, context: BillFormulaContext): (BillDef & { amount: number })[] {
+/** Applies formulas to the ordered bills.json identity/display list. Unknown formulas cost zero.
+ *  `usageCharges` (optional) adds a runtime-metered charge ON TOP of a bill's formula amount, keyed
+ *  by bill id — the additive Hydro usage from game/hydro.ts (never part of the Finance Editor
+ *  preview, which is formula-only; see computeFinancePreview). Non-finite/negative adds are ignored. */
+export function computeBillAmounts(
+  data: BillsData,
+  finance: FinanceData,
+  context: BillFormulaContext,
+  usageCharges: Record<string, number> = {},
+): (BillDef & { amount: number })[] {
   const preview = computeFinancePreview(finance, context);
   const formulaAmounts = new Map(preview.bills.map((bill) => [bill.id, bill.amount]));
-  return data.bills.map((bill) => ({
-    ...bill,
-    amount: bill.id === 'rent' ? preview.rent : (formulaAmounts.get(bill.id) ?? 0),
-  }));
+  return data.bills.map((bill) => {
+    const base = bill.id === 'rent' ? preview.rent : (formulaAmounts.get(bill.id) ?? 0);
+    const extra = usageCharges[bill.id];
+    return { ...bill, amount: base + (Number.isFinite(extra) && extra! > 0 ? extra! : 0) };
+  });
 }
 
 function resolveInterval(value: number | undefined): number {
@@ -236,12 +245,15 @@ export class FinanceState {
     this.creditScore = clampCreditScore(this.creditScore, this.creditTuning);
   }
 
-  /** Called on each crossed day boundary. Returns null until the configured cadence is due. */
-  tick(day: number, context: BillFormulaContext): BillArrival | null {
+  /** Called on each crossed day boundary. Returns null until the configured cadence is due.
+   *  `usageCharges` (optional) folds runtime-metered charges onto matching bills at arrival — the
+   *  Hydro usage accumulated by game/hydro.ts. The caller resets its accumulator only when this
+   *  returns non-null (a bill actually arrived and consumed the charge). */
+  tick(day: number, context: BillFormulaContext, usageCharges: Record<string, number> = {}): BillArrival | null {
     this.updateOverdue(day);
     if (day - this.lastArrivalDay < this.intervalDays) return null;
     this.lastArrivalDay = day;
-    const arrived = computeBillAmounts({ bills: this.defs }, this.finance, context).map((bill, index) => ({
+    const arrived = computeBillAmounts({ bills: this.defs }, this.finance, context, usageCharges).map((bill, index) => ({
       ...bill,
       key: `${day}:${bill.id}:${index}`,
       arrivalDay: day,

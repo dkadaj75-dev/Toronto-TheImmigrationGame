@@ -228,6 +228,82 @@ export function wallSegments(wallLen: number, wallHeight: number, apertures: Ape
   return out;
 }
 
+/** A derived header (lintel) box that caps the top of a GAP-ENCODED doorway. */
+export interface GapLintelSpec {
+  /** World XZ midpoint of the gap the header spans. */
+  center: [number, number];
+  /** Header length along the wall axis (the full flanking gap). */
+  length: number;
+  orientation: 'vertical' | 'horizontal';
+  /** World-vertical centre of the header box. */
+  yCenter: number;
+  /** Header height (wall top minus aperture height). */
+  height: number;
+}
+
+/**
+ * The header (lintel) box that caps a GAP-ENCODED doorway — the legacy door form (see the module
+ * doc) where the opening is a real gap BETWEEN two separate wall segments. aperturesForWall never
+ * matches such a door (its `at` sits on no wall), so wallSegments emits no lintel and the doorway
+ * reads as a full-height void above the panel (the designer's "entrance door has no lintel" bug,
+ * 2026-07-17). This derives the missing header purely: it finds the gap the door sits in among its
+ * COLLINEAR flanking walls (same orientation, same constant-axis coordinate within tolerance) and
+ * returns a box spanning that gap from the door's aperture height up to the wall top — the exact
+ * visual an ON-WALL door already gets from wallSegments' lintel, so both door forms read the same.
+ *
+ * Returns null when: the door opts out (cutsWall:false), it is actually ON a wall (aperturesForWall
+ * already handles it), no flanking gap is found (a floating/edge door), or the aperture already
+ * reaches the wall top (no header needed). world.ts owns the box mesh; nav is untouched (the gap
+ * was already walkable).
+ */
+export function gapDoorLintel(
+  door: ApertureDoorEntry,
+  walls: WallLike[],
+  def: AssetDef | undefined,
+  wallHeight: number,
+): GapLintelSpec | null {
+  if (!doorCutsWall(door)) return null;
+  if (!finitePositive(wallHeight)) return null;
+  // On-wall doors already get a lintel from wallSegments — only true gap doors need this.
+  if (walls.some((w) => doorAlongWall(w, door) !== null)) return null;
+
+  const vertical = door.orientation === 'vertical';
+  // The constant-axis coordinate the wall line sits at, and the variable axis it runs along.
+  const constPos = vertical ? door.at[0] : door.at[1];
+  const varPos = vertical ? door.at[1] : door.at[0];
+
+  // Covered spans along the variable axis from collinear flanking walls (same run orientation as
+  // the door, sharing its constant-axis coordinate within ON_WALL_TOLERANCE).
+  let gapStart = -Infinity, gapEnd = Infinity;
+  for (const w of walls) {
+    const [wx1, wz1] = w.from, [wx2, wz2] = w.to;
+    const dx = wx2 - wx1, dz = wz2 - wz1;
+    if (Math.hypot(dx, dz) <= EPS) continue;
+    const wallVertical = Math.abs(dz) > Math.abs(dx); // runs mostly along Z
+    if (wallVertical !== vertical) continue;
+    const wallConst = vertical ? (wx1 + wx2) / 2 : (wz1 + wz2) / 2;
+    if (Math.abs(wallConst - constPos) > ON_WALL_TOLERANCE) continue;
+    const lo = Math.min(vertical ? wz1 : wx1, vertical ? wz2 : wx2);
+    const hi = Math.max(vertical ? wz1 : wx1, vertical ? wz2 : wx2);
+    // Nearest flanking edge below and above the door along the variable axis.
+    if (hi <= varPos + EPS && hi > gapStart) gapStart = hi;
+    if (lo >= varPos - EPS && lo < gapEnd) gapEnd = lo;
+  }
+  if (!Number.isFinite(gapStart) || !Number.isFinite(gapEnd) || gapEnd - gapStart <= EPS) return null;
+
+  const apH = Math.min(apertureSizeFor(def, door).height, wallHeight);
+  if (wallHeight - apH <= EPS) return null; // aperture already spans the full wall height
+
+  const midVar = (gapStart + gapEnd) / 2;
+  return {
+    center: vertical ? [constPos, midVar] : [midVar, constPos],
+    length: gapEnd - gapStart,
+    orientation: door.orientation,
+    yCenter: (apH + wallHeight) / 2,
+    height: wallHeight - apH,
+  };
+}
+
 /** The pass-through spans (along-the-wall meters) the apertures open at walk height — the
  *  walkable counterpart of wallSegments for tests/tools. Nav itself keeps carving from the door
  *  entry's own `width` (unchanged legacy behavior, see nav.ts's carve loop doc). */

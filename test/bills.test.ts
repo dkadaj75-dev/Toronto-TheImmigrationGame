@@ -61,6 +61,33 @@ console.log('bills.test — formula math');
   check('effective player-owned addition contributes at arrival', owned.find((bill) => bill.id === 'phone')?.amount === 35);
 }
 
+console.log('bills.test — Hydro usage charge composition (additive on top of the base formula)');
+{
+  // computeBillAmounts: a usage charge on 'hydro' adds ON TOP of the base formula; other bills and
+  // rent are untouched, and the Finance Editor preview path (no usage arg) stays formula-only.
+  const base = computeBillAmounts(defs, finance, context);
+  const hydroBase = base.find((b) => b.id === 'hydro')!.amount;
+  const withUsage = computeBillAmounts(defs, finance, context, { hydro: 7.5 });
+  check('usage adds on top of the hydro base formula', withUsage.find((b) => b.id === 'hydro')!.amount === hydroBase + 7.5, String(withUsage.find((b) => b.id === 'hydro')!.amount));
+  check('usage on hydro leaves phone/rent unchanged',
+    withUsage.find((b) => b.id === 'phone')!.amount === base.find((b) => b.id === 'phone')!.amount
+    && withUsage.find((b) => b.id === 'rent')!.amount === base.find((b) => b.id === 'rent')!.amount);
+  check('negative/NaN usage is ignored (never reduces a bill)',
+    computeBillAmounts(defs, finance, context, { hydro: -5 }).find((b) => b.id === 'hydro')!.amount === hydroBase
+    && computeBillAmounts(defs, finance, context, { hydro: NaN }).find((b) => b.id === 'hydro')!.amount === hydroBase);
+
+  // FinanceState.tick folds the usage onto the arrived bill; base bill total gets +usage exactly.
+  const meterState = new FinanceState(defs, finance, 3, 1);
+  const plain = meterState.tick(4, context);              // day 4: first cycle, no usage
+  const plainTotal = plain!.total;
+  const withUsageArrival = meterState.tick(7, context, { hydro: 12 }); // next cycle with usage
+  check('tick folds hydro usage into the arrived bill total', withUsageArrival!.total === plainTotal + 12, `${withUsageArrival!.total} vs ${plainTotal}`);
+  const arrivedHydro = withUsageArrival!.arrived.find((b) => b.id === 'hydro')!;
+  check('the arrived hydro outstanding bill carries base + usage', arrivedHydro.amount === base.find((b) => b.id === 'hydro')!.amount + 12);
+  // A non-billing day returns null and ignores the usage (caller keeps accumulating).
+  check('usage passed on a non-arrival day is a no-op (tick returns null)', meterState.tick(8, context, { hydro: 999 }) === null);
+}
+
 console.log('bills.test — arrival cadence, payment, retune, persistence');
 {
   const state = new FinanceState(defs, finance, 3, 1);

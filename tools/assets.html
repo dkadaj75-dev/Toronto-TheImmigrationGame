@@ -638,6 +638,18 @@ function renderEditor() {
   )));
   root.appendChild(cardLight);
 
+  // --- Power (2026-07-17 hydro): sparse per-hour draw charged onto the Hydro bill while the
+  // instance is ON (its Turn On/Off / light state, above). Absent = draws no metered power.
+  const cardPower = document.createElement('div');
+  cardPower.className = 'card';
+  cardPower.innerHTML = '<h2>Power (Hydro)</h2><div class="hint">Currency charged per in-game hour this asset is ON (its Turn On/Off state, same as the light). The accumulated usage is added onto the Hydro bill each billing cycle. Blank = draws no metered power.</div>';
+  cardPower.appendChild(frow('rate per hour (blank = none)', numInput(
+    () => a.power?.ratePerHour,
+    (v) => { if (v === undefined || !(v > 0)) delete a.power; else (a.power ??= {}).ratePerHour = v; },
+    'power.ratePerHour',
+  )));
+  root.appendChild(cardPower);
+
   // --- B6-13 wall mount: an empty block is meaningful (enabled, default height 1.5m).
   const cardWall = document.createElement('div');
   cardWall.className = 'card';

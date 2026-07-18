@@ -104,7 +104,12 @@ function renderPreview() {
   const result=state.compute(state.finance,{map:state.map,assets:state.assets});
   $('previewMeta').textContent=`${result.floorTileCount} floor tiles · ${money(result.totalAssetValue)} placed asset value · ${state.map.propertyType || 'condo'}`;
   const root=$('preview'); root.innerHTML='';
-  [['Rent',result.rent],...result.bills.map((bill)=>[bill.name,bill.amount])].forEach(([name,amount])=>{const row=document.createElement('div');row.className='preview-row';const label=document.createElement('span');label.textContent=name;const value=document.createElement('strong');value.textContent=money(amount);value.dataset.previewId=name==='Rent'?'rent':result.bills.find((bill)=>bill.name===name)?.id||'';row.append(label,value);root.appendChild(row);});
+  [['Rent',result.rent],...result.bills.map((bill)=>[bill.name,bill.amount])].forEach(([name,amount])=>{const row=document.createElement('div');row.className='preview-row';const previewId=name==='Rent'?'rent':result.bills.find((bill)=>bill.name===name)?.id||'';const label=document.createElement('span');label.textContent=name;
+    // Hydro carries a runtime-metered usage charge (per-asset power ratePerHour x ON-hours) ADDED on
+    // top of this base formula each billing cycle — it can't be previewed here (it depends on live
+    // play), so flag the shown amount as the base only.
+    if(previewId==='hydro'){const note=document.createElement('span');note.className='status';note.textContent='base — usage added at runtime';note.title='Assets with a Power rate per hour add their accumulated ON-time usage onto this bill during play.';label.append(' ',note);}
+    const value=document.createElement('strong');value.textContent=money(amount);value.dataset.previewId=previewId;row.append(label,value);root.appendChild(row);});
 }
 async function load() {
   try {
