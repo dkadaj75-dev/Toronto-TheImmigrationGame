@@ -969,6 +969,7 @@ import { classifyMeshPath, createSpriteInstance } from '/game/sprites.ts';
 import { normalizeModelToFootprint, applyMeshFit, loadMeshTemplate, loadRiggedCharacter } from '/game/world.ts';
 
 let renderer = null, scene, camera, controls, current = null, raf = 0;
+let footprintHelper = null; // translucent ground rect + outline at y=0 showing the asset's footprint
 let activeSprite = null; // §7.5: SpriteInstance being previewed — its update() drives GIF frames (real time here, sim time in-game)
 let previewSeq = 0; // staleness token: a slow decode must not clobber a newer show()
 let characterPromise = null, characterRoot = null, characterAnim = null;
@@ -980,8 +981,40 @@ function previewMessage() {
   if (msg) msg.textContent = [assetStatus, characterStatus].filter(Boolean).join(' · ');
 }
 
+// ITEM 1 feature: draw the asset's footprint as a visible ground rectangle (translucent fill +
+// wireframe outline) at y=0 so the designer can see where the mesh sits WITHIN it — the footprint
+// drives placement/nav and stays put while meshFit offsets nudge the mesh relative to its center.
+// Rebuilt on every show() so it live-updates when the footprint (or offsets) change.
+function updateFootprintHelper(def) {
+  if (footprintHelper) {
+    scene.remove(footprintHelper);
+    footprintHelper.traverse((o) => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
+    footprintHelper = null;
+  }
+  const fp = def && Array.isArray(def.footprint) ? def.footprint : null;
+  const w = fp && fp[0] > 0 ? fp[0] : 0, d = fp && fp[1] > 0 ? fp[1] : 0;
+  if (!(w > 0) || !(d > 0)) return;
+  footprintHelper = new THREE.Group();
+  footprintHelper.name = 'footprint-helper';
+  const hx = w / 2, hz = d / 2, y = 0.002; // just above the grid to avoid z-fighting
+  const fill = new THREE.Mesh(
+    new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0x4fd1c5, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false }),
+  );
+  fill.position.y = y;
+  const outline = new THREE.LineLoop(
+    new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-hx, y, -hz), new THREE.Vector3(hx, y, -hz),
+      new THREE.Vector3(hx, y, hz), new THREE.Vector3(-hx, y, hz),
+    ]),
+    new THREE.LineBasicMaterial({ color: 0x4fd1c5 }),
+  );
+  footprintHelper.add(fill, outline);
+  scene.add(footprintHelper);
+}
+
 function framePreview() {
-  const visible = [current, characterRoot?.visible ? characterRoot : null].filter(Boolean);
+  const visible = [current, characterRoot?.visible ? characterRoot : null, footprintHelper].filter(Boolean);
   if (!visible.length) return;
   const box = new THREE.Box3();
   for (const object of visible) box.expandByObject(object);
@@ -1114,6 +1147,7 @@ window.AssetPreview = {
     if (current) { scene.remove(current); current = null; }
     if (activeSprite) { activeSprite.dispose(); activeSprite = null; }
     if (characterRoot) characterRoot.visible = false;
+    updateFootprintHelper(assetDef); // live footprint ground rect (rebuilt each show → follows footprint edits)
     assetStatus = meshPath ? '' : 'No mesh assigned — set a GLB or image path to preview it.';
     characterStatus = '';
     previewMessage();
@@ -1182,11 +1216,11 @@ window.AssetPreview = {
         if (seq !== previewSeq) return; // superseded by a newer show()
         const model = template.clone(true);
         normalizeModelToFootprint(model, def.footprint); // footprint-fit scale + center XZ + ground y=0
-        if (def.wallMounted) { // wall-mounted assets re-center vertically like the game does
+        applyMeshFit(model, def.meshFit); // scale / yaw / offsets — re-anchors to footprint center
+        if (def.wallMounted) { // wall-mounted assets re-center vertically like the game does (after meshFit)
           const wb = new THREE.Box3().setFromObject(model);
           model.position.y -= wb.getCenter(new THREE.Vector3()).y;
         }
-        applyMeshFit(model, def.meshFit); // scale / yawOffsetDeg / yOffset corrections
         if (current) scene.remove(current);
         current = model;
         scene.add(current);

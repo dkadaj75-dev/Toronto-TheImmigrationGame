@@ -808,22 +808,39 @@ export class BuyModeController {
     this.additionGroups.delete(key);
   }
 
+  /** A sold/destroyed designer object is GONE, not merely hidden. Detaching it from the world graph
+   *  (rather than `child.visible = false`) is the root-cause fix for a sold ORIGINAL asset lingering:
+   *  many consumers scan `world.children` by `userData.assetId` WITHOUT checking `.visible` — input.ts
+   *  raycasts it (tap/hover/contextmenu still hit an invisible mesh) and sim.ts's findSeatFor still
+   *  counts it as a seat candidate. Nav + environment already drop it via effectivePlacedObjectsList.
+   *  buildWorld rebuilds it fresh on the next hot-reload; reattach() detaches it again there, so a
+   *  sold object never reappears. Meshes are disposed via disposeGroupLocal (shared GLB resources are
+   *  guarded by userData.sharedResource; makeStandIn geometry is per-instance). */
+  private removeFromWorld(world: THREE.Group, objects: THREE.Object3D[]) {
+    for (const child of objects) {
+      world.remove(child);
+      disposeGroupLocal(child);
+    }
+  }
+
   /** Repositions/hides already-built groups (designer overrides via world.ts's `placedIndex`
    *  tagging, player additions via their own group map) to match the current overlay state —
    *  called after a move/rotate/sell so the live scene matches the overlay without a full rebuild. */
   private applyOverridesToWorld() {
     const world = this.getWorld();
     const byId = this.byId();
+    const removed: THREE.Object3D[] = [];
     for (const child of world.children) {
       const idx = child.userData?.placedIndex as number | undefined;
       if (idx === undefined) continue;
+      if (this.overlay.isRemoved(idx)) { removed.push(child); continue; }
       const ov = this.overlay.overrideFor(idx);
-      if (this.overlay.isRemoved(idx)) { child.visible = false; continue; }
       if (ov?.type === 'moved') {
         const def = byId.get(child.userData.assetId as string);
         if (def) applyAssetPlacement(child, def, ov.pos, ov.rotDeg);
       }
     }
+    this.removeFromWorld(world, removed);
     for (const [key, group] of this.additionGroups) {
       const a = this.overlay.allAdditions.find((x) => x.key === key);
       if (!a) continue;
@@ -841,16 +858,18 @@ export class BuyModeController {
    */
   reattach(world: THREE.Group) {
     const byId = this.byId();
+    const removed: THREE.Object3D[] = [];
     for (const child of world.children) {
       const idx = child.userData?.placedIndex as number | undefined;
       if (idx === undefined) continue;
+      if (this.overlay.isRemoved(idx)) { removed.push(child); continue; }
       const ov = this.overlay.overrideFor(idx);
-      if (this.overlay.isRemoved(idx)) child.visible = false;
-      else if (ov?.type === 'moved') {
+      if (ov?.type === 'moved') {
         const def = byId.get(child.userData.assetId as string);
         if (def) applyAssetPlacement(child, def, ov.pos, ov.rotDeg);
       }
     }
+    this.removeFromWorld(world, removed);
     for (const group of this.additionGroups.values()) world.add(group);
     if (this.gridOverlay && this.active) world.add(this.gridOverlay);
     // a pending ghost (placing/moving) also lived under the OLD world group — reattach it too,

@@ -53,11 +53,15 @@ console.log('wallaperture.test — apertureSizeFor (explicit fields beat derived
   const scaled = makeDoorAsset({ meshFit: { scale: [1.2, 1.1, 1] } });
   const ss = apertureSizeFor(scaled);
   check('meshFit x-scale multiplies the footprint-derived width', approx(ss.width, 1.2));
-  check('meshFit y-scale multiplies the default height', approx(ss.height, DEFAULT_APERTURE_HEIGHT * 1.1));
+  // ITEM 3: meshFit y-scale is a per-mesh authoring correction, NOT a doorway-height statement — it
+  // no longer inflates the default aperture height (that inflation pushed the doorway past the wall
+  // and killed the lintel). The default stays the canonical DEFAULT_APERTURE_HEIGHT.
+  check('meshFit y-scale does NOT inflate the default height', approx(ss.height, DEFAULT_APERTURE_HEIGHT));
 
   const uniform = makeDoorAsset({ meshFit: { scale: 1.5 } });
   const su = apertureSizeFor(uniform);
-  check('uniform meshFit scale applies to both axes', approx(su.width, 1.5) && approx(su.height, DEFAULT_APERTURE_HEIGHT * 1.5));
+  check('uniform meshFit scale widens the hole but leaves height canonical',
+    approx(su.width, 1.5) && approx(su.height, DEFAULT_APERTURE_HEIGHT));
 
   const explicitBeatsScale = makeDoorAsset({ meshFit: { scale: 2 }, door: { hingeOffset: [0, 0], apertureWidth: 1.1 } });
   check('explicit width ignores meshFit scale', apertureSizeFor(explicitBeatsScale).width === 1.1);
@@ -145,6 +149,40 @@ console.log('wallaperture.test — single door mid-wall → left / right / linte
     approx(textureRepeat(l.alongLength, mpt), 2.5) && approx(textureRepeat(l.height, mpt), WALL_H));
   check('lintel repeat spans its own shorter height',
     approx(textureRepeat(lin.alongLength, mpt), 1) && approx(textureRepeat(lin.height, mpt), WALL_H - 2.1));
+}
+
+// ------------------------------------------------------------------ ITEM 3 regression: a meshFit
+// y-scale that used to inflate the doorway past the wall (shipped door.glb carries meshFit
+// scale [1.5,1.75,1.8]; 2.1 x 1.75 = 3.675 > 2.5) must NO LONGER fill the wall — a shorter-than-
+// wall door leaves a lintel.
+console.log('wallaperture.test — ITEM 3: meshFit-scaled door still yields a lintel (no full-height hole)');
+{
+  const wall: WallLike = { from: [0, 5], to: [8, 5] };
+  const door: ApertureDoorEntry = { at: [4, 5], orientation: 'horizontal', assetId: 'door_scaled' };
+  const scaledDoor = makeDoorAsset({ id: 'door_scaled', meshFit: { scale: [1.5, 1.75, 1.8] } });
+  const defs = new Map([['door_scaled', scaledDoor]]);
+  const aps = aperturesForWall(wall, [door], (id) => (id ? defs.get(id) : undefined), WALL_H);
+  check('aperture height stays canonical 2.1 (not 3.675), below the 2.5 wall', aps.length === 1 && approx(aps[0].height, 2.1));
+  check('aperture width still tracks the meshFit x-scale (1.5)', approx(aps[0].end - aps[0].start, 1.5));
+  const segs = wallSegments(8, WALL_H, aps);
+  check('a lintel IS produced above the meshFit-scaled door', segs.some((s) => s.kind === 'lintel'));
+  check('lintel height = wall minus the 2.1 doorway', approx(segs.find((s) => s.kind === 'lintel')!.height, WALL_H - 2.1));
+
+  // Explicit override still wins and CAN reach full height (a deliberate garage-style opening).
+  const tallExplicit = makeDoorAsset({ id: 'door_tall', door: { hingeOffset: [0, 0], apertureHeight: 9 } });
+  const apsTall = aperturesForWall(
+    { from: [0, 5], to: [8, 5] },
+    [{ at: [4, 5], orientation: 'horizontal', assetId: 'door_tall' }],
+    () => tallExplicit, WALL_H,
+  );
+  check('explicit apertureHeight >= wall clamps to full height (no lintel)', approx(apsTall[0].height, WALL_H));
+  check('explicit full-height door → no lintel segment', !wallSegments(8, WALL_H, apsTall).some((s) => s.kind === 'lintel'));
+
+  // Degenerate guards: a door with no def falls back to the canonical height and still leaves a lintel.
+  const apsNoDef = aperturesForWall({ from: [0, 5], to: [8, 5] }, [{ at: [4, 5], orientation: 'horizontal' }], () => undefined, WALL_H);
+  check('no-def door uses the canonical height and leaves a lintel',
+    apsNoDef.length === 1 && approx(apsNoDef[0].height, DEFAULT_APERTURE_HEIGHT) &&
+    wallSegments(8, WALL_H, apsNoDef).some((s) => s.kind === 'lintel'));
 }
 
 // ------------------------------------------------------------------ door at wall end

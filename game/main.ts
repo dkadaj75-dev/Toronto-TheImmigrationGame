@@ -1812,8 +1812,12 @@ async function start() {
     if (primarySkill) {
       const sdef = stats.skillDefs.find((s) => s.id === primarySkill.id);
       if (sdef) {
-        const prog = skillPointProgress(stats.skills.get(sdef.id) ?? sdef.default, sdef.max ?? 100);
-        if (!prog.atMax) { skillActive = true; skillFraction = prog.fraction; skillLabel = `${sdef.name}:`; }
+        const level = stats.skills.get(sdef.id) ?? sdef.default;
+        const max = sdef.max ?? 100;
+        const prog = skillPointProgress(level, max);
+        // ITEM 4: include the real level/max in the in-world label ("<Skill> 3/10:") — same numeric
+        // readout the HUD skill bars now carry, using each skill's real max from stats.json.
+        if (!prog.atMax) { skillActive = true; skillFraction = prog.fraction; skillLabel = `${sdef.name} ${Math.round(level)}/${max}:`; }
       }
     }
     skillBar.update(sim, skillActive, skillFraction, skillLabel, data.tuning.character?.heightMeters ?? 1.55, resolveSkillBarConfig(data.tuning.feedback?.skillBar));

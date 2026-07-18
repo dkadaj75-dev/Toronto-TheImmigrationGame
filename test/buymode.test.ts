@@ -1,17 +1,18 @@
 // buymode.test.ts — game/buymode.ts pure logic (PROJECT_CONTEXT.md §7.6 Buy/Sell mode slice).
 // Run: npx tsx test/buymode.test.ts
+import * as THREE from 'three';
 import {
   isPurchasable, isAffordable, purchasableCatalog, catalogCategories, filterCatalog,
   snapToStep, snapPos, normalizeRotDeg, rotateStep, wallRect, isValidPlacement, footprintOnFloor,
   snapWallMountedPlacement, isWallMountedPlacement,
-  BuyOverlay, effectiveInstances, effectivePlacedObjects, isSelectableForSell,
+  BuyOverlay, BuyModeController, effectiveInstances, effectivePlacedObjects, isSelectableForSell,
   attemptBuy, attemptSell, attemptMove, attemptDestroy,
   iconFallbackColor, iconFallbackInitials,
   type OtherInstance, type PlacedLike, type EffectiveInstance, type FloorDef, type WallSeg,
 } from '../game/buymode';
 import { footprintRect } from '../game/accidents';
 import { readFileSync } from 'node:fs';
-import type { AssetDef, AssetsData } from '../game/data';
+import type { AssetDef, AssetsData, GameData } from '../game/data';
 
 let failures = 0;
 function check(name: string, cond: boolean, detail = '') {
@@ -352,6 +353,47 @@ console.log('buymode.test — re-buy after sell (a fresh addition, not a restora
   check('re-buying places a brand-new addition, not a restoration', rebuy.ok === true && rebuy.addition?.key !== 'designer#0');
   const finalInsts = effectiveInstances(designerObjects, overlay, byId);
   check('final state: original designer sofa stays sold, new addition present, exactly 1 sofa total', finalInsts.filter((i) => i.asset === 'sofa').length === 1 && finalInsts[0].source === 'player');
+}
+
+// --- ITEM 2 (2026-07-17): selling an ORIGINAL designer-placed object must DESTROY it — detached
+//     from the world graph, not merely hidden. Many consumers scan world.children by userData.assetId
+//     WITHOUT checking `.visible` (input.ts raycast for tap/hover/contextmenu, sim.ts findSeatFor for
+//     seat candidacy), so a hidden-but-present sold object still gets hit / counted. Regression: after
+//     a sale the tagged child is gone from world.children entirely.
+console.log('buymode.test — ITEM 2 sold original object detached from world graph');
+{
+  const sofaDef = {
+    id: 'sofa', name: 'Sofa', category: 'seating', footprint: [2, 1] as [number, number],
+    buyPrice: 100, sellPrice: 50, interactions: [],
+  } as unknown as AssetDef;
+  const data = {
+    map: { placedObjects: [{ asset: 'sofa', pos: [1, 1], rotDeg: 0 }] },
+    assets: { categories: ['seating'], assets: [sofaDef] },
+  } as unknown as GameData;
+  const world = new THREE.Group();
+  const placed = new THREE.Group();
+  placed.userData = { assetId: 'sofa', placedIndex: 0 };
+  placed.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial()));
+  world.add(placed);
+
+  const ctrl = new BuyModeController(() => data, () => world);
+  const inst = ctrl.instances().find((i) => i.designerIndex === 0);
+  check('controller resolves the designer sofa before sale', !!inst);
+  check('designer sofa is in the world graph before sale', world.children.includes(placed));
+
+  const refund = ctrl.sellInstance(inst!, sofaDef);
+  check('sale refunds the sell price', refund === 50);
+  check('sold designer object detached from world graph (not hidden)', !world.children.includes(placed));
+  check('no placedIndex-tagged child survives the sale', !world.children.some((c) => c.userData?.placedIndex === 0));
+
+  // reattach (hot-reload path): buildWorld rebuilds the sold object fresh; reattach must detach it again.
+  const rebuilt = new THREE.Group();
+  const placed2 = new THREE.Group();
+  placed2.userData = { assetId: 'sofa', placedIndex: 0 };
+  placed2.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial()));
+  rebuilt.add(placed2);
+  ctrl.reattach(rebuilt);
+  check('reattach re-detaches the sold object after a world rebuild', !rebuilt.children.includes(placed2));
 }
 
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }

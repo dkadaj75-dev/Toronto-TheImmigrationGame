@@ -125,6 +125,21 @@ export function applyMeshFit(model: THREE.Object3D, fit: AssetDef['meshFit']) {
     else model.scale.multiplyScalar(fit.scale);
   }
   if (fit.yawOffsetDeg) model.rotation.y += THREE.MathUtils.degToRad(fit.yawOffsetDeg);
+  // Re-anchor to the footprint center + ground plane AFTER scale/yaw. Both of those transform
+  // about the model's LOCAL origin, which for most GLBs is NOT its bounding-box center — so either
+  // one drifts the mesh off the footprint center normalizeModelToFootprint just established (a
+  // scaled/rotated model slides sideways and can sink through the floor). Recentering here keeps
+  // the FOOTPRINT put (it drives placement/nav) and makes the offsets below a clean nudge of the
+  // MESH relative to that center — identical in-game and in the Asset Editor preview, since both
+  // call this one function. Skipped when the object has no measurable bounds (e.g. the pure-offset
+  // unit tests pass a geometry-less Group): offsets then apply directly, unchanged.
+  const box = new THREE.Box3().setFromObject(model);
+  if (!box.isEmpty()) {
+    const center = box.getCenter(new THREE.Vector3());
+    model.position.x -= center.x;
+    model.position.z -= center.z;
+    model.position.y -= box.min.y;
+  }
   if (fit.xOffset) model.position.x += fit.xOffset;
   if (fit.yOffset) model.position.y += fit.yOffset;
   if (fit.zOffset) model.position.z += fit.zOffset;
@@ -181,11 +196,13 @@ export function attachMesh(group: THREE.Group, def: AssetDef, opts: { allowSprit
     .then((template) => {
       const model = template.clone(true);
       normalizeModelToFootprint(model, def.footprint);
+      applyMeshFit(model, def.meshFit);
       if (def.wallMounted) {
+        // Center the (already scale/offset-corrected) mesh vertically on its mount point; runs
+        // AFTER applyMeshFit so a wall asset carrying meshFit.scale still centers on its final size.
         const box = new THREE.Box3().setFromObject(model);
         model.position.y -= box.getCenter(new THREE.Vector3()).y;
       }
-      applyMeshFit(model, def.meshFit);
       model.traverse((o) => {
         if (o instanceof THREE.Mesh) { o.castShadow = true; o.userData.sharedResource = true; }
       });

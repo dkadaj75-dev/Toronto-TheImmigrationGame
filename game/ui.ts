@@ -25,6 +25,10 @@ export interface ContextMenuLayout {
 const MENU_EDGE_GAP = 8;
 const MENU_BUTTON_HEIGHT = 48;
 
+/** ITEM 4: needs are a 0-100 scale (NeedDef carries no per-need max, unlike SkillDef.max), so the
+ *  in-bar readout denominator for every need is 100 (e.g. "54/100"). */
+export const NEED_MAX = 100;
+
 /** Pure screen-space layout for B6-11's contextual action bubbles. */
 export function layoutContextMenu(
   point: ScreenPoint,
@@ -123,9 +127,15 @@ const CSS = `
 .happiness-gauge .bar-fill { background:linear-gradient(90deg,#8e62cf,#e475b9); }
 .bar-row { display: grid; grid-template-columns: 58px 1fr; gap: 6px; align-items: center; margin: 3px 0; }
 .bar-row label { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bar-track { height: 8px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; }
+.bar-track { position: relative; height: 14px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; }
 .bar-fill { height: 100%; border-radius: 4px; transition: width .3s; }
 .bar-fill.low { animation: hud-blink 1s infinite; }
+/* ITEM 4: the live level shown INSIDE the bar (e.g. "54/100" for a need, "3/10" for a skill).
+   Overlaid, right-aligned, theme-aware panel text with a dark halo so it stays readable over any
+   fill color. pointer-events:none so it never blocks bar interaction. */
+.bar-value { position: absolute; top: 0; right: 5px; height: 100%; display: flex; align-items: center;
+  font-size: 9px; line-height: 1; font-variant-numeric: tabular-nums; pointer-events: none;
+  color: var(--theme-panel-fg, #eaf0fb); text-shadow: 0 0 2px rgba(0,0,0,.9), 0 0 1px rgba(0,0,0,.9); }
 @keyframes hud-blink { 50% { filter: brightness(1.7); } }
 
 #time-bar { position: absolute; top: calc(8px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%);
@@ -403,6 +413,7 @@ export class Hud {
   private feedbackRoot: HTMLElement;
   private feedbackItems: { el: HTMLElement; elapsed: number }[] = [];
   private fills = new Map<string, HTMLElement>();
+  private barValues = new Map<string, HTMLElement>(); // ITEM 4: in-bar "value/max" text elements
   private happinessFill: HTMLElement;
   private happinessValue: HTMLOutputElement;
 
@@ -666,15 +677,18 @@ export class Hud {
   /** (Re)build bar rows from the stat definitions — called at start and on data hot-reload. */
   rebuildBars() {
     this.fills.clear();
+    this.barValues.clear();
     const build = (panel: HTMLElement, rows: { id: string; name: string; color: string }[], prefix: string) => {
       const bars = panel.querySelector('.bars')!;
       bars.innerHTML = '';
       for (const row of rows) {
         const el = document.createElement('div');
         el.className = 'bar-row';
-        el.innerHTML = `<label>${row.name}</label><div class="bar-track"><div class="bar-fill" style="background:${row.color}"></div></div>`;
+        // ITEM 4: a .bar-value span rides inside the track (over the fill) showing the live level.
+        el.innerHTML = `<label>${row.name}</label><div class="bar-track"><div class="bar-fill" style="background:${row.color}"></div><span class="bar-value"></span></div>`;
         bars.appendChild(el);
         this.fills.set(`${prefix}:${row.id}`, el.querySelector('.bar-fill')!);
+        this.barValues.set(`${prefix}:${row.id}`, el.querySelector('.bar-value')!);
       }
     };
     build(this.needsPanel, this.stats.needDefs, 'need');
@@ -682,20 +696,27 @@ export class Hud {
     this.refresh();
   }
 
-  /** Update bar widths from current values. Call once per HUD tick (not per frame). */
+  /** Update bar widths + in-bar value text from current values. Call once per HUD tick (not per frame). */
   refresh() {
+    // Needs are a 0-100 scale (no per-need max in stats.json) → shown as "value/100".
     for (const def of this.stats.needDefs) {
       const fill = this.fills.get(`need:${def.id}`);
       if (!fill) continue;
       const v = this.stats.needs.get(def.id) ?? 0;
       fill.style.width = `${v}%`;
       fill.classList.toggle('low', v < 20);
+      const text = this.barValues.get(`need:${def.id}`);
+      if (text) text.textContent = `${Math.round(v)}/${NEED_MAX}`;
     }
+    // Skills use each stat's real max from stats.json (e.g. charisma 10, cooking 100) → "value/max".
     for (const def of this.stats.skillDefs) {
       const fill = this.fills.get(`skill:${def.id}`);
       if (!fill) continue;
+      const max = def.max || 100;
       const v = this.stats.skills.get(def.id) ?? 0;
-      fill.style.width = `${(v / (def.max || 100)) * 100}%`;
+      fill.style.width = `${(v / max) * 100}%`;
+      const text = this.barValues.get(`skill:${def.id}`);
+      if (text) text.textContent = `${Math.round(v)}/${max}`;
     }
   }
 

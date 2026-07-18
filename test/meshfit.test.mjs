@@ -81,6 +81,50 @@ function boundsOf(o) {
   approx(g.position.x, 1, 'offset + scale: x offset applied alongside scale');
 }
 
+// --- ITEM 1 root cause: meshFit.scale must NOT drift the mesh off the footprint center when the
+//     GLB's local origin is not its bounding-box center. normalize() centers on the footprint;
+//     applyMeshFit(scale) must re-anchor so the footprint center stays put.
+{
+  const g = new THREE.Group();
+  // geometry whose local origin is far from its own center (off-center authoring, like a real GLB)
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1));
+  mesh.position.set(5, 0.5, -3); // origin nowhere near the box center
+  g.add(mesh);
+  normalizeModelToFootprint(g, [1, 1]); // fit + center + ground
+  applyMeshFit(g, { scale: 2 });        // 2x: naive scale-about-origin would slide it sideways
+  const b = boundsOf(g);
+  approx(b.center.x, 0, 'scale keeps footprint-centered x (no drift)');
+  approx(b.center.z, 0, 'scale keeps footprint-centered z (no drift)');
+  approx(b.min.y, 0, 'scale keeps mesh grounded (no sink)');
+  approx(b.size.x, 2, 'scale doubles footprint width');
+}
+// --- yawOffsetDeg must also re-anchor (rotation about an off-center origin drifts too)
+{
+  const g = new THREE.Group();
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 1));
+  mesh.position.set(4, 0.5, 4);
+  g.add(mesh);
+  normalizeModelToFootprint(g, [2, 1]);
+  applyMeshFit(g, { yawOffsetDeg: 90 });
+  const b = boundsOf(g);
+  approx(b.center.x, 0, 'yaw keeps footprint-centered x');
+  approx(b.center.z, 0, 'yaw keeps footprint-centered z');
+  approx(b.min.y, 0, 'yaw keeps mesh grounded');
+}
+// --- offsets nudge the mesh FROM the re-anchored footprint center (scale + offset compose cleanly)
+{
+  const g = new THREE.Group();
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1));
+  mesh.position.set(5, 0.5, -3);
+  g.add(mesh);
+  normalizeModelToFootprint(g, [1, 1]);
+  applyMeshFit(g, { scale: 2, xOffset: 0.3, zOffset: -0.4, yOffset: 0.1 });
+  const b = boundsOf(g);
+  approx(b.center.x, 0.3, 'offset nudges x from re-anchored center');
+  approx(b.center.z, -0.4, 'offset nudges z from re-anchored center');
+  approx(b.min.y, 0.1, 'offset nudges y from ground');
+}
+
 console.log('ALL MESH-NORMALIZE TESTS PASSED');
 
 function approx(a, b, msg, eps = 1e-6) {

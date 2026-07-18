@@ -96,8 +96,19 @@ function meshFitScale(fit: AssetDef['meshFit'], axis: 0 | 1): number {
  * designer can fix a badly-sized GLB without re-exporting):
  *  - width:  AssetDef.door.apertureWidth → footprint[0] (the door's long axis) x meshFit x-scale
  *            → the entry's own nav `width` → DEFAULT_APERTURE_WIDTH.
- *  - height: AssetDef.door.apertureHeight → DEFAULT_APERTURE_HEIGHT (the 2.1m stand-in panel
- *            height) x meshFit y-scale.
+ *  - height: AssetDef.door.apertureHeight → DEFAULT_APERTURE_HEIGHT (the canonical 2.1m doorway
+ *            height, which the shipped door.glb also fits to naturally).
+ *
+ * ITEM 3 fix (2026-07-17): the default height is NO LONGER multiplied by meshFit y-scale.
+ * meshFit.scale is a per-mesh AUTHORING correction (fixing a GLB's import units/proportions), NOT a
+ * statement about how tall the DOORWAY should be — conflating the two produced a doorway taller than
+ * its wall. The shipped door.glb is ~2.1m at its natural footprint fit but carries meshFit y=1.75,
+ * so `2.1 x 1.75 = 3.675m` overshot the 2.5m wall: aperturesForWall clamped it to full wall height
+ * and wallSegments emitted no lintel (the designer's "wall hole is full height / no lintel" bug).
+ * A doorway's canonical height is DEFAULT_APERTURE_HEIGHT; a designer who genuinely wants a taller or
+ * shorter opening sets the explicit door.apertureHeight (Asset Editor), which still wins. This keeps
+ * the aperture height decoupled from the GLB's internal proportions, which apertureSizeFor cannot
+ * measure purely anyway.
  * Non-finite / non-positive values are ignored at every step (never a zero/NaN hole).
  */
 export function apertureSizeFor(
@@ -113,7 +124,7 @@ export function apertureSizeFor(
   else width = DEFAULT_APERTURE_WIDTH;
   let height: number;
   if (finitePositive(explicitH)) height = explicitH;
-  else height = DEFAULT_APERTURE_HEIGHT * (def ? meshFitScale(def.meshFit, 1) : 1);
+  else height = DEFAULT_APERTURE_HEIGHT;
   return { width, height };
 }
 
