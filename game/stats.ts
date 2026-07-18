@@ -27,11 +27,11 @@ export function computeEnvironmentScore(
   placedAssetIds: string[],
   accidentAssetIds: string[],
   environmentScoreFor: (assetId: string) => number,
-  nightLightBonus = 0,
+  nightEnvironmentContribution = 0,
 ): number {
   const placedSum = placedAssetIds.reduce((sum, id) => sum + environmentScoreFor(id), 0);
   const accidentSum = accidentAssetIds.reduce((sum, id) => sum + environmentScoreFor(id), 0);
-  return placedSum + accidentSum + nightLightBonus;
+  return placedSum + accidentSum + nightEnvironmentContribution;
 }
 
 /** B5-1: positive practice gains taper as a skill approaches its max. Losses/decay are returned

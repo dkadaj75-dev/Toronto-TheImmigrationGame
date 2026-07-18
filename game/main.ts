@@ -44,7 +44,7 @@ import { isNpcAvailable, NpcVisitorController, type NpcDef } from './npc';
 import { mutualFacingDeg, usePoseFor } from './facing';
 import { contactViews, PhoneContactSession, phoneAutonomyCandidates } from './contacts';
 import { visitGate, VisitAwayTracker, type VisitReturnEvent } from './visit';
-import { crossedNightWindowBoundary, inspectAmbience, nightEnvironmentBonus, sleepBlockDecision, type AmbienceAssetInstance } from './ambience';
+import { crossedNightWindowBoundary, inspectAmbience, nightEnvironmentContribution, sleepBlockDecision, type AmbienceAssetInstance } from './ambience';
 
 /** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
  *  a seat-aware action with no eligible seat in range) plays the dedicated 'sit_ground' state
@@ -292,7 +292,7 @@ async function start() {
       buyMode.effectivePlacedObjectsList().map((p) => p.asset),
       accidents.registry.all.map((inst) => inst.accidentId),
       environmentScoreFor,
-      ambientEnvironmentBonus(),
+      ambientEnvironmentContribution(),
     );
   };
   const envNeedId = () => data.stats.needs.find((n) => n.computed)?.id;
@@ -334,13 +334,13 @@ async function start() {
   const sleepDecisionAt = (position: [number, number]) => sleepBlockDecision(
     ambienceMatchesAt(position), data.tuning.ambience?.sleepBlockingEnabled ?? true,
   );
-  const ambientEnvironmentBonus = () => {
-    if (data.tuning.ambience?.nightEnvironmentEnabled === false) return 0;
-    return nightEnvironmentBonus(
+  const ambientEnvironmentContribution = () => {
+    return nightEnvironmentContribution(
       gameSeconds / 3600,
       data.tuning.time.nightStartHour,
       data.tuning.time.nightEndHour,
       ambienceMatchesAt([sim.position.x, sim.position.z]),
+      data.tuning.ambience,
     );
   };
 

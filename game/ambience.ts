@@ -150,6 +150,25 @@ export function nightEnvironmentBonus(
   ), 0);
 }
 
+export interface NightEnvironmentTuning {
+  nightEnvironmentEnabled?: boolean;
+  nightEnvironmentPenalty?: number;
+}
+
+/** One event-recomputed night Environment contribution: signed darkness delta plus ON lamps.
+ *  The shared feature flag disables both halves; absent penalty preserves old tuning fixtures. */
+export function nightEnvironmentContribution(
+  hour: number,
+  nightStartHour: number,
+  nightEndHour: number,
+  matches: readonly AmbienceMatch[],
+  tuning?: NightEnvironmentTuning,
+): number {
+  if (tuning?.nightEnvironmentEnabled === false || !isNightHour(hour, nightStartHour, nightEndHour)) return 0;
+  return (tuning?.nightEnvironmentPenalty ?? 0)
+    + nightEnvironmentBonus(hour, nightStartHour, nightEndHour, matches);
+}
+
 /** Event trigger for the clock path: true only when advancing time crosses into/out of night. */
 export function crossedNightWindowBoundary(
   previousHour: number,

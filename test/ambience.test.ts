@@ -1,6 +1,7 @@
 import { AssetStateRegistry } from '../game/assetstate';
 import {
-  crossedNightWindowBoundary, inspectAmbience, isNightHour, nightEnvironmentBonus, sameRoom, sleepBlockDecision,
+  crossedNightWindowBoundary, inspectAmbience, isNightHour, nightEnvironmentBonus, nightEnvironmentContribution,
+  sameRoom, sleepBlockDecision,
   type AmbienceAssetInstance, type AmbienceRoomGeometry,
 } from '../game/ambience';
 import type { AssetDef } from '../game/data';
@@ -76,8 +77,30 @@ check('other-room light adds no night Environment bonus', nightEnvironmentBonus(
 ]) === 0);
 check('absent environmentBonus resolves to zero', nightEnvironmentBonus(23, 22, 6, [tvMatch]) === 0);
 check('sound-only emitters do not add light Environment', nightEnvironmentBonus(23, 22, 6, [soundMatch]) === 0);
+check('night darkness penalty is applied as its authored signed delta', nightEnvironmentContribution(
+  23, 22, 6, [], { nightEnvironmentPenalty: -7 },
+) === -7);
+check('a positive authored night delta raises Environment without sign coercion', nightEnvironmentContribution(
+  23, 22, 6, [], { nightEnvironmentPenalty: 4 },
+) === 4);
+check('day has neither darkness penalty nor lamp bonus', nightEnvironmentContribution(
+  12, 22, 6, [nearby], { nightEnvironmentPenalty: -7 },
+) === 0);
+check('ON lamps claw back part of the night penalty', nightEnvironmentContribution(
+  23, 22, 6, [nearby], { nightEnvironmentPenalty: -7 },
+) === -6.25);
+check('night Environment master switch disables penalty and lamp bonuses together', nightEnvironmentContribution(
+  23, 22, 6, [nearby], { nightEnvironmentEnabled: false, nightEnvironmentPenalty: -7 },
+) === 0);
+check('absent nightEnvironmentPenalty defaults to zero for old tuning fixtures', nightEnvironmentContribution(
+  23, 22, 6, [nearby], { nightEnvironmentEnabled: true },
+) === 0.75);
 check('night start crossing requests an Environment recompute', crossedNightWindowBoundary(21.99, 22, 22, 6));
 check('night end crossing requests an Environment recompute', crossedNightWindowBoundary(5.99, 6, 22, 6));
+check('night-boundary recompute changes the full penalty-plus-lamps contribution',
+  nightEnvironmentContribution(21.99, 22, 6, [nearby], { nightEnvironmentPenalty: -7 }) === 0
+  && nightEnvironmentContribution(22, 22, 6, [nearby], { nightEnvironmentPenalty: -7 }) === -6.25
+  && crossedNightWindowBoundary(21.99, 22, 22, 6));
 check('ordinary hour advancement does not request a recompute', !crossedNightWindowBoundary(23, 0, 22, 6));
 
 const blocked = sleepBlockDecision([nearby, tvMatch]);

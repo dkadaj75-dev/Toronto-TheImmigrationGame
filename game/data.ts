@@ -637,8 +637,14 @@ export interface TuningData {
   skills?: { growthCurveExp?: number };
   autonomy: { seekBelowThreshold: number; stopAtThreshold: number; postPlayerCommandCooldownSeconds: number; decisionGraceSeconds?: number };
   time: { secondsPerGameDay: number; nightStartHour: number; nightEndHour: number };
-  /** B13-9/B13-10 shared room-aware light/sound range and feature gates. */
-  ambience?: { radiusMeters?: number; nightEnvironmentEnabled?: boolean; sleepBlockingEnabled?: boolean };
+  /** B13-9/B13-10/B13-14 shared room-aware light/sound range and feature gates. The night
+   *  Environment penalty is a signed delta (normally negative); absent preserves old fixtures. */
+  ambience?: {
+    radiusMeters?: number;
+    nightEnvironmentEnabled?: boolean;
+    nightEnvironmentPenalty?: number;
+    sleepBlockingEnabled?: boolean;
+  };
   economy: { startingFunds: number; currencyName: string };
   /** B13-8 Buy Mode actual-asset ghost. Opacity is clamped to 0..1; absent defaults to 0.5. */
   buy?: { ghostOpacity?: number };
@@ -819,6 +825,17 @@ export interface GameData {
   /** SOCIAL S3: optional for old fixtures; loadAll supplies both files in the real game. */
   npcs?: import('./npc').NpcsData;
   social?: import('./social').SocialData;
+  /** Save settings are optional so older test fixtures and deployments remain compatible. */
+  save?: SaveConfig;
+}
+
+/** Runtime-save policy only; authored data remains outside save envelopes. */
+export interface SaveConfig {
+  slots: number;
+  autosaveSlotId: string;
+  autosaveIntervalHours: number;
+  autosaveOnEvents: string[];
+  storageKeyPrefix: string;
 }
 
 /** B7-7 boot-only presentation. Unlike tuning.json this file is intentionally not hot-reloaded. */
@@ -847,6 +864,7 @@ const FILES = {
   theme: '/data/theme.json',
   npcs: '/data/npcs.json',
   social: '/data/social.json',
+  save: '/data/save.json',
 } as const;
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -900,7 +918,7 @@ export async function loadAll(): Promise<GameData> {
     if (fallbackId === homeId) throw err;
     map = await fetchJson<MapData>(`/data/maps/${fallbackId}.json`);
   }
-  const [stats, interactions, assets, quests, visas, jobs, bills, finance, happiness, loading, behavior, theme, npcs, social] = await Promise.all([
+  const [stats, interactions, assets, quests, visas, jobs, bills, finance, happiness, loading, behavior, theme, npcs, social, save] = await Promise.all([
     fetchJson<StatsData>(FILES.stats),
     fetchJson<InteractionsData>(FILES.interactions),
     fetchJson<AssetsData>(FILES.assets),
@@ -915,8 +933,9 @@ export async function loadAll(): Promise<GameData> {
     fetchOptionalJson<ThemeData>(FILES.theme),
     fetchOptionalJson<import('./npc').NpcsData>(FILES.npcs),
     fetchOptionalJson<import('./social').SocialData>(FILES.social),
+    fetchOptionalJson<SaveConfig>(FILES.save),
   ]);
-  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills, finance, happiness, loading, behavior, theme, npcs, social };
+  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills, finance, happiness, loading, behavior, theme, npcs, social, save };
 }
 
 async function fetchOptionalJson<T>(url: string): Promise<T | undefined> {

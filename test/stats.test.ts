@@ -94,9 +94,10 @@ check(
   computeEnvironmentScore(['couch', 'puddle'], [], envScoreFor) === 5 + -8,
 );
 check(
-  'event-resolved night light bonus enters the existing Environment aggregate',
-  computeEnvironmentScore(['couch'], [], envScoreFor, 0.75) === 5.75,
+  'event-resolved night penalty plus lamp bonus enters the existing Environment aggregate',
+  computeEnvironmentScore(['couch'], [], envScoreFor, -7 + 0.75) === -1.25,
 );
+check('day/disabled contribution leaves the base aggregate unchanged', computeEnvironmentScore(['couch'], [], envScoreFor, 0) === 5);
 
 // ITEM 2 (skill progress bar) — skillPointProgress: fraction toward the next integer skill point.
 {
