@@ -157,22 +157,10 @@
       ],
       "to": [
         0,
-        2.5
+        0
       ],
       "texture": "textures/wallpaint.jpg",
       "textureB": "textures/Concrete.jpg"
-    },
-    {
-      "from": [
-        0,
-        1.5
-      ],
-      "to": [
-        0,
-        0
-      ],
-      "textureB": "textures/wallrough.jpg",
-      "texture": "textures/wallpaint.jpg"
     },
     {
       "from": [

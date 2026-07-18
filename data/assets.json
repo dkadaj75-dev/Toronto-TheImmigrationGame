@@ -379,6 +379,9 @@
       "combustibility": {
         "chancePercent": 50,
         "delaySeconds": 5
+      },
+      "power": {
+        "ratePerHour": 0.25
       }
     },
     {
@@ -456,6 +459,9 @@
       "icon": "/public/icons/lamp.png",
       "meshFit": {
         "scale": 0.8
+      },
+      "power": {
+        "ratePerHour": 0.1
       }
     },
     {
@@ -484,7 +490,10 @@
         "yOffset": 0,
         "defaultOn": false
       },
-      "icon": "/public/icons/walllight.png"
+      "icon": "/public/icons/walllight.png",
+      "power": {
+        "ratePerHour": 0.05
+      }
     },
     {
       "id": "canvas",

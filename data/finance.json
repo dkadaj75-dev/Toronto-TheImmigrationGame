@@ -21,7 +21,7 @@
       "id": "hydro",
       "name": "Hydro",
       "base": 35,
-      "perAssetValue": 0.005
+      "perAssetValue": 0
     }
   ],
   "overdueDays": 2,
