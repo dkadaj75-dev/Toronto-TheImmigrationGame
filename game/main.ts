@@ -3,7 +3,7 @@
 // Simulation (needs/autonomy/pathfinding) arrives in Phase 1 and will read the same data objects.
 
 import * as THREE from 'three';
-import { loadAll, loadAllMaps, setRuntimeHomeMap, watchData, type ActionDef, type GameData, type MapData } from './data';
+import { loadAll, loadAllMaps, setRuntimeHomeMap, watchData, type ActionDef, type AssetDef, type GameData, type MapData } from './data';
 import { TouchCamera } from './camera';
 import { applyWallCutView, buildWorld, makeSimStandIn, makeLights, applyDayNight, applyExteriorScene, loadRiggedCharacter, normalizeMeshUrl, setAssetObjectOn } from './world';
 import { buildDoors, ExteriorDoorTransit, type ExteriorDoorTransitRequest } from './doors';
@@ -39,9 +39,9 @@ import { InitialLoadTracker, phraseAt } from './loading';
 import { applyTheme } from './theme';
 import { compatibility, visitOutcome, type InteractionDef } from './social';
 import { SocialRuntime } from './socialruntime';
-import { availableSocialInteractions, SocialInteractionSession, socialActionDef, socialAutonomyCandidates, socialScoringTarget } from './social-interactions';
+import { availableSocialInteractions, matchesSocialTarget, pairedAssetPositions, SocialInteractionSession, socialActionDef, socialAnimationFor, socialAutonomyCandidates, socialNpcActionDef, socialRoutingDecision, socialScoringTarget } from './social-interactions';
 import { isNpcAvailable, NpcVisitorController, type NpcDef } from './npc';
-import { mutualFacingDeg } from './facing';
+import { mutualFacingDeg, usePoseFor } from './facing';
 import { contactViews, PhoneContactSession, phoneAutonomyCandidates } from './contacts';
 import { visitGate, VisitAwayTracker, type VisitReturnEvent } from './visit';
 import { inspectAmbience, nightComfortBonus, sleepBlockDecision, type AmbienceAssetInstance } from './ambience';
@@ -363,6 +363,7 @@ async function start() {
     getCompatibilityMultiplier: (npc) => data.social
       ? compatibility(Object.fromEntries(stats.personality), npc.personality, data.social).multiplier
       : 1,
+    getRelationshipLevel: (npcId) => socialRuntime.relationships.levelFor(npcId),
     exteriorDoorUsable: (doorObject, doorDef) => !accidents.isBlocked(doorObject, doorDef),
     requestExteriorTransit,
     onCallFallback: (npc, outcome) => {
@@ -377,12 +378,16 @@ async function start() {
     ),
   });
 
+  let pairedSocial: {
+    playerAction: ActiveAction['action']; npcAction: ActiveAction['action'];
+    target: THREE.Object3D; targetDef: AssetDef; started: boolean;
+  } | null = null;
   const socialSession = new SocialInteractionSession(
     socialRuntime.relationships,
     () => data.social!,
     {
       setNpcAutonomyPaused: (paused) => visitors.setAutonomyPaused(paused),
-      stopNpcAction: () => visitors.stopInteraction(),
+      stopNpcAction: () => { visitors.stopInteraction(); pairedSocial = null; },
       applyPlayerNeed: (needId, delta) => {
         const current = stats.needs.get(needId);
         if (current !== undefined) stats.needs.set(needId, Math.max(0, Math.min(100, current + delta)));
@@ -410,11 +415,38 @@ async function start() {
   };
 
   const orderSocialInteraction = (npc: NpcDef, interaction: InteractionDef): boolean => {
-    const target = visitors.visitorObject;
-    if (!target || visitors.state.phase !== 'visiting' || currentVisitor()?.id !== npc.id) return false;
+    const visitor = visitors.visitorObject;
+    if (!visitor || visitors.state.phase !== 'visiting' || currentVisitor()?.id !== npc.id) return false;
+    let target: THREE.Object3D = visitor;
+    let targetDef: AssetDef | undefined;
+    if (interaction.targetAsset?.trim()) {
+      const candidates = world.children.flatMap((object) => {
+        if (!object.visible || !object.parent) return [];
+        const def = data.assets.assets.find((asset) => asset.id === object.userData.assetId);
+        return def && matchesSocialTarget(interaction, def) ? [{ object, def }] : [];
+      });
+      candidates.sort((a, b) => sim.position.distanceToSquared(a.object.position) - sim.position.distanceToSquared(b.object.position));
+      const chosen = candidates[0];
+      if (!chosen) {
+        hud.showQuestToast(`No ${interaction.targetAsset} is available`, 'started', 2500);
+        return false;
+      }
+      target = chosen.object;
+      targetDef = chosen.def;
+    }
     socialSession.finish(false);
     const order = socialSession.begin(npc, interaction, Object.fromEntries(stats.personality));
-    if (!agent.orderAction(order.action, target)) {
+    if (targetDef) {
+      const decision = socialRoutingDecision(interaction, targetDef);
+      const npcAction = socialNpcActionDef(interaction);
+      if (!visitors.orderInteraction(npcAction, target, targetDef, decision.pose ?? undefined)) {
+        socialSession.finish(false);
+        return false;
+      }
+      pairedSocial = { playerAction: order.action, npcAction, target, targetDef, started: false };
+    }
+    const pose = targetDef ? socialRoutingDecision(interaction, targetDef).pose ?? undefined : undefined;
+    if (!agent.orderAction(order.action, target, null, targetDef, false, pose)) {
       socialSession.finish(false);
       return false;
     }
@@ -1220,13 +1252,21 @@ async function start() {
     if (socialOrder?.action === a.action) {
       const visitor = visitors.visitorObject;
       if (!visitor) { agent.stopAction(false); return; }
+      // A target-asset pair begins only once BOTH ordinary SimAgents have reached and posed on
+      // the asset. The render-loop rendezvous below owns its shared timer/audio start.
+      if (pairedSocial?.playerAction === a.action) {
+        hud.showActivity(a.action.name);
+        anim?.play('idle');
+        durationState = null;
+        return;
+      }
       const [playerDeg, visitorDeg] = mutualFacingDeg(
         [sim.position.x, sim.position.z],
         [visitor.position.x, visitor.position.z],
       );
       sim.rotation.y = THREE.MathUtils.degToRad(playerDeg);
       visitor.rotation.y = THREE.MathUtils.degToRad(visitorDeg);
-      visitors.playInteraction(a.action.animation);
+      visitors.playInteraction(socialAnimationFor(socialOrder.interaction, 'npc'));
     }
     if (a.action.id !== FOOD_EATING_ACTION_ID && !quests.spend(a.action.cost ?? 0)) {
       hud.showQuestToast('Not enough funds for that action', 'started', 2500);
@@ -2175,6 +2215,35 @@ async function start() {
       }
     }
     visitors.update(sdt, clockScale());
+    // Paired social rendezvous: both agents used their normal orderAction/usePose route. Only now
+    // do the authored role clips, one shared sim-time duration, and interaction sound begin.
+    if (pairedSocial && !pairedSocial.started && agent.current?.action === pairedSocial.playerAction
+      && visitors.isInteractionReady(pairedSocial.npcAction)) {
+      pairedSocial.started = true;
+      if (pairedSocial.targetDef.category === 'beds') {
+        const rotationDeg = THREE.MathUtils.radToDeg(pairedSocial.target.rotation.y);
+        const lie = usePoseFor('lie', {
+          pos: [pairedSocial.target.position.x, pairedSocial.target.position.z], rotDeg: rotationDeg,
+        }, pairedSocial.targetDef, data.tuning);
+        const positions = pairedAssetPositions(
+          lie.pos,
+          rotationDeg,
+          pairedSocial.targetDef.footprint,
+        );
+        sim.position.x = positions.player[0]; sim.position.z = positions.player[1];
+        const visitor = visitors.visitorObject;
+        if (visitor) { visitor.position.x = positions.npc[0]; visitor.position.z = positions.npc[1]; }
+      }
+      const socialOrder = socialSession.active;
+      if (socialOrder) {
+        anim?.play(socialAnimationFor(socialOrder.interaction, 'player') || 'idle');
+        visitors.playInteraction(socialAnimationFor(socialOrder.interaction, 'npc'));
+        const active = agent.current;
+        const total = active ? computeDurationSeconds(active.action.duration, Object.fromEntries(stats.skills), data.stats.skills, Object.fromEntries(stats.needs)) : null;
+        durationState = active && total !== null ? { action: active, totalSeconds: total, elapsed: 0 } : null;
+        if (active?.action.sound) audio.startLoop(`action:${active.action.id}`, active.action.sound);
+      }
+    }
     // A timed/availability departure can preempt an approach or active conversation. Route that
     // through the ordinary completed=false stop so no social effects land and both Sims clean up.
     if (socialSession.active && visitors.state.phase !== 'visiting') agent.stopAction(false);

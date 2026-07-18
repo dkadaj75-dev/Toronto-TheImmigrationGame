@@ -31,12 +31,66 @@ export function socialActionDef(interaction: InteractionDef): ActionDef {
     name: interaction.name ?? interaction.id,
     needGains: { ...(interaction.needGains ?? {}) },
     skillGains: {},
-    animation: interaction.animation ?? '',
+    animation: socialAnimationFor(interaction, 'player'),
+    sound: interaction.sound || undefined,
     autonomyEligible: interaction.autonomyEligible === true,
     primaryNeed: null,
     censor: interaction.censor === true,
     duration: { baseSeconds: Math.max(0, finite(interaction.durationSeconds)) },
   };
+}
+
+export type SocialRole = 'player' | 'npc';
+
+/** A blank/missing role override deliberately falls back to the existing shared animation. */
+export function socialAnimationFor(interaction: InteractionDef, role: SocialRole): string {
+  const override = role === 'player' ? interaction.playerAnimation : interaction.npcAnimation;
+  return override?.trim() || interaction.animation?.trim() || '';
+}
+
+/** `targetAsset` accepts either an exact asset id or a category, with no separate schema branch. */
+export function matchesSocialTarget(interaction: InteractionDef, asset: Pick<AssetDef, 'id' | 'category'>): boolean {
+  const target = interaction.targetAsset?.trim();
+  return !!target && (asset.id === target || asset.category === target);
+}
+
+/** Pure routing decision shared by runtime/tests. Beds always request the existing lie pose,
+ * independently of the authored clip name; other paired assets use their ordinary pose rules. */
+export function socialRoutingDecision(
+  interaction: InteractionDef,
+  asset?: Pick<AssetDef, 'id' | 'category'>,
+): { paired: boolean; matches: boolean; pose: 'lie' | null } {
+  const paired = !!interaction.targetAsset?.trim();
+  return { paired, matches: paired && !!asset && matchesSocialTarget(interaction, asset), pose: asset?.category === 'beds' ? 'lie' : null };
+}
+
+/** Opposite double-bed halves: quarter-footprint offsets along the placed asset's local X axis.
+ * This intentionally stays simple: no occupancy registry, just stable player/NPC sides. */
+export function pairedAssetPositions(
+  center: [number, number], rotationDeg: number, footprint: [number, number],
+): { player: [number, number]; npc: [number, number] } {
+  const halfSeparation = Math.max(0, footprint[0]) / 4;
+  const rad = rotationDeg * Math.PI / 180;
+  const dx = Math.cos(rad) * halfSeparation;
+  const dz = -Math.sin(rad) * halfSeparation;
+  return {
+    player: [center[0] - dx, center[1] - dz],
+    npc: [center[0] + dx, center[1] + dz],
+  };
+}
+
+/** Decision-only audio seam: the runtime maps start to AudioManager.startLoop and every terminal
+ * path maps stop to stopLoop. Absent/blank sound is a no-op. */
+export function socialSoundDecision(
+  interaction: InteractionDef, phase: 'start' | 'stop',
+): { startPath?: string; stop: boolean } {
+  const sound = interaction.sound?.trim();
+  return phase === 'start' && sound ? { startPath: sound, stop: false } : { stop: phase === 'stop' && !!sound };
+}
+
+/** NPC action adapter uses the same duration/censor/gain-free action shape as the player. */
+export function socialNpcActionDef(interaction: InteractionDef): ActionDef {
+  return { ...socialActionDef(interaction), animation: socialAnimationFor(interaction, 'npc'), sound: undefined };
 }
 
 /** Asset-shaped scoring descriptor: it carries no authored gain multiplier, so social actions feed

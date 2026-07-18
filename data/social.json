@@ -31,6 +31,13 @@
       }
     ]
   },
+  "visitDuration": {
+    "byLevel": {
+      "enemy": 0.25,
+      "acquaintance": 1,
+      "beloved": 2
+    }
+  },
   "compatibility": {
     "traitWeights": {
       "cleanliness": 0.5,
@@ -141,6 +148,10 @@
       "id": "bed",
       "name": "Put the seal on the bed",
       "animation": "",
+      "targetAsset": "bed",
+      "playerAnimation": "lie_sleep",
+      "npcAnimation": "lie_sleep",
+      "sound": "/sounds/action_beep.wav",
       "durationSeconds": 20,
       "needGains": {},
       "relationshipGain": 0,

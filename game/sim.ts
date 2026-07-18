@@ -24,6 +24,9 @@ export interface ActiveAction {
    *  tuning.interaction.seatSearchRadius, or the resolved seat was unreachable) — the sim sits
    *  on the ground at its walked-to spot instead of snapping onto the target object itself. */
   groundSit?: boolean;
+  /** Runtime choreography override; social bed pairs use the existing lie machinery even when
+   * their authored role clip does not use the conventional `lie_` prefix. */
+  poseOverride?: 'sit' | 'lie' | 'use';
 }
 
 /**
@@ -147,7 +150,7 @@ export class SimAgent {
    * Actions that aren't seat-aware at all (seatAware omitted/false) never set groundSit; they
    * keep whatever pose their own `action.animation` implies, unchanged.
    */
-  orderAction(action: ActionDef, target: THREE.Object3D, seat: THREE.Object3D | null = null, targetDef?: AssetDef, seatAware = false): boolean {
+  orderAction(action: ActionDef, target: THREE.Object3D, seat: THREE.Object3D | null = null, targetDef?: AssetDef, seatAware = false, poseOverride?: 'sit' | 'lie' | 'use'): boolean {
     this.stopAction();
     const routeToPivot = (obj: THREE.Object3D): boolean => {
       const stand = nearestWalkable(this.grid, worldToCell(this.grid, obj.position.x, obj.position.z));
@@ -186,7 +189,7 @@ export class SimAgent {
       const seatDef = this.assetsById.get(seat.userData?.assetId as string);
       const reachedSeat = seatDef ? routeToTargetFront(seat, seatDef) : routeToPivot(seat);
       if (reachedSeat) {
-        this.queued = { action, target, seat };
+        this.queued = { action, target, seat, poseOverride };
         return true;
       }
     }
@@ -194,7 +197,7 @@ export class SimAgent {
       ? routeBesideSim(target)
       : targetDef ? routeToTargetFront(target, targetDef) : routeToPivot(target);
     if (reachedTarget) {
-      this.queued = { action, target, seat: null, groundSit: seatAware };
+      this.queued = { action, target, seat: null, groundSit: seatAware, poseOverride };
       return true;
     }
     return false;
@@ -294,11 +297,12 @@ export class SimAgent {
       return;
     }
     const anim = a.action.animation;
-    const pose: 'sit' | 'lie' | null = anim.startsWith('lie') ? 'lie' : anim.startsWith('sit') ? 'sit' : null;
+    const pose: 'sit' | 'lie' | 'use' | null = a.poseOverride
+      ?? (anim.startsWith('lie') ? 'lie' : anim.startsWith('sit') ? 'sit' : null);
     const perch = a.seat ?? a.target;
     const def = this.assetsById.get(perch.userData?.assetId as string);
 
-    if (!pose) {
+    if (!pose || pose === 'use') {
       // Standing action: only snap onto the asset's own explicit `use` perch (B2-3) — no
       // AssetDef, or an AssetDef with no `usePose.use`, means "keep the approach spot" (return,
       // nothing to do — the sim is already standing where it walked to).

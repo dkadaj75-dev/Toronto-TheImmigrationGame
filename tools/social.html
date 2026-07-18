@@ -20,7 +20,7 @@
   .entity-head{display:flex;gap:9px;align-items:center;margin-bottom:10px} .entity-head strong{flex:1}
   .slider-row{display:grid;grid-template-columns:minmax(120px,1fr) 1fr 48px;gap:10px;align-items:center;margin:5px 0} .slider-row .sv{text-align:right;font-variant-numeric:tabular-nums;color:#b9d2ff}
   .hint-line.warn{color:#e0a44a;font-size:12px;margin-top:5px}
-  .level-row{display:grid;grid-template-columns:1fr 110px auto auto auto;gap:8px;align-items:center;margin:6px 0}
+  .level-row{display:grid;grid-template-columns:1fr 110px 120px auto auto auto;gap:8px;align-items:center;margin:6px 0}
   .need-row{display:grid;grid-template-columns:minmax(120px,1fr) 110px;gap:8px 12px;align-items:center;margin:5px 0}
   .preview-meta{color:var(--muted);font-size:12px;margin:0 0 10px} .compat-line{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #252e3f} .compat-line strong{color:#b9d2ff;font-variant-numeric:tabular-nums}
   .lvl-block{margin-top:10px} .lvl-block .lvl-name{font-weight:650;color:#e7edf8;margin-bottom:3px} .lvl-block .lvl-acts{color:var(--muted);font-size:12px} .lvl-block .lvl-acts.none{color:#6f7b95;font-style:italic}
@@ -86,7 +86,7 @@
 'use strict';
 const API = '/api/data/';
 const NPCS_FILE = 'npcs.json', SOCIAL_FILE = 'social.json';
-const state = { npcs:null, social:null, stats:null, dirty:new Set(), fns:null, previewNpcId:null };
+const state = { npcs:null, social:null, stats:null, assets:null, dirty:new Set(), fns:null, previewNpcId:null };
 const $ = (id) => document.getElementById(id);
 
 function markDirty(file){ state.dirty.add(file); $('save').disabled=false; $('status').textContent='Unsaved changes'; }
@@ -116,6 +116,12 @@ function numberInput(value,onValue,file,options={}){
   input.addEventListener('input',()=>{ const n=Number(input.value); if(!Number.isFinite(n)) return; onValue(n); markDirty(file); renderPreview(); });
   return input;
 }
+function sparseNumberInput(value,onValue,file,options={}){
+  const input=document.createElement('input'); input.type='number'; input.step=options.step||'any'; input.value=Number.isFinite(value)?String(value):'';
+  input.placeholder=options.placeholder||''; if(options.min!==undefined) input.min=String(options.min);
+  input.addEventListener('input',()=>{ if(input.value.trim()==='') onValue(null); else { const n=Number(input.value); if(!Number.isFinite(n)) return; onValue(n); } markDirty(file); renderPreview(); });
+  return input;
+}
 function textInput(value,onValue,file,options={}){
   const input=document.createElement('input'); input.type='text'; input.value=value??''; if(options.placeholder) input.placeholder=options.placeholder;
   input.addEventListener('input',()=>{ onValue(input.value); markDirty(file); if(options.onInput) options.onInput(input); renderPreview(); });
@@ -138,6 +144,10 @@ function selectInput(rows,current,onValue,file,blankLabel){
 }
 function uniqueId(prefix,existing){ const used=new Set(existing); let n=existing.length+1; while(used.has(prefix+n)) n++; return prefix+n; }
 function levelRows(){ return state.social.relationship.levels.map((l)=>[l.id,l.id]); }
+function assetRows(){
+  const categories=[...new Set([...(state.assets?.categories||[]),...(state.assets?.assets||[]).map((a)=>a.category)])];
+  return [...categories.map((c)=>[c,'Category: '+c]),...(state.assets?.assets||[]).map((a)=>[a.id,'Asset: '+(a.name||a.id)+' ('+a.id+')'])];
+}
 
 // ---------------------------------------------------------------------------------------------- NPCs
 function renderNpcs(){
@@ -185,6 +195,8 @@ function renderNpcs(){
 // -------------------------------------------------------------------------------------- Relationship
 function renderRelationship(){
   const rel=state.social.relationship;
+  const byLevel=state.social.visitDuration?.byLevel||{};
+  const attachByLevel=()=>{ state.social.visitDuration||={}; state.social.visitDuration.byLevel=byLevel; };
   const bounds=$('relBounds'); bounds.innerHTML='';
   appendField(bounds,'Min score',numberInput(rel.min,(v)=>rel.min=v,SOCIAL_FILE,{step:'any'}));
   appendField(bounds,'Max score',numberInput(rel.max,(v)=>rel.max=v,SOCIAL_FILE,{step:'any'}));
@@ -194,15 +206,17 @@ function renderRelationship(){
   const root=$('levels'); root.innerHTML='';
   rel.levels.forEach((level,index)=>{
     const row=document.createElement('div'); row.className='level-row'; row.dataset.levelIndex=String(index);
-    const id=textInput(level.id,(v)=>{ level.id=v; },SOCIAL_FILE); id.placeholder='level id';
+    let previousId=level.id;
+    const id=textInput(level.id,(v)=>{ if(previousId!==v && Object.prototype.hasOwnProperty.call(byLevel,previousId)){ byLevel[v]=byLevel[previousId]; delete byLevel[previousId]; } level.id=v; previousId=v; },SOCIAL_FILE); id.placeholder='level id';
     const atLeast=numberInput(level.atLeast,(v)=>level.atLeast=v,SOCIAL_FILE,{step:'any'});
+    const visitMultiplier=sparseNumberInput(byLevel[level.id],(v)=>{ if(v===null) delete byLevel[level.id]; else { attachByLevel(); byLevel[level.id]=v; } },SOCIAL_FILE,{min:0,placeholder:'x1 default'});
     const up=document.createElement('button'); up.className='mini'; up.dataset.action='level-up'; up.textContent='↑'; up.disabled=index===0;
     up.addEventListener('click',()=>{ const a=rel.levels; [a[index-1],a[index]]=[a[index],a[index-1]]; markDirty(SOCIAL_FILE); renderRelationship(); renderInteractions(); renderVisit(); renderPreview(); });
     const down=document.createElement('button'); down.className='mini'; down.dataset.action='level-down'; down.textContent='↓'; down.disabled=index===rel.levels.length-1;
     down.addEventListener('click',()=>{ const a=rel.levels; [a[index+1],a[index]]=[a[index],a[index+1]]; markDirty(SOCIAL_FILE); renderRelationship(); renderInteractions(); renderVisit(); renderPreview(); });
     const del=document.createElement('button'); del.className='danger mini'; del.dataset.action='remove-level'; del.textContent='✕';
-    del.addEventListener('click',()=>{ rel.levels.splice(index,1); markDirty(SOCIAL_FILE); renderRelationship(); renderInteractions(); renderVisit(); renderPreview(); });
-    row.append(id,atLeast,up,down,del); root.appendChild(row);
+    del.addEventListener('click',()=>{ delete byLevel[level.id]; rel.levels.splice(index,1); markDirty(SOCIAL_FILE); renderRelationship(); renderInteractions(); renderVisit(); renderPreview(); });
+    row.append(id,atLeast,visitMultiplier,up,down,del); root.appendChild(row);
   });
 }
 
@@ -240,6 +254,12 @@ function renderInteractions(){
     const updateWarn=()=>{ warn.style.display=anim.value.trim()?'none':''; };
     anim.addEventListener('input',updateWarn); updateWarn();
     animWrap.append(anim,warn); appendField(grid,'Animation',animWrap);
+    appendField(grid,'Target asset / category',selectInput(assetRows(),it.targetAsset??'',(v)=>{ if(v) it.targetAsset=v; else delete it.targetAsset; },SOCIAL_FILE,'-- standing pair --'));
+    appendField(grid,'Player animation override',textInput(it.playerAnimation??'',(v)=>{ if(v.trim()) it.playerAnimation=v; else delete it.playerAnimation; },SOCIAL_FILE,{placeholder:'blank = base animation'}));
+    appendField(grid,'NPC animation override',textInput(it.npcAnimation??'',(v)=>{ if(v.trim()) it.npcAnimation=v; else delete it.npcAnimation; },SOCIAL_FILE,{placeholder:'blank = base animation'}));
+    const sound=textInput(it.sound??'',(v)=>{ if(v.trim()) it.sound=v; else delete it.sound; },SOCIAL_FILE,{placeholder:'/sounds/social.wav'});
+    sound.addEventListener('blur',()=>{ const norm=normalizeSourcePath(sound.value); if(norm!==sound.value){ sound.value=norm; if(norm) it.sound=norm; else delete it.sound; markDirty(SOCIAL_FILE); } });
+    appendField(grid,'Sound',sound);
     appendField(grid,'Duration (s)',numberInput(it.durationSeconds,(v)=>it.durationSeconds=v,SOCIAL_FILE,{min:0,step:'any'}));
     appendField(grid,'Relationship gain',numberInput(it.relationshipGain,(v)=>it.relationshipGain=v,SOCIAL_FILE,{step:'any'}));
     appendField(grid,'Requires level ≥',selectInput(levels,it.requiresLevelAtLeast??'',(v)=>it.requiresLevelAtLeast=v||null,SOCIAL_FILE,'— none —'));
@@ -331,8 +351,8 @@ function renderAll(){ renderNpcs(); renderRelationship(); renderCompatibility();
 async function load(){
   try{
     const get=async(path)=>{ const r=await fetch(API+path); if(!r.ok) throw new Error(path+': '+r.status); return r.json(); };
-    const [npcs,social,stats]=await Promise.all([get(NPCS_FILE),get(SOCIAL_FILE),get('stats.json')]);
-    Object.assign(state,{npcs,social,stats}); state.dirty.clear();
+    const [npcs,social,stats,assets]=await Promise.all([get(NPCS_FILE),get(SOCIAL_FILE),get('stats.json'),get('assets.json')]);
+    Object.assign(state,{npcs,social,stats,assets}); state.dirty.clear();
     renderAll(); $('save').disabled=true; $('status').textContent='Loaded';
   }catch(error){ $('status').textContent='Load failed'; console.error('[social-editor]',error); }
 }

@@ -74,6 +74,13 @@ export interface InteractionDef {
   id: string;
   name?: string;
   animation?: string;
+  /** Sparse per-role overrides. `animation` remains the both-role fallback. */
+  playerAnimation?: string;
+  npcAnimation?: string;
+  /** Sparse asset id OR category. Present routes both Sims to one matching live asset. */
+  targetAsset?: string;
+  /** Sparse action loop, using the same lifecycle as ActionDef.sound. */
+  sound?: string;
   durationSeconds?: number;
   needGains?: Record<string, number>;
   /** BEFORE the compatibility multiplier is applied */
@@ -111,10 +118,20 @@ export interface VisitTheirPlaceConfig {
 
 export interface SocialData {
   relationship: RelationshipConfig;
+  /** Sparse relationship-level multipliers for an NPC's authored base visit duration. */
+  visitDuration?: { byLevel?: Record<string, number> };
   compatibility: CompatibilityConfig;
   interactions: InteractionDef[];
   phone: PhoneConfig;
   visitTheirPlace: VisitTheirPlaceConfig;
+}
+
+/** Resolve an NPC's authored BASE stay once at arrival. Missing curve/level entries are neutral x1. */
+export function resolveVisitDurationHours(baseHours: number, levelId: string | null, data: SocialData): number {
+  const base = Number.isFinite(baseHours) && baseHours > 0 ? baseHours : 0;
+  const authored = levelId == null ? undefined : data.visitDuration?.byLevel?.[levelId];
+  const multiplier = typeof authored === 'number' && Number.isFinite(authored) && authored >= 0 ? authored : 1;
+  return base * multiplier;
 }
 
 // ---------------------------------------------------------------------------------------------------

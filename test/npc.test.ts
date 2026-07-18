@@ -15,7 +15,8 @@ const amara: NpcDef = {
 };
 const npcs: NpcsData = { npcs: [amara] };
 const social: SocialData = {
-  relationship: { min: -100, max: 100, start: 0, decayPerDay: 0, levels: [] },
+  relationship: { min: -100, max: 100, start: 0, decayPerDay: 0, levels: [{ id: 'enemy', atLeast: -100 }, { id: 'beloved', atLeast: 85 }] },
+  visitDuration: { byLevel: { enemy: 0.25, beloved: 2 } },
   compatibility: { traitWeights: {}, traitRange: 10, minMultiplier: 0.25, maxMultiplier: 1.75 },
   interactions: [],
   phone: {
@@ -88,6 +89,19 @@ console.log('npc.test — duration, asked and availability leave triggers');
   check('cross-midnight availability helper includes both sides',
     isNpcAvailable(23, { from: 20, to: 2 }) && isNpcAvailable(1.5, { from: 20, to: 2 }));
   check('cross-midnight availability ends exactly at to', !isNpcAvailable(2, { from: 20, to: 2 }));
+}
+
+console.log('npc.test - visit duration is relationship-scaled once at arrival');
+{
+  const scaled = make();
+  scaled.invite('amara');
+  tickMinutes(scaled, 5, 12, { ...reachable, relationshipLevel: () => 'enemy' });
+  check('arrival stores base 2h x enemy 0.25 = 30 minutes', scaled.state.resolvedVisitDurationMinutes === 30);
+  scaled.markEntered();
+  social.visitDuration!.byLevel!.enemy = 2;
+  tickMinutes(scaled, 30, 12.5);
+  check('hot-edited curve does not change the duration already resolved at arrival', scaled.state.leaveReason === 'duration');
+  social.visitDuration!.byLevel!.enemy = 0.25;
 }
 
 console.log('npc.test — unreachable exterior door converts to completed call outcome');

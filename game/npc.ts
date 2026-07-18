@@ -3,7 +3,7 @@
 // transitions into the existing character loader, AnimController, SimAgent and Autonomy classes.
 
 import * as THREE from 'three';
-import type { AssetDef, CharacterTuning, GameData } from './data';
+import type { ActionDef, AssetDef, CharacterTuning, GameData } from './data';
 import type { NavGrid } from './nav';
 import { cellCenter, isWalkable, worldToCell } from './nav';
 import { SimAgent, type ActiveAction } from './sim';
@@ -11,7 +11,7 @@ import { Autonomy, type AutonomyStats } from './autonomy';
 import { AnimController } from './anim';
 import { loadRiggedCharacter } from './world';
 import { effectiveNeedGain } from './stats';
-import { phoneGain, type PhoneGainResult, type SocialData } from './social';
+import { phoneGain, resolveVisitDurationHours, type PhoneGainResult, type SocialData } from './social';
 import type { EvalContext } from './quests';
 import type { ExteriorDoorTransitHandle } from './doors';
 
@@ -41,6 +41,8 @@ export interface VisitSaveState {
   compatibilityMultiplier: number;
   pendingElapsedMinutes: number;
   visitElapsedMinutes: number;
+  /** Resolved once when arrival begins; sparse for old saves. */
+  resolvedVisitDurationMinutes?: number;
   /** One normalized internal meter: 1 = content/socially full, 0 = ready to leave. */
   socialMeter: number;
   leaveReason: VisitLeaveReason;
@@ -51,12 +53,15 @@ export interface VisitTickHooks {
   modelReadiness(npc: NpcDef): 'pending' | 'ready' | 'failed';
   /** Completion seam for the pending-arrival timer once the rig is ready. */
   beginArrival(npc: NpcDef): boolean;
+  /** Current level sampled exactly once after arrival routing succeeds. */
+  relationshipLevel?(npc: NpcDef): string | null;
   onCallFallback?(npc: NpcDef, outcome: PhoneGainResult): void;
 }
 
 const idleState = (): VisitSaveState => ({
   phase: 'idle', npcId: null, compatibilityMultiplier: 1,
-  pendingElapsedMinutes: 0, visitElapsedMinutes: 0, socialMeter: 1, leaveReason: null,
+  pendingElapsedMinutes: 0, visitElapsedMinutes: 0, resolvedVisitDurationMinutes: undefined,
+  socialMeter: 1, leaveReason: null,
 });
 
 function finiteNonNegative(value: number): number {
@@ -88,7 +93,8 @@ export class VisitLifecycle {
     this.saved = {
       phase: 'pending', npcId,
       compatibilityMultiplier: Number.isFinite(compatibilityMultiplier) ? compatibilityMultiplier : 1,
-      pendingElapsedMinutes: 0, visitElapsedMinutes: 0, socialMeter: 1, leaveReason: null,
+      pendingElapsedMinutes: 0, visitElapsedMinutes: 0, resolvedVisitDurationMinutes: undefined,
+      socialMeter: 1, leaveReason: null,
     };
     return true;
   }
@@ -141,13 +147,22 @@ export class VisitLifecycle {
         hooks.onCallFallback?.(npc, outcome);
         return;
       }
+      if (this.saved.resolvedVisitDurationMinutes === undefined) {
+        this.saved.resolvedVisitDurationMinutes = resolveVisitDurationHours(
+          npc.visitDurationHours,
+          hooks.relationshipLevel?.(npc) ?? null,
+          this.getSocial(),
+        ) * 60;
+      }
       this.saved.phase = 'entering';
       return;
     }
 
     if (this.saved.phase !== 'visiting') return;
     this.saved.visitElapsedMinutes += deltaMinutes;
-    const durationMinutes = finiteNonNegative(npc.visitDurationHours) * 60;
+    const durationMinutes = this.saved.resolvedVisitDurationMinutes === undefined
+      ? finiteNonNegative(npc.visitDurationHours) * 60
+      : finiteNonNegative(this.saved.resolvedVisitDurationMinutes);
     if (durationMinutes > 0) {
       this.saved.socialMeter = Math.max(0, this.saved.socialMeter - deltaMinutes / durationMinutes);
     } else {
@@ -174,6 +189,8 @@ export class VisitLifecycle {
       compatibilityMultiplier: Number.isFinite(state.compatibilityMultiplier) ? state.compatibilityMultiplier : 1,
       pendingElapsedMinutes: finiteNonNegative(state.pendingElapsedMinutes),
       visitElapsedMinutes: finiteNonNegative(state.visitElapsedMinutes),
+      resolvedVisitDurationMinutes: state.resolvedVisitDurationMinutes === undefined
+        ? undefined : finiteNonNegative(state.resolvedVisitDurationMinutes),
       socialMeter: Math.max(0, Math.min(1, Number.isFinite(state.socialMeter) ? state.socialMeter : 1)),
       leaveReason: state.leaveReason ?? null,
     };
@@ -197,6 +214,7 @@ export interface NpcVisitorControllerOptions {
   getHour: () => number;
   getEvalContext?: () => EvalContext;
   getCompatibilityMultiplier?: (npc: NpcDef) => number;
+  getRelationshipLevel?: (npcId: string) => string | null;
   exteriorDoorUsable?: (doorObject: THREE.Object3D, doorDef: AssetDef) => boolean;
   requestExteriorTransit?: (request: {
     passThrough: () => void;
@@ -243,6 +261,7 @@ export class NpcVisitorController {
   readonly lifecycle: VisitLifecycle;
   private live: LiveVisitor | null = null;
   private preload: RigPreloadState = { status: 'idle' };
+  private interactionAction: ActionDef | null = null;
 
   constructor(private options: NpcVisitorControllerOptions) {
     this.lifecycle = new VisitLifecycle(
@@ -258,7 +277,23 @@ export class NpcVisitorController {
 
   /** S4 presentation/meter adapters. State math remains owned by VisitLifecycle. */
   playInteraction(animation: string): void { this.live?.anim?.play(animation || 'idle'); }
-  stopInteraction(): void { this.live?.anim?.play(this.live?.agent.isMoving ? 'walk' : 'idle'); }
+  stopInteraction(): void {
+    const action = this.interactionAction;
+    this.interactionAction = null;
+    if (action && this.live?.agent.pendingActionId === action.id) {
+      this.live.agent.stopAction(false);
+      this.live.agent.halt();
+    }
+    this.live?.anim?.play(this.live?.agent.isMoving ? 'walk' : 'idle');
+  }
+  orderInteraction(action: ActionDef, target: THREE.Object3D, targetDef: AssetDef, pose?: 'lie'): boolean {
+    if (!this.live) return false;
+    this.interactionAction = action;
+    const ordered = this.live.agent.orderAction(action, target, null, targetDef, false, pose);
+    if (!ordered) this.interactionAction = null;
+    return ordered;
+  }
+  isInteractionReady(action: ActionDef): boolean { return this.live?.agent.current?.action === action; }
   adjustSocialMeter(delta: number): void { this.lifecycle.adjustSocialMeter(delta); }
 
   invite(npcId: string): boolean {
@@ -314,6 +349,7 @@ export class NpcVisitorController {
     this.lifecycle.tick(sdtSeconds, gameSecondsPerSimSecond, this.options.getHour(), {
       modelReadiness: (npc) => this.rigReadiness(npc),
       beginArrival: (npc) => this.spawn(npc, true),
+      relationshipLevel: (npc) => this.options.getRelationshipLevel?.(npc.id) ?? null,
       onCallFallback: (npc, outcome) => {
         this.clearPreload();
         this.options.onCallFallback?.(npc, outcome);
@@ -423,8 +459,11 @@ export class NpcVisitorController {
       live.anim.play(moving ? 'walk' : agent.current ? actionAnim(agent.current) : 'idle');
       if (moving) live.anim.setWalkSpeed(this.options.getData().tuning.movement.walkSpeed);
     };
-    agent.onActionStart = (active) => live.anim?.play(actionAnim(active));
-    agent.onActionStop = () => live.anim?.play(agent.isMoving ? 'walk' : 'idle');
+    agent.onActionStart = (active) => live.anim?.play(this.interactionAction === active.action ? 'idle' : actionAnim(active));
+    agent.onActionStop = (active) => {
+      if (this.interactionAction === active.action) this.interactionAction = null;
+      live.anim?.play(agent.isMoving ? 'walk' : 'idle');
+    };
     this.live = live;
     this.options.scene.add(root);
     if (routeIn) {
@@ -589,6 +628,7 @@ export class NpcVisitorController {
   private despawn(): void {
     if (!this.live) return;
     this.live.transit?.cancel();
+    this.interactionAction = null;
     this.live.loadToken = {};
     this.live.agent.stopAction(false);
     this.options.scene.remove(this.live.root);

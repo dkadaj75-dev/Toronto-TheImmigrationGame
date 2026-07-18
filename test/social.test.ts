@@ -11,6 +11,7 @@ import {
   levelAllows,
   phoneGain,
   visitOutcome,
+  resolveVisitDurationHours,
   RelationshipState,
   PhoneState,
   type SocialData,
@@ -22,6 +23,7 @@ function check(name: string, cond: boolean, detail = '') {
   if (cond) console.log(`  ok  ${name}`);
   else { failures++; console.error(`FAIL  ${name} ${detail}`); }
 }
+
 function approx(a: number, b: number, eps = 1e-9): boolean { return Math.abs(a - b) <= eps; }
 
 /** A self-contained SocialData fixture mirroring the shipped data/social.json shape. */
@@ -55,6 +57,16 @@ function socialData(overrides: Partial<SocialData> = {}): SocialData {
     visitTheirPlace: { awayHours: 4, needsRestored: { social: 60, fun: 30 }, relationshipGain: 8, minLevel: 'friend' },
     ...overrides,
   };
+}
+
+console.log('social.test - relationship-scaled visit duration');
+{
+  const curved = socialData({ visitDuration: { byLevel: { enemy: 0.25, beloved: 2 } } });
+  check('enemy multiplier scales the NPC base', approx(resolveVisitDurationHours(8, 'enemy', curved), 2));
+  check('beloved multiplier scales the NPC base', approx(resolveVisitDurationHours(8, 'beloved', curved), 16));
+  check('absent level entry is sparse x1', approx(resolveVisitDurationHours(8, 'friend', curved), 8));
+  check('absent curve is sparse x1', approx(resolveVisitDurationHours(8, 'enemy', socialData()), 8));
+  check('invalid multiplier safely falls back to x1', approx(resolveVisitDurationHours(8, 'enemy', socialData({ visitDuration: { byLevel: { enemy: Number.NaN } } })), 8));
 }
 
 // ---- compatibility: symmetry ----------------------------------------------------------------------

@@ -6,8 +6,14 @@ import type { NavGrid } from '../game/nav';
 import { SimAgent } from '../game/sim';
 import {
   availableSocialInteractions,
+  matchesSocialTarget,
+  pairedAssetPositions,
   SocialInteractionSession,
+  socialAnimationFor,
   socialAutonomyCandidates,
+  socialNpcActionDef,
+  socialRoutingDecision,
+  socialSoundDecision,
 } from '../game/social-interactions';
 import { RelationshipState, type InteractionDef, type SocialData } from '../game/social';
 import { SocialRuntime } from '../game/socialruntime';
@@ -34,6 +40,11 @@ const askLeave: InteractionDef = {
   needGains: {}, relationshipGain: 0, special: 'endVisit',
   // Deliberately impossible at enemy: the engine special must still remain visible.
   requiresLevelAtLeast: 'beloved', autonomyEligible: false,
+};
+const cuddle: InteractionDef = {
+  id: 'cuddle', name: 'Cuddle', animation: 'lie_idle', playerAnimation: 'lie_player', npcAnimation: 'lie_npc',
+  targetAsset: 'beds', sound: '/sounds/cuddle.wav', durationSeconds: 30,
+  needGains: { social: 5 }, relationshipGain: 6, requiresLevelAtLeast: 'beloved', censor: true,
 };
 const social: SocialData = {
   relationship: {
@@ -71,6 +82,22 @@ console.log('social-interactions.test — current-level contextual menu');
   relationships.set('amara', 40);
   check('friend menu contains chat after score changes', availableSocialInteractions('amara', relationships, social).some((x) => x.id === 'chat'));
   check('friend menu hides argue after score changes', !availableSocialInteractions('amara', relationships, social).some((x) => x.id === 'argue'));
+}
+
+console.log('social-interactions.test - paired routing, roles, bed halves, and sound decisions');
+{
+  const bed = { id: 'bed', category: 'beds' };
+  check('targetAsset category selects a paired live asset', matchesSocialTarget(cuddle, bed));
+  check('unrelated asset is rejected', !matchesSocialTarget(cuddle, { id: 'sofa', category: 'seating' }));
+  const route = socialRoutingDecision(cuddle, bed);
+  check('paired bed decision routes both and forces the shared lie pose machinery', route.paired && route.matches && route.pose === 'lie');
+  check('per-role animation overrides win', socialAnimationFor(cuddle, 'player') === 'lie_player' && socialAnimationFor(cuddle, 'npc') === 'lie_npc');
+  check('blank/missing role override sparsely falls back to base', socialAnimationFor({ id: 'wave', animation: 'stand_wave' }, 'npc') === 'stand_wave');
+  check('NPC adapter uses NPC clip and never starts a second audio loop', socialNpcActionDef(cuddle).animation === 'lie_npc' && socialNpcActionDef(cuddle).sound === undefined);
+  const halves = pairedAssetPositions([10, 20], 0, [2, 3]);
+  check('double bed positions use stable opposite local-X halves', halves.player[0] === 9.5 && halves.npc[0] === 10.5 && halves.player[1] === 20 && halves.npc[1] === 20);
+  check('sound starts only on start decision', socialSoundDecision(cuddle, 'start').startPath === '/sounds/cuddle.wav' && !socialSoundDecision(cuddle, 'start').stop);
+  check('sound stops on every terminal decision', socialSoundDecision(cuddle, 'stop').stop && socialSoundDecision({ id: 'silent' }, 'stop').stop === false);
 }
 
 function harness() {
@@ -149,6 +176,31 @@ console.log('social-interactions.test — queued interruption leaves both agents
   check('queued cancel applies no relationship effect', h.relationships.get('amara') === 0);
   check('queued cancel leaves player idle', !agent.isBusy && agent.pendingActionId === null);
   check('queued cancel stops NPC presentation and resumes autonomy', h.npcStops === 1 && h.pauses.join(',') === 'true,false');
+}
+
+console.log('social-interactions.test - paired cancel cleans both SimAgents and applies nothing');
+{
+  const relationships = new RelationshipState(social);
+  const grid: NavGrid = { cols: 5, rows: 5, cellSize: 0.5, walkable: new Uint8Array(25).fill(1) };
+  const tuning = { movement: { walkSpeed: 1, arrivalRadius: 0.1 }, interaction: { useSpotClearance: 0.4 } } as TuningData;
+  const playerRoot = new THREE.Group(); playerRoot.position.set(0.25, 0, 0.25);
+  const npcRoot = new THREE.Group(); npcRoot.position.set(1.25, 0, 0.25);
+  const target = new THREE.Group(); target.position.set(1.25, 0, 1.25); target.userData.assetId = 'bed';
+  const playerAgent = new SimAgent(playerRoot, grid, tuning);
+  const npcAgent = new SimAgent(npcRoot, grid, tuning);
+  let session!: SocialInteractionSession;
+  session = new SocialInteractionSession(relationships, () => social, {
+    setNpcAutonomyPaused: () => {},
+    stopNpcAction: () => { npcAgent.stopAction(false); npcAgent.halt(); },
+    applyPlayerNeed: () => {}, adjustNpcMeter: () => {}, endVisit: () => {},
+  });
+  const order = session.begin(amara, cuddle, { cleanliness: 7 });
+  const npcAction = socialNpcActionDef(cuddle);
+  playerAgent.onActionStop = (_active, completed) => { session.finish(completed); if (!completed) playerAgent.halt(); };
+  check('both paired routes queue through ordinary agents', playerAgent.orderAction(order.action, target) && npcAgent.orderAction(npcAction, target));
+  playerAgent.stopAction(false);
+  check('paired cancel leaves both agents idle and clears the shared session', !playerAgent.isBusy && !npcAgent.isBusy && session.active === null);
+  check('paired cancel applies no relationship effect', relationships.get('amara') === 0);
 }
 
 console.log('social-interactions.test — autonomy candidate generation');

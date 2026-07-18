@@ -35,12 +35,15 @@ const stats = {
   skills:[{id:'cooking', name:'Cooking'}],
   personality:[{id:'cleanliness', name:'Cleanliness', default:5, max:10}, {id:'intelligence', name:'Intelligence', default:5, max:10}],
 };
+const assets = { categories:['beds','seating'], assets:[
+  { id:'bed', name:'Double Bed', category:'beds' }, { id:'sofa', name:'Sofa', category:'seating' },
+] };
 
 const rawPuts = {};
 const fetchMock = async (url, opts={}) => {
   const path = String(url).replace('/api/data/','');
   if (opts.method === 'PUT') { rawPuts[path] = opts.body; return { ok:true, status:200, json:async()=>({}) }; }
-  const body = { 'npcs.json':npcs, 'social.json':social, 'stats.json':stats }[path];
+  const body = { 'npcs.json':npcs, 'social.json':social, 'stats.json':stats, 'assets.json':assets }[path];
   return { ok:!!body, status:body?200:404, json:async()=>structuredClone(body) };
 };
 
@@ -63,7 +66,7 @@ check(doc.querySelectorAll('#interactions .entity').length===2, 'renders two int
 
 // ---- level-gate dropdown consistency: options are fed by the levels list + a null option ---------
 {
-  const atLeast = doc.querySelectorAll('#interactions .entity')[0].querySelectorAll('select')[0];
+  const atLeast = doc.querySelectorAll('#interactions .entity')[0].querySelectorAll('select')[1];
   const opts = [...atLeast.options].map((o)=>o.value);
   check(opts[0]==='' && opts.slice(1).join(',')==='enemy,acquaintance,friend', 'level ≥ dropdown = blank + every level id in order');
   const visitMin = doc.querySelector('#visitFields select');
@@ -101,6 +104,14 @@ check(T.normalizeSourcePath('')==='' , 'blank path stays blank');
   check(T.state.npcs.npcs[0].portrait==='/npcs/amara.png', 'pasted Windows portrait path normalized on blur');
 }
 
+// ---- sparse visit-duration curve ---------------------------------------------------------------
+{
+  const enemyMultiplier = doc.querySelectorAll('#levels .level-row')[0].querySelectorAll('input[type=number]')[1];
+  check(enemyMultiplier.value==='', 'missing visit multiplier renders sparse/blank (x1)');
+  enemyMultiplier.value='0.25'; fire(enemyMultiplier,'input');
+  check(T.state.social.visitDuration.byLevel.enemy===0.25, 'visit multiplier round-trips by relationship level');
+}
+
 // ---- level CRUD + reorder -----------------------------------------------------------------------
 doc.getElementById('addLevel').click();
 check(T.state.social.relationship.levels.length===4 && T.state.social.relationship.levels[3].id==='level4', 'add level appends unique id');
@@ -125,7 +136,17 @@ check(T.state.social.interactions.length===3 && T.state.social.interactions[2].i
   check(warn.style.display==='none', 'setting an animation hides the warn line');
   check(T.state.social.interactions[2].animation==='wave', 'animation edit round-trips');
   // level gate select → maps blank to null
-  const atLeast = card.querySelectorAll('.grid select')[0];
+  const targetPicker = card.querySelectorAll('.grid select')[0];
+  check([...targetPicker.options].some((o)=>o.value==='beds') && [...targetPicker.options].some((o)=>o.value==='bed'), 'target picker is fetched from asset categories + ids');
+  targetPicker.value='bed'; fire(targetPicker,'change');
+  const playerAnimation = card.querySelector('input[placeholder="blank = base animation"]');
+  const npcAnimation = card.querySelectorAll('input[placeholder="blank = base animation"]')[1];
+  const sound = card.querySelector('input[placeholder="/sounds/social.wav"]');
+  playerAnimation.value='lie_player'; fire(playerAnimation,'input');
+  npcAnimation.value='lie_npc'; fire(npcAnimation,'input');
+  sound.value='C:\\game\\public\\sounds\\cuddle.wav'; fire(sound,'input'); fire(sound,'blur');
+  check(T.state.social.interactions[2].targetAsset==='bed' && T.state.social.interactions[2].playerAnimation==='lie_player' && T.state.social.interactions[2].npcAnimation==='lie_npc' && T.state.social.interactions[2].sound==='/sounds/cuddle.wav', 'paired target, role animations, and normalized sound CRUD round-trip');
+  const atLeast = card.querySelectorAll('.grid select')[1];
   atLeast.value = 'friend'; fire(atLeast, 'change');
   check(T.state.social.interactions[2].requiresLevelAtLeast==='friend', 'requiresLevelAtLeast picks a level id');
   atLeast.value = ''; fire(atLeast, 'change');
@@ -137,6 +158,15 @@ check(T.state.social.interactions.length===3 && T.state.social.interactions[2].i
 }
 doc.querySelectorAll('#interactions [data-action="remove-interaction"]')[2].click();
 check(T.state.social.interactions.length===2, 'remove interaction deletes it');
+
+// Keep one paired interaction through the save round-trip.
+{
+  const card = doc.querySelectorAll('#interactions .entity')[0];
+  const selects = card.querySelectorAll('.grid select'); selects[0].value='beds'; fire(selects[0],'change');
+  const roles = card.querySelectorAll('input[placeholder="blank = base animation"]');
+  roles[0].value='player_talk'; fire(roles[0],'input'); roles[1].value='npc_talk'; fire(roles[1],'input');
+  const sound = card.querySelector('input[placeholder="/sounds/social.wav"]'); sound.value='/sounds/chat.wav'; fire(sound,'input');
+}
 
 // ---- live preview via injected real functions ---------------------------------------------------
 T.setSocial({
@@ -165,6 +195,7 @@ check(rawPuts['npcs.json'] && rawPuts['social.json'], 'save PUTs both edited fil
 const savedNpcs = JSON.parse(rawPuts['npcs.json']), savedSocial = JSON.parse(rawPuts['social.json']);
 check(savedNpcs.npcs[0].name==='Amara Renamed' && savedNpcs.npcs[0].portrait==='/npcs/amara.png', 'npcs.json PUT carries the edited values');
 check(savedSocial.interactions.length===2 && savedSocial.relationship.levels.length===3, 'social.json PUT carries the edited collections');
+check(savedSocial.visitDuration.byLevel.enemy===0.25 && savedSocial.interactions[0].targetAsset==='beds' && savedSocial.interactions[0].playerAnimation==='player_talk' && savedSocial.interactions[0].npcAnimation==='npc_talk' && savedSocial.interactions[0].sound==='/sounds/chat.wav', 'new sparse social fields survive whole-file save round-trip');
 check(rawPuts['npcs.json']===JSON.stringify(savedNpcs,null,2) && rawPuts['social.json']===JSON.stringify(savedSocial,null,2), 'both saves use exact 2-space pretty whole-file JSON');
 
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }
