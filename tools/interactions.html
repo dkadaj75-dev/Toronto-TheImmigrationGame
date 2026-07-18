@@ -470,6 +470,8 @@ function renderEditor() {
     checkInput(() => !!a.fetchBeforeSeat, (v) => { if (v) a.fetchBeforeSeat = true; else delete a.fetchBeforeSeat; }, 'fetchBeforeSeat')));
   card2.appendChild(frow('face target after sitting (unticking keeps the seat’s own facing instead — e.g. read_book stays facing however the sofa’s usePose points it, rather than spinning to stare at the bookshelf)',
     checkInput(() => a.faceTarget !== false, (v) => { if (v) delete a.faceTarget; else a.faceTarget = false; }, 'faceTarget')));
+  card2.appendChild(frow('powers on target (starting this action switches the stateful target asset ON and leaves it on — e.g. every Watch-TV channel powers the TV)',
+    checkInput(() => !!a.powersOnTarget, (v) => { if (v) a.powersOnTarget = true; else delete a.powersOnTarget; }, 'powersOnTarget')));
   card2.appendChild(frow('censor (Sims-style pixelation quad over the sim while this action runs, e.g. shower/toilet)',
     checkInput(() => !!a.censor, (v) => { if (v) a.censor = true; else delete a.censor; }, 'censor')));
   card2.appendChild(frow('cost (optional — charged from funds when the action starts)',

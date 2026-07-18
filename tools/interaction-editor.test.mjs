@@ -78,6 +78,13 @@ const fetchCb2 = doc.querySelector('input[data-path="fetchBeforeSeat"]');
 assert(fetchCb2.checked === false, 'fetchBeforeSeat defaults unchecked when absent');
 faceCb2.checked = false;
 faceCb2.dispatchEvent(new window.Event('change', { bubbles: true }));
+
+// --- B13-2 powersOnTarget: sparse checkbox, absent = unchecked; ticking writes true
+const powerCb = doc.querySelector('input[data-path="powersOnTarget"]');
+assert(powerCb, 'powersOnTarget checkbox rendered');
+assert(powerCb.checked === false, 'powersOnTarget defaults unchecked when absent');
+powerCb.checked = true;
+powerCb.dispatchEvent(new window.Event('change', { bubbles: true }));
 fetchCb2.checked = true;
 fetchCb2.dispatchEvent(new window.Event('change', { bubbles: true }));
 
@@ -108,6 +115,8 @@ assert(savedReadBook.fetchBeforeSeat === true, 'untouched fetchBeforeSeat:true s
 const savedWatchTv = saved.actions.find((a) => a.id === 'watch_tv');
 assert(savedWatchTv.faceTarget === false, 'unchecking faceTarget on watch_tv writes faceTarget:false');
 assert(savedWatchTv.fetchBeforeSeat === true, 'checking fetchBeforeSeat writes sparse true');
+assert(savedWatchTv.powersOnTarget === true, 'ticking powersOnTarget writes sparse true (B13-2)');
+assert(!('powersOnTarget' in savedReadBook), 'untouched action carries no powersOnTarget key');
 assert(savedWatchTv.food && savedWatchTv.food.hungerGain === 30, 'food.hungerGain override written sparsely');
 assert(!('perishHours' in savedWatchTv.food), 'cleared perishHours pruned from the sparse food override');
 

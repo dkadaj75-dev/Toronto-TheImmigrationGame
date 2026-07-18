@@ -34,8 +34,12 @@ console.log('assetstate.test — contextual actions and Sims-like TV auto-on');
   check('Turn On shown only while OFF', isAssetStateActionAvailable('turn_on', false) && !isAssetStateActionAvailable('turn_on', true));
   check('Turn Off shown only while ON', isAssetStateActionAvailable('turn_off', true) && !isAssetStateActionAvailable('turn_off', false));
   check('ordinary actions ignore state', isAssetStateActionAvailable('watch_tv', false));
-  check('Watch TV auto-powers ON', powerStateForAction('watch_tv') === true);
+  check('powersOnTarget action auto-powers ON (B13-2 data-driven)', powerStateForAction('watch_tv', { powersOnTarget: true }) === true);
+  check('any powersOnTarget id works, not just watch_tv', powerStateForAction('watch_colombian_telenovelas', { powersOnTarget: true }) === true);
+  check('without the flag no auto-power (old hardcoded watch_tv gone)', powerStateForAction('watch_tv', {}) === null);
+  check('turn_on still powers ON without any flag', powerStateForAction('turn_on') === true);
   check('Turn Off powers OFF', powerStateForAction('turn_off') === false);
+  check('turn_off wins even if mistakenly flagged powersOnTarget', powerStateForAction('turn_off', { powersOnTarget: true }) === false);
   check('unrelated action has no power side effect', powerStateForAction('shower') === null);
 }
 

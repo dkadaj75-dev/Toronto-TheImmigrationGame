@@ -1192,7 +1192,7 @@ async function start() {
     const startAssetId = a.target.userData?.assetId as string | undefined;
     const startAssetDef = startAssetId ? data.assets.assets.find((x) => x.id === startAssetId) : undefined;
     const stateKey = a.target.userData?.assetStateKey as string | undefined;
-    const power = powerStateForAction(a.action.id);
+    const power = powerStateForAction(a.action.id, a.action);
     if (stateKey && startAssetDef && isStatefulAsset(startAssetDef) && power !== null) {
       assetStates.setOn(stateKey, power);
       syncAssetStates();

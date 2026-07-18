@@ -103,6 +103,7 @@
       "autonomyEligible": true,
       "primaryNeed": "fun",
       "seatAware": true,
+      "powersOnTarget": true,
       "_note": "Signature: TV teaches English. Sim prefers a seat facing the TV."
     },
     {
@@ -414,7 +415,8 @@
       "animation": "sit_idle",
       "autonomyEligible": true,
       "primaryNeed": "fun",
-      "seatAware": true
+      "seatAware": true,
+      "powersOnTarget": true
     },
     {
       "id": "watch_colombian_telenovelas",
@@ -426,7 +428,8 @@
       "animation": "sit_idle",
       "autonomyEligible": true,
       "primaryNeed": "fun",
-      "seatAware": true
+      "seatAware": true,
+      "powersOnTarget": true
     }
   ]
 }

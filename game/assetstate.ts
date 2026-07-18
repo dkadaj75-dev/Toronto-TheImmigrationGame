@@ -44,10 +44,16 @@ export function isAssetStateActionAvailable(actionId: string, on: boolean): bool
   return true;
 }
 
-/** Power side effect at action start. Watch TV auto-powers the TV and leaves it on, Sims-style. */
-export function powerStateForAction(actionId: string): boolean | null {
-  if (actionId === 'turn_on' || actionId === 'watch_tv') return true;
+/** Power side effect at action start. B13-2: data-driven — any action with the sparse
+ * `powersOnTarget` flag switches its stateful target ON and leaves it on, Sims-style (every
+ * Watch-TV channel, not just the one that happened to carry the `watch_tv` id).
+ * `turn_on`/`turn_off` stay the generic explicit toggles. */
+export function powerStateForAction(
+  actionId: string,
+  action?: { powersOnTarget?: boolean } | null,
+): boolean | null {
   if (actionId === 'turn_off') return false;
+  if (actionId === 'turn_on' || action?.powersOnTarget) return true;
   return null;
 }
 

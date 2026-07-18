@@ -2,6 +2,12 @@
 // Loads data/*.json and, in dev, polls for changes so tuning edits hot-reload into a running game.
 
 export type ThemeAnchor = 'tl' | 'tr' | 'bl' | 'br' | 'tc' | 'bc';
+export interface ThemeFontFace {
+  family: string;
+  src: string;
+  weight?: string;
+  style?: string;
+}
 export interface ThemeComponentOverrides {
   fontFamily?: string;
   fontSizePx?: number;
@@ -12,6 +18,12 @@ export interface ThemeComponentOverrides {
   radiusPx?: number;
   outlineWidthPx?: number;
   shadow?: string;
+  marginPx?: number;
+  paddingXPx?: number;
+  paddingYPx?: number;
+  widthPx?: number;
+  heightPx?: number;
+  centerRadiusPx?: number;
 }
 export interface ThemeLayoutItem {
   anchor: ThemeAnchor;
@@ -21,7 +33,7 @@ export interface ThemeLayoutItem {
   accordion?: string;
 }
 export interface ThemeData {
-  fonts: { family: string; sizePx: number };
+  fonts: { family: string; sizePx: number; faces?: ThemeFontFace[] };
   colors: {
     panelBg: string; panelFg: string; accent: string; warn: string; error: string;
     buttonBg: string; buttonFg: string; outline: string;
@@ -32,9 +44,15 @@ export interface ThemeData {
     button?: ThemeComponentOverrides;
     panel?: ThemeComponentOverrides;
     actionMenu?: ThemeComponentOverrides;
+    card?: ThemeComponentOverrides;
+    bar?: ThemeComponentOverrides;
+    phoneShell?: ThemeComponentOverrides;
+    phoneTab?: ThemeComponentOverrides;
+    accordionHeader?: ThemeComponentOverrides;
+    [name: string]: ThemeComponentOverrides | undefined;
   };
   layout: Record<string, ThemeLayoutItem>;
-  accordions?: { name: string; collapsedByDefault?: boolean }[];
+  accordions?: { name: string; collapsedByDefault?: boolean; icon?: string; showText?: boolean }[];
 }
 
 export interface NeedDef { id: string; name: string; color: string; default: number; decayPerTick: number; autonomy: boolean; computed?: string; }
@@ -95,6 +113,10 @@ export interface ActionDef {
    *  decideWasteHandling) auto-tidies it into a nearby garbage can instead. Absent = this action
    *  produces no waste. See game/garbage.ts's module doc comment for the full decision flow. */
   producesWaste?: string;
+  /** B13-2: sparse power side effect — starting this action switches its stateful target asset ON
+   *  and leaves it on, Sims-style (e.g. every Watch-TV channel powers the TV). Replaces the old
+   *  hardcoded `watch_tv` id match; `turn_on`/`turn_off` remain the generic toggles. */
+  powersOnTarget?: boolean;
   /** ROADMAP item 2 (meal tiers): sparse per-ACTION override of the food transient this action
    *  spawns (fridge Eat → snack, stove Cook → meal — see game/food.ts foodAssetForActionEvent).
    *  Present fields win over the spawned transient's own AssetDef.food block (the default); absent
