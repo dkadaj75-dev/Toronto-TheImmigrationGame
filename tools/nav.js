@@ -15,8 +15,8 @@
 //  - The game (index.html): a top strip would collide with the HUD's
 //    top-left/top-right need+skill panels and the top-center clock/quest
 //    toasts (see game/ui.ts), so instead this renders a small fixed
-//    collapsible gear button in the bottom-right corner (above #devbar,
-//    clear of the bottom-center action menu and bottom-left quest panel).
+//    collapsible gear button in the bottom-right corner (clear of the
+//    bottom-center action menu and bottom-left quest panel).
 //
 // Guarded to no-op safely if document/body aren't available (e.g. under
 // jsdom tool tests, which by default never even fetch an external

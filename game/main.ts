@@ -65,9 +65,6 @@ const loadingTrack = document.getElementById('loading-track')!;
 const loadingFill = document.getElementById('loading-fill')!;
 const loadingCount = document.getElementById('loading-count')!;
 const loadingTap = document.getElementById('loading-tap') as HTMLButtonElement;
-const devData = document.getElementById('dev-data')!;
-const devClock = document.getElementById('dev-clock')!;
-const devFps = document.getElementById('dev-fps')!;
 
 async function start() {
   let data: GameData;
@@ -517,6 +514,8 @@ async function start() {
         sim.visible = true;
         if (marker) marker.pivot.visible = true;
         hud.setAtWork(false);
+        // B13-7: fresh return from work — give the player a beat before free will kicks in.
+        autonomy.forceCooldown(data.tuning.autonomy.decisionGraceSeconds ?? 5);
         quests.funds += event.pay; // QuestRunner is the single runtime economy owner (§3 / buy mode)
         const nextNeeds = applyNeedsCost(Object.fromEntries(stats.needs), event.needsCost);
         for (const [needId, value] of Object.entries(nextNeeds)) stats.needs.set(needId, value);
@@ -592,6 +591,8 @@ async function start() {
       sim.visible = true;
       if (marker) marker.pivot.visible = true;
       hud.setAtWork(false);
+      // B13-7: fresh return from a visit — give the player a beat before free will kicks in.
+      autonomy.forceCooldown(data.tuning.autonomy.decisionGraceSeconds ?? 5);
       const npc = data.npcs?.npcs.find((entry) => entry.id === event.npcId);
       if (npc && data.social) {
         const compat = compatibility(Object.fromEntries(stats.personality), npc.personality, data.social);
@@ -1823,6 +1824,8 @@ async function start() {
       agent.teleportTo(data.map.spawn.pos[0], data.map.spawn.pos[1], data.map.spawn.facingDeg);
       hud.hideActionMenu();
       audio.mapChanged(); // restart the new map's playlist from the top rather than resuming the old cycle position
+      // B13-7: fresh map means a fresh sim — give the player a beat before free will kicks in.
+      autonomy.forceCooldown(data.tuning.autonomy.decisionGraceSeconds ?? 5);
     }
     // keep the music channel pointed at the right context (its own track/playlist content may
     // have changed even without a context switch — setMusicContext no-ops when nothing changed)
@@ -1856,7 +1859,6 @@ async function start() {
     }
     hud.setFunds(quests.funds, currencyName());
     if (buyMode.active) refreshBuyCatalog(); // asset prices/icons/gates may have changed mid-shop
-    flashDevbar();
   };
   watchData(applyFreshData);
 
@@ -1958,8 +1960,6 @@ async function start() {
     }
   };
 
-  devData.innerHTML = `data: <b>${data.assets.assets.length} assets</b> · <b>${data.stats.needs.length} needs</b> · <b>${data.stats.skills.filter(s => s.enabled !== false).length} skills</b> · <b>${data.interactions.actions.length} actions</b> · <b>${data.quests.quests.length} quests</b>`;
-
   // --- game clock (display only in Phase 0; drives day/night in Phase 1; day count feeds quests' time.day) ---
   let gameSeconds = 8 * 3600; // start the day at 08:00
   let gameDay = 1;
@@ -1996,7 +1996,7 @@ async function start() {
   let lastPendingRefreshHour = -1;
 
   // --- render loop ---
-  let frames = 0, fpsTimer = 0, last = performance.now();
+  let last = performance.now();
   // ITEM 1 (2026-07-17): garbage fill-bar occlusion is recomputed only when the camera actually
   // moved/rotated OR on a ~0.25s tick (never every frame) — occlusion can only change with camera
   // motion or a rare world rebuild, and the fill-bar set is small. Camera motion is detected by
@@ -2063,7 +2063,6 @@ async function start() {
       refreshPhone();
     }
     const h = Math.floor(gameSeconds / 3600), m = Math.floor((gameSeconds % 3600) / 60);
-    devClock.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     hud.setClock(h, m);
     applyDayNight(lights, scene, gameSeconds / 3600, data.tuning.time.nightStartHour, data.tuning.time.nightEndHour);
 
@@ -2262,9 +2261,6 @@ async function start() {
       garbage.updateFillBarOcclusion(cam.camera, world.children);
     }
 
-    frames++; fpsTimer += dt;
-    if (fpsTimer >= 1) { devFps.textContent = `${frames} fps`; frames = 0; fpsTimer = 0; }
-
     renderer.render(scene, cam.camera);
   });
 
@@ -2273,6 +2269,8 @@ async function start() {
   window.clearInterval(phraseTimer);
   audio.setMusicContext('map', data.map);
   boot.classList.add('done');
+  // B13-7: don't let the Sim take an autonomous decision the instant the game becomes playable.
+  autonomy.forceCooldown(data.tuning.autonomy.decisionGraceSeconds ?? 5);
 }
 
 function disposeGroup(g: THREE.Group) {
@@ -2283,11 +2281,6 @@ function disposeGroup(g: THREE.Group) {
       (Array.isArray(m) ? m : [m]).forEach((mm) => mm.dispose());
     }
   });
-}
-
-function flashDevbar() {
-  devData.style.color = '#9fd08c';
-  setTimeout(() => (devData.style.color = ''), 600);
 }
 
 void start();

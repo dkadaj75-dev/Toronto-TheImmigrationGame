@@ -235,10 +235,9 @@ const CSS = `
 }
 
 /* --- Buy/Sell mode (PROJECT_CONTEXT.md §7.6) ---------------------------------------------
-   Layout budget on the bottom-right (§8 constraints): #devbar is a full-width strip at the very
-   bottom; tools/nav.js's corner gear sits at right:8px, bottom:40px (~36px tall). #funds-chip and
-   #buy-button stack ABOVE that, clear of both; #action-menu/#activity-chip stay bottom-center so
-   there's no conflict there either. */
+   Layout budget on the bottom-right (§8 constraints): tools/nav.js's corner gear sits at
+   right:8px, bottom:40px (~36px tall). #funds-chip and #buy-button stack ABOVE that;
+   #action-menu/#activity-chip stay bottom-center so there's no conflict there either. */
 #funds-chip { position: absolute; right: calc(8px + env(safe-area-inset-right, 0px));
   bottom: calc(128px + env(safe-area-inset-bottom, 0px)); background: var(--theme-panel-bg, rgba(20,26,40,.82));
   border-radius: 999px; padding: 6px 12px; font-size: 12px; font-variant-numeric: tabular-nums;

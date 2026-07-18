@@ -37,14 +37,6 @@
     #loading-count { margin-top: 8px; font-size: 11px; opacity: .8; font-variant-numeric: tabular-nums; }
     #loading-tap { margin-top: 18px; padding: 10px 16px; border: 1px solid rgba(255,255,255,.45); border-radius: 999px; color: inherit; background: rgba(20,26,38,.72); font: inherit; cursor: pointer; }
     #loading-tap[hidden] { display: none; }
-    #devbar {
-      position: fixed; left: env(safe-area-inset-left, 0); right: env(safe-area-inset-right, 0);
-      bottom: env(safe-area-inset-bottom, 0);
-      padding: 6px 10px; background: var(--hud-bg); color: var(--hud-fg);
-      font-size: 11px; display: flex; gap: 12px; justify-content: space-between;
-      font-variant-numeric: tabular-nums;
-    }
-    #devbar b { font-weight: 600; color: #9fd08c; }
   </style>
 </head>
 <body>
@@ -56,11 +48,6 @@
       <div id="loading-count">Preparing paperwork…</div>
       <button id="loading-tap" type="button" hidden>Tap to start the music</button>
     </div>
-  </div>
-  <div id="devbar">
-    <span id="dev-data">data: …</span>
-    <span id="dev-clock">–</span>
-    <span id="dev-fps">– fps</span>
   </div>
   <script type="module" src="/game/main.ts"></script>
   <script src="/tools/nav.js"></script>

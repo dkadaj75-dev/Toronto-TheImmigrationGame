@@ -633,7 +633,7 @@ export interface TuningData {
   /** B5-1 global positive skill-gain taper. 0 preserves linear gains; larger values make gains
    *  progressively harder near each skill's max. Optional for old fixtures; stats.ts defaults 1.5. */
   skills?: { growthCurveExp?: number };
-  autonomy: { seekBelowThreshold: number; stopAtThreshold: number; postPlayerCommandCooldownSeconds: number };
+  autonomy: { seekBelowThreshold: number; stopAtThreshold: number; postPlayerCommandCooldownSeconds: number; decisionGraceSeconds?: number };
   time: { secondsPerGameDay: number; nightStartHour: number; nightEndHour: number };
   economy: { startingFunds: number; currencyName: string };
   /** F3 credit score, consequences, debt-window scaling, and phone history length. */

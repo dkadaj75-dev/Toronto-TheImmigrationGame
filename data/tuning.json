@@ -13,7 +13,8 @@
     "seekBelowThreshold": 30,
     "stopAtThreshold": 95,
     "postPlayerCommandCooldownSeconds": 15,
-    "_source": "seek/stop from roadmap §2; cooldown PLACEHOLDER — verify vs CLAUDE.md"
+    "decisionGraceSeconds": 5,
+    "_source": "seek/stop from roadmap §2; cooldown PLACEHOLDER — verify vs CLAUDE.md. decisionGraceSeconds (B13-7): sim-time grace window suppressing AUTONOMOUS decisions right after a 'fresh start' moment (boot, map switch, return from work, return from a visit) so the Sim doesn't act before the player gets their bearings; default 5 sim-seconds, PLACEHOLDER pending designer tuning. Player-issued orders are never affected."
   },
   "time": {
     "secondsPerGameDay": 180,

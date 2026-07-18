@@ -387,3 +387,5 @@ Design reading: (1) Theme Editor gains a per-element gallery preview (each thema
 ## B13-11. Work schedule: the sim should not work every day — choose days + times of the week; implement the WEEKDAY feature, weekday shown at the top of the smartphone (no dedicated tab).
 
 ## B13-12. Social: visit duration depends on the relationship; PAIRED interactions that move both sims to a target asset (e.g. both go on the bed, then the action starts with per-role animations); interactions can trigger sounds.
+
+**B13-7 DONE (2026-07-18):** tuning.autonomy.decisionGraceSeconds (default 5 sim-seconds, Tuning Editor generic card) arms the existing Autonomy.forceCooldown sim-time primitive at boot complete, runtime map switch, return from work, and return from a visit (game-over restart reloads the page, so boot covers it). Autonomy-only: player orders bypass it structurally. Pause freezes it (sdt). New test/autonomy-grace.test.ts. Also removed the leftover #devbar debug strip (redundant clock + data/fps stats) from index.html/main.ts, with stale layout comments updated in nav.js/ui.ts.
