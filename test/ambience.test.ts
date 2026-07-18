@@ -1,6 +1,6 @@
 import { AssetStateRegistry } from '../game/assetstate';
 import {
-  inspectAmbience, isNightHour, nightComfortBonus, sameRoom, sleepBlockDecision,
+  crossedNightWindowBoundary, inspectAmbience, isNightHour, nightEnvironmentBonus, sameRoom, sleepBlockDecision,
   type AmbienceAssetInstance, type AmbienceRoomGeometry,
 } from '../game/ambience';
 import type { AssetDef } from '../game/data';
@@ -16,7 +16,7 @@ const asset = (id: string, extra: Partial<AssetDef>): AssetDef => ({
   id, name: id === 'tv' ? 'TV' : id, category: 'decor', mesh: '', buyPrice: 0, sellPrice: 0,
   environmentScore: 0, footprint: [1, 1], interactions: ['turn_on', 'turn_off'], ...extra,
 });
-const lamp = asset('lamp', { light: { defaultOn: true, comfortBonus: 0.75 } });
+const lamp = asset('lamp', { light: { defaultOn: true, environmentBonus: 0.75 } });
 const tv = asset('tv', { sound: '/tv.mp3', light: { defaultOn: true } });
 const stereo = asset('stereo', { sound: '/radio.mp3' });
 const wall = { from: [5, 0] as [number, number], to: [5, 10] as [number, number] };
@@ -66,10 +66,19 @@ check('night ends exclusively', !isNightHour(6, 22, 6));
 check('day before night start is not night', !isNightHour(21.999, 22, 6));
 check('non-wrapping night window edges work', isNightHour(2, 1, 4) && !isNightHour(4, 1, 4));
 
-check('night comfort resolves sparse per-light bonus', nightComfortBonus(23, 22, 6, [nearby]) === 0.75);
-check('comfort bonus is zero during day', nightComfortBonus(12, 22, 6, [nearby]) === 0);
-check('absent comfortBonus resolves to zero', nightComfortBonus(23, 22, 6, [tvMatch]) === 0);
-check('sound-only emitters do not add light comfort', nightComfortBonus(23, 22, 6, [soundMatch]) === 0);
+check('lit nearby same-room asset adds its sparse night Environment bonus', nightEnvironmentBonus(23, 22, 6, [nearby]) === 0.75);
+check('night Environment bonus is zero during day', nightEnvironmentBonus(12, 22, 6, [nearby]) === 0);
+check('OFF light adds no night Environment bonus', nightEnvironmentBonus(23, 22, 6, [
+  inspectAmbience([0, 0], instance(lamp, [1, 0], 'off-lamp'), states, { walls: [], doors: [] }, 3),
+]) === 0);
+check('other-room light adds no night Environment bonus', nightEnvironmentBonus(23, 22, 6, [
+  inspectAmbience([2, 5], instance(lamp, [8, 5]), states, room(false), 10),
+]) === 0);
+check('absent environmentBonus resolves to zero', nightEnvironmentBonus(23, 22, 6, [tvMatch]) === 0);
+check('sound-only emitters do not add light Environment', nightEnvironmentBonus(23, 22, 6, [soundMatch]) === 0);
+check('night start crossing requests an Environment recompute', crossedNightWindowBoundary(21.99, 22, 22, 6));
+check('night end crossing requests an Environment recompute', crossedNightWindowBoundary(5.99, 6, 22, 6));
+check('ordinary hour advancement does not request a recompute', !crossedNightWindowBoundary(23, 0, 22, 6));
 
 const blocked = sleepBlockDecision([nearby, tvMatch]);
 check('sleep is blocked by active emitter', blocked.blocked && blocked.blocker?.def.id === 'tv');

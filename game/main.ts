@@ -44,7 +44,7 @@ import { isNpcAvailable, NpcVisitorController, type NpcDef } from './npc';
 import { mutualFacingDeg, usePoseFor } from './facing';
 import { contactViews, PhoneContactSession, phoneAutonomyCandidates } from './contacts';
 import { visitGate, VisitAwayTracker, type VisitReturnEvent } from './visit';
-import { inspectAmbience, nightComfortBonus, sleepBlockDecision, type AmbienceAssetInstance } from './ambience';
+import { crossedNightWindowBoundary, inspectAmbience, nightEnvironmentBonus, sleepBlockDecision, type AmbienceAssetInstance } from './ambience';
 
 /** The logical animation state for an in-progress action: `groundSit` (ROADMAP_NEXT item 2 —
  *  a seat-aware action with no eligible seat in range) plays the dedicated 'sit_ground' state
@@ -255,13 +255,17 @@ async function start() {
   const skillBar: SkillBarInstance = createSkillBarInstance(scene);
 
   agent.onLocomotionChange = (moving) => {
-    if (!anim) return;
-    if (moving) {
-      anim.play('walk');
-      anim.setWalkSpeed(data.tuning.movement.walkSpeed);
-    } else if (!agent.current) {
-      anim.play('idle'); // arrival into an action is handled by onActionStart instead
+    if (anim) {
+      if (moving) {
+        anim.play('walk');
+        anim.setWalkSpeed(data.tuning.movement.walkSpeed);
+      } else if (!agent.current) {
+        anim.play('idle'); // arrival into an action is handled by onActionStart instead
+      }
     }
+    // The sparse night-light contribution is sim-relative (radius + room), so finishing a route
+    // is an Environment event even though ordinary furniture moves/rotations do not change score.
+    if (!moving) applyEnvironment();
   };
 
   const stats = new SimStats(data.stats, data.tuning.skills?.growthCurveExp ?? 1.5);
@@ -288,11 +292,11 @@ async function start() {
       buyMode.effectivePlacedObjectsList().map((p) => p.asset),
       accidents.registry.all.map((inst) => inst.accidentId),
       environmentScoreFor,
+      ambientEnvironmentBonus(),
     );
   };
   const envNeedId = () => data.stats.needs.find((n) => n.computed)?.id;
   const applyEnvironment = () => { const id = envNeedId(); if (id) stats.setComputed(id, environmentScore()); };
-  applyEnvironment();
 
   const sleepAction = (action: Pick<ActionDef, 'id'>) => action.id === 'sleep' || action.id === 'nap';
   /** Live placed light/sound roots. Sold/destroyed objects are detached by BuyModeController, and
@@ -330,9 +334,9 @@ async function start() {
   const sleepDecisionAt = (position: [number, number]) => sleepBlockDecision(
     ambienceMatchesAt(position), data.tuning.ambience?.sleepBlockingEnabled ?? true,
   );
-  const ambientComfortGain = () => {
-    if (data.tuning.ambience?.nightComfortEnabled === false) return 0;
-    return nightComfortBonus(
+  const ambientEnvironmentBonus = () => {
+    if (data.tuning.ambience?.nightEnvironmentEnabled === false) return 0;
+    return nightEnvironmentBonus(
       gameSeconds / 3600,
       data.tuning.time.nightStartHour,
       data.tuning.time.nightEndHour,
@@ -1292,8 +1296,9 @@ async function start() {
     const stateKey = a.target.userData?.assetStateKey as string | undefined;
     const power = powerStateForAction(a.action.id, a.action);
     if (stateKey && startAssetDef && isStatefulAsset(startAssetDef) && power !== null) {
-      assetStates.setOn(stateKey, power);
+      const powerChanged = assetStates.setOn(stateKey, power);
       syncAssetStates();
+      if (powerChanged) applyEnvironment();
     }
     const loopPath = loopSoundFor(a.action, startAssetDef);
     if (loopPath) audio.startLoop(startAssetDef?.sound ? `asset:${a.target.uuid}` : `action:${a.action.id}`, loopPath);
@@ -1805,9 +1810,7 @@ async function start() {
     const decayEvery = data.tuning.simulation.needsDecayTickSeconds;
     while (decayAcc >= decayEvery) {
       decayAcc -= decayEvery;
-      const comfortNeedId = data.tuning.ambience?.comfortNeedId ?? 'comfort';
-      stats.decayTick({ [comfortNeedId]: ambientComfortGain() });
-      applyEnvironment();
+      stats.decayTick();
       happiness = computeHappiness(data.happiness, buildEvalContext());
       hud.setHappiness(happiness);
       // ROADMAP_NEXT B2-4: zero-crossing check happens right after decay, on the same tick bladder
@@ -2069,6 +2072,7 @@ async function start() {
   // --- game clock (display only in Phase 0; drives day/night in Phase 1; day count feeds quests' time.day) ---
   let gameSeconds = 8 * 3600; // start the day at 08:00
   let gameDay = 1;
+  applyEnvironment();
   refreshVisaChip(); // now that gameDay exists, show the starting visa chip immediately
   happiness = computeHappiness(data.happiness, buildEvalContext());
   hud.setHappiness(happiness);
@@ -2136,6 +2140,7 @@ async function start() {
     audio.setPaused(initialLoadingActive || effectiveSpeed === 0 || buyMode.active || repoOverlayActive || gameOverActive);
     syncAssetStates(); // picks up newly purchased/sold stateful instances; idempotent for steady state
 
+    const previousGameHour = gameSeconds / 3600;
     const gameSecondsDelta = sdt * clockScale();
     gameSeconds += gameSecondsDelta;
     // Hydro: accrue this frame's ON metered draw over the sim-hours elapsed. Paused/loading frames
@@ -2168,6 +2173,14 @@ async function start() {
       refreshVisaChip();
       refreshPhone();
     }
+    // Environment is event-recomputed, never tick-fed. The clock is already advanced here for
+    // the day/night sky, so compare the old/new window state and recompute only at its boundaries.
+    if (crossedNightWindowBoundary(
+      previousGameHour,
+      gameSeconds / 3600,
+      data.tuning.time.nightStartHour,
+      data.tuning.time.nightEndHour,
+    )) applyEnvironment();
     const h = Math.floor(gameSeconds / 3600), m = Math.floor((gameSeconds % 3600) / 60);
     hud.setClock(h, m, weekdayName(currentWorkTime(), data.tuning.calendar));
     applyDayNight(lights, scene, gameSeconds / 3600, data.tuning.time.nightStartHour, data.tuning.time.nightEndHour);

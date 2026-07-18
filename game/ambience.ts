@@ -137,8 +137,8 @@ export function isNightHour(hour: number, nightStartHour: number, nightEndHour: 
   return start < end ? h >= start && h < end : h >= start || h < end;
 }
 
-/** Sum of sparse per-light comfort contributions at this position; absent field = zero. */
-export function nightComfortBonus(
+/** Sum of sparse per-light Environment contributions at this position; absent field = zero. */
+export function nightEnvironmentBonus(
   hour: number,
   nightStartHour: number,
   nightEndHour: number,
@@ -146,8 +146,19 @@ export function nightComfortBonus(
 ): number {
   if (!isNightHour(hour, nightStartHour, nightEndHour)) return 0;
   return matches.reduce((sum, match) => sum + (
-    match.active && match.emitsLight ? Math.max(0, match.instance.def.light?.comfortBonus ?? 0) : 0
+    match.active && match.emitsLight ? Math.max(0, match.instance.def.light?.environmentBonus ?? 0) : 0
   ), 0);
+}
+
+/** Event trigger for the clock path: true only when advancing time crosses into/out of night. */
+export function crossedNightWindowBoundary(
+  previousHour: number,
+  currentHour: number,
+  nightStartHour: number,
+  nightEndHour: number,
+): boolean {
+  return isNightHour(previousHour, nightStartHour, nightEndHour)
+    !== isNightHour(currentHour, nightStartHour, nightEndHour);
 }
 
 /** Nearest active light/sound source wins, giving stable and useful blocker feedback. */

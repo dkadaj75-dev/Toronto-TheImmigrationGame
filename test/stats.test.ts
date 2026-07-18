@@ -29,16 +29,16 @@ stats.applyGains(action);
 check('SimStats.applyGains uses the non-linear helper', approx(stats.skills.get('cooking')!, 90 + scaleSkillGain(raw, 90, 100, 1.5)));
 
 {
-  const ambientStats = new SimStats({
+  const decayStats = new SimStats({
     needs: [
       { id: 'comfort', name: 'Comfort', color: '#fff', default: 50, decayPerTick: 1 },
       { id: 'environment', name: 'Environment', color: '#fff', default: 50, decayPerTick: 1, computed: true },
     ],
     skills: [],
   });
-  ambientStats.decayTick({ comfort: 1.5, environment: 99 });
-  check('decay tick applies continuous ambient gain modifier', ambientStats.needs.get('comfort') === 50.5);
-  check('computed needs ignore ambient gain modifiers', ambientStats.needs.get('environment') === 50);
+  decayStats.decayTick();
+  check('ordinary needs decay normally', decayStats.needs.get('comfort') === 49);
+  check('computed Environment never changes on a needs tick', decayStats.needs.get('environment') === 50);
 }
 
 // --- effectiveNeedGain: the ONE shared helper the sim tick and the autonomy scorer both use.
@@ -92,6 +92,10 @@ check(
 check(
   'a still-present designer puddle drags the score down until destroyed',
   computeEnvironmentScore(['couch', 'puddle'], [], envScoreFor) === 5 + -8,
+);
+check(
+  'event-resolved night light bonus enters the existing Environment aggregate',
+  computeEnvironmentScore(['couch'], [], envScoreFor, 0.75) === 5.75,
 );
 
 // ITEM 2 (skill progress bar) — skillPointProgress: fraction toward the next integer skill point.

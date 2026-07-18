@@ -22,7 +22,8 @@ const onDef = { interactions: ['turn_on', 'turn_off'], light: { defaultOn: true,
   const registry = new AssetStateRegistry();
   check('instance seeds OFF from sparse default', registry.isOn('designer:1', offDef) === false);
   check('another instance seeds ON independently', registry.isOn('designer:2', onDef) === true);
-  registry.setOn('designer:1', true);
+  check('light toggle reports a derived-state recompute trigger', registry.setOn('designer:1', true) === true);
+  check('reapplying the same power state does not retrigger', registry.setOn('designer:1', true) === false);
   const saved = registry.serialize();
   const restored = new AssetStateRegistry(); restored.restore(saved);
   check('serialize/restore preserves per-instance ON', restored.isOn('designer:1', offDef) === true);

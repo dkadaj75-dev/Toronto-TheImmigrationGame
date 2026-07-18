@@ -27,10 +27,11 @@ export function computeEnvironmentScore(
   placedAssetIds: string[],
   accidentAssetIds: string[],
   environmentScoreFor: (assetId: string) => number,
+  nightLightBonus = 0,
 ): number {
   const placedSum = placedAssetIds.reduce((sum, id) => sum + environmentScoreFor(id), 0);
   const accidentSum = accidentAssetIds.reduce((sum, id) => sum + environmentScoreFor(id), 0);
-  return placedSum + accidentSum;
+  return placedSum + accidentSum + nightLightBonus;
 }
 
 /** B5-1: positive practice gains taper as a skill approaches its max. Losses/decay are returned
@@ -105,13 +106,12 @@ export class SimStats {
   get skillDefs(): SkillDef[] { return this.defs.skills.filter((s) => s.enabled !== false); }
   get personalityDefs(): PersonalityDef[] { return this.defs.personality ?? []; }
 
-  /** One needs-decay tick. Optional ambient gains are continuous tick modifiers (B13-9), not
-   * one-shot action effects. Computed needs (Environment) ignore both and stay externally set. */
-  decayTick(gainModifiers: Readonly<Record<string, number>> = {}) {
+  /** One needs-decay tick. Computed needs (Environment) stay externally recomputed on events. */
+  decayTick() {
     for (const def of this.defs.needs) {
       if (def.computed) continue;
       const v = this.needs.get(def.id) ?? def.default;
-      this.needs.set(def.id, clamp(v - def.decayPerTick + (gainModifiers[def.id] ?? 0), 0, 100));
+      this.needs.set(def.id, clamp(v - def.decayPerTick, 0, 100));
     }
   }
 

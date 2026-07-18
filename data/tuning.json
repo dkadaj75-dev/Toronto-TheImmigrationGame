@@ -24,10 +24,9 @@
   },
   "ambience": {
     "radiusMeters": 5,
-    "nightComfortEnabled": true,
-    "comfortNeedId": "comfort",
+    "nightEnvironmentEnabled": -7,
     "sleepBlockingEnabled": true,
-    "_source": "B13-9/B13-10 shared room-aware ambience. radiusMeters is the maximum sim-to-device range for both night light comfort and sleep blockers. Walls and closed doors block; open apertures connect. nightComfortEnabled and sleepBlockingEnabled are independent master switches; comfortNeedId names the need receiving each light's sparse light.comfortBonus per needs tick."
+    "_source": "B13-9/B13-10 shared room-aware ambience. radiusMeters is the maximum sim-to-device range for both the night light Environment bonus and sleep blockers. Walls and closed doors block; open apertures connect. nightEnvironmentEnabled and sleepBlockingEnabled are independent master switches; each ON in-room light's sparse light.environmentBonus joins the event-recomputed Environment score at night."
   },
   "textures": {
     "metersPerTile": 1,
@@ -77,7 +76,15 @@
     "_source": "Smartphone/jobs V2 + designer HUD launcher delta (PROJECT_CONTEXT.md §7.20) — jobListSize controls hourly listings; icon is the persistent HUD button image. rentalTabName (ROADMAP_APT R1, §6.4 RESOLVED) and contactsTabName (ROADMAP_SOCIAL S5) are renameable phone-tab labels consumed by the HUD."
   },
   "calendar": {
-    "dayNames": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "dayNames": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat",
+      "Sun"
+    ],
     "startDayIndex": 0,
     "_source": "B13-11 weekday calendar. dayNames defines the seven phone/editor labels in weekly order; startDayIndex (0..6) chooses the weekday of game day 1. Weekdays derive from the absolute game clock and need no save state."
   },

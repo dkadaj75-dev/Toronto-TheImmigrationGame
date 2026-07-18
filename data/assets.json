@@ -239,7 +239,7 @@
         ]
       },
       "needMultipliers": {
-        "hunger": 2
+        "hunger": 1
       }
     },
     {
@@ -504,7 +504,7 @@
         "distance": 5,
         "yOffset": 1.5,
         "defaultOn": false,
-        "comfortBonus": 0.08
+        "environmentBonus": 3
       },
       "icon": "/public/icons/lamp.png",
       "meshFit": {
@@ -542,7 +542,7 @@
         "distance": 4.5,
         "yOffset": 0,
         "defaultOn": false,
-        "comfortBonus": 0.06
+        "environmentBonus": 1.5
       },
       "icon": "/public/icons/walllight.png",
       "power": {

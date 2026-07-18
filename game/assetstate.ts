@@ -65,7 +65,12 @@ export class AssetStateRegistry {
     return this.on.get(key)!;
   }
 
-  setOn(key: string, value: boolean): void { this.on.set(key, value); }
+  /** Set one instance's power state; return whether observers need to recompute derived state. */
+  setOn(key: string, value: boolean): boolean {
+    const previous = this.on.get(key);
+    this.on.set(key, value);
+    return previous !== value;
+  }
 
   serialize(): AssetStateSaveState { return { on: Object.fromEntries(this.on) }; }
 
