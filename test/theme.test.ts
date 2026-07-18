@@ -2,7 +2,8 @@
 // Run: npx tsx test/theme.test.ts
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { DEFAULT_THEME, KNOWN_THEME_ELEMENT_IDS, anchorCss, fontFaceCss, resolveAccordionGroups, resolveActionMenuStyle, themeVariableMap } from '../game/theme';
+import { JSDOM } from 'jsdom';
+import { DEFAULT_THEME, KNOWN_THEME_ELEMENT_IDS, anchorCss, applyTheme, fontFaceCss, resolveAccordionGroups, resolveActionMenuStyle, themeVariableMap } from '../game/theme';
 import type { ThemeData } from '../game/data';
 
 let assertions = 0;
@@ -36,6 +37,42 @@ equal(customVariables['--theme-font-family'], 'Georgia, serif', 'custom font rep
 equal(customVariables['--theme-font-size'], '18px', 'numeric font size receives px');
 equal(customVariables['--theme-panel-bg'], '#123456', 'custom global panel color is mapped');
 equal(customVariables['--theme-panel-radius'], '22px', 'sparse component override inherits and replaces one field');
+
+const galleryKeys = {
+  fontFamily: 'Gallery Face', fontSizePx: 17, background: '#102030', foreground: '#f0e0d0',
+  accent: '#abcdef', outline: '#fedcba', radiusPx: 19, outlineWidthPx: 3, shadow: '1px 2px 3px #000',
+};
+const galleryVariables = themeVariableMap({
+  ...DEFAULT_THEME,
+  components: {
+    card: { ...galleryKeys }, bar: { ...galleryKeys, heightPx: 21 }, phoneShell: { ...galleryKeys },
+    phoneTab: { ...galleryKeys, paddingXPx: 8, paddingYPx: 9, heightPx: 51 },
+    accordionHeader: { ...galleryKeys, paddingXPx: 12, paddingYPx: 13 },
+    actionMenu: { ...galleryKeys, marginPx: 4, paddingXPx: 5, paddingYPx: 6, widthPx: 140, heightPx: 55, centerRadiusPx: 120 },
+  },
+});
+for (const [component, extras] of Object.entries({
+  card: {}, bar: { height: '21px' }, phoneShell: {}, phoneTab: { paddingX: '8px', paddingY: '9px', height: '51px' },
+  accordionHeader: { paddingX: '12px', paddingY: '13px' },
+  actionMenu: { margin: '4px', paddingX: '5px', paddingY: '6px', width: '140px', height: '55px', centerRadius: '120px' },
+})) {
+  const prefix = `--theme-${component.replace(/[A-Z]/g, (letter) => '-' + letter.toLowerCase())}`;
+  for (const [suffix, value] of Object.entries({
+    'font-family': 'Gallery Face', 'font-size': '17px', bg: '#102030', fg: '#f0e0d0', accent: '#abcdef',
+    outline: '#fedcba', radius: '19px', 'outline-width': '3px', shadow: '1px 2px 3px #000',
+  })) equal(galleryVariables[`${prefix}-${suffix}`], value, `${component} consumes gallery ${suffix}`);
+  for (const [suffix, value] of Object.entries(extras)) {
+    const cssSuffix = suffix.replace(/[A-Z]/g, (letter) => '-' + letter.toLowerCase());
+    equal(galleryVariables[`${prefix}-${cssSuffix}`], value, `${component} consumes gallery ${suffix}`);
+  }
+}
+
+const previewDom = new JSDOM('<!doctype html><html><head></head><body><div id="hud"></div></body></html>');
+const previewTheme: ThemeData = { ...DEFAULT_THEME, components: { card: { background: '#123456', radiusPx: 24 } } };
+applyTheme(previewTheme, previewDom.window.document);
+equal(previewDom.window.document.documentElement.style.getPropertyValue('--theme-card-bg'), '#123456', 'applyTheme writes a gallery override to the preview root');
+applyTheme({ ...previewTheme, components: { card: { radiusPx: 24 } } }, previewDom.window.document);
+equal(previewDom.window.document.documentElement.style.getPropertyValue('--theme-card-bg'), '', 'applyTheme removes a cleared sparse override instead of leaving stale preview/runtime CSS');
 
 equal(anchorCss('tl', 8, 12), {
   position: 'absolute', top: 'calc(12px + env(safe-area-inset-top, 0px))', right: 'auto',

@@ -52,6 +52,7 @@ function finite(value: number | undefined, fallback: number): number {
 }
 
 const COMPONENT_NAMES = ['panel', 'button', 'toast', 'actionMenu', 'card', 'bar', 'phoneShell', 'phoneTab', 'accordionHeader'] as const;
+const appliedVariables = new WeakMap<Document, Set<string>>();
 function componentPrefix(name: string): string {
   return `--theme-${name.replace(/[A-Z]/g, (letter) => '-' + letter.toLowerCase())}`;
 }
@@ -210,7 +211,14 @@ function unwrapAccordions(hud: HTMLElement): Map<string, boolean> {
 export function applyTheme(theme?: ThemeData, doc: Document = document): void {
   const source = theme ?? DEFAULT_THEME;
   const root = doc.documentElement;
-  for (const [property, value] of Object.entries(themeVariableMap(source))) root.style.setProperty(property, value);
+  const variables = themeVariableMap(source);
+  // Sparse component overrides disappear when their editor field is cleared. Remove variables
+  // emitted by the previous application first, otherwise their stale inline values survive.
+  for (const property of appliedVariables.get(doc) ?? []) {
+    if (!(property in variables)) root.style.removeProperty(property);
+  }
+  for (const [property, value] of Object.entries(variables)) root.style.setProperty(property, value);
+  appliedVariables.set(doc, new Set(Object.keys(variables)));
   let fontStyle = doc.getElementById('theme-font-faces') as HTMLStyleElement | null;
   if (!fontStyle) {
     fontStyle = doc.createElement('style'); fontStyle.id = 'theme-font-faces'; doc.head.appendChild(fontStyle);

@@ -1,7 +1,7 @@
 // audio.test.ts — game/audio.ts pure logic (ROADMAP_NEXT item 7: data-driven audio placeholders).
 // Run: npx tsx test/audio.test.ts
 import {
-  resolveAudioTuning, effectiveVolume, trackForContext, nextPlaylistIndex, normalizeSoundUrl, loopSoundFor,
+  AutoplayGate, resolveAudioTuning, effectiveVolume, trackForContext, nextPlaylistIndex, normalizeSoundUrl, loopSoundFor,
 } from '../game/audio';
 import type { TuningData, MapData, ActionDef, AssetDef } from '../game/data';
 
@@ -90,6 +90,44 @@ console.log('audio.test — loopSoundFor (ActionDef.sound vs AssetDef.sound prec
   check('neither set, no asset at all → undefined', loopSoundFor(actionNoSound, undefined) === undefined);
   check('stateful asset sound is not action-scoped', loopSoundFor(actionWithSound, statefulAsset) === 'sounds/action.wav');
   check('stateful asset with no action sound returns undefined', loopSoundFor(actionNoSound, statefulAsset) === undefined);
+}
+
+console.log('audio.test - loading autoplay fallback');
+{
+  const allowed = new AutoplayGate();
+  let allowedAttempts = 0;
+  let allowedStarted = 0;
+  allowed.bestEffort(() => { allowedAttempts++; return Promise.resolve(); }, () => true, () => { allowedStarted++; });
+  await Promise.resolve();
+  check('relaxed policy starts loading music without a gesture', allowedAttempts === 1 && allowedStarted === 1);
+
+  const gate = new AutoplayGate();
+  let attempts = 0;
+  let started = 0;
+  gate.bestEffort(() => {
+    attempts++;
+    return attempts === 1 ? Promise.reject(new Error('autoplay blocked')) : Promise.resolve();
+  }, () => true, () => { started++; });
+  await Promise.resolve();
+  await Promise.resolve();
+  check('loading music is attempted immediately', attempts === 1);
+  check('blocked autoplay waits for a gesture retry', started === 0);
+  gate.unlock();
+  await Promise.resolve();
+  await Promise.resolve();
+  check('first gesture retries the blocked loading track once', attempts === 2 && started === 1);
+  gate.unlock();
+  check('later gestures do not replay the fallback', attempts === 2);
+
+  const stale = new AutoplayGate();
+  let wanted = true;
+  let staleAttempts = 0;
+  stale.bestEffort(() => { staleAttempts++; return Promise.reject(new Error('blocked')); }, () => wanted);
+  await Promise.resolve();
+  await Promise.resolve();
+  wanted = false;
+  stale.unlock();
+  check('a context switch cancels the queued loading retry', staleAttempts === 1);
 }
 
 if (failures) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }

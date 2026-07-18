@@ -30,9 +30,8 @@
 //     buy-mode `sdt` freeze, which is a DIFFERENT kind of pause and is handled the same way: entering
 //     buy mode force-stops action loops via the ordinary onActionStop path already firing when buy
 //     mode's own tap-routing takes over, so no special-casing is needed here).
-//   - AUTOPLAY POLICY: browsers refuse to start ANY audio (WebAudio context or a plain
-//     HTMLAudioElement) before a user gesture. `AudioManager` defers every real `.play()` call
-//     behind a one-time "unlocked" flag that flips on the first `pointerdown`/`keydown` anywhere in
+//   - AUTOPLAY POLICY: loading music gets a best-effort immediate `.play()` attempt. If policy
+//     blocks it, `AudioManager` retries on the first `pointerdown`/`keydown` anywhere in
 //     the document (the standard pattern — see MDN "Autoplay guide for media and Web Audio APIs").
 //     Anything requested before that point (e.g. map music wanting to start at page load) is queued
 //     as the "desired" state and applied the instant the gesture fires.
@@ -118,10 +117,46 @@ export function normalizeSoundUrl(path: string): string {
 
 export interface LoopHandle { readonly key: string; stop(): void }
 
+/** DOM-free playback gate: an immediate autoplay failure becomes one first-gesture retry. */
+export class AutoplayGate {
+  private unlocked = false;
+  private pending: Array<() => void> = [];
+
+  defer(start: () => void, stillWanted: () => boolean = () => true): void {
+    const guarded = () => { if (stillWanted()) start(); };
+    if (this.unlocked) guarded();
+    else this.pending.push(guarded);
+  }
+
+  bestEffort(start: () => Promise<unknown> | void, stillWanted: () => boolean = () => true, onStarted?: () => void): void {
+    const attempt = (retryOnFailure: boolean) => {
+      if (!stillWanted()) return;
+      let result: Promise<unknown> | void;
+      try { result = start(); }
+      catch {
+        if (retryOnFailure) this.defer(() => attempt(false), stillWanted);
+        return;
+      }
+      Promise.resolve(result).then(() => {
+        if (stillWanted()) onStarted?.();
+      }).catch(() => {
+        if (retryOnFailure) this.defer(() => attempt(false), stillWanted);
+      });
+    };
+    attempt(!this.unlocked);
+  }
+
+  unlock(): void {
+    if (this.unlocked) return;
+    this.unlocked = true;
+    const queued = this.pending.splice(0);
+    for (const start of queued) start();
+  }
+}
+
 export class AudioManager {
   private audio: AudioTuning;
-  private unlocked = false;
-  private pendingUnlock: Array<() => void> = [];
+  private readonly playback = new AutoplayGate();
   private paused = false;
 
   private readonly loops = new Map<string, HTMLAudioElement>(); // sfx/asset/action loop channels, keyed by caller-chosen id
@@ -136,12 +171,9 @@ export class AudioManager {
   constructor(tuning: Pick<TuningData, 'audio'>) {
     this.audio = resolveAudioTuning(tuning);
     const unlock = () => {
-      if (this.unlocked) return;
-      this.unlocked = true;
       document.removeEventListener('pointerdown', unlock);
       document.removeEventListener('keydown', unlock);
-      const queued = this.pendingUnlock.splice(0);
-      for (const fn of queued) fn();
+      this.playback.unlock();
     };
     document.addEventListener('pointerdown', unlock);
     document.addEventListener('keydown', unlock);
@@ -168,8 +200,7 @@ export class AudioManager {
   }
 
   private whenUnlocked(fn: () => void): void {
-    if (this.unlocked) fn();
-    else this.pendingUnlock.push(fn);
+    this.playback.defer(fn);
   }
 
   /** One-shot sound effect (e.g. a discrete UI cue) — not tracked/stoppable, fires and forgets. */
@@ -218,7 +249,7 @@ export class AudioManager {
    *  No-ops if that's already what's playing (including "already silent"). A genuine change
    *  crossfades from the current track (or from silence) to the new one (or to silence) over
    *  `tuning.audio.musicCrossfadeSeconds`. */
-  setMusicContext(context: MusicContext, map: Pick<MapData, 'music'>, loadingMusic?: string): void {
+  setMusicContext(context: MusicContext, map: Pick<MapData, 'music'>, loadingMusic?: string, onStarted?: () => void): void {
     if (context !== this.musicContext) this.musicPlaylistIndex = 0; // fresh context starts its playlist from the top
     const desired = trackForContext(context, map, this.audio, this.musicPlaylistIndex, loadingMusic);
     const contextChanged = context !== this.musicContext;
@@ -226,10 +257,10 @@ export class AudioManager {
     this.musicContext = context;
     if (!contextChanged && !trackChanged) return;
     this.musicTrack = desired;
-    this.crossfadeTo(desired, context, map);
+    this.crossfadeTo(desired, context, map, onStarted);
   }
 
-  private crossfadeTo(path: string | null, context: MusicContext, map: Pick<MapData, 'music'>): void {
+  private crossfadeTo(path: string | null, context: MusicContext, map: Pick<MapData, 'music'>, onStarted?: () => void): void {
     const outgoing = this.musicActiveIsA ? this.musicA : this.musicB;
     let incoming: HTMLAudioElement | null = null;
     if (path) {
@@ -237,10 +268,16 @@ export class AudioManager {
       incoming.loop = false; // 'map' cycles via 'ended' below; a single buyModeMusic track loops via its own 'ended' → replay
       incoming.volume = 0;
       incoming.addEventListener('ended', () => this.onTrackEnded(context, map));
-      this.whenUnlocked(() => incoming!.play().catch(() => {}));
     }
     if (this.musicActiveIsA) this.musicB = incoming; else this.musicA = incoming;
     this.musicActiveIsA = !this.musicActiveIsA;
+    if (incoming) {
+      const start = () => incoming.play();
+      const stillWanted = () => this.musicContext === context && this.musicTrack === path
+        && (this.musicActiveIsA ? this.musicA : this.musicB) === incoming;
+      if (context === 'loading') this.playback.bestEffort(start, stillWanted, onStarted);
+      else this.whenUnlocked(() => { if (stillWanted()) start().catch(() => {}); });
+    }
 
     const seconds = this.audio.musicCrossfadeSeconds;
     const targetVol = effectiveVolume(this.audio, 'music');

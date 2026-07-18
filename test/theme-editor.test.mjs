@@ -3,10 +3,14 @@ import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { transformSync } from 'esbuild';
 
 const here=dirname(fileURLToPath(import.meta.url));
 const html=readFileSync(join(here,'../tools/theme.html'),'utf8');
 const theme=JSON.parse(readFileSync(join(here,'../data/theme.json'),'utf8'));
+const themeEngineSource=readFileSync(join(here,'../game/theme.ts'),'utf8');
+const themeEngineJs=transformSync(themeEngineSource,{loader:'ts',format:'esm',target:'es2020'}).code;
+const {applyTheme}=await import(`data:text/javascript;base64,${Buffer.from(themeEngineJs).toString('base64')}`);
 const knownIds=['needs-panel','skills-panel','quest-panel','time-bar','activity-chip','work-chip','quest-toasts','visa-chip','funds-chip','buy-button','wall-cut-button','phone-button','buy-ghost-controls','buy-selection-chips'];
 let rawPut='';
 const fetchMock=async(url,opts={})=>{
@@ -24,7 +28,7 @@ function fire(el,type){el.dispatchEvent(new window.Event(type,{bubbles:true}));}
 
 const T=window.ThemeEditor;
 check(!!T,'plain script exposes ThemeEditor');
-T.setThemeEngine((edited,previewDoc)=>{previewCalls++;previewDoc.documentElement.dataset.previewFamily=edited.fonts.family;},knownIds);
+T.setThemeEngine((edited,previewDoc)=>{previewCalls++;applyTheme(edited,previewDoc);previewDoc.documentElement.dataset.previewFamily=edited.fonts.family;},knownIds);
 check(doc.querySelectorAll('.component').length===Object.keys(theme.components).length,'gallery derives one card per theme component key');
 check(doc.querySelector('[data-component="phoneShell"] .specimen-phone')&&doc.querySelector('[data-component="actionMenu"] [data-path$="centerRadiusPx"]'),'gallery includes isolated phone and radial specimens with relevant sparse fields');
 check([...doc.querySelectorAll('#fontOptions option')].map((x)=>x.value).includes('/fonts/Test Font.woff2'),'font listing populates its dropdown');
@@ -40,6 +44,20 @@ check(T.state.theme.fonts.family==='Test Family'&&T.state.theme.fonts.faces[last
 const panelShadow=doc.querySelector('[data-path="components.panel.shadow"]');panelShadow.value='';fire(panelShadow,'input');
 const radialRadius=doc.querySelector('[data-path="components.actionMenu.centerRadiusPx"]');radialRadius.value='132';fire(radialRadius,'input');
 check(!('shadow' in T.state.theme.components.panel)&&T.state.theme.components.actionMenu.centerRadiusPx===132,'gallery edits stay sparse and radial metrics round-trip');
+
+const shellBackground=doc.querySelector('[data-path="components.phoneShell.background"]');shellBackground.value='#334455';fire(shellBackground,'input');
+const shellRadius=doc.querySelector('[data-path="components.phoneShell.radiusPx"]');shellRadius.value='41';fire(shellRadius,'input');
+check(T.state.theme.components.phoneShell.background==='#334455'&&T.state.theme.components.phoneShell.radiusPx===41,'component color and shape fields update the draft');
+check(doc.documentElement.style.getPropertyValue('--theme-phone-shell-bg')==='#334455'&&doc.documentElement.style.getPropertyValue('--theme-phone-shell-radius')==='41px','real applyTheme restyles the component specimen variables');
+const cardBackground=doc.querySelector('[data-path="components.card.background"]');cardBackground.value='#445566';fire(cardBackground,'input');cardBackground.value='';fire(cardBackground,'input');
+check(!('background' in T.state.theme.components.card)&&doc.documentElement.style.getPropertyValue('--theme-card-bg')==='','clearing a sparse override removes its stale preview variable');
+
+const legacyWarn=doc.querySelector('[data-path="colors.warn"] input[type="text"]')||doc.querySelector('[data-path="colors.warn"]');
+legacyWarn.value='#aabbcc';fire(legacyWarn,'input');
+const legacyPanel=doc.querySelector('[data-path="colors.panelBg"]');legacyPanel.value='#223344';fire(legacyPanel,'input');
+const legacyRadius=doc.querySelector('[data-path="shapes.radiusPx"]');legacyRadius.value='15';fire(legacyRadius,'input');
+check(T.state.theme.colors.warn==='#aabbcc'&&T.state.theme.colors.panelBg==='#223344'&&T.state.theme.shapes.radiusPx===15,'legacy Colors and Shapes cards still update the draft');
+check(doc.documentElement.style.getPropertyValue('--theme-warn')==='#aabbcc'&&doc.documentElement.style.getPropertyValue('--theme-radius')==='15px','legacy color and shape edits re-apply to the preview');
 
 const dragged=T.dragLayout({anchor:'tl',offsetX:8,offsetY:8},{x:500,y:260},{width:120,height:50},{width:640,height:360});
 check(JSON.stringify(dragged)==='{"anchor":"br","offsetX":12,"offsetY":42}','drag math converts pointer delta to nearest anchor and offsets');
@@ -57,6 +75,7 @@ check(T.state.theme.accordions[0].icon==='/icons/custom.png'&&T.state.theme.acco
 doc.getElementById('save').click();await new Promise((resolve)=>setTimeout(resolve,20));
 const saved=JSON.parse(rawPut);
 check(saved.fonts.faces[lastFace].src==='/fonts/Test Font.woff2'&&saved.components.actionMenu.centerRadiusPx===132,'PUT payload contains font and radial edits');
+check(saved.components.phoneShell.background==='#334455'&&saved.components.phoneShell.radiusPx===41&&saved.colors.warn==='#aabbcc'&&saved.colors.panelBg==='#223344'&&saved.shapes.radiusPx===15,'PUT payload carries component and legacy card edits');
 check(saved.layout['funds-chip'].anchor==='bl'&&saved.accordions[0].icon==='/icons/custom.png','PUT payload contains layout and accordion edits');
 check(rawPut===JSON.stringify(T.state.theme,null,2),'save uses exact pretty whole-file JSON payload');
 check(previewCalls>4&&doc.documentElement.dataset.previewFamily==='Test Family','edits live-apply through the engine bridge');
