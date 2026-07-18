@@ -54,6 +54,7 @@ function renderRentals(tabName = 'Kijiji') {
     creditScore: 700,
     creditHistory: [],
     rentalTabName: tabName,
+    contactsTabName: 'People',
     rentals,
     rentDisabledTitle: 'Renting is coming soon',
   });
@@ -65,6 +66,11 @@ const doc = window.document;
 const rentalsTab = doc.querySelector('[data-phone-tab="rentals"]') as HTMLButtonElement;
 check('rentals tab label comes from the tuning name', rentalsTab.textContent === 'Kijiji');
 check('picking the rentals tab marks it active', rentalsTab.classList.contains('active'));
+check('smartphone frame has a status bar and home indicator', !!doc.querySelector('.phone-shell .phone-status-bar') && !!doc.querySelector('.phone-shell .phone-home-indicator'));
+check('content sits before bottom-tab navigation', !!doc.querySelector('.phone-header + #phone-body + .phone-tabs'));
+check('contacts tab label comes from tuning', doc.querySelector('[data-phone-tab="contacts"]')?.textContent === 'People');
+hud.setClock(9, 5);
+check('game clock is mirrored into the smartphone status bar', doc.querySelector('.phone-status')?.textContent === '09:05');
 
 const cards = [...doc.querySelectorAll('#phone-body .phone-card')];
 check('every listed ad renders a card', cards.length === 3);
@@ -107,6 +113,7 @@ hud.renderPhone({
   tab: 'rentals', currentStatusName: 'Visitor', searchedJobs: false, jobs: [], currentJob: null,
   visas: [], pending: null, currencyName: '§', bills: [], billsTotal: 0, creditScore: 700,
   creditHistory: [], rentalTabName: 'Kijiji', rentals: pendingRentals, rentDisabledTitle: 'Not rentable right now',
+  contactsTabName: 'Contacts',
 });
 const pCards = [...doc.querySelectorAll('#phone-body .phone-card')];
 const movingCard = pCards[1];

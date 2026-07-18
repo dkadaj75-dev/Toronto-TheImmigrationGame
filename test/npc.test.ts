@@ -26,7 +26,7 @@ const social: SocialData = {
 };
 
 const make = () => new VisitLifecycle(() => npcs, () => social);
-const reachable = { beginArrival: () => true };
+const reachable = { modelReadiness: () => 'ready' as const, beginArrival: () => true };
 // scale 60 means one sdt second advances one authored game minute.
 const tickMinutes = (visits: VisitLifecycle, minutes: number, hour: number, hooks = reachable) =>
   visits.tick(minutes, 60, hour, hooks);
@@ -43,6 +43,25 @@ console.log('npc.test — pending arrival and one-visitor gating');
   check('arrival fires at inclusive delay boundary', visits.state.phase === 'entering');
   check('entering visitor still blocks invites', !visits.canInvite());
   check('runtime arrival completion starts visiting', visits.markEntered() && visits.state.phase === 'visiting');
+}
+
+console.log('npc.test — arrival waits for the invited rig to become ready');
+{
+  const visits = make();
+  let readiness: 'pending' | 'ready' | 'failed' = 'pending';
+  let arrivalAttempts = 0;
+  visits.invite('amara');
+  const hooks = {
+    modelReadiness: () => readiness,
+    beginArrival: () => { arrivalAttempts++; return true; },
+  };
+  tickMinutes(visits, 5, 12, hooks);
+  check('elapsed arrival delay remains pending while model load is in flight', visits.state.phase === 'pending' && arrivalAttempts === 0);
+  tickMinutes(visits, 30, 12.5, hooks);
+  check('extra elapsed time never bypasses readiness', visits.state.phase === 'pending' && arrivalAttempts === 0);
+  readiness = 'ready';
+  tickMinutes(visits, 0, 12.5, hooks);
+  check('ready model starts entering on the next lifecycle tick', visits.state.phase === 'entering' && arrivalAttempts === 1);
 }
 
 console.log('npc.test — duration, asked and availability leave triggers');
@@ -80,6 +99,7 @@ console.log('npc.test — unreachable exterior door converts to completed call o
   let socialGain = 0;
   visits.invite('amara', 1.5);
   const hooks = {
+    modelReadiness: () => 'ready' as const,
     beginArrival: () => { arrivalAttempts++; return false; },
     onCallFallback: (_npc: NpcDef, outcome: { relationshipDelta: number; needGains: Record<string, number> }) => {
       fallbackCalls++;
@@ -96,6 +116,21 @@ console.log('npc.test — unreachable exterior door converts to completed call o
   check('failed arrival clears occupancy instead of sticking', visits.state.phase === 'idle' && visits.canInvite());
   tickMinutes(visits, 30, 13, hooks);
   check('cleared fallback cannot apply twice', fallbackCalls === 1);
+}
+
+console.log('npc.test — rig load failure uses the call fallback');
+{
+  const visits = make();
+  let arrivalAttempts = 0;
+  let fallbackCalls = 0;
+  visits.invite('amara', 1.5);
+  tickMinutes(visits, 5, 12, {
+    modelReadiness: () => 'failed' as const,
+    beginArrival: () => { arrivalAttempts++; return true; },
+    onCallFallback: () => { fallbackCalls++; },
+  });
+  check('failed rig never attempts a visible arrival', arrivalAttempts === 0);
+  check('failed rig applies the call fallback once and clears occupancy', fallbackCalls === 1 && visits.canInvite());
 }
 
 console.log('npc.test — serialize/restore round trip');

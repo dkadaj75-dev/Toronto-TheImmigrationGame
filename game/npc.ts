@@ -9,10 +9,11 @@ import { cellCenter, isWalkable, worldToCell } from './nav';
 import { SimAgent, type ActiveAction } from './sim';
 import { Autonomy, type AutonomyStats } from './autonomy';
 import { AnimController } from './anim';
-import { loadRiggedCharacter, makeSimStandIn } from './world';
+import { loadRiggedCharacter } from './world';
 import { effectiveNeedGain } from './stats';
 import { phoneGain, type PhoneGainResult, type SocialData } from './social';
 import type { EvalContext } from './quests';
+import type { ExteriorDoorTransitHandle } from './doors';
 
 export interface NpcDef {
   id: string;
@@ -46,7 +47,9 @@ export interface VisitSaveState {
 }
 
 export interface VisitTickHooks {
-  /** Completion seam for the pending-arrival timer. False converts the invite into a call. */
+  /** Rig readiness is an explicit pure input: pending waits; failed uses the call fallback. */
+  modelReadiness(npc: NpcDef): 'pending' | 'ready' | 'failed';
+  /** Completion seam for the pending-arrival timer once the rig is ready. */
   beginArrival(npc: NpcDef): boolean;
   onCallFallback?(npc: NpcDef, outcome: PhoneGainResult): void;
 }
@@ -129,8 +132,10 @@ export class VisitLifecycle {
     if (this.saved.phase === 'pending') {
       this.saved.pendingElapsedMinutes += deltaMinutes;
       if (this.saved.pendingElapsedMinutes < finiteNonNegative(npc.arrivalDelayMinutes)) return;
-      // The pending timer genuinely completed. Only this seam may create the call side effect.
-      if (!hooks.beginArrival(npc)) {
+      const readiness = hooks.modelReadiness(npc);
+      if (readiness === 'pending') return;
+      // Load failure and an unreachable door deliberately share the exact call-fallback seam.
+      if (readiness === 'failed' || !hooks.beginArrival(npc)) {
         const outcome = phoneGain('call', this.saved.compatibilityMultiplier, this.getSocial());
         this.saved = idleState();
         hooks.onCallFallback?.(npc, outcome);
@@ -193,6 +198,11 @@ export interface NpcVisitorControllerOptions {
   getEvalContext?: () => EvalContext;
   getCompatibilityMultiplier?: (npc: NpcDef) => number;
   exteriorDoorUsable?: (doorObject: THREE.Object3D, doorDef: AssetDef) => boolean;
+  requestExteriorTransit?: (request: {
+    passThrough: () => void;
+    passComplete: () => boolean;
+    onClosed?: () => void;
+  }) => ExteriorDoorTransitHandle | null;
   onCallFallback?: (npc: NpcDef, outcome: PhoneGainResult) => void;
   feedback?: (message: string) => void;
 }
@@ -209,12 +219,30 @@ interface LiveVisitor {
   gainAcc: number;
   loadToken: object;
   rigSignature: string;
+  transit: ExteriorDoorTransitHandle | null;
+  entryStarted: boolean;
+  entryClosed: boolean;
+  exitTransitStarted: boolean;
 }
+
+interface PreparedVisitorRig {
+  npcId: string;
+  signature: string;
+  model: THREE.Object3D;
+  anim: AnimController;
+}
+
+type RigPreloadState =
+  | { status: 'idle' }
+  | { status: 'pending'; npcId: string; signature: string; token: object }
+  | { status: 'ready'; rig: PreparedVisitorRig }
+  | { status: 'failed'; npcId: string; signature: string };
 
 /** Thin scene adapter. Public methods are intentionally the S4/S5 integration surface. */
 export class NpcVisitorController {
   readonly lifecycle: VisitLifecycle;
   private live: LiveVisitor | null = null;
+  private preload: RigPreloadState = { status: 'idle' };
 
   constructor(private options: NpcVisitorControllerOptions) {
     this.lifecycle = new VisitLifecycle(
@@ -237,7 +265,9 @@ export class NpcVisitorController {
     const data = this.options.getData();
     const npc = data.npcs?.npcs.find((entry) => entry.id === npcId);
     if (!npc || !data.social) return false;
-    return this.lifecycle.invite(npcId, this.options.getCompatibilityMultiplier?.(npc) ?? 1);
+    const accepted = this.lifecycle.invite(npcId, this.options.getCompatibilityMultiplier?.(npc) ?? 1);
+    if (accepted) this.preloadRig(npc);
+    return accepted;
   }
 
   endVisit(completed = true): boolean { return this.lifecycle.endVisit(completed); }
@@ -251,8 +281,13 @@ export class NpcVisitorController {
   }
 
   retune(): void {
-    if (!this.live) return;
     const data = this.options.getData();
+    const pendingId = this.lifecycle.state.phase === 'pending' ? this.lifecycle.state.npcId : null;
+    if (pendingId) {
+      const pendingNpc = data.npcs?.npcs.find((npc) => npc.id === pendingId);
+      if (pendingNpc && this.rigReadiness(pendingNpc) === 'failed') this.preloadRig(pendingNpc);
+    }
+    if (!this.live) return;
     const current = data.npcs?.npcs.find((npc) => npc.id === this.live!.npc.id);
     if (!current) {
       this.despawn();
@@ -277,8 +312,10 @@ export class NpcVisitorController {
     const data = this.options.getData();
     if (!data.social || !data.npcs) return;
     this.lifecycle.tick(sdtSeconds, gameSecondsPerSimSecond, this.options.getHour(), {
+      modelReadiness: (npc) => this.rigReadiness(npc),
       beginArrival: (npc) => this.spawn(npc, true),
       onCallFallback: (npc, outcome) => {
+        this.clearPreload();
         this.options.onCallFallback?.(npc, outcome);
         this.options.feedback?.(`${npc.name} couldn't reach your door, so you caught up by phone.`);
       },
@@ -289,7 +326,10 @@ export class NpcVisitorController {
     live.agent.update(sdtSeconds);
     live.anim?.update(sdtSeconds);
 
-    if (this.lifecycle.state.phase === 'entering' && !live.agent.isMoving) {
+    if (this.lifecycle.state.phase === 'entering' && live.entryStarted && !live.transit && !live.agent.isMoving) {
+      live.entryClosed = true;
+    }
+    if (this.lifecycle.state.phase === 'entering' && live.entryClosed) {
       this.lifecycle.markEntered();
       live.anim?.play('idle');
     }
@@ -306,51 +346,64 @@ export class NpcVisitorController {
     }
 
     if (this.lifecycle.state.phase === 'leaving') this.beginLeaving(live);
-    if (this.lifecycle.state.phase === 'leaving' && live.leaveOrdered && !live.agent.isMoving) {
-      this.lifecycle.markExited();
-      this.despawn();
-    }
   }
 
   serialize(): VisitSaveState { return this.lifecycle.serialize(); }
   restore(state: VisitSaveState): void {
     this.despawn();
+    this.clearPreload();
     this.lifecycle.restore(state);
     const restored = this.lifecycle.state;
-    if (restored.phase === 'idle' || restored.phase === 'pending' || !restored.npcId) return;
+    if (restored.phase === 'idle' || !restored.npcId) return;
     const npc = this.options.getData().npcs?.npcs.find((entry) => entry.id === restored.npcId);
-    if (!npc || !this.spawn(npc, restored.phase === 'entering')) {
+    if (!npc) {
       this.lifecycle.restore(idleState());
       return;
     }
-    if (restored.phase === 'leaving' && this.live) this.beginLeaving(this.live);
+    // A restored visible phase must still honor the preload invariant. Re-enter through pending,
+    // preserving elapsed clocks; the already-completed arrival delay means it resumes as soon as
+    // the rig is ready instead of ever constructing a placeholder.
+    if (restored.phase !== 'pending') {
+      this.lifecycle.restore({ ...restored, phase: 'pending', pendingElapsedMinutes: npc.arrivalDelayMinutes });
+    }
+    this.preloadRig(npc);
   }
 
   private spawn(npc: NpcDef, routeIn: boolean): boolean {
     this.despawn();
     const data = this.options.getData();
+    const prepared = this.takePreparedRig(npc);
+    if (!prepared) return false;
     const door = exteriorDoor(data);
-    if (!door) return false;
+    if (!door) { disposeObject(prepared.model); return false; }
     const points = doorPoints(this.options.getGrid(), door.entry);
-    if (!points) return false;
-    if (this.options.exteriorDoorUsable && !this.options.exteriorDoorUsable(door.object, door.def)) return false;
+    if (!points) { disposeObject(prepared.model); return false; }
+    if (this.options.exteriorDoorUsable && !this.options.exteriorDoorUsable(door.object, door.def)) {
+      disposeObject(prepared.model);
+      return false;
+    }
 
-    const root = makeSimStandIn();
+    const root = new THREE.Group();
+    root.add(prepared.model);
     root.name = `npc:${npc.id}`;
     root.userData.npcId = npc.id;
-    tintObject(root, npc.tint);
     root.position.set(routeIn ? points.outside[0] : points.inside[0], 0, routeIn ? points.outside[1] : points.inside[1]);
     const agent = new SimAgent(root, this.options.getGrid(), data.tuning, assetMap(data));
+    agent.hasRig = true;
+    // Validate the same route before making the rig visible/state entering. Movement itself is
+    // restarted only by the exterior-transit pass seam after the pane is fully open.
     if (routeIn && !agent.goTo(points.inside[0], points.inside[1])) {
       disposeObject(root);
       return false;
     }
+    if (routeIn) agent.halt();
 
     const stats = visitorStats(npc, () => this.lifecycle.state.socialMeter);
     const live: LiveVisitor = {
-      npc, root, agent, anim: null, autonomyPaused: false, leaveOrdered: false,
+      npc, root, agent, anim: prepared.anim, autonomyPaused: false, leaveOrdered: false,
       decisionAcc: 0, gainAcc: 0, loadToken: {},
-      rigSignature: characterSignature(characterTuningFor(npc, data), npc.tint),
+      rigSignature: prepared.signature, transit: null,
+      entryStarted: !routeIn, entryClosed: !routeIn, exitTransitStarted: false,
       autonomy: null as unknown as Autonomy,
     };
     live.autonomy = new Autonomy(
@@ -374,7 +427,31 @@ export class NpcVisitorController {
     agent.onActionStop = () => live.anim?.play(agent.isMoving ? 'walk' : 'idle');
     this.live = live;
     this.options.scene.add(root);
-    this.loadRig(live);
+    if (routeIn) {
+      let passedDoor = false;
+      const beginEntry = () => {
+        if (this.live !== live) return;
+        live.entryStarted = live.agent.goTo(points.inside[0], points.inside[1]);
+        passedDoor = live.entryStarted;
+        if (!live.entryStarted) live.transit?.cancel();
+      };
+      if (this.options.requestExteriorTransit) {
+        live.transit = this.options.requestExteriorTransit({
+          passThrough: beginEntry,
+          passComplete: () => this.live !== live || (live.entryStarted && !live.agent.isMoving),
+          onClosed: () => {
+            if (this.live !== live) return;
+            live.transit = null;
+            if (passedDoor) live.entryClosed = true;
+            else { this.lifecycle.restore(idleState()); this.despawn(); }
+          },
+        });
+        if (!live.transit) { this.despawn(); return false; }
+      } else {
+        beginEntry();
+        if (!live.entryStarted) { this.despawn(); return false; }
+      }
+    }
     return true;
   }
 
@@ -392,7 +469,57 @@ export class NpcVisitorController {
       live.agent.hasRig = true;
       live.anim.setWalkSpeed(this.options.getData().tuning.movement.walkSpeed);
       live.anim.play(live.agent.current ? actionAnim(live.agent.current) : live.agent.isMoving ? 'walk' : 'idle');
-    }).catch((error) => console.warn(`NPC "${live.npc.id}" rig failed to load; keeping stand-in.`, error));
+    }).catch((error) => console.warn(`NPC "${live.npc.id}" replacement rig failed to load; keeping the ready rig.`, error));
+  }
+
+  private preloadRig(npc: NpcDef): void {
+    this.clearPreload();
+    const tuning = characterTuningFor(npc, this.options.getData());
+    const signature = characterSignature(tuning, npc.tint);
+    if (!tuning.meshPath) {
+      this.preload = { status: 'failed', npcId: npc.id, signature };
+      return;
+    }
+    const token = {};
+    this.preload = { status: 'pending', npcId: npc.id, signature, token };
+    loadRiggedCharacter(tuning).then(({ model, clips }) => {
+      if (this.preload.status !== 'pending' || this.preload.token !== token) {
+        disposeObject(model);
+        return;
+      }
+      tintObject(model, npc.tint);
+      const anim = new AnimController(model, clips, tuning);
+      anim.setWalkSpeed(this.options.getData().tuning.movement.walkSpeed);
+      anim.play('idle');
+      this.preload = { status: 'ready', rig: { npcId: npc.id, signature, model, anim } };
+    }).catch((error) => {
+      if (this.preload.status !== 'pending' || this.preload.token !== token) return;
+      console.warn(`NPC "${npc.id}" rig failed to preload; converting the visit to a call.`, error);
+      this.preload = { status: 'failed', npcId: npc.id, signature };
+    });
+  }
+
+  private rigReadiness(npc: NpcDef): 'pending' | 'ready' | 'failed' {
+    const signature = characterSignature(characterTuningFor(npc, this.options.getData()), npc.tint);
+    if (this.preload.status === 'ready') {
+      return this.preload.rig.npcId === npc.id && this.preload.rig.signature === signature ? 'ready' : 'failed';
+    }
+    if (this.preload.status === 'pending') {
+      return this.preload.npcId === npc.id && this.preload.signature === signature ? 'pending' : 'failed';
+    }
+    return this.preload.status === 'failed' && this.preload.npcId === npc.id ? 'failed' : 'pending';
+  }
+
+  private takePreparedRig(npc: NpcDef): PreparedVisitorRig | null {
+    if (this.rigReadiness(npc) !== 'ready' || this.preload.status !== 'ready') return null;
+    const rig = this.preload.rig;
+    this.preload = { status: 'idle' };
+    return rig;
+  }
+
+  private clearPreload(): void {
+    if (this.preload.status === 'ready') disposeObject(this.preload.rig.model);
+    this.preload = { status: 'idle' };
   }
 
   private tickVisitorAction(live: LiveVisitor, sdtSeconds: number): void {
@@ -417,21 +544,51 @@ export class NpcVisitorController {
   }
 
   private beginLeaving(live: LiveVisitor): void {
-    if (live.leaveOrdered) return;
-    live.autonomyPaused = true;
-    live.agent.stopAction(false);
     const door = exteriorDoor(this.options.getData());
     const points = door ? doorPoints(this.options.getGrid(), door.entry) : null;
-    if (!points || !live.agent.goTo(points.inside[0], points.inside[1])) {
+    if (!points) {
       this.lifecycle.markExited();
       this.despawn();
       return;
     }
-    live.leaveOrdered = true;
+    if (!live.leaveOrdered) {
+      live.autonomyPaused = true;
+      live.agent.stopAction(false);
+      if (!live.agent.goTo(points.inside[0], points.inside[1])) {
+        this.lifecycle.markExited();
+        this.despawn();
+        return;
+      }
+      live.leaveOrdered = true;
+      return;
+    }
+    if (live.agent.isMoving || live.exitTransitStarted) return;
+    live.exitTransitStarted = true;
+    const passThrough = () => {
+      if (this.live !== live) return;
+      live.anim?.play('walk');
+      live.agent.teleportTo(points.outside[0], points.outside[1], THREE.MathUtils.radToDeg(live.root.rotation.y));
+    };
+    const finish = () => {
+      if (this.live !== live) return;
+      this.lifecycle.markExited();
+      this.despawn();
+    };
+    if (this.options.requestExteriorTransit) {
+      live.transit = this.options.requestExteriorTransit({
+        passThrough,
+        passComplete: () => true,
+        onClosed: finish,
+      });
+      if (live.transit) return;
+    }
+    passThrough();
+    finish();
   }
 
   private despawn(): void {
     if (!this.live) return;
+    this.live.transit?.cancel();
     this.live.loadToken = {};
     this.live.agent.stopAction(false);
     this.options.scene.remove(this.live.root);

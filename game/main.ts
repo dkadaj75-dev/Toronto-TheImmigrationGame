@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { loadAll, loadAllMaps, watchData, type ActionDef, type GameData, type MapData } from './data';
 import { TouchCamera } from './camera';
 import { applyWallCutView, buildWorld, makeSimStandIn, makeLights, applyDayNight, applyExteriorScene, loadRiggedCharacter, normalizeMeshUrl, setAssetObjectOn } from './world';
-import { buildDoors } from './doors';
+import { buildDoors, ExteriorDoorTransit, type ExteriorDoorTransitRequest } from './doors';
 import { AnimController } from './anim';
 import { bakeNavGrid } from './nav';
 import { TapInput, type TapResult } from './input';
@@ -127,6 +127,7 @@ async function start() {
   let wallCutActive = false; // in-page preference only; deliberately not serialized
   let world = buildWorld(data, trackInitialLoad);
   let doors = buildDoors(data, trackInitialLoad);
+  const exteriorDoorTransit = new ExteriorDoorTransit();
   world.add(doors.group);
   applyWallCutView(world, wallCutActive, data.tuning.view?.wallCutHeight ?? 1);
   const lights = makeLights();
@@ -174,6 +175,7 @@ async function start() {
   // (currently the only map that exists, so always true — no extra gating needed).
   let panicState: { elapsed: number; totalSeconds: number } | null = null;
   const triggerPanic = () => {
+    exteriorDoorTransit.cancel();
     if (playerAway()) return; // the sim is off-lot (work OR visiting) and cannot react to a home fire while away
     agent.stopAction(); // fires onActionStop → animation reset to idle, activity chip hidden, etc.
     cancelCarry(); // ROADMAP_NEXT B3-5: panic interrupts an in-progress carry-to-garbage walk too
@@ -300,6 +302,10 @@ async function start() {
   const socialRuntime = new SocialRuntime(data.social);
   let autonomy: Autonomy;
 
+  /** One transit entry point for visitors, work/visit departures and returns, and trash removal. */
+  const requestExteriorTransit = (request: ExteriorDoorTransitRequest) =>
+    exteriorDoorTransit.begin(doors.instances.find((door) => door.config.exterior), request);
+
   // --- SOCIAL S3: exactly one pending/active visitor. NpcVisitorController is the thin scene
   // adapter; its VisitLifecycle owns all timing/gating and exposes invite/canInvite/state for S5
   // plus endVisit/engage/autonomy-pause for S4. Unknown/missing social need ids are safe no-ops.
@@ -314,6 +320,7 @@ async function start() {
       ? compatibility(Object.fromEntries(stats.personality), npc.personality, data.social).multiplier
       : 1,
     exteriorDoorUsable: (doorObject, doorDef) => !accidents.isBlocked(doorObject, doorDef),
+    requestExteriorTransit,
     onCallFallback: (npc, outcome) => {
       socialRuntime.relationships.set(npc.id, socialRuntime.relationships.get(npc.id) + outcome.relationshipDelta);
       for (const [needId, delta] of Object.entries(outcome.needGains)) {
@@ -423,7 +430,8 @@ async function start() {
   // visiting into the one "off-lot, cannot act" predicate every work.isAtWork call site already
   // gated on, so a visit is exactly as exclusive as a work shift.
   const visitAway = new VisitAwayTracker();
-  const playerAway = () => work.isAtWork || visitAway.isAway;
+  let returnTransitPending = false;
+  const playerAway = () => work.isAtWork || visitAway.isAway || returnTransitPending;
   // Remembers which NPC the in-flight 'visit_their_place' walk-to-door action is for; read only at
   // that action's own completion (see handleActionCompleted below) — a cancelled/interrupted walk
   // never reaches it, so nothing needs to be undone (side_effect_rule).
@@ -466,6 +474,7 @@ async function start() {
     refreshVisaChip();
   };
   visaMachine.onGameOver = (reason, def) => {
+    exteriorDoorTransit.cancel(true);
     gameOverActive = true;
     const name = def?.name ?? visaMachine.statusId;
     hud.showGameOver(reason === 'grace_expired'
@@ -498,30 +507,43 @@ async function start() {
       return;
     }
     if (event.type === 'returned') {
-      agent.teleportTo(event.returnPoint.pos[0], event.returnPoint.pos[1], event.returnPoint.facingDeg);
-      sim.visible = true;
-      if (marker) marker.pivot.visible = true;
-      hud.setAtWork(false);
-      quests.funds += event.pay; // QuestRunner is the single runtime economy owner (§3 / buy mode)
-      const nextNeeds = applyNeedsCost(Object.fromEntries(stats.needs), event.needsCost);
-      for (const [needId, value] of Object.entries(nextNeeds)) stats.needs.set(needId, value);
-      hud.setFunds(quests.funds, data.tuning.economy.currencyName);
-      hud.showQuestToast(
-        `+${data.tuning.economy.currencyName}${event.pay.toLocaleString()}`,
-        'completed',
-        data.tuning.quests.toastDurationSeconds * 1000,
-      );
-      const job = data.jobs.jobs.find((entry) => entry.id === event.jobId);
-      if (job) {
-        const promotion = work.rollPromotion(job, happiness, data.tuning.work?.promotionHappinessFactor ?? 1);
-        if (promotion.promoted) {
-          const pay = `${promotion.payIncrease >= 0 ? '+' : ''}${data.tuning.economy.currencyName}${promotion.payIncrease}`;
-          hud.showQuestToast(`Promoted to ${promotion.title}! ${pay}`, 'completed', data.tuning.quests.toastDurationSeconds * 1000);
-          // Keep the income quest var current with the new level's pay (see phone.ts applyForJob).
-          quests.vars.income = jobLevelPay(job, work.getJobLevel(job.id));
+      let applied = false;
+      returnTransitPending = true;
+      const completeReturn = () => {
+        if (applied) return;
+        applied = true;
+        returnTransitPending = false;
+        agent.teleportTo(event.returnPoint.pos[0], event.returnPoint.pos[1], event.returnPoint.facingDeg);
+        sim.visible = true;
+        if (marker) marker.pivot.visible = true;
+        hud.setAtWork(false);
+        quests.funds += event.pay; // QuestRunner is the single runtime economy owner (§3 / buy mode)
+        const nextNeeds = applyNeedsCost(Object.fromEntries(stats.needs), event.needsCost);
+        for (const [needId, value] of Object.entries(nextNeeds)) stats.needs.set(needId, value);
+        hud.setFunds(quests.funds, data.tuning.economy.currencyName);
+        hud.showQuestToast(
+          `+${data.tuning.economy.currencyName}${event.pay.toLocaleString()}`,
+          'completed',
+          data.tuning.quests.toastDurationSeconds * 1000,
+        );
+        const job = data.jobs.jobs.find((entry) => entry.id === event.jobId);
+        if (job) {
+          const promotion = work.rollPromotion(job, happiness, data.tuning.work?.promotionHappinessFactor ?? 1);
+          if (promotion.promoted) {
+            const pay = `${promotion.payIncrease >= 0 ? '+' : ''}${data.tuning.economy.currencyName}${promotion.payIncrease}`;
+            hud.showQuestToast(`Promoted to ${promotion.title}! ${pay}`, 'completed', data.tuning.quests.toastDurationSeconds * 1000);
+            // Keep the income quest var current with the new level's pay (see phone.ts applyForJob).
+            quests.vars.income = jobLevelPay(job, work.getJobLevel(job.id));
+          }
         }
-      }
-      refreshPhone();
+        refreshPhone();
+      };
+      const transit = requestExteriorTransit({
+        passThrough: completeReturn,
+        passComplete: () => true,
+        onClosed: completeReturn,
+      });
+      if (!transit) completeReturn();
       return;
     }
 
@@ -560,22 +582,31 @@ async function start() {
   // player needs). An npc deleted mid-hot-reload degrades gracefully: the sim still reappears, it
   // just carries no outcome (nothing to compute it against).
   const handleVisitReturn = (event: VisitReturnEvent) => {
-    agent.teleportTo(event.returnPoint.pos[0], event.returnPoint.pos[1], event.returnPoint.facingDeg);
-    sim.visible = true;
-    if (marker) marker.pivot.visible = true;
-    hud.setAtWork(false);
-    const npc = data.npcs?.npcs.find((entry) => entry.id === event.npcId);
-    if (npc && data.social) {
-      const compat = compatibility(Object.fromEntries(stats.personality), npc.personality, data.social);
-      const outcome = visitOutcome(event.npcId, socialRuntime.relationships, compat, data.social);
-      socialRuntime.relationships.set(npc.id, socialRuntime.relationships.get(npc.id) + outcome.relationshipDelta);
-      for (const [needId, delta] of Object.entries(outcome.needsRestored)) {
-        const current = stats.needs.get(needId);
-        if (current !== undefined) stats.needs.set(needId, Math.max(0, Math.min(100, current + delta)));
+    let applied = false;
+    returnTransitPending = true;
+    const completeReturn = () => {
+      if (applied) return;
+      applied = true;
+      returnTransitPending = false;
+      agent.teleportTo(event.returnPoint.pos[0], event.returnPoint.pos[1], event.returnPoint.facingDeg);
+      sim.visible = true;
+      if (marker) marker.pivot.visible = true;
+      hud.setAtWork(false);
+      const npc = data.npcs?.npcs.find((entry) => entry.id === event.npcId);
+      if (npc && data.social) {
+        const compat = compatibility(Object.fromEntries(stats.personality), npc.personality, data.social);
+        const outcome = visitOutcome(event.npcId, socialRuntime.relationships, compat, data.social);
+        socialRuntime.relationships.set(npc.id, socialRuntime.relationships.get(npc.id) + outcome.relationshipDelta);
+        for (const [needId, delta] of Object.entries(outcome.needsRestored)) {
+          const current = stats.needs.get(needId);
+          if (current !== undefined) stats.needs.set(needId, Math.max(0, Math.min(100, current + delta)));
+        }
+        hud.showQuestToast(`Back from visiting ${npc.name}`, 'completed', data.tuning.quests.toastDurationSeconds * 1000);
       }
-      hud.showQuestToast(`Back from visiting ${npc.name}`, 'completed', data.tuning.quests.toastDurationSeconds * 1000);
-    }
-    refreshPhone();
+      refreshPhone();
+    };
+    const transit = requestExteriorTransit({ passThrough: completeReturn, passComplete: () => true, onClosed: completeReturn });
+    if (!transit) completeReturn();
   };
 
   // --- smartphone jobs + visa applications (PROJECT_CONTEXT.md §7.20 V2, B3-7) ---
@@ -806,6 +837,7 @@ async function start() {
     repoOverlayActive = false;
     if (!debtGameOverPending) return;
     debtGameOverPending = false;
+    exteriorDoorTransit.cancel(true);
     gameOverActive = true;
     hud.showGameOver('Your debt remained unpaid after everything seizable was repossessed.');
   };
@@ -846,6 +878,7 @@ async function start() {
     if (decision.seized.length > 0) { rebakeNav(); applyEnvironment(); }
     hud.setFunds(quests.funds, currencyName());
     refreshPhone();
+    exteriorDoorTransit.cancel(true);
     repoOverlayActive = true;
     debtGameOverPending = decision.gameOver;
     hud.showRepoNotice(decision.seized, currencyName());
@@ -1098,6 +1131,7 @@ async function start() {
   const bladderFailureState = initBladderFailureState();
   let peeState: { elapsed: number; totalSeconds: number } | null = null;
   const triggerBladderFailure = () => {
+    exteriorDoorTransit.cancel();
     agent.stopAction(); // fires onActionStop → animation reset to idle, activity chip hidden, etc.
     cancelCarry(); // ROADMAP_NEXT B3-5: bladder failure interrupts an in-progress carry walk too
     const cfg = data.tuning.bladderFailure;
@@ -1192,6 +1226,7 @@ async function start() {
   const survivalEventActive = () => energyCollapseState.phase !== 'ready' || starvation.state.phase === 'collapse';
   const handleEnergyCollapse = (event: ReturnType<typeof tickEnergyCollapse>) => {
     if (event === 'collapse') {
+      exteriorDoorTransit.cancel();
       agent.stopAction(); cancelCarry();
       const cfg = data.tuning.energyCollapse;
       autonomy.forceCooldown((cfg?.collapseSeconds ?? 2) + (cfg?.sleepSeconds ?? 20));
@@ -1216,11 +1251,13 @@ async function start() {
       hud.showQuestToast('Starving! Eat before the countdown expires.', 'started', data.tuning.quests.toastDurationSeconds * 1000);
     } else if (event === 'collapse') {
       // Starvation is terminal and takes precedence if its countdown expires during energy sleep.
+      exteriorDoorTransit.cancel();
       energyCollapseState.phase = 'ready'; energyCollapseState.elapsed = 0; energyCollapseState.armed = true;
       agent.stopAction(); cancelCarry(); agent.setGroundLie(true);
       autonomy.forceCooldown(cfg?.collapseSeconds ?? 4);
       anim?.play('starve');
     } else if (event === 'gameOver') {
+      exteriorDoorTransit.cancel(true);
       gameOverActive = true;
       hud.showGameOver(cfg?.message ?? 'Your Sim starved after going too long without food.');
     }
@@ -1280,21 +1317,25 @@ async function start() {
     if (a.action.id === 'leave_for_work') {
       const job = currentJob();
       if (!job) return;
-      const started = work.beginShift(job, currentWorkTime(), {
-        pos: [a.target.position.x, a.target.position.z],
-        facingDeg: THREE.MathUtils.radToDeg(a.target.rotation.y),
-      }, data.tuning.work?.departureWindowHours ?? 2); // B7-5: reject a late (past-window) arrival
-      if (!started.ok) {
-        hud.showQuestToast('Too late — you missed your shift', 'started', 2500);
-        return;
-      }
-      cancelCarry();
-      // Clearing at the current point is the SimAgent equivalent of "nav idle" and preserves the
-      // departure facing before the character is hidden.
-      agent.teleportTo(sim.position.x, sim.position.z, THREE.MathUtils.radToDeg(sim.rotation.y));
-      sim.visible = false;
-      if (marker) marker.pivot.visible = false;
-      hud.setAtWork(true);
+      const depart = () => {
+        const started = work.beginShift(job, currentWorkTime(), {
+          pos: [a.target.position.x, a.target.position.z],
+          facingDeg: THREE.MathUtils.radToDeg(a.target.rotation.y),
+        }, data.tuning.work?.departureWindowHours ?? 2); // B7-5: reject a late (past-window) arrival
+        if (!started.ok) {
+          hud.showQuestToast('Too late — you missed your shift', 'started', 2500);
+          return;
+        }
+        cancelCarry();
+        // Clearing at the current point is the SimAgent equivalent of "nav idle" and preserves the
+        // departure facing before the character is hidden.
+        agent.teleportTo(sim.position.x, sim.position.z, THREE.MathUtils.radToDeg(sim.rotation.y));
+        sim.visible = false;
+        if (marker) marker.pivot.visible = false;
+        hud.setAtWork(true);
+      };
+      const transit = requestExteriorTransit({ passThrough: depart, passComplete: () => true });
+      if (!transit) depart();
       return;
     }
     // SOCIAL S6: direct clone of the leave_for_work branch above — same hide/teleport effects, a
@@ -1310,12 +1351,16 @@ async function start() {
         pos: [a.target.position.x, a.target.position.z],
         facingDeg: THREE.MathUtils.radToDeg(a.target.rotation.y),
       };
-      if (!visitAway.begin(npc.id, currentWorkTime(), data.social.visitTheirPlace.awayHours, returnPoint)) return;
-      cancelCarry();
-      agent.teleportTo(sim.position.x, sim.position.z, THREE.MathUtils.radToDeg(sim.rotation.y));
-      sim.visible = false;
-      if (marker) marker.pivot.visible = false;
-      hud.setAtWork(true, `Visiting ${npc.name}`);
+      const depart = () => {
+        if (!visitAway.begin(npc.id, currentWorkTime(), data.social!.visitTheirPlace.awayHours, returnPoint)) return;
+        cancelCarry();
+        agent.teleportTo(sim.position.x, sim.position.z, THREE.MathUtils.radToDeg(sim.rotation.y));
+        sim.visible = false;
+        if (marker) marker.pivot.visible = false;
+        hud.setAtWork(true, `Visiting ${npc.name}`);
+      };
+      const transit = requestExteriorTransit({ passThrough: depart, passComplete: () => true });
+      if (!transit) depart();
       return;
     }
     // §7.3: roll for a new accident (normal asset finishing a use) or despawn one (a cleanup
@@ -1372,7 +1417,10 @@ async function start() {
     // ROADMAP_NEXT item 4/10: the exterior door's `empty_garbage` interaction resets every can —
     // ships with a fixed `duration` (see interactions.json) so it auto-completes and lands here
     // exactly like any other duration-timed action, no new instant-action plumbing needed.
-    if (a.action.id === 'empty_garbage') garbage.emptyAll();
+    if (a.action.id === 'empty_garbage') {
+      const transit = requestExteriorTransit({ passThrough: () => garbage.emptyAll(), passComplete: () => true });
+      if (!transit) garbage.emptyAll();
+    }
   };
   hud.onCancelAction = () => { autonomy.notePlayerCommand(); agent.stopAction(); };
 
@@ -1527,6 +1575,7 @@ async function start() {
   hud.setFunds(quests.funds, currencyName());
 
   hud.onBuyOpen = () => {
+    exteriorDoorTransit.cancel(true);
     if (repoOverlayActive || gameOverActive || playerAway()) return;
     if (agent.current?.action.id === 'use_phone') agent.stopAction();
     buyMode.enter();
@@ -1743,6 +1792,7 @@ async function start() {
   const applyFreshData = (fresh: GameData) => {
     data = fresh;
     applyTheme(data.theme);
+    exteriorDoorTransit.cancel(true);
     scene.remove(world);
     disposeGroup(world);
     world = buildWorld(data);
@@ -2121,6 +2171,7 @@ async function start() {
     const simPos: [number, number] = [sim.position.x, sim.position.z];
     const simPath = agent.getPathPoints();
     for (const d of doors.instances) d.update(sdt, simPos, simPath);
+    exteriorDoorTransit.update();
     // ROADMAP_NEXT item 6: fire burn timers + spread rolls advance on the same sim time as doors —
     // pause freezes a burning fire mid-blaze, 2x/3x speeds it toward destruction/spreading.
     accidents.tick(simClockSeconds);

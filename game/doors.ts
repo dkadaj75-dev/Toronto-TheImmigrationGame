@@ -183,6 +183,59 @@ export function stepDoorAngle(currentAngle: number, targetOpen: boolean, config:
   return currentAngle;
 }
 
+// ------------------------------------------------------------------ explicit exterior transits (pure state + thin runtime adapter)
+
+export type DoorTransitPhase = 'idle' | 'opening' | 'passing' | 'closing';
+
+export interface DoorTransitStep {
+  targetOpen: boolean;
+  passNow: boolean;
+  closedNow: boolean;
+}
+
+/**
+ * Pure lifecycle for an explicit exterior-door transit. The actual angle remains owned by the
+ * ordinary DoorInstance/stepDoorAngle machinery; this machine only waits for its fully-open/
+ * fully-closed inputs and exposes the single pass-through seam between them.
+ */
+export class DoorTransitMachine {
+  private current: DoorTransitPhase = 'idle';
+
+  get phase(): DoorTransitPhase { return this.current; }
+  get active(): boolean { return this.current !== 'idle'; }
+  get targetOpen(): boolean { return this.current === 'opening' || this.current === 'passing'; }
+
+  begin(): boolean {
+    if (this.active) return false;
+    this.current = 'opening';
+    return true;
+  }
+
+  update(fullyOpen: boolean, fullyClosed: boolean, passComplete: boolean): DoorTransitStep {
+    let passNow = false;
+    let closedNow = false;
+    if (this.current === 'opening' && fullyOpen) {
+      this.current = 'passing';
+      passNow = true;
+    }
+    if (this.current === 'passing' && passComplete) this.current = 'closing';
+    if (this.current === 'closing' && fullyClosed) {
+      this.current = 'idle';
+      closedNow = true;
+    }
+    return { targetOpen: this.targetOpen, passNow, closedNow };
+  }
+
+  /** Interruptions always target closed; the runtime may optionally snap the panel shut. */
+  interrupt(): boolean {
+    if (!this.active) return false;
+    this.current = 'closing';
+    return true;
+  }
+
+  reset(): void { this.current = 'idle'; }
+}
+
 // ------------------------------------------------------------------ D2 frame/pane split (pure)
 
 /** The two sparse forms of a frame/pane split (AssetDef.door.paneNode / paneMesh, see game/data.ts).
@@ -251,9 +304,74 @@ export function isAnimatedDoor(door: DoorEntry, byId: Map<string, AssetDef>, tun
 
 export interface DoorInstance {
   readonly pivot: THREE.Group;
+  readonly config: DoorConfig;
   /** `simPos`/`simPath` are world XZ; `simPath` is the sim's current remaining route
    *  (SimAgent.getPathPoints()) — empty while the sim isn't moving. */
   update(dt: number, simPos: [number, number], simPath: [number, number][]): void;
+  setTransitOpen(open: boolean | null): void;
+  isFullyOpen(): boolean;
+  isFullyClosed(): boolean;
+  forceClosed(): void;
+}
+
+export interface ExteriorDoorTransitRequest {
+  passThrough: () => void;
+  passComplete: () => boolean;
+  onClosed?: () => void;
+}
+
+export interface ExteriorDoorTransitHandle { cancel(snapClosed?: boolean): void; }
+
+/** Shared runtime adapter around the pure transit machine and the real animated door instance. */
+export class ExteriorDoorTransit {
+  private machine = new DoorTransitMachine();
+  private door: DoorInstance | null = null;
+  private request: ExteriorDoorTransitRequest | null = null;
+  private token: object | null = null;
+
+  get active(): boolean { return this.machine.active; }
+
+  begin(door: DoorInstance | undefined, request: ExteriorDoorTransitRequest): ExteriorDoorTransitHandle | null {
+    if (!door?.config.exterior || !this.machine.begin()) return null;
+    const token = {};
+    this.token = token;
+    this.door = door;
+    this.request = request;
+    door.setTransitOpen(true);
+    return { cancel: (snapClosed = false) => { if (this.token === token) this.cancel(snapClosed); } };
+  }
+
+  update(): void {
+    const door = this.door;
+    const request = this.request;
+    if (!door || !request) return;
+    const step = this.machine.update(
+      door.isFullyOpen(), door.isFullyClosed(),
+      this.machine.phase === 'passing' && request.passComplete(),
+    );
+    door.setTransitOpen(step.targetOpen);
+    if (step.passNow) request.passThrough();
+    if (step.closedNow) this.finish(request.onClosed);
+  }
+
+  cancel(snapClosed = false): void {
+    if (!this.door || !this.machine.interrupt()) return;
+    this.door.setTransitOpen(false);
+    if (!snapClosed) return;
+    this.door.forceClosed();
+    const onClosed = this.request?.onClosed;
+    this.machine.reset();
+    this.finish(onClosed);
+  }
+
+  private finish(onClosed?: () => void): void {
+    const door = this.door;
+    this.door = null;
+    this.request = null;
+    this.token = null;
+    door?.setTransitOpen(null);
+    onClosed?.();
+  }
 }
 
 /**
@@ -312,15 +430,24 @@ export function createDoorInstance(door: DoorEntry, def: AssetDef, tuning: Tunin
 
     let angle = 0; // 0 = closed, degrees of swing added on top of baseYaw
     let open = false; // current target state (not the mid-swing angle)
+    let transitOpen: boolean | null = null;
 
     return {
       pivot,
+      config,
       update(dt, simPos, simPath) {
         const within = distanceToDoor(simPos, door) < config.triggerDistance;
         const crosses = within && pathCrossesDoorway(simPath, door);
-        open = doorShouldBeOpenExt(config.exterior, within, crosses, open);
+        open = transitOpen ?? doorShouldBeOpenExt(config.exterior, within, crosses, open);
         angle = stepDoorAngle(angle, open, config, dt);
         pivot.rotation.y = THREE.MathUtils.degToRad(baseYaw + angle);
+      },
+      setTransitOpen(value) { transitOpen = value; },
+      isFullyOpen: () => angle === config.openAngleDeg,
+      isFullyClosed: () => angle === 0,
+      forceClosed() {
+        transitOpen = false; open = false; angle = 0;
+        pivot.rotation.y = THREE.MathUtils.degToRad(baseYaw);
       },
     };
   }
@@ -459,14 +586,23 @@ export function createDoorInstance(door: DoorEntry, def: AssetDef, tuning: Tunin
 
   let angle = 0; // 0 = closed
   let open = false;
+  let transitOpen: boolean | null = null;
   return {
     pivot: root,
+    config,
     update(dt, simPos, simPath) {
       const within = distanceToDoor(simPos, door) < config.triggerDistance;
       const crosses = within && pathCrossesDoorway(simPath, door);
-      open = doorShouldBeOpenExt(config.exterior, within, crosses, open);
+      open = transitOpen ?? doorShouldBeOpenExt(config.exterior, within, crosses, open);
       angle = stepDoorAngle(angle, open, config, dt);
       paneGroup.rotation.y = THREE.MathUtils.degToRad(angle); // ONLY the pane swings; frame stays put
+    },
+    setTransitOpen(value) { transitOpen = value; },
+    isFullyOpen: () => angle === config.openAngleDeg,
+    isFullyClosed: () => angle === 0,
+    forceClosed() {
+      transitOpen = false; open = false; angle = 0;
+      paneGroup.rotation.y = 0;
     },
   };
 }

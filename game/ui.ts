@@ -293,56 +293,73 @@ const CSS = `
 
 /* --- Smartphone overlay (PROJECT_CONTEXT.md §7.20 V2) -------------------------------------- */
 #phone-overlay { position: fixed; inset: 0; z-index: 18; display: none; align-items: center;
-  justify-content: center; padding: max(14px, env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-right, 0px))
-  max(14px, env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-left, 0px));
-  background: rgba(8,11,18,.58); pointer-events: none; }
+  justify-content: center; padding: max(8px, env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-right, 0px))
+  max(8px, env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
+  background: color-mix(in srgb, var(--theme-panel-bg, rgba(20,26,40,.82)) 55%, transparent); pointer-events: none; }
 #phone-overlay.open { display: flex; pointer-events: auto; }
-.phone-shell { width: min(430px, 100%); max-height: min(760px, 92vh); overflow: hidden;
-  display: flex; flex-direction: column; border-radius: 24px; background: rgba(15,20,32,.98);
-  border: 1px solid #33415f; box-shadow: 0 22px 70px rgba(0,0,0,.55); color: #eaf0fb; }
-.phone-header { display: flex; align-items: center; gap: 10px; padding: 14px 16px 10px; }
-.phone-header .phone-title { font-size: 16px; font-weight: 700; flex: 1; }
-.phone-header .phone-status { font-size: 11px; color: #93a3c0; }
-.phone-close { width: 34px; height: 34px; border: 0; border-radius: 50%; background: #263149;
-  color: #dfe6f2; font-size: 18px; cursor: pointer; touch-action: manipulation; }
-.phone-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 0 14px 12px; }
-.phone-tabs button { border: 0; border-radius: 10px; padding: 10px; background: #1c2436;
-  color: #93a3c0; font-size: 13px; cursor: pointer; touch-action: manipulation; }
-.phone-tabs button.active { background: rgba(90,120,190,.55); color: #fff; }
-#phone-body { overflow-y: auto; padding: 0 14px 16px; overscroll-behavior: contain; }
-.phone-search { width: 100%; border: 0; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px;
-  background: #4466a5; color: white; font-size: 14px; font-weight: 650; cursor: pointer; touch-action: manipulation; }
-.phone-card { background: #1a2234; border: 1px solid #2a3853; border-radius: 14px; padding: 12px;
+.phone-shell { width: min(390px, 100%); height: min(780px, calc(100dvh - 16px)); overflow: hidden;
+  display: flex; flex-direction: column; border-radius: calc(var(--theme-panel-radius, 10px) + var(--theme-panel-radius, 10px) + var(--theme-panel-radius, 10px));
+  background: var(--theme-panel-bg, rgba(20,26,40,.82));
+  border: max(var(--theme-panel-outline-width, 1px), 2px) solid var(--theme-panel-outline, rgba(130,158,210,.45));
+  box-shadow: var(--theme-panel-shadow, var(--theme-shadow, 0 3px 14px rgba(0,0,0,.35)));
+  color: var(--theme-panel-fg, #dfe6f2); font-family: var(--theme-panel-font-family, var(--theme-font-family)); }
+.phone-status-bar { min-height: 34px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  padding: 5px 12px 2px 16px; font-size: 11px; font-variant-numeric: tabular-nums; }
+.phone-status-bar::after { content: ''; width: 54px; height: 5px; border-radius: var(--theme-button-radius, 999px);
+  background: var(--theme-panel-fg, #dfe6f2); opacity: .24; grid-column: 2; grid-row: 1; }
+.phone-status { grid-column: 1; grid-row: 1; font-weight: 750; }
+.phone-close { grid-column: 3; grid-row: 1; justify-self: end; width: 32px; height: 32px; border: 0;
+  border-radius: var(--theme-button-radius, 999px); background: var(--theme-button-bg, rgba(90,120,190,.55));
+  color: var(--theme-button-fg, #eaf0fb); font: inherit; font-size: 18px; cursor: pointer; touch-action: manipulation; }
+.phone-header { display: flex; align-items: center; gap: 10px; padding: 10px 16px 12px; border-bottom: var(--theme-panel-outline-width, 1px) solid var(--theme-panel-outline, rgba(130,158,210,.45)); }
+.phone-header .phone-title { font-size: 20px; font-weight: 800; flex: 1; }
+.phone-header .phone-context { max-width: 48%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  border-radius: var(--theme-button-radius, 999px); padding: 5px 9px; background: var(--theme-panel-accent, var(--theme-accent));
+  color: var(--theme-panel-fg, #dfe6f2); font-size: 10px; }
+.phone-tabs { order: 3; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; padding: 7px 9px 9px;
+  border-top: var(--theme-panel-outline-width, 1px) solid var(--theme-panel-outline, rgba(130,158,210,.45));
+  background: var(--theme-panel-bg, rgba(20,26,40,.82)); }
+.phone-tabs button { min-width: 0; min-height: 48px; border: 0; border-radius: var(--theme-button-radius, 999px); padding: 7px 3px;
+  overflow: hidden; text-overflow: ellipsis; background: transparent; color: var(--theme-panel-fg, #dfe6f2);
+  opacity: .66; font: inherit; font-size: 10px; cursor: pointer; touch-action: manipulation; }
+.phone-tabs button.active { background: var(--theme-button-bg, rgba(90,120,190,.55)); color: var(--theme-button-fg, #eaf0fb); opacity: 1; }
+.phone-home-indicator { order: 4; align-self: center; width: 34%; height: 5px; margin: 0 0 7px;
+  border-radius: var(--theme-button-radius, 999px); background: var(--theme-panel-fg, #dfe6f2); opacity: .35; }
+#phone-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 14px 16px; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.phone-search { width: 100%; min-height: 46px; border: 0; border-radius: var(--theme-button-radius, 999px); padding: 12px 14px; margin-bottom: 10px;
+  background: var(--theme-button-bg, rgba(90,120,190,.55)); color: var(--theme-button-fg, #eaf0fb); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
+.phone-card { background: color-mix(in srgb, var(--theme-panel-bg, rgba(20,26,40,.82)) 82%, var(--theme-panel-fg, #dfe6f2));
+  border: var(--theme-panel-outline-width, 1px) solid var(--theme-panel-outline, rgba(130,158,210,.45));
+  border-radius: var(--theme-panel-radius, 10px); padding: 12px;
   margin: 9px 0; }
 .phone-card-head { display: flex; align-items: flex-start; gap: 10px; }
 .phone-card-name { flex: 1; font-size: 14px; font-weight: 700; }
-.phone-card-pay { color: #e0c26f; font-size: 13px; white-space: nowrap; }
-.phone-meta { color: #9eabc2; font-size: 11px; margin: 5px 0 8px; }
-.phone-requirement { font-size: 11px; line-height: 1.35; margin: 3px 0; color: #e2a1a1; }
-.phone-requirement.met { color: #8ed19a; }
-.phone-card button.apply { width: 100%; margin-top: 10px; border: 0; border-radius: 10px; padding: 10px;
-  background: rgba(90,150,220,.5); color: #f2f6ff; font-size: 13px; cursor: pointer; touch-action: manipulation; }
+.phone-card-pay { color: var(--theme-warn, #e0b05f); font-size: 13px; white-space: nowrap; }
+.phone-meta { color: var(--theme-panel-fg, #dfe6f2); opacity: .72; font-size: 11px; margin: 5px 0 8px; }
+.phone-requirement { font-size: 11px; line-height: 1.35; margin: 3px 0; color: var(--theme-error, #e57a7a); }
+.phone-requirement.met { color: var(--theme-toast-accent, var(--theme-accent)); }
+.phone-card button.apply { width: 100%; min-height: 44px; margin-top: 10px; border: 0; border-radius: var(--theme-button-radius, 999px); padding: 10px;
+  background: var(--theme-button-bg, rgba(90,120,190,.55)); color: var(--theme-button-fg, #eaf0fb); font: inherit; font-size: 13px; cursor: pointer; touch-action: manipulation; }
 .phone-card button.apply:disabled { opacity: .4; cursor: default; }
-.phone-pending { display: inline-block; border-radius: 999px; padding: 4px 8px; background: rgba(224,176,95,.2);
-  color: #e0b05f; font-size: 10px; white-space: nowrap; }
-.phone-empty { color: #7886a1; font-size: 12px; text-align: center; padding: 28px 10px; }
+.phone-pending { display: inline-block; border-radius: var(--theme-button-radius, 999px); padding: 4px 8px;
+  background: color-mix(in srgb, var(--theme-warn, #e0b05f) 20%, transparent); color: var(--theme-warn, #e0b05f); font-size: 10px; white-space: nowrap; }
+.phone-empty { color: var(--theme-panel-fg, #dfe6f2); opacity: .58; font-size: 12px; text-align: center; padding: 28px 10px; }
 .phone-bills-summary { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding: 10px 12px;
-  border-radius: 12px; background: #1c2436; color: #eaf0fb; font-size: 13px; font-weight: 700; }
+  border-radius: var(--theme-panel-radius, 10px); background: var(--theme-panel-accent, var(--theme-accent)); color: var(--theme-panel-fg, #dfe6f2); font-size: 13px; font-weight: 700; }
 .phone-bills-summary span { flex: 1; }
 .phone-bills-summary button, .phone-bill-pay { border: 0; border-radius: 9px; padding: 8px 11px;
-  background: #5277be; color: #fff; font-weight: 700; cursor: pointer; }
+  min-height: 40px; background: var(--theme-button-bg, rgba(90,120,190,.55)); color: var(--theme-button-fg, #eaf0fb); font: inherit; font-weight: 700; cursor: pointer; }
 
 @media (max-width: 500px) {
-  #phone-overlay { padding: 0; align-items: flex-end; }
-  .phone-shell { width: 100%; max-height: 88vh; border-radius: 22px 22px 0 0; border-bottom: 0; }
-  .phone-header { padding-top: 12px; }
+  .phone-shell { width: min(390px, 100%); height: min(760px, calc(100dvh - 16px)); }
+  .phone-header { padding-top: 8px; }
 }
-.phone-credit-score { font-size: 42px; font-weight: 750; text-align: center; color: #b9d2ff; margin: 10px 0 4px; }
+.phone-credit-score { font-size: 42px; font-weight: 750; text-align: center; color: var(--theme-panel-fg, #dfe6f2); margin: 10px 0 4px; }
 .phone-credit-trend { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 8px; }
-.phone-credit-trend li { display: grid; grid-template-columns: 32px 1fr auto; gap: 8px; font-size: 12px; color: #aebbd1; }
-.phone-credit-trend .positive { color: #76d394; } .phone-credit-trend .negative { color: #ff8b8b; }
-.phone-rental-img { display: block; width: 100%; height: 128px; object-fit: cover; border-radius: 10px;
-  margin: 8px 0 4px; background: #10182a; }
+.phone-credit-trend li { display: grid; grid-template-columns: 32px 1fr auto; gap: 8px; font-size: 12px; color: var(--theme-panel-fg, #dfe6f2); }
+.phone-credit-trend .positive { color: var(--theme-toast-accent, var(--theme-accent)); } .phone-credit-trend .negative { color: var(--theme-error, #e57a7a); }
+.phone-rental-img { display: block; width: 100%; height: 128px; object-fit: cover; border-radius: var(--theme-panel-radius, 10px);
+  margin: 8px 0 4px; background: var(--theme-panel-bg, rgba(20,26,40,.82)); }
 .phone-rental-meta { display: flex; align-items: center; gap: 8px; }
 .phone-rental-area { font-variant-numeric: tabular-nums; }
 
@@ -401,17 +418,17 @@ const CSS = `
 }
 .phone-contact-head { align-items: center; }
 .phone-contact-portrait { position: relative; flex: 0 0 48px; width: 48px; height: 48px;
-  border-radius: 50%; overflow: hidden; background: #26344d; display: grid; place-items: center;
-  color: #b9c7df; font-weight: 800; }
+  border-radius: var(--theme-button-radius, 999px); overflow: hidden; background: var(--theme-panel-accent, var(--theme-accent)); display: grid; place-items: center;
+  color: var(--theme-panel-fg, #dfe6f2); font-weight: 800; }
 .phone-contact-portrait img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.phone-contact-level { color: #b9c7df; font-size: 11px; margin-top: 3px; }
-.phone-contact-score { height: 7px; border-radius: 999px; overflow: hidden; background: #111827; margin: 9px 0; }
-.phone-contact-score > span { display: block; height: 100%; background: #73a2ff; }
+.phone-contact-level { color: var(--theme-panel-fg, #dfe6f2); opacity: .72; font-size: 11px; margin-top: 3px; }
+.phone-contact-score { height: 7px; border-radius: var(--theme-button-radius, 999px); overflow: hidden; background: var(--theme-panel-bg, rgba(20,26,40,.82)); margin: 9px 0; }
+.phone-contact-score > span { display: block; height: 100%; background: var(--theme-accent, rgba(90,120,190,.55)); }
 .phone-contact-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.phone-contact-actions button { border: 0; border-radius: 9px; padding: 9px 5px; background: #30466d;
-  color: #fff; font: inherit; font-size: 11px; cursor: pointer; }
+.phone-contact-actions button { min-height: 42px; border: 0; border-radius: var(--theme-button-radius, 999px); padding: 9px 5px; background: var(--theme-button-bg, rgba(90,120,190,.55));
+  color: var(--theme-button-fg, #eaf0fb); font: inherit; font-size: 11px; cursor: pointer; }
 .phone-contact-actions button:disabled { opacity: .42; cursor: default; }
-.phone-contact-reason { min-height: 14px; margin: 7px 0 0; color: #e0b56f; font-size: 10px; }
+.phone-contact-reason { min-height: 14px; margin: 7px 0 0; color: var(--theme-warn, #e0b05f); font-size: 10px; }
 `;
 
 export class Hud {
@@ -445,6 +462,7 @@ export class Hud {
   private phoneBadge: HTMLElement;
   private phoneBody: HTMLElement;
   private phoneStatus: HTMLElement;
+  private phoneContext: HTMLElement;
   private phoneTabs: NodeListOf<HTMLButtonElement>;
 
   // --- Buy/Sell mode (§7.6) ---
@@ -553,11 +571,15 @@ export class Hud {
       </div>
       <div id="phone-overlay">
         <div class="phone-shell" role="dialog" aria-modal="true" aria-label="Phone">
-          <div class="phone-header">
-            <span class="phone-title">Phone</span>
-            <span class="phone-status"></span>
+          <div class="phone-status-bar">
+            <span class="phone-status">00:00</span>
             <button class="phone-close" aria-label="Close phone">×</button>
           </div>
+          <div class="phone-header">
+            <span class="phone-title">Condo Life</span>
+            <span class="phone-context"></span>
+          </div>
+          <div id="phone-body"></div>
           <div class="phone-tabs">
             <button data-phone-tab="jobs" class="active">Jobs</button>
             <button data-phone-tab="visas">Visas</button>
@@ -566,7 +588,7 @@ export class Hud {
             <button data-phone-tab="rentals">Rentals</button>
             <button data-phone-tab="contacts">Contacts</button>
           </div>
-          <div id="phone-body"></div>
+          <div class="phone-home-indicator" aria-hidden="true"></div>
         </div>
       </div>
       <div id="buy-bar">
@@ -628,6 +650,7 @@ export class Hud {
     this.phoneBadge = this.phoneButton.querySelector('.phone-badge')!;
     this.phoneBody = root.querySelector('#phone-body')!;
     this.phoneStatus = root.querySelector('.phone-status')!;
+    this.phoneContext = root.querySelector('.phone-context')!;
     this.phoneTabs = root.querySelectorAll<HTMLButtonElement>('[data-phone-tab]');
     this.phoneButton.addEventListener('click', () => this.onPhoneOpen?.());
     this.setPhoneIcon('/icons/Smartphone.png');
@@ -766,7 +789,9 @@ export class Hud {
   }
 
   setClock(hours: number, minutes: number) {
-    this.clockEl.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    const text = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    this.clockEl.textContent = text;
+    this.phoneStatus.textContent = text;
   }
 
   /** Screen-space contextual menu around a tapped object. `screen` is optional for old callers. */
@@ -988,7 +1013,7 @@ export class Hud {
     /** Tooltip shown only on a DISABLED Rent button (gated/current/move-pending ads). */
     rentDisabledTitle?: string;
   }) {
-    this.phoneStatus.textContent = args.currentStatusName;
+    this.phoneContext.textContent = args.currentStatusName;
     // The Kijiji tab's label is data-driven (tuning.phone.rentalTabName), never hardcoded.
     this.phoneTabs.forEach((button) => {
       if (button.dataset.phoneTab === 'rentals') button.textContent = args.rentalTabName;

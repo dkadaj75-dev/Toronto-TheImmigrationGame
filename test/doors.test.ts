@@ -4,7 +4,7 @@ import {
   resolveDoorConfig, doorBaseYawDeg, hingeWorldPos, panelLocalOffset,
   segmentCrossesDoorway, pathCrossesDoorway, distanceToDoor, doorShouldBeOpen, doorShouldBeOpenExt,
   stepDoorAngle, isAnimatedDoor, resolvePaneConfig, paneHingeLocal, paneLocalOffsetFromHinge,
-  type DoorEntry, type DoorConfig, type PaneBounds,
+  DoorTransitMachine, type DoorEntry, type DoorConfig, type PaneBounds,
 } from '../game/doors';
 import type { AssetDef, TuningData } from '../game/data';
 
@@ -256,6 +256,22 @@ console.log('doors.test — D2 paneHingeLocal / paneLocalOffsetFromHinge (hinge 
   const o = paneLocalOffsetFromHinge(offCenter, [-0.5, 0]);
   check('off-center pane: hinge on real min edge', approx(h[0], 0.2), String(h));
   check('off-center pane: hinge+offset == real center (0.7, 0)', approx(h[0] + o[0], 0.7) && approx(h[1] + o[1], 0), String(o));
+}
+
+console.log('doors.test — explicit exterior transit opens, passes, closes, and interrupts safely');
+{
+  const transit = new DoorTransitMachine();
+  check('transit begins in opening state', transit.begin() && transit.phase === 'opening' && transit.targetOpen);
+  check('a second transit cannot overlap', !transit.begin());
+  check('not-yet-open door does not release the passer', !transit.update(false, true, false).passNow);
+  const opened = transit.update(true, false, false);
+  check('fully open door releases the passer exactly at the pass seam', opened.passNow && transit.phase === 'passing');
+  const closing = transit.update(true, false, true);
+  check('completed passage targets closing', !closing.targetOpen && transit.phase === 'closing');
+  check('door remains occupied until fully closed', !transit.update(false, false, true).closedNow);
+  check('fully closed door completes and becomes reusable', transit.update(false, true, true).closedNow && !transit.active && transit.begin());
+  check('interruption always changes the target to closing', transit.interrupt() && transit.phase === 'closing' && !transit.targetOpen);
+  check('interrupted transit ends idle only once the door is closed', transit.update(false, true, false).closedNow && transit.phase === 'idle');
 }
 
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }
