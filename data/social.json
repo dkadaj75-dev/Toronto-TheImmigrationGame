@@ -5,16 +5,37 @@
     "start": 0,
     "decayPerDay": 0.5,
     "levels": [
-      { "id": "enemy", "atLeast": -100 },
-      { "id": "disliked", "atLeast": -40 },
-      { "id": "acquaintance", "atLeast": 0 },
-      { "id": "friend", "atLeast": 30 },
-      { "id": "good_friend", "atLeast": 60 },
-      { "id": "beloved", "atLeast": 85 }
+      {
+        "id": "enemy",
+        "atLeast": -100
+      },
+      {
+        "id": "disliked",
+        "atLeast": -40
+      },
+      {
+        "id": "acquaintance",
+        "atLeast": 0
+      },
+      {
+        "id": "friend",
+        "atLeast": 30
+      },
+      {
+        "id": "good_friend",
+        "atLeast": 60
+      },
+      {
+        "id": "beloved",
+        "atLeast": 85
+      }
     ]
   },
   "compatibility": {
-    "traitWeights": { "cleanliness": 0.5, "intelligence": 1.0 },
+    "traitWeights": {
+      "cleanliness": 0.5,
+      "intelligence": 1
+    },
     "traitRange": 10,
     "minMultiplier": 0.25,
     "maxMultiplier": 1.75
@@ -23,9 +44,11 @@
     {
       "id": "chat",
       "name": "Chat",
-      "animation": "stand_talk",
+      "animation": "Talking",
       "durationSeconds": 20,
-      "needGains": { "social": 3 },
+      "needGains": {
+        "social": 3
+      },
       "relationshipGain": 4,
       "requiresLevelAtLeast": "acquaintance",
       "requiresLevelAtMost": null,
@@ -37,7 +60,9 @@
       "name": "Argue",
       "animation": "stand_talk",
       "durationSeconds": 20,
-      "needGains": { "social": 1 },
+      "needGains": {
+        "social": 1
+      },
       "relationshipGain": -6,
       "requiresLevelAtLeast": null,
       "requiresLevelAtMost": "acquaintance",
@@ -59,12 +84,29 @@
     }
   ],
   "phone": {
-    "text": { "durationSeconds": 10, "needGains": { "social": 1 }, "relationshipGain": 1, "cooldownMinutes": 60 },
-    "call": { "durationSeconds": 45, "needGains": { "social": 2.5 }, "relationshipGain": 2, "cooldownMinutes": 120 }
+    "text": {
+      "durationSeconds": 10,
+      "needGains": {
+        "social": 1
+      },
+      "relationshipGain": 1,
+      "cooldownMinutes": 60
+    },
+    "call": {
+      "durationSeconds": 45,
+      "needGains": {
+        "social": 2.5
+      },
+      "relationshipGain": 2,
+      "cooldownMinutes": 120
+    }
   },
   "visitTheirPlace": {
     "awayHours": 4,
-    "needsRestored": { "social": 60, "fun": 30 },
+    "needsRestored": {
+      "social": 60,
+      "fun": 30
+    },
     "relationshipGain": 8,
     "minLevel": "friend"
   }

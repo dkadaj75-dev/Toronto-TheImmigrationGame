@@ -7,11 +7,20 @@
       "mesh": "/models/character.glb",
       "tint": "#d9a066",
       "clipMap": null,
-      "personality": { "cleanliness": 7, "intelligence": 6 },
-      "availableHours": { "from": 10, "to": 22 },
+      "personality": {
+        "cleanliness": 7,
+        "intelligence": 6
+      },
+      "availableHours": {
+        "from": 1,
+        "to": 23
+      },
       "visitDurationHours": 3,
       "arrivalDelayMinutes": 30,
-      "visitorActions": ["sit", "watch_tv"]
+      "visitorActions": [
+        "sit",
+        "watch_tv"
+      ]
     }
   ]
 }

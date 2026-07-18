@@ -152,7 +152,8 @@
       "pee": "Defeated",
       "panic": "Yelling",
       "extinguishing_fire": "Yelling",
-      "cleaning": "Cleaning"
+      "cleaning": "Cleaning",
+      "Talking": "Yelling"
     },
     "animationPaths": [],
     "marker": {

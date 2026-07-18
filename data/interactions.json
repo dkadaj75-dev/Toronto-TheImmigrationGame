@@ -173,7 +173,7 @@
       "skillGains": {
         "charisma": 0.03
       },
-      "animation": "stand_use",
+      "animation": "Talking",
       "autonomyEligible": true,
       "primaryNeed": "social",
       "_note": "Open decision #4 — what phone Talk to/Play grant"
