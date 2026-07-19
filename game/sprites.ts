@@ -257,6 +257,15 @@ export function preloadGif(url: string): Promise<void> {
   return cachedDecodeGifFrames(url).then(() => undefined).catch(() => {}); // failure is handled by the real decode attempt later
 }
 
+// Next.txt (2026-07-18, fire-freeze fix): a designer GIF can be huge (fire.gif ships 264 frames at
+// 480×272 — decoding EVERY frame at full size held ~130MB of RGBA canvases and stalled the main
+// thread for seconds, which is exactly the "game freezes when there is a fire, especially on
+// phone" report). Playback quality doesn't need anywhere near that: frames beyond the cap are
+// stride-sampled (their delays folded into the kept frame so the loop's total duration is
+// unchanged) and each kept frame is downscaled to a texture-friendly size for a ~1m sprite.
+const MAX_GIF_FRAMES = 48;
+const MAX_GIF_DIMENSION = 160;
+
 async function decodeGifFrames(url: string): Promise<{ frames: HTMLCanvasElement[]; delaysMs: number[] }> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`);
@@ -266,17 +275,21 @@ async function decodeGifFrames(url: string): Promise<{ frames: HTMLCanvasElement
   await decoder.tracks.ready;
   const track = decoder.tracks.selectedTrack;
   const frameCount: number = track?.frameCount ?? 1;
+  const stride = Math.max(1, Math.ceil(frameCount / MAX_GIF_FRAMES));
   const frames: HTMLCanvasElement[] = [];
   const delaysMs: number[] = [];
-  for (let i = 0; i < frameCount; i++) {
+  for (let i = 0; i < frameCount; i += stride) {
     const { image } = await decoder.decode({ frameIndex: i });
     const w = image.displayWidth as number, h = image.displayHeight as number;
+    const scale = Math.min(1, MAX_GIF_DIMENSION / Math.max(w, h, 1));
     const c = document.createElement('canvas');
-    c.width = w; c.height = h;
+    c.width = Math.max(1, Math.round(w * scale)); c.height = Math.max(1, Math.round(h * scale));
     const cctx = c.getContext('2d')!;
-    cctx.drawImage(image, 0, 0, w, h); // VideoFrame implements CanvasImageSource
+    cctx.drawImage(image, 0, 0, c.width, c.height); // VideoFrame implements CanvasImageSource
     const durationUs = image.duration as number | null;
-    delaysMs.push(durationUs ? durationUs / 1000 : 100);
+    // This kept frame stands in for itself plus the (stride-1) skipped frames after it.
+    const skipped = Math.min(stride, frameCount - i);
+    delaysMs.push((durationUs ? durationUs / 1000 : 100) * skipped);
     image.close();
     frames.push(c);
   }

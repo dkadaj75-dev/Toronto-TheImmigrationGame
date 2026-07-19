@@ -194,7 +194,20 @@ export function resolveAccordionGroups(theme?: ThemeData): AccordionResolution[]
   return groups;
 }
 
-function setPosition(element: HTMLElement, layout: ThemeLayoutItem) {
+/** True when an element's layout matches the built-in default for that HUD id. */
+function isDefaultLayout(id: string, layout: ThemeLayoutItem): boolean {
+  const fallback = DEFAULT_THEME.layout[id];
+  if (!fallback) return false;
+  return layout.anchor === fallback.anchor
+    && finite(layout.offsetX, 0) === finite(fallback.offsetX, 0)
+    && finite(layout.offsetY, 0) === finite(fallback.offsetY, 0);
+}
+
+function setPosition(element: HTMLElement, layout: ThemeLayoutItem, custom = true) {
+  // The mobile-polish media queries in ui.ts reposition some HUD elements with !important.
+  // Those rules are scoped to :not(.theme-positioned) so a user-customized anchor/offset
+  // always wins; default layouts keep the class off so the mobile polish still applies.
+  element.classList.toggle('theme-positioned', custom);
   for (const [property, value] of Object.entries(anchorCss(layout.anchor, layout.offsetX, layout.offsetY))) {
     element.style.setProperty(property, value);
   }
@@ -235,7 +248,8 @@ export function applyTheme(theme?: ThemeData, doc: Document = document): void {
   for (const id of KNOWN_THEME_ELEMENT_IDS) {
     const element = doc.getElementById(id);
     if (!element) continue;
-    setPosition(element, source.layout?.[id] ?? DEFAULT_THEME.layout[id]);
+    const layout = source.layout?.[id] ?? DEFAULT_THEME.layout[id];
+    setPosition(element, layout, !isDefaultLayout(id, layout));
   }
   for (const group of resolveAccordionGroups(source)) {
     const members = group.elementIds.map((id) => doc.getElementById(id)).filter((el): el is HTMLElement => !!el);

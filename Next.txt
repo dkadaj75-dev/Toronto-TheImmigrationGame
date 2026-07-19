@@ -1,7 +1,8 @@
-- Social: The time other NPCs stay home depends on the relationship between each others. Some interactions provoque actions: for example "Put the seal on the bed: they both go on the bed, then the action starts, with their own animations). Actions can trigger sounds as well.
-- Theme bug: this is still here, see the empty parameters at Colors, Shapes, Element gallery. See screenshot: D:\WebCreation\condo-life-web\Capture.PNG.
-- Buy mode: do not just show the footprint, but also the mesh itself when we are in buy mode and see where we can put new objects, with some transparency.
-- Autonomy: Add a tunable delay for when we launch the game / change map / sim comes back from work etc to avoid Sim taking decisions too fast before the player.
-- Lights should add some level of comfort when turned on at night (depends on the asset).
-- If a light or sound producing device such as tv is turned on in a certain radius AND in the room (e.g. if separated by door / wall, the sim does not hear / see it), the Sim cannot sleep.
-- We need a schedule for work as well, the Sim should not work every day: we need to be able to choose days and time of the week, which means implementing the weekday feature - can be checked on the smartphone (this will show at the top of the phone, no specific tab for that).
+- When moving certain blocks in the theme editor, like the time barif I anchor it at the bottom of the screen the block is streched from top to bottom (graphical bug) some others have similar bugs like visa chip, but the opposite when I anchor it at the top...
+- Also, when I put even a 0 Y offset at the bottom for example for the visa chip or funds, they do not go all the way down, as if something is blocking them.
+- For notifications: I do not have access to the icons! I cannot change them.
+- For the Titlke: I want to change the title, also I do not want the background card, just the buttons (that I should be able to reposition as well).
+- When the TV is ON, the action to sleep should still be present, however the Sim would wake up a few seconds after and play a select animation (he is mad) and go turn off the TV and lights. And there should be (low importance)  notifications.
+- Low importance notifications are weirdly flickering also.
+- I don't know why, but when there is a fire, most of the time the game freezes, especially on phone.
+- In the map editor AND the buy menu, I want the assets to have a snap to wall / other assets options (kinda like the wall mounted object that snap to the wall). This is to avoid awward gaps.

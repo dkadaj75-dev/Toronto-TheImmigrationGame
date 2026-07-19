@@ -5,8 +5,8 @@
       "id": "hunger",
       "name": "Hunger",
       "color": "#e74c3c",
-      "default": 60,
-      "decayPerTick": 0.3,
+      "default": 75,
+      "decayPerTick": 0.15,
       "autonomy": true,
       "_decaySource": "PLACEHOLDER — verify vs CLAUDE.md"
     },
@@ -80,7 +80,7 @@
       "id": "english",
       "name": "English",
       "color": "#2980b9",
-      "default": 15,
+      "default": 5,
       "max": 100,
       "_note": "Signature mechanic — language-learning angle."
     },
@@ -102,7 +102,7 @@
       "id": "engineering",
       "name": "Engineering",
       "color": "#7f8c8d",
-      "default": 2,
+      "default": 10,
       "max": 100
     },
     {

@@ -3,6 +3,8 @@
   "logoImage": null,
   "background": "textures/Title1.jpg",
   "music": null,
+  "hideCard": true,
+  "menuLayout": { "anchor": "bc", "offsetX": 0, "offsetY": 48 },
   "menu": [
     { "id": "new", "label": "New Game" },
     { "id": "load", "label": "Load Game" },

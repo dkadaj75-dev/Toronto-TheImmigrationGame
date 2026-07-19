@@ -216,7 +216,8 @@ const CSS = `
   border-left: 4px solid var(--theme-notification-card-accent, #5a9fd6); border-radius: var(--theme-notification-card-radius, 10px);
   box-shadow: var(--theme-notification-card-shadow, 0 2px 10px rgba(0,0,0,.35)); font-family: var(--theme-notification-card-font-family, system-ui, sans-serif);
   font-size: var(--theme-notification-card-font-size, 12px); }
-.notification-card.passive { pointer-events: none; opacity: .82; grid-template-columns: 36px minmax(0,1fr); animation: notification-passive-in .2s ease-out; }
+.notification-card.passive { pointer-events: none; opacity: .82; grid-template-columns: 36px minmax(0,1fr); }
+.notification-card.passive.enter { animation: notification-passive-in .2s ease-out; }
 @keyframes notification-passive-in { from { opacity: 0; transform: translateY(-5px); } }
 .notification-icon { width: 36px; height: 36px; object-fit: contain; align-self: center; }
 .notification-copy { min-width: 0; line-height: 1.3; }
@@ -274,11 +275,15 @@ const CSS = `
   .hud-panel h3 { font-size: 10px; }
   .bar-row { grid-template-columns: 44px 1fr; gap: 4px; margin: 2px 0; }
   .bar-row label { font-size: 9px; }
-  #time-bar { top: calc(46px + env(safe-area-inset-top, 0px)) !important; padding: 4px 6px; gap: 3px; }
+  /* Positional overrides only apply while the element still has its default theme layout
+     (.theme-positioned is added by applyTheme when the user customizes anchor/offset). */
+  #time-bar:not(.theme-positioned) { top: calc(46px + env(safe-area-inset-top, 0px)) !important; }
+  #time-bar { padding: 4px 6px; gap: 3px; }
   #time-bar button { width: 26px; height: 26px; }
   #time-bar .clock { min-width: 38px; font-size: 12px; padding: 0 4px; }
-  #notification-stack { top: calc(96px + env(safe-area-inset-top, 0px)) !important; left: env(safe-area-inset-left, 0px) !important; right: env(safe-area-inset-right, 0px) !important;
-    width: auto !important; padding: 0 8px; transform: none !important; }
+  #notification-stack:not(.theme-positioned) { top: calc(96px + env(safe-area-inset-top, 0px)) !important; left: env(safe-area-inset-left, 0px) !important; right: env(safe-area-inset-right, 0px) !important;
+    width: auto !important; transform: none !important; }
+  #notification-stack { padding: 0 8px; }
 }
 
 /* --- Buy/Sell mode (PROJECT_CONTEXT.md §7.6) ---------------------------------------------
@@ -467,6 +472,7 @@ const CSS = `
   font-size: 13px; background: rgba(90,120,190,.28); color: #eaf0fb; cursor: pointer; touch-action: manipulation; }
 #buy-ghost-controls button.gc-confirm, #buy-selection-chips button.sc-sell { background: rgba(90,190,110,.35); }
 #buy-ghost-controls button.gc-cancel, #buy-selection-chips button.sc-cancel { background: transparent; color: #93a3c0; }
+#buy-ghost-controls button.active { background: rgba(90,120,190,.7); color: #fff; }
 #buy-selection-chips .sel-name { font-size: 12px; color: #93a3c0; padding: 0 4px; white-space: nowrap; }
 
 .theme-accordion { pointer-events: auto; display: grid; gap: 6px; min-width: 136px; }
@@ -480,10 +486,13 @@ const CSS = `
 .theme-accordion.collapsed .theme-accordion-body { display: none; }
 
 @media (max-width: 500px) {
-  #funds-chip { bottom: calc(118px + env(safe-area-inset-bottom, 0px)) !important; font-size: 11px; padding: 5px 10px; }
-  #visa-chip { bottom: calc(154px + env(safe-area-inset-bottom, 0px)) !important; font-size: 11px; padding: 5px 10px; }
-  #buy-button { bottom: calc(78px + env(safe-area-inset-bottom, 0px)) !important; font-size: 12px; padding: 8px 12px; }
-  #phone-button { bottom: calc(190px + env(safe-area-inset-bottom, 0px)) !important; }
+  #funds-chip:not(.theme-positioned) { bottom: calc(118px + env(safe-area-inset-bottom, 0px)) !important; }
+  #visa-chip:not(.theme-positioned) { bottom: calc(154px + env(safe-area-inset-bottom, 0px)) !important; }
+  #buy-button:not(.theme-positioned) { bottom: calc(78px + env(safe-area-inset-bottom, 0px)) !important; }
+  #phone-button:not(.theme-positioned) { bottom: calc(190px + env(safe-area-inset-bottom, 0px)) !important; }
+  #funds-chip { font-size: 11px; padding: 5px 10px; }
+  #visa-chip { font-size: 11px; padding: 5px 10px; }
+  #buy-button { font-size: 12px; padding: 8px 12px; }
   .buy-card { width: 78px; }
 }
 .phone-contact-head { align-items: center; }
@@ -512,6 +521,8 @@ export class Hud {
   private questBody: HTMLElement;
   private notificationStack: HTMLElement;
   private notificationModal: HTMLElement;
+  /** Ids already shown in the stack — used to play the entrance animation only once per card. */
+  private renderedNotificationIds = new Set<string>();
   private systemMenuOverlay: HTMLElement;
   private systemMenuPanel: HTMLElement;
   private feedbackRoot: HTMLElement;
@@ -563,6 +574,7 @@ export class Hud {
   onBuySearch: ((query: string) => void) | null = null;
   onBuyItemPick: ((assetId: string) => void) | null = null;
   onGhostRotate: (() => void) | null = null;
+  onGhostSnapToggle: (() => void) | null = null;
   onGhostConfirm: (() => void) | null = null;
   onGhostCancel: (() => void) | null = null;
   onSelectionMove: (() => void) | null = null;
@@ -698,6 +710,7 @@ export class Hud {
         </div>
       </div>
       <div id="buy-ghost-controls">
+        <button data-gc="snap" class="active" aria-pressed="true" title="Snap to walls and nearby furniture">⌗ Snap</button>
         <button data-gc="rotate">⟳ Rotate</button>
         <button data-gc="confirm" class="gc-confirm">✓ Confirm</button>
         <button data-gc="cancel" class="gc-cancel">✗ Cancel</button>
@@ -780,6 +793,7 @@ export class Hud {
     root.querySelector('#buy-exit')!.addEventListener('click', () => this.onBuyClose?.());
     this.buySearchEl.addEventListener('input', () => this.onBuySearch?.(this.buySearchEl.value));
     root.querySelector('[data-gc="rotate"]')!.addEventListener('click', () => this.onGhostRotate?.());
+    root.querySelector('[data-gc="snap"]')!.addEventListener('click', () => this.onGhostSnapToggle?.());
     root.querySelector('[data-gc="confirm"]')!.addEventListener('click', () => this.onGhostConfirm?.());
     root.querySelector('[data-gc="cancel"]')!.addEventListener('click', () => this.onGhostCancel?.());
     root.querySelector('[data-sc="move"]')!.addEventListener('click', () => this.onSelectionMove?.());
@@ -1045,9 +1059,15 @@ export class Hud {
 
   renderNotifications(stack: readonly ResolvedNotification[], modal: ResolvedNotification | null, nowRealMs = Date.now()): void {
     this.notificationStack.replaceChildren();
+    // Cards are rebuilt from scratch on every render (age refresh included), so the entrance
+    // animation must only apply to ids never rendered before — otherwise passive cards replay
+    // their fade-in each refresh and visibly flicker (Next.txt 2026-07-18).
+    const renderedIds = new Set<string>();
     for (const notification of [...stack].reverse()) {
+      const isNew = !this.renderedNotificationIds.has(notification.id);
+      renderedIds.add(notification.id);
       const card = document.createElement('article');
-      card.className = `notification-card${notification.tier === 'passive' ? ' passive' : ''}`;
+      card.className = `notification-card${notification.tier === 'passive' ? ' passive' : ''}${isNew ? ' enter' : ''}`;
       card.dataset.notificationId = notification.id;
       if (notification.tier === 'passive' && Number.isFinite(notification.tierConfig.autoExpireSeconds)) {
         const lifetimeMs = Math.max(1, notification.tierConfig.autoExpireSeconds! * 1000);
@@ -1075,6 +1095,7 @@ export class Hud {
       }
       this.notificationStack.appendChild(card);
     }
+    this.renderedNotificationIds = renderedIds;
 
     this.notificationModal.replaceChildren();
     this.notificationModal.classList.toggle('open', !!modal);
@@ -1674,6 +1695,12 @@ export class Hud {
   setBuySearchValue(q: string) { this.buySearchEl.value = q; }
 
   showGhostControls() { this.ghostControls.classList.add('open'); }
+  setGhostSnap(active: boolean) {
+    const button = this.ghostControls.querySelector<HTMLButtonElement>('[data-gc="snap"]');
+    if (!button) return;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  }
   hideGhostControls() { this.ghostControls.classList.remove('open'); }
 
   showSelectionChips(name: string, sellPrice: number, currencyName: string) {

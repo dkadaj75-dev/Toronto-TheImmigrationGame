@@ -3,7 +3,7 @@
   "id": "condo",
   "name": "condo",
   "propertyType": "basement",
-  "gridSize": 0.5,
+  "gridSize": 0.25,
   "snapStep": 0.25,
   "bounds": {
     "w": 6,
@@ -14,30 +14,30 @@
       "id": "floor_1",
       "polygon": [
         [
+          0,
+          0
+        ],
+        [
           4,
-          1.5
+          0
         ],
         [
-          6,
-          1.5
-        ],
-        [
-          6,
+          4,
           5
         ],
         [
-          4,
+          0,
           5
         ]
       ],
-      "material": "tile",
-      "texture": "textures/ShittyTiling.jpg"
+      "material": "wood",
+      "texture": "textures/ShittyFloor.jpg"
     },
     {
       "id": "floor_2",
       "polygon": [
         [
-          0,
+          4,
           0
         ],
         [
@@ -46,114 +46,68 @@
         ],
         [
           6,
-          1.5
+          4
         ],
         [
-          0,
-          1.5
+          4,
+          4
         ]
       ],
-      "material": "wood",
-      "texture": "textures/ShittyFloor.jpg"
+      "material": "tile",
+      "texture": "textures/ShittyTiling.jpg"
     },
     {
       "id": "floor_3",
       "polygon": [
         [
           0,
-          1.5
+          5
         ],
         [
           4,
-          1.5
+          5
         ],
         [
           4,
-          6
+          7
         ],
         [
           0,
-          6
-        ]
-      ],
-      "material": "wood",
-      "texture": "textures/ShittyFloor.jpg"
-    },
-    {
-      "id": "floor_4",
-      "polygon": [
-        [
-          0,
-          6
-        ],
-        [
-          4,
-          6
-        ],
-        [
-          4,
-          9
-        ],
-        [
-          0,
-          9
+          7
         ]
       ],
       "material": "carpet",
       "texture": "textures/Carpet1.jpg"
     },
     {
-      "id": "floor_5",
+      "id": "floor_4",
       "polygon": [
         [
           4,
-          6
+          4
         ],
         [
           6,
-          6
+          4
         ],
         [
           6,
-          9
+          7
         ],
         [
           4,
-          9
+          7
         ]
       ],
       "material": "tile",
-      "texture": "textures/ShittyTiling.jpg"
-    },
-    {
-      "id": "floor_6",
-      "polygon": [
-        [
-          5,
-          5
-        ],
-        [
-          6,
-          5
-        ],
-        [
-          6,
-          6
-        ],
-        [
-          5,
-          6
-        ]
-      ],
-      "material": "tile",
-      "texture": "textures/ShittyTiling.jpg"
+      "texture": "textures/ShittyTiling2.jpg"
     }
   ],
   "walls": [
     {
       "from": [
         0,
-        6
+        7
       ],
       "to": [
         0,
@@ -165,11 +119,11 @@
     {
       "from": [
         6,
-        5
+        4
       ],
       "to": [
         4,
-        5
+        4
       ],
       "textureB": "textures/ShittyTiling2.jpg",
       "texture": "textures/Tiling.jpg"
@@ -177,7 +131,7 @@
     {
       "from": [
         6,
-        5
+        4
       ],
       "to": [
         6,
@@ -201,38 +155,14 @@
     {
       "from": [
         6,
-        9
+        7
       ],
       "to": [
         0,
-        9
+        7
       ],
       "texture": "textures/Concrete.jpg",
       "textureB": "textures/wallpaper.jpg"
-    },
-    {
-      "from": [
-        4,
-        9
-      ],
-      "to": [
-        4,
-        7
-      ],
-      "textureB": "textures/wallpaper.jpg",
-      "texture": "textures/Tiling.jpg"
-    },
-    {
-      "from": [
-        4,
-        7
-      ],
-      "to": [
-        4,
-        6
-      ],
-      "textureB": "textures/wallpaper.jpg",
-      "texture": "textures/Tiling.jpg"
     },
     {
       "from": [
@@ -249,35 +179,23 @@
     {
       "from": [
         4,
-        6
+        7
       ],
       "to": [
         4,
-        5
+        4
       ],
       "texture": "textures/Tiling.jpg",
       "textureB": "textures/wallpaint.jpg"
     },
     {
       "from": [
-        0,
-        6
-      ],
-      "to": [
-        0,
-        9
-      ],
-      "texture": "textures/wallpaper.jpg",
-      "textureB": "textures/Concrete.jpg"
-    },
-    {
-      "from": [
         6,
-        5
+        4
       ],
       "to": [
         6,
-        9
+        7
       ],
       "texture": "textures/Concrete.jpg",
       "textureB": "textures/Tiling.jpg"
@@ -296,7 +214,7 @@
     {
       "at": [
         4,
-        7.5
+        5.75
       ],
       "orientation": "vertical",
       "assetId": "door_basic"
@@ -305,8 +223,8 @@
   "windows": [
     {
       "at": [
-        2,
-        9
+        1.25,
+        7
       ],
       "orientation": "horizontal",
       "assetId": "window_basic",
@@ -315,25 +233,17 @@
   ],
   "spawn": {
     "pos": [
-      2,
-      3
+      0.5,
+      2.25
     ],
-    "facingDeg": 180
+    "facingDeg": 90
   },
   "placedObjects": [
-    {
-      "asset": "tv",
-      "pos": [
-        0.5,
-        4.5
-      ],
-      "rotDeg": 90
-    },
     {
       "asset": "shower",
       "pos": [
         4.5,
-        5.5
+        4.5
       ],
       "rotDeg": 0
     },
@@ -341,7 +251,7 @@
       "asset": "sink",
       "pos": [
         5.5,
-        5.5
+        4.5
       ],
       "rotDeg": 0
     },
@@ -349,7 +259,7 @@
       "asset": "toilet",
       "pos": [
         5.5,
-        8.25
+        6.5
       ],
       "rotDeg": 270
     },
@@ -372,8 +282,8 @@
     {
       "asset": "stove",
       "pos": [
-        5.5,
-        3.5
+        5.565,
+        2.625
       ],
       "rotDeg": 270
     },
@@ -381,15 +291,15 @@
       "asset": "fridge",
       "pos": [
         5.5,
-        4.5
+        3.5
       ],
       "rotDeg": 270
     },
     {
       "asset": "counter",
       "pos": [
-        5.5,
-        2.75
+        5.565,
+        1.875
       ],
       "rotDeg": 270
     },
@@ -397,55 +307,55 @@
       "asset": "bookshelf",
       "pos": [
         1.5,
-        0.5
+        0.25
       ],
       "rotDeg": 0
     },
     {
       "asset": "bed",
       "pos": [
-        1.5,
-        7.5
+        1.25,
+        6
       ],
       "rotDeg": 90
     },
     {
       "asset": "garbage_can",
       "pos": [
-        5.5,
-        2
+        5.640000000000001,
+        1.2
       ],
       "rotDeg": 270
     },
     {
       "asset": "armchair",
       "pos": [
-        2.5,
-        4.5
+        2.25,
+        3.75
       ],
       "rotDeg": 270
     },
     {
       "asset": "lamp",
       "pos": [
-        0.5,
-        6.25
+        3.75,
+        6.75
       ],
-      "rotDeg": 90
+      "rotDeg": 180
     },
     {
       "asset": "wall_lamp",
       "pos": [
-        5.86,
-        1.25
+        5.5,
+        0.14
       ],
-      "rotDeg": 270
+      "rotDeg": 0
     },
     {
       "asset": "wall_lamp",
       "pos": [
         0.14,
-        1.25
+        1
       ],
       "rotDeg": 90
     },
@@ -453,9 +363,65 @@
       "asset": "wall_lamp",
       "pos": [
         5.86,
-        6.75
+        5.5
       ],
       "rotDeg": 270
+    },
+    {
+      "asset": "tv",
+      "pos": [
+        0.185,
+        3.75
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "water_puddle",
+      "pos": [
+        4,
+        2.75
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "water_puddle",
+      "pos": [
+        1.25,
+        2
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "water_puddle",
+      "pos": [
+        2.5,
+        2.5
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "water_puddle",
+      "pos": [
+        2.5,
+        1.25
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "water_puddle",
+      "pos": [
+        4.75,
+        5.5
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "water_puddle",
+      "pos": [
+        3.25,
+        5.25
+      ],
+      "rotDeg": 0
     }
   ],
   "music": [

@@ -2,7 +2,7 @@
   "id": "Apt1",
   "name": "Scarborough 1 Bedroom",
   "propertyType": "condo",
-  "gridSize": 0.5,
+  "gridSize": 0.25,
   "snapStep": 0.25,
   "bounds": {
     "w": 14,
@@ -267,48 +267,56 @@
     {
       "asset": "toilet",
       "pos": [
-        1.5,
-        1
+        1.56,
+        1.06
       ],
       "rotDeg": 90
     },
     {
       "asset": "shower",
       "pos": [
-        1.5,
-        2
+        1.56,
+        1.94
       ],
       "rotDeg": 90
     },
     {
       "asset": "sink",
       "pos": [
-        3,
-        2
+        3.565,
+        2.19
       ],
       "rotDeg": 180
     },
     {
       "asset": "stove",
       "pos": [
-        1.5,
-        6.5
+        1.435,
+        6.435
       ],
       "rotDeg": 90
     },
     {
       "asset": "fridge",
       "pos": [
-        1.5,
-        5.5
+        1.56,
+        5.56
       ],
       "rotDeg": 90
     },
     {
       "asset": "sink",
       "pos": [
-        1.5,
-        7.5
+        1.31,
+        7.185
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "bed",
+      "pos": [
+        2.31,
+        4.065
       ],
       "rotDeg": 90
     }

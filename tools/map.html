@@ -80,6 +80,7 @@
   <button id="map-play" title="set as the map the game plays (tuning.map.active)">▶ Play this map</button>
   <span class="grow"></span>
   <label class="chk"><input type="checkbox" id="snap" checked /> placement snap</label>
+  <label class="chk" title="Nudge objects flush against walls and neighboring objects"><input type="checkbox" id="edge-snap" checked /> edge snap</label>
   <label class="chk"><input type="checkbox" id="show-nav" checked /> nav overlay</label>
   <button id="reload">Reload</button>
   <button id="save" class="primary" disabled>Save map</button>
@@ -304,9 +305,21 @@ const snapVal = (v) => (document.getElementById('snap').checked ? Math.round(v /
 const snapPoint = (x, z) => [snapVal(x), snapVal(z)];
 
 // B6-13: delegate wall-mounted snapping to game/buymode.ts through the module bridge below.
+// Next.txt (2026-07-18): ordinary objects get the same edge snap-to-wall/other-assets as the
+// in-game buy menu (game/buymode.ts's snapToNeighborEdges), gated by the "edge snap" checkbox.
 function snapWallObject(p, requested, maxDistance = Infinity) {
   const def = assetById(p.asset);
-  if (!def?.wallMounted) return { pos: [requested[0], requested[1]], rotDeg: p.rotDeg };
+  if (!def?.wallMounted) {
+    let pos = [requested[0], requested[1]];
+    if (def && document.getElementById('edge-snap')?.checked) {
+      const others = state.doc.placedObjects.map((o, i) => ({
+        key: String(i), pos: o.pos, rotDeg: o.rotDeg, footprint: assetById(o.asset)?.footprint ?? [1, 1],
+      }));
+      const excludeKey = String(state.doc.placedObjects.indexOf(p));
+      pos = window.PlacementBridge?.snapEdges?.(pos, p.rotDeg, def.footprint, state.doc, others, { excludeKey }) ?? pos;
+    }
+    return { pos, rotDeg: p.rotDeg };
+  }
   return window.PlacementBridge?.snapWallMounted(requested, def, state.doc, maxDistance) ?? null;
 }
 
@@ -1497,7 +1510,7 @@ boot();
 <script type="module">
 // Nav overlay — the game's own nav module via Vite (never a reimplementation).
 import { bakeNavGrid } from '/game/nav.ts';
-import { snapWallMountedPlacement } from '/game/buymode.ts';
+import { snapToNeighborEdges, snapWallMountedPlacement } from '/game/buymode.ts';
 import { apertureSizeFor } from '/game/wallaperture.ts';
 import { floorsAreaM2 } from '/game/textures.ts';
 // D1: the door inspector's aperture readout resolves through the game's own sizing math.
@@ -1507,6 +1520,9 @@ window.AreaBridge = { floorsAreaM2 };
 window.PlacementBridge = {
   snapWallMounted(requested, def, map, maxDistance) {
     return snapWallMountedPlacement(requested, def, map.walls, map.floors, map.gridSize, maxDistance);
+  },
+  snapEdges(requested, rotDeg, footprint, map, others, opts) {
+    return snapToNeighborEdges(requested, rotDeg, footprint, map.walls, others, opts);
   },
 };
 window.NavBridge = {

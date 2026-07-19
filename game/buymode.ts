@@ -195,6 +195,49 @@ export function snapWallMountedPlacement(
   return result ? { pos: result.pos, rotDeg: result.rotDeg, wallIndex: result.wallIndex } : null;
 }
 
+export const DEFAULT_EDGE_SNAP_DISTANCE = 0.6;
+
+/** Next.txt (2026-07-18): nudge a footprint flush against the nearest wall face or neighboring
+ * asset edge when within `maxDistance` — the "snap to wall / other assets" option that kills
+ * awkward slivers of gap. Pure and axis-independent: X and Z snap separately, and a candidate
+ * only counts on an axis when the rects roughly line up on the OTHER axis (within `maxDistance`),
+ * so furniture across the room never yanks the ghost. Callers re-validate the returned position
+ * with isValidPlacement as usual (flush touching edges are not "overlap" — rectsOverlap is
+ * strict), and wall-mounted assets keep their own snapWallMountedPlacement flow instead. */
+export function snapToNeighborEdges(
+  pos: [number, number],
+  rotDeg: number,
+  footprint: [number, number],
+  walls: WallSeg[],
+  others: OtherInstance[],
+  opts: { maxDistance?: number; excludeKey?: string } = {},
+): [number, number] {
+  const max = opts.maxDistance ?? DEFAULT_EDGE_SNAP_DISTANCE;
+  const rect = footprintRect(pos, rotDeg, footprint);
+  const candidates: Rect[] = [
+    ...walls.map((wall) => wallRect(wall)),
+    ...others.filter((other) => other.key !== opts.excludeKey)
+      .map((other) => footprintRect(other.pos, other.rotDeg, other.footprint)),
+  ];
+  let bestX: number | null = null;
+  let bestZ: number | null = null;
+  for (const b of candidates) {
+    const nearOnZ = rect.z0 < b.z1 + max && rect.z1 > b.z0 - max;
+    const nearOnX = rect.x0 < b.x1 + max && rect.x1 > b.x0 - max;
+    if (nearOnZ) {
+      for (const dx of [b.x0 - rect.x1, b.x1 - rect.x0]) {
+        if (Math.abs(dx) <= max && (bestX === null || Math.abs(dx) < Math.abs(bestX))) bestX = dx;
+      }
+    }
+    if (nearOnX) {
+      for (const dz of [b.z0 - rect.z1, b.z1 - rect.z0]) {
+        if (Math.abs(dz) <= max && (bestZ === null || Math.abs(dz) < Math.abs(bestZ))) bestZ = dz;
+      }
+    }
+  }
+  return [pos[0] + (bestX ?? 0), pos[1] + (bestZ ?? 0)];
+}
+
 /** True only when an already-authored placement is at the exact flush/inward-facing snap. */
 export function isWallMountedPlacement(
   pos: [number, number], rotDeg: number,
@@ -703,6 +746,11 @@ export class BuyModeController {
    *  tap-only interaction, consistent with every other placement/movement gesture already in this
    *  game (tap-to-go, tap-to-act) — a live drag-follow is a possible future enhancement, not
    *  required by any test here. */
+  /** Next.txt (2026-07-18): edge snap-to-wall/assets for ordinary (non-wall-mounted) placement.
+   *  Toggled from the ghost controls; persists for the session. */
+  edgeSnapEnabled = true;
+  toggleEdgeSnap(): boolean { this.edgeSnapEnabled = !this.edgeSnapEnabled; return this.edgeSnapEnabled; }
+
   moveGhostTo(worldX: number, worldZ: number) {
     if (!this.selection || this.selection.kind === 'selected') return;
     const snapStep = this.getData().map.snapStep ?? DEFAULT_PLACEMENT_SNAP;
@@ -714,6 +762,11 @@ export class BuyModeController {
       : null;
     if (mounted) { pos = mounted.pos; rotDeg = mounted.rotDeg; }
     const excludeKey = this.selection.kind === 'moving' ? this.selection.inst.key : undefined;
+    if (!mounted && !def.wallMounted && this.edgeSnapEnabled) {
+      const { map } = this.getData();
+      const others = this.instances().map((i): OtherInstance => ({ key: i.key, pos: i.pos, rotDeg: i.rotDeg, footprint: i.footprint }));
+      pos = snapToNeighborEdges(pos, rotDeg, def.footprint, map.walls, others, { excludeKey });
+    }
     const valid = this.checkValidity(pos, rotDeg, def, excludeKey);
     this.selection = { ...this.selection, pos, rotDeg, valid };
     if (this.ghost) { applyAssetPlacement(this.ghost, def, pos, rotDeg); this.updateGhostAppearance(valid); }

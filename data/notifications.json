@@ -1,57 +1,233 @@
 {
   "tiers": {
-    "modal": { "pausesGame": true, "requiresOk": true },
-    "card": { "autoExpireSeconds": 20, "sound": "notification" },
-    "passive": { "autoExpireSeconds": 8 }
+    "modal": {
+      "pausesGame": true,
+      "requiresOk": true
+    },
+    "card": {
+      "autoExpireSeconds": 20,
+      "sound": "notification"
+    },
+    "passive": {
+      "autoExpireSeconds": 8
+    }
   },
   "stackCap": 5,
   "events": {
-    "questReceived": { "tier": "modal", "icon": "icons/quest.svg", "sound": "questStarted" },
-    "questStarted": { "tier": "modal", "icon": "icons/quest.svg", "sound": "questStarted" },
-    "questCompleted": { "tier": "modal", "icon": "icons/quest.svg", "sound": "questCompleted" },
-    "moveInCompleted": { "tier": "modal", "icon": "icons/home.svg", "sound": "questCompleted" },
-    "starvationWarning": { "tier": "modal", "icon": "icons/warning.svg", "sound": "notification" },
-    "visitorInvited": { "tier": "card", "icon": "icons/visitor.svg" },
-    "visitorArrived": { "tier": "card", "icon": "icons/visitor.svg", "action": { "type": "phoneTab", "tab": "contacts", "label": "Contacts" } },
-    "visitorLeft": { "tier": "card", "icon": "icons/visitor.svg" },
-    "callFallback": { "tier": "card", "icon": "icons/Smartphone.png", "action": { "type": "phoneTab", "tab": "contacts", "label": "Contacts" } },
-    "socialContactCompleted": { "tier": "passive", "icon": "icons/Smartphone.png" },
-    "headingToVisit": { "tier": "passive", "icon": "icons/visitor.svg" },
-    "visitReturned": { "tier": "passive", "icon": "icons/visitor.svg" },
-    "workDue": { "tier": "card", "icon": "icons/work.svg" },
-    "offToWork": { "tier": "passive", "icon": "icons/work.svg" },
-    "workReturned": { "tier": "passive", "icon": "icons/work.svg" },
-    "workMissed": { "tier": "card", "icon": "icons/work.svg" },
-    "jobLost": { "tier": "card", "icon": "icons/work.svg" },
-    "promotion": { "tier": "card", "icon": "icons/work.svg", "sound": "questCompleted" },
-    "jobAccepted": { "tier": "card", "icon": "icons/work.svg" },
-    "jobRequirementsUnmet": { "tier": "passive", "icon": "icons/work.svg" },
-    "visaApplicationSubmitted": { "tier": "card", "icon": "icons/visa.svg" },
-    "visaRequirementsUnmet": { "tier": "passive", "icon": "icons/visa.svg" },
-    "visaApplicationRejected": { "tier": "card", "icon": "icons/visa.svg" },
-    "billCharged": { "tier": "card", "icon": "icons/bill.svg" },
-    "billsArrived": { "tier": "card", "icon": "icons/bill.svg", "action": { "type": "phoneTab", "tab": "bills", "label": "View Bills" } },
-    "billPaid": { "tier": "card", "icon": "icons/bill.svg" },
-    "billOverdue": { "tier": "card", "icon": "icons/bill.svg", "action": { "type": "phoneTab", "tab": "bills", "label": "View Bills" } },
-    "rentalAccepted": { "tier": "card", "icon": "icons/home.svg" },
-    "moveCancelled": { "tier": "passive", "icon": "icons/home.svg" },
-    "saveCompleted": { "tier": "passive", "icon": "icons/save.svg" },
-    "saveBlocked": { "tier": "passive", "icon": "icons/save.svg" },
-    "saveFailed": { "tier": "card", "icon": "icons/save.svg" },
-    "autosaveFailure": { "tier": "card", "icon": "icons/save.svg" },
-    "loadCompleted": { "tier": "passive", "icon": "icons/save.svg" },
-    "loadBlocked": { "tier": "passive", "icon": "icons/save.svg" },
-    "loadFailed": { "tier": "card", "icon": "icons/save.svg" },
-    "sleepBlocked": { "tier": "passive", "icon": "icons/bed.png" },
-    "actionTargetUnavailable": { "tier": "passive" },
-    "insufficientFunds": { "tier": "passive" },
-    "garbageUnavailable": { "tier": "passive", "icon": "icons/Trash.png" },
-    "doorPathUnavailable": { "tier": "passive" },
-    "notification": { "tier": "passive", "sound": "notification" },
-    "moveOrder": { "tier": "passive", "sound": "moveOrder" },
-    "actionSelect": { "tier": "passive", "sound": "actionSelect" },
-    "skillUp": { "tier": "passive", "sound": "skillUp" },
-    "moneyUp": { "tier": "passive", "sound": "moneyUp" },
-    "moneyDown": { "tier": "passive", "sound": "moneyDown" }
+    "questReceived": {
+      "tier": "modal",
+      "icon": "/icons/beginquest.png",
+      "sound": "questStarted"
+    },
+    "questStarted": {
+      "tier": "modal",
+      "icon": "/icons/beginquest.png",
+      "sound": "questStarted"
+    },
+    "questCompleted": {
+      "tier": "modal",
+      "icon": "/icons/quest.png",
+      "sound": "questCompleted"
+    },
+    "moveInCompleted": {
+      "tier": "modal",
+      "icon": "icons/home.svg",
+      "sound": "questCompleted"
+    },
+    "starvationWarning": {
+      "tier": "modal",
+      "icon": "icons/warning.svg",
+      "sound": "notification"
+    },
+    "visitorInvited": {
+      "tier": "card",
+      "icon": "icons/visitor.svg"
+    },
+    "visitorArrived": {
+      "tier": "card",
+      "icon": "icons/visitor.svg",
+      "action": {
+        "type": "phoneTab",
+        "tab": "contacts",
+        "label": "Contacts"
+      }
+    },
+    "visitorLeft": {
+      "tier": "card",
+      "icon": "icons/visitor.svg"
+    },
+    "callFallback": {
+      "tier": "card",
+      "icon": "icons/Smartphone.png",
+      "action": {
+        "type": "phoneTab",
+        "tab": "contacts",
+        "label": "Contacts"
+      }
+    },
+    "socialContactCompleted": {
+      "tier": "passive",
+      "icon": "icons/Smartphone.png"
+    },
+    "headingToVisit": {
+      "tier": "passive",
+      "icon": "icons/visitor.svg"
+    },
+    "visitReturned": {
+      "tier": "passive",
+      "icon": "icons/visitor.svg"
+    },
+    "workDue": {
+      "tier": "card",
+      "icon": "icons/work.svg"
+    },
+    "offToWork": {
+      "tier": "passive",
+      "icon": "icons/work.svg"
+    },
+    "workReturned": {
+      "tier": "passive",
+      "icon": "icons/work.svg"
+    },
+    "workMissed": {
+      "tier": "card",
+      "icon": "icons/work.svg"
+    },
+    "jobLost": {
+      "tier": "card",
+      "icon": "icons/work.svg"
+    },
+    "promotion": {
+      "tier": "card",
+      "icon": "icons/work.svg",
+      "sound": "questCompleted"
+    },
+    "jobAccepted": {
+      "tier": "card",
+      "icon": "icons/work.svg"
+    },
+    "jobRequirementsUnmet": {
+      "tier": "passive",
+      "icon": "icons/work.svg"
+    },
+    "visaApplicationSubmitted": {
+      "tier": "card",
+      "icon": "icons/visa.svg"
+    },
+    "visaRequirementsUnmet": {
+      "tier": "passive",
+      "icon": "icons/visa.svg"
+    },
+    "visaApplicationRejected": {
+      "tier": "card",
+      "icon": "icons/visa.svg"
+    },
+    "billCharged": {
+      "tier": "card",
+      "icon": "icons/bill.svg"
+    },
+    "billsArrived": {
+      "tier": "card",
+      "icon": "icons/bill.svg",
+      "action": {
+        "type": "phoneTab",
+        "tab": "bills",
+        "label": "View Bills"
+      }
+    },
+    "billPaid": {
+      "tier": "card",
+      "icon": "icons/bill.svg"
+    },
+    "billOverdue": {
+      "tier": "card",
+      "icon": "icons/bill.svg",
+      "action": {
+        "type": "phoneTab",
+        "tab": "bills",
+        "label": "View Bills"
+      }
+    },
+    "rentalAccepted": {
+      "tier": "card",
+      "icon": "icons/home.svg"
+    },
+    "moveCancelled": {
+      "tier": "passive",
+      "icon": "icons/home.svg"
+    },
+    "saveCompleted": {
+      "tier": "passive",
+      "icon": "icons/save.svg"
+    },
+    "saveBlocked": {
+      "tier": "passive",
+      "icon": "icons/save.svg"
+    },
+    "saveFailed": {
+      "tier": "card",
+      "icon": "icons/save.svg"
+    },
+    "autosaveFailure": {
+      "tier": "card",
+      "icon": "icons/save.svg"
+    },
+    "loadCompleted": {
+      "tier": "passive",
+      "icon": "icons/save.svg"
+    },
+    "loadBlocked": {
+      "tier": "passive",
+      "icon": "icons/save.svg"
+    },
+    "loadFailed": {
+      "tier": "card",
+      "icon": "icons/save.svg"
+    },
+    "sleepBlocked": {
+      "tier": "passive",
+      "icon": "icons/bed.png"
+    },
+    "actionTargetUnavailable": {
+      "tier": "passive"
+    },
+    "insufficientFunds": {
+      "tier": "passive"
+    },
+    "garbageUnavailable": {
+      "tier": "passive",
+      "icon": "icons/Trash.png"
+    },
+    "doorPathUnavailable": {
+      "tier": "passive"
+    },
+    "notification": {
+      "tier": "passive",
+      "sound": "notification"
+    },
+    "moveOrder": {
+      "tier": "passive",
+      "sound": "moveOrder"
+    },
+    "actionSelect": {
+      "tier": "passive",
+      "sound": "actionSelect"
+    },
+    "skillUp": {
+      "tier": "passive",
+      "sound": "skillUp"
+    },
+    "moneyUp": {
+      "tier": "passive",
+      "sound": "moneyUp"
+    },
+    "moneyDown": {
+      "tier": "passive",
+      "sound": "moneyDown"
+    },
+    "sleepInterrupted": {
+      "tier": "passive",
+      "icon": "icons/bed.png"
+    }
   }
 }

@@ -202,8 +202,8 @@
       "environmentScore": 1,
       "survivalImportance": 90,
       "footprint": [
-        0.7,
-        0.7
+        0.75,
+        0.75
       ],
       "interactions": [
         "cook",
@@ -251,8 +251,8 @@
       "sellPrice": 110,
       "environmentScore": 1,
       "footprint": [
-        0.7,
-        0.7
+        0.75,
+        0.75
       ],
       "interactions": [],
       "meshFit": {
@@ -369,8 +369,8 @@
       "sellPrice": 150,
       "environmentScore": 0,
       "footprint": [
-        1,
-        1
+        0.75,
+        0.5
       ],
       "interactions": [
         "wash_hands"
@@ -383,7 +383,7 @@
           1
         ],
         "xOffset": 0,
-        "zOffset": -0.18
+        "zOffset": 0
       }
     },
     {
@@ -396,8 +396,8 @@
       "environmentScore": 2,
       "survivalImportance": -10,
       "footprint": [
-        2,
-        1
+        1.5,
+        0.25
       ],
       "interactions": [
         "watch_tv",
@@ -407,7 +407,8 @@
         "watch_tv_radio_canada"
       ],
       "meshFit": {
-        "yawOffsetDeg": 0
+        "yawOffsetDeg": 0,
+        "scale": 1.5
       },
       "sound": "sounds/actions/TV.mp3",
       "light": {
@@ -441,7 +442,7 @@
       "survivalImportance": -10,
       "footprint": [
         2,
-        1
+        0.5
       ],
       "interactions": [
         "read_book",
@@ -450,10 +451,10 @@
       ],
       "meshFit": {
         "yawOffsetDeg": 90,
-        "scale": 2,
+        "scale": 4,
         "xOffset": 0,
         "yOffset": 0,
-        "zOffset": -0.25
+        "zOffset": -0.1
       },
       "combustibility": {
         "chancePercent": 80,
@@ -686,8 +687,8 @@
       "sellPrice": 0,
       "environmentScore": -5,
       "footprint": [
-        1,
-        1
+        0.5,
+        0.5
       ],
       "interactions": [
         "mop"

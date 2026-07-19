@@ -31,13 +31,13 @@
     },
     {
       "id": "find_a_job",
-      "name": "Find a job",
-      "description": "Use your smartphone to find your first job as a temporary foreign worker.",
+      "name": "The arrival",
+      "description": "Welcome to Toronto!\nYou successfully passed the immigration and got your first (very bad) basement apartment!\nYou have a TOURIST Visa of 3 days only. Quick! Find a job!\nUse your smartphone to find your first job as a temporary foreign worker.\nRefresh jobs, new jobs appear regularly!\n\nBut first, let's mop all of these disgusting puddles on the floor! Toronto real estate is a nightmare.",
       "trigger": {
         "all": [
           {
-            "var": "skills.english",
-            "gte": 0
+            "var": "vars.job",
+            "eq": false
           }
         ]
       },
@@ -60,7 +60,7 @@
         "all": [
           {
             "var": "skills.english",
-            "gte": 0
+            "gte": 12
           }
         ]
       },
@@ -68,7 +68,7 @@
         "all": [
           {
             "var": "skills.english",
-            "eq": 30
+            "eq": 20
           }
         ]
       },

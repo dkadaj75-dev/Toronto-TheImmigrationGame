@@ -39,6 +39,14 @@
       border-radius: var(--theme-title-screen-radius, 18px); background: var(--theme-title-screen-bg, rgba(20,26,40,.88));
       box-shadow: var(--theme-title-screen-shadow, 0 10px 40px rgba(0,0,0,.45));
     }
+    /* hideCard (data/title.json): the card stretches over the whole screen with no chrome;
+       contents stay centered unless given an explicit anchor (.title-anchored). */
+    .title-card.no-card { position: absolute; inset: 0; width: auto; max-height: none; padding: 0;
+      border: 0; border-radius: 0; background: transparent; box-shadow: none; overflow: visible;
+      display: grid; place-items: center; align-content: center; grid-auto-rows: min-content; gap: 4px; }
+    .title-card.no-card > #title-panel { width: min(420px, calc(100vw - 40px)); max-height: 100dvh; overflow: auto; }
+    .title-anchored { margin: 0 !important; z-index: 1; }
+    #title-menu.title-anchored { width: min(320px, calc(100vw - 32px)); }
     #title-logo-image { display: block; max-width: min(280px, 80vw); max-height: 24vh; margin: 0 auto 10px; object-fit: contain; }
     #title-logo-text { font-size: clamp(40px, 12vw, 70px); line-height: .95; color: var(--theme-title-screen-accent, #9fd08c); text-shadow: 0 4px 18px #000; }
     #title-menu { display: grid; gap: 10px; margin: clamp(24px, 7vh, 52px) auto 8px; }
@@ -95,8 +103,10 @@
   <div id="app"></div>
   <section id="title-screen" aria-label="Condo Life title screen">
     <div class="title-card">
-      <img id="title-logo-image" alt="" hidden />
-      <h1 id="title-logo-text">Condo Life</h1>
+      <div id="title-identity">
+        <img id="title-logo-image" alt="" hidden />
+        <h1 id="title-logo-text">Condo Life</h1>
+      </div>
       <nav id="title-menu" aria-label="Main menu">
         <button class="title-menu-button" type="button">New Game</button>
         <button class="title-menu-button" type="button" disabled>Load Game</button>

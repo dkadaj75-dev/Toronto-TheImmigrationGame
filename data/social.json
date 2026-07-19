@@ -92,7 +92,7 @@
     {
       "id": "Slap",
       "name": "Slap in the face",
-      "animation": "",
+      "animation": "slap",
       "durationSeconds": 5,
       "needGains": {
         "social": -15,
@@ -107,7 +107,7 @@
     {
       "id": "Kiss",
       "name": "Kiss lightly",
-      "animation": "",
+      "animation": "kiss",
       "durationSeconds": 5,
       "needGains": {
         "social": 15
@@ -121,7 +121,7 @@
     {
       "id": "FRkiss",
       "name": "French Kiss",
-      "animation": "",
+      "animation": "kiss",
       "durationSeconds": 10,
       "needGains": {
         "social": 25
@@ -135,7 +135,7 @@
     {
       "id": "foreplay",
       "name": "Foreplay with the seal",
-      "animation": "",
+      "animation": "kiss",
       "durationSeconds": 10,
       "needGains": {},
       "relationshipGain": 0,
@@ -147,7 +147,7 @@
     {
       "id": "bed",
       "name": "Put the seal on the bed",
-      "animation": "",
+      "animation": "lie",
       "targetAsset": "bed",
       "playerAnimation": "lie_sleep",
       "npcAnimation": "lie_sleep",

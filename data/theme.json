@@ -82,8 +82,8 @@
       "radiusPx": 10
     },
     "bar": {
-      "background": "rgba(255,255,255,.12)",
-      "radiusPx": 4,
+      "background": "rgba(255,255,255,.10)",
+      "radiusPx": 7,
       "heightPx": 14
     },
     "phoneShell": {
@@ -106,17 +106,17 @@
       "foreground": "#eaf0fb",
       "accent": "#9fd08c",
       "outline": "rgba(130,158,210,.55)",
-      "radiusPx": 18,
       "outlineWidthPx": 1,
-      "shadow": "0 10px 40px rgba(0,0,0,.45)"
+      "shadow": "0 10px 40px rgba(0,0,0,.45)",
+      "fontSizePx": 10
     },
     "notificationCard": {
       "background": "rgba(20,26,40,.92)",
       "foreground": "#eaf0fb",
       "accent": "#5a9fd6",
       "outline": "rgba(130,158,210,.45)",
-      "radiusPx": 16,
-      "outlineWidthPx": 1,
+      "radiusPx": 10,
+      "outlineWidthPx": 2,
       "shadow": "0 2px 10px rgba(0,0,0,.35)",
       "fontSizePx": 9,
       "fontFamily": "Loucos Lyne"
@@ -127,7 +127,7 @@
       "accent": "#5a9fd6",
       "outline": "rgba(130,158,210,.55)",
       "radiusPx": 18,
-      "outlineWidthPx": 1,
+      "outlineWidthPx": 2,
       "shadow": "0 10px 40px rgba(0,0,0,.55)",
       "fontSizePx": 11,
       "fontFamily": "Loucos Lyne"
@@ -141,30 +141,31 @@
       "accordion": "Needs"
     },
     "skills-panel": {
-      "anchor": "tl",
-      "offsetX": 175,
+      "anchor": "tr",
+      "offsetX": 5,
       "offsetY": 5,
       "accordion": "Skills"
     },
     "quest-panel": {
       "anchor": "bl",
       "offsetX": 5,
-      "offsetY": 5
+      "offsetY": 5,
+      "accordion": "Needs"
     },
     "time-bar": {
-      "anchor": "tc",
+      "anchor": "bc",
       "offsetX": 0,
       "offsetY": 5
     },
     "activity-chip": {
       "anchor": "bc",
       "offsetX": 0,
-      "offsetY": 80
+      "offsetY": 120
     },
     "work-chip": {
       "anchor": "bc",
       "offsetX": 0,
-      "offsetY": 14
+      "offsetY": 120
     },
     "notification-stack": {
       "anchor": "tr",
@@ -172,14 +173,14 @@
       "offsetY": 66
     },
     "visa-chip": {
-      "anchor": "br",
+      "anchor": "bl",
       "offsetX": 5,
-      "offsetY": 10
+      "offsetY": 60
     },
     "funds-chip": {
-      "anchor": "br",
-      "offsetX": 90,
-      "offsetY": 10
+      "anchor": "bl",
+      "offsetX": 5,
+      "offsetY": 5
     },
     "buy-button": {
       "anchor": "br",
@@ -187,17 +188,17 @@
       "offsetY": 5
     },
     "wall-cut-button": {
-      "anchor": "tr",
+      "anchor": "br",
       "offsetX": 5,
-      "offsetY": 50
+      "offsetY": 55
     },
     "phone-button": {
-      "anchor": "br",
-      "offsetX": 8,
-      "offsetY": 208
+      "anchor": "bc",
+      "offsetX": 0,
+      "offsetY": 50
     },
     "system-menu-button": {
-      "anchor": "tr",
+      "anchor": "tc",
       "offsetX": 5,
       "offsetY": 5
     },

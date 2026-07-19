@@ -72,6 +72,11 @@ export interface TitleOptionDef {
 export interface TitleConfig {
   logoText?: string; logoImage?: string | null; background?: string | null; music?: string | null;
   menu: TitleMenuDef[]; options: TitleOptionDef[]; credits?: string | null;
+  /** Strip the centered card chrome so only the logo/menu/credits float over the background. */
+  hideCard?: boolean;
+  /** Optional screen-anchored positions for the menu buttons and the logo block. */
+  menuLayout?: ThemeLayoutItem;
+  titleLayout?: ThemeLayoutItem;
 }
 
 export interface NeedDef { id: string; name: string; color: string; default: number; decayPerTick: number; autonomy: boolean; computed?: string; }
@@ -670,6 +675,10 @@ export interface TuningData {
     nightEnvironmentEnabled?: boolean;
     nightEnvironmentPenalty?: number;
     sleepBlockingEnabled?: boolean;
+    /** Next.txt (2026-07-18) angry-wake: seconds asleep before waking mad, and how long the mad
+     *  'select' animation holds before the sim walks off to turn the blockers off. */
+    angryWakeSeconds?: number;
+    angryReactSeconds?: number;
   };
   economy: { startingFunds: number; currencyName: string };
   /** B13-8 Buy Mode actual-asset ghost. Opacity is clamped to 0..1; absent defaults to 0.5. */

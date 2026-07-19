@@ -385,6 +385,26 @@ async function start(initialLoadSlotId?: string) {
   const sleepDecisionAt = (position: [number, number]) => sleepBlockDecision(
     ambienceMatchesAt(position), data.tuning.ambience?.sleepBlockingEnabled ?? true,
   );
+  // Next.txt (2026-07-18): sleeping while a TV/light is on is ALLOWED to start. A few seconds in,
+  // the sim wakes up mad ('select' animation state), then walks to each active blocker in turn and
+  // turns it off through the ordinary turn_off action (power flip, walking, audio all reuse the
+  // normal pipeline). Passive notifications narrate the wake-up and the all-quiet finish.
+  // `angrySleepState` mirrors panicState's tiny elapsed/total shape; `angryShutdownActive` keeps
+  // the turn-off chain alive across onActionStop completions.
+  let angrySleepState: { phase: 'sleeping' | 'mad'; elapsed: number; totalSeconds: number } | null = null;
+  let angryShutdownActive = false;
+  const orderNextAmbienceShutdown = (): boolean => {
+    const match = ambienceMatchesAt([sim.position.x, sim.position.z])
+      .filter((m) => m.active && m.instance.def.interactions.includes('turn_off'))
+      .sort((a, b) => a.distance - b.distance)[0];
+    if (!match) return false;
+    const action = data.interactions.actions.find((entry) => entry.id === 'turn_off');
+    if (!action) return false;
+    let target: THREE.Object3D | null = null;
+    world.traverse((obj) => { if (!target && obj.userData.assetStateKey === match.instance.key) target = obj; });
+    if (!target) return false;
+    return agent.orderAction(action, target, null, match.instance.def, false);
+  };
   const ambientEnvironmentContribution = () => {
     return nightEnvironmentContribution(
       gameSeconds / 3600,
@@ -1330,14 +1350,8 @@ async function start(initialLoadSlotId?: string) {
       }
       return;
     }
-    if (sleepAction(a.action)) {
-      const decision = sleepDecisionAt([sim.position.x, sim.position.z]);
-      if (decision.blocked) {
-        agent.stopAction(false);
-        postNotification('sleepBlocked', decision.reason!);
-        return;
-      }
-    }
+    // Next.txt (2026-07-18): sleep is no longer refused when a TV/light is on — the angry-wake
+    // sequence in the render loop handles it after the sim has actually fallen asleep.
     const socialOrder = socialSession.active;
     if (socialOrder?.action === a.action) {
       const visitor = visitors.visitorObject;
@@ -1496,6 +1510,15 @@ async function start(initialLoadSlotId?: string) {
     // for main.ts's own two natural-finish call sites (primaryNeed threshold below, and the
     // `duration` timer running out in the render loop) — see sim.ts's stopAction doc comment.
     if (!completed) return;
+    // Next.txt (2026-07-18) angry-wake turn-off chain: after each completed turn_off, head to the
+    // next still-active blocker until the home is quiet.
+    if (angryShutdownActive && a.action.id === 'turn_off') {
+      if (!orderNextAmbienceShutdown()) {
+        angryShutdownActive = false;
+        postNotification('sleepInterrupted', 'All quiet now');
+      }
+      return;
+    }
     const completedFoodAssetId = foodAssetForActionEvent(a.action.id, 'completion');
     if (completedFoodAssetId) { startCarriedFood(completedFoodAssetId, true, a.action); return; }
     // §7.20 V3: the short duration on leave_for_work finishes through the ordinary completed-only
@@ -1721,10 +1744,9 @@ async function start(initialLoadSlotId?: string) {
             const seat = legSeatAware ? findSeatFor(world, data, target) : null;
             if (agent.orderAction(action, target, seat, resolvedAsset, legSeatAware)) cue.showAt(target.position.x, target.position.z);
             else console.log('no path to object', resolvedAsset.id);
-          }, quests.funds, currencyName(), hit.screen, (action) => {
-            if (!sleepAction(action)) return null;
-            return sleepDecisionAt([target.position.x, target.position.z]).reason;
-          });
+          // Next.txt (2026-07-18): sleep stays selectable with a TV/light on; the angry-wake
+          // sequence handles the interruption instead of a disabled menu entry.
+          }, quests.funds, currencyName(), hit.screen, () => null);
           return; // object tap opens the menu; don't also walk to the tap point
         }
       }
@@ -1801,6 +1823,7 @@ async function start(initialLoadSlotId?: string) {
     hud.showGhostControls();
   };
   hud.onGhostRotate = () => buyMode.rotateGhost();
+  hud.onGhostSnapToggle = () => hud.setGhostSnap(buyMode.toggleEdgeSnap());
   hud.onGhostConfirm = () => {
     const result = buyMode.confirm(quests.funds);
     if (!result) return;
@@ -2140,6 +2163,8 @@ async function start(initialLoadSlotId?: string) {
       durationState = null;
       panicState = null;
       peeState = null;
+      angrySleepState = null;
+      angryShutdownActive = false;
       for (const item of [...food.all]) food.discard(item.key);
       accidents.restore({ instances: [], seq: accidents.serialize().seq, destroyedBase: [], spreadRolled: [] });
       buyMode.restore({ additions: [], overrides: [], seq: 0 });
@@ -2290,6 +2315,8 @@ async function start(initialLoadSlotId?: string) {
         durationState = null;
         panicState = null;
         peeState = null;
+        angrySleepState = null;
+        angryShutdownActive = false;
         pendingVisitNpcId = null;
         foodTransitioning = false;
         returnTransitPending = false;
@@ -2491,13 +2518,17 @@ async function start(initialLoadSlotId?: string) {
     }
 
     agent.update(sdt);
-    // Re-evaluate during sleep so a newly switched-on device, hot-reloaded default, or door that
-    // closes between rooms interrupts through the ordinary CANCEL path (completed=false).
+    // Next.txt (2026-07-18): while asleep with an active light/sound blocker nearby, arm the
+    // angry-wake countdown instead of instantly cancelling. Un-arm if the blocker goes quiet
+    // (e.g. its auto-off or a hot-reload) before the sim actually wakes.
     if (agent.current && sleepAction(agent.current.action)) {
       const decision = sleepDecisionAt([sim.position.x, sim.position.z]);
       if (decision.blocked) {
-        agent.stopAction(false);
-        postNotification('sleepBlocked', decision.reason!);
+        if (!angrySleepState) {
+          angrySleepState = { phase: 'sleeping', elapsed: 0, totalSeconds: data.tuning.ambience?.angryWakeSeconds ?? 4 };
+        }
+      } else if (angrySleepState?.phase === 'sleeping') {
+        angrySleepState = null;
       }
     }
     visitors.update(sdt, clockScale());
@@ -2608,6 +2639,29 @@ async function start(initialLoadSlotId?: string) {
       if (isDurationComplete(panicState.elapsed, panicState.totalSeconds)) {
         panicState = null;
         if (!survivalEventActive()) anim?.play('idle');
+      }
+    }
+    // Next.txt (2026-07-18) angry-wake timer: sleeping phase counts down to the mad wake-up
+    // ('select' animation + passive notification), mad phase holds the animation briefly before
+    // the turn-off chain starts (continued per-completion in onActionStop).
+    if (angrySleepState) {
+      angrySleepState.elapsed += sdt;
+      if (angrySleepState.phase === 'sleeping') {
+        if (!agent.current || !sleepAction(agent.current.action)) {
+          angrySleepState = null; // sleep ended some other way (player order, interruption)
+        } else if (isDurationComplete(angrySleepState.elapsed, angrySleepState.totalSeconds)) {
+          const reason = sleepDecisionAt([sim.position.x, sim.position.z]).reason;
+          agent.stopAction(false);
+          const madSeconds = data.tuning.ambience?.angryReactSeconds ?? 2;
+          autonomy.forceCooldown(madSeconds + 4); // keep autonomy out until the turn-off chain is underway
+          anim?.play('select');
+          postNotification('sleepInterrupted', reason ?? 'Woken up by the noise');
+          angrySleepState = { phase: 'mad', elapsed: 0, totalSeconds: madSeconds };
+        }
+      } else if (isDurationComplete(angrySleepState.elapsed, angrySleepState.totalSeconds)) {
+        angrySleepState = null;
+        angryShutdownActive = orderNextAmbienceShutdown();
+        if (!angryShutdownActive) anim?.play('idle');
       }
     }
     // doors advance on the same sim time as the animation mixer (pause freezes them mid-swing,

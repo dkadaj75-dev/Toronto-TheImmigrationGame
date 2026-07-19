@@ -1,7 +1,7 @@
 {
   "_comment": "EVERY global tunable lives here (design pillar #2). Game hot-reloads this file in dev. Values documented in WEB_GAME_ROADMAP.md are marked; the rest are PLACEHOLDER pending CLAUDE.md verification.",
   "simulation": {
-    "needsDecayTickSeconds": 1,
+    "needsDecayTickSeconds": 0.5,
     "activityGainTickSeconds": 2,
     "_source": "roadmap §5 — matches Unreal prototype exactly"
   },
@@ -27,7 +27,9 @@
     "nightEnvironmentEnabled": 1,
     "nightEnvironmentPenalty": -7,
     "sleepBlockingEnabled": true,
-    "_source": "B13-9/B13-10/B13-14 shared room-aware ambience. radiusMeters is the maximum sim-to-device range for both the night light Environment bonus and sleep blockers. Walls and closed doors block; open apertures connect. nightEnvironmentEnabled gates BOTH nightEnvironmentPenalty and ON in-room light.environmentBonus contributions; sleepBlockingEnabled is independent. nightEnvironmentPenalty is the signed flat delta added at night exactly as authored (normally negative; -7 lowers Environment by 7)."
+    "_source": "B13-9/B13-10/B13-14 shared room-aware ambience. radiusMeters is the maximum sim-to-device range for both the night light Environment bonus and sleep blockers. Walls and closed doors block; open apertures connect. nightEnvironmentEnabled gates BOTH nightEnvironmentPenalty and ON in-room light.environmentBonus contributions; sleepBlockingEnabled is independent. nightEnvironmentPenalty is the signed flat delta added at night exactly as authored (normally negative; -7 lowers Environment by 7).",
+    "angryWakeSeconds": 4,
+    "angryReactSeconds": 2
   },
   "textures": {
     "metersPerTile": 1,
@@ -172,14 +174,20 @@
       "lie_sleep": "Sleeping",
       "sit_eat": "Sitting",
       "sit_idle": "Sitting",
-      "stand_use": "Easting",
+      "stand_use": "Cooking",
       "idle": "Idle",
       "sit_ground": "Sitting",
       "pee": "Defeated",
       "panic": "Yelling",
-      "extinguishing_fire": "Yelling",
+      "extinguishing_fire": "Cooking",
       "cleaning": "Cleaning",
-      "Talking": "Yelling"
+      "Talking": "Talking",
+      "collapse": "Fall",
+      "starve": "Fall",
+      "select": "Yelling",
+      "angry": "Angry",
+      "slap": "Fight",
+      "kiss": "Kiss"
     },
     "animationPaths": [],
     "marker": {

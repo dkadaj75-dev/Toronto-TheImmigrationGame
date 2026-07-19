@@ -1,5 +1,6 @@
 // title-screen.ts — reusable DOM title/options surface; all decisions stay in title.ts.
-import type { TitleConfig, TitleOptionDef } from './data';
+import type { ThemeLayoutItem, TitleConfig, TitleOptionDef } from './data';
+import { anchorCss } from './theme';
 import { deleteDecision, loadDecision, type SlotCardView } from './saveslots';
 import { applyVolumes, PreferencesStore, resolveMenu, resolveOptions, type TitlePreferences, type VolumeAudioTarget } from './title';
 import { publicUrl } from './urls';
@@ -84,6 +85,24 @@ export class TitleScreen {
     this.root.style.backgroundImage = this.config.background ? `url(${JSON.stringify(publicUrl(this.config.background))})` : '';
     const credits = this.root.querySelector<HTMLElement>('#title-credits')!;
     credits.textContent = this.config.credits?.trim() || 'A life simulation';
+    // Optional chrome removal + screen-anchored layout (Next.txt: no background card,
+    // repositionable buttons/title). Absent fields keep the classic centered card.
+    const card = this.root.querySelector<HTMLElement>('.title-card');
+    card?.classList.toggle('no-card', this.config.hideCard === true);
+    const applyLayout = (element: HTMLElement | null, layout: ThemeLayoutItem | undefined) => {
+      if (!element) return;
+      element.classList.toggle('title-anchored', !!layout);
+      if (!layout) {
+        for (const property of ['position', 'top', 'right', 'bottom', 'left', 'transform']) element.style.removeProperty(property);
+        return;
+      }
+      for (const [property, value] of Object.entries(anchorCss(layout.anchor, layout.offsetX, layout.offsetY))) {
+        element.style.setProperty(property, value);
+      }
+      element.style.display = layout.hidden ? 'none' : '';
+    };
+    applyLayout(this.root.querySelector<HTMLElement>('#title-menu'), this.config.menuLayout);
+    applyLayout(this.root.querySelector<HTMLElement>('#title-identity') ?? text, this.config.titleLayout);
   }
 
   private renderMenu(hasSaves: boolean): void {
