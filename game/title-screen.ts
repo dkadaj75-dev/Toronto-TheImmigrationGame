@@ -79,12 +79,19 @@ export class TitleScreen {
   private paintIdentity(): void {
     const text = this.root.querySelector<HTMLElement>('#title-logo-text')!;
     const image = this.root.querySelector<HTMLImageElement>('#title-logo-image')!;
-    text.textContent = this.config.logoText?.trim() || 'Condo Life';
+    // An explicitly empty/blank logoText means "no written title" (the background art carries the
+    // logo); only a MISSING field falls back to the default wordmark.
+    const logoText = (this.config.logoText ?? 'Condo Life').trim();
+    text.textContent = logoText;
+    text.hidden = !logoText;
     image.hidden = !this.config.logoImage;
     if (this.config.logoImage) image.src = publicUrl(this.config.logoImage);
     this.root.style.backgroundImage = this.config.background ? `url(${JSON.stringify(publicUrl(this.config.background))})` : '';
+    // Same empty-means-hidden rule as logoText: "" removes the credits line entirely.
     const credits = this.root.querySelector<HTMLElement>('#title-credits')!;
-    credits.textContent = this.config.credits?.trim() || 'A life simulation';
+    const creditsText = (this.config.credits ?? 'A life simulation').trim();
+    credits.textContent = creditsText;
+    credits.hidden = !creditsText;
     // Optional chrome removal + screen-anchored layout (Next.txt: no background card,
     // repositionable buttons/title). Absent fields keep the classic centered card.
     const card = this.root.querySelector<HTMLElement>('.title-card');

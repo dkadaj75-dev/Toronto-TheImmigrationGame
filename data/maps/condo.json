@@ -288,22 +288,6 @@
       "rotDeg": 270
     },
     {
-      "asset": "fridge",
-      "pos": [
-        5.5,
-        3.5
-      ],
-      "rotDeg": 270
-    },
-    {
-      "asset": "counter",
-      "pos": [
-        5.565,
-        1.875
-      ],
-      "rotDeg": 270
-    },
-    {
       "asset": "bookshelf",
       "pos": [
         1.5,
@@ -322,8 +306,8 @@
     {
       "asset": "garbage_can",
       "pos": [
-        5.640000000000001,
-        1.2
+        5.69,
+        1
       ],
       "rotDeg": 270
     },
@@ -422,6 +406,22 @@
         5.25
       ],
       "rotDeg": 0
+    },
+    {
+      "asset": "stinky_fridge",
+      "pos": [
+        5.5,
+        3.5
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "kitchen_sink",
+      "pos": [
+        5.69,
+        1.75
+      ],
+      "rotDeg": 270
     }
   ],
   "music": [

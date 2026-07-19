@@ -16,31 +16,31 @@
     },
     {
       "id": "happy",
-      "atLeast": 80,
+      "atLeast": 70,
       "label": "Happy",
       "icon": "/icons/happy.svg"
     },
     {
       "id": "content",
-      "atLeast": 65,
+      "atLeast": 55,
       "label": "Content",
       "icon": "/icons/happy.svg"
     },
     {
       "id": "fine",
-      "atLeast": 50,
+      "atLeast": 40,
       "label": "Fine",
       "icon": "/icons/neutral.svg"
     },
     {
       "id": "unhappy",
-      "atLeast": 30,
+      "atLeast": 25,
       "label": "Unhappy",
       "icon": "/icons/sad.svg"
     },
     {
       "id": "sad",
-      "atLeast": 20,
+      "atLeast": 15,
       "label": "Sad",
       "icon": "/icons/sad.svg"
     },
@@ -73,13 +73,13 @@
     },
     {
       "var": "needs.hygiene",
-      "weight": 2,
+      "weight": 1,
       "min": 0,
       "max": 100
     },
     {
       "var": "needs.bladder",
-      "weight": 2,
+      "weight": 1,
       "min": 0,
       "max": 100
     },
@@ -109,9 +109,9 @@
     },
     {
       "var": "funds",
-      "weight": 2,
+      "weight": 1,
       "min": 0,
-      "max": 5000
+      "max": 50000
     },
     {
       "var": "vars.visaStatus",

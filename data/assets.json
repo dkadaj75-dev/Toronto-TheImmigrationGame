@@ -838,6 +838,58 @@
       "sprite": {
         "orientation": "flat"
       }
+    },
+    {
+      "id": "stinky_fridge",
+      "name": "Stinky Fridge",
+      "category": "appliances",
+      "mesh": "models/stinkyfridge.glb",
+      "buyPrice": 600,
+      "sellPrice": 450,
+      "environmentScore": 1,
+      "survivalImportance": 90,
+      "footprint": [
+        1,
+        1
+      ],
+      "interactions": [
+        "eat"
+      ],
+      "meshFit": {
+        "yawOffsetDeg": 0,
+        "scale": [
+          1,
+          0.85,
+          1
+        ]
+      },
+      "icon": "/public/icons/stinkyfridge.png"
+    },
+    {
+      "id": "kitchen_sink",
+      "name": "Kitchen Sink",
+      "category": "plumbing",
+      "mesh": "models/kitchensink.glb",
+      "buyPrice": 200,
+      "sellPrice": 150,
+      "environmentScore": 0,
+      "footprint": [
+        1,
+        0.5
+      ],
+      "interactions": [
+        "wash_hands"
+      ],
+      "icon": "/public/icons/kitchensink.png",
+      "meshFit": {
+        "scale": [
+          1,
+          2,
+          1
+        ],
+        "xOffset": 0,
+        "zOffset": 0
+      }
     }
   ]
 }

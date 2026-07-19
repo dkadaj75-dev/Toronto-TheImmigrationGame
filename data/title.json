@@ -1,5 +1,5 @@
 {
-  "logoText": " ",
+  "logoText": "",
   "logoImage": null,
   "background": "textures/Title1.jpg",
   "music": null,
@@ -15,5 +15,5 @@
     { "id": "musicVolume", "type": "slider", "label": "Music volume", "min": 0, "max": 1, "step": 0.05, "default": 1 },
     { "id": "feedbackVolume", "type": "slider", "label": "Feedback volume", "min": 0, "max": 1, "step": 0.05, "default": 1 }
   ],
-  "credits": null
+  "credits": ""
 }

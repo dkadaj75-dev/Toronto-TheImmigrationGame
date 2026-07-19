@@ -26,7 +26,7 @@
       "id": "Mahmoud",
       "name": "Mahmoud",
       "portrait": "",
-      "mesh": "/models/character.glb",
+      "mesh": "/models/Momo.glb",
       "tint": "#1d1207",
       "clipMap": null,
       "personality": {
@@ -34,8 +34,8 @@
         "intelligence": 1
       },
       "availableHours": {
-        "from": 10,
-        "to": 22
+        "from": 6,
+        "to": 23
       },
       "visitDurationHours": 6,
       "arrivalDelayMinutes": 60
