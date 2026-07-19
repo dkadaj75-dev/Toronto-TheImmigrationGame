@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Happy placeholder">
+  <circle cx="32" cy="32" r="28" fill="#f4c95d" stroke="#f7e2a2" stroke-width="3"/>
+  <circle cx="22" cy="25" r="3" fill="#4a3b2b"/><circle cx="42" cy="25" r="3" fill="#4a3b2b"/>
+  <path d="M18 35c3 12 25 12 28 0" fill="none" stroke="#4a3b2b" stroke-width="4" stroke-linecap="round"/>
+</svg>

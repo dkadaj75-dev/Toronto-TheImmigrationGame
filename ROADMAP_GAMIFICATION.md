@@ -132,7 +132,15 @@ assert it). System menu button + Esc: Resume / Save(disabled until SAVE) / Optio
 component per §1) / Quit-to-title(disabled until TITLE). Menu open = pause reason.
 **Agent: Claude (Sonnet).** Thin over G1; the shared-options coordination is the only care.
 
-### G4 — Happiness states
+### G4 — Happiness states — ✅ SHIPPED (2026-07-18)
+> As-built (Codex): data/happiness.json states (7 seeded bands, Extremely happy 90 → Miserable
+> 0) + stateDisplay icon|text|both (default both); pure happinessStateFor (inclusive atLeast,
+> highest wins, order-independent) in game/happiness.ts; player HUD number/bar REPLACED by the
+> themed state (sparse states = nothing shown, number still hidden); numeric math for
+> autonomy/work/promotions/quests untouched; Finance Editor happiness card gains state CRUD w/
+> reorder, /api/icons suggestions (graceful degradation), path normalization, real-resolver
+> live preview; placeholder happy/neutral/sad SVGs under public/icons. Coordinator-verified
+> live: number gone, "Unhappy" + icon rendering at happiness 48, zero console errors.
 `data/happiness.json` states array + display knob; pure `happinessStateFor(value, states)`
 (inclusive thresholds, highest wins — mirror social levelFor); HUD swap (number removed from
 needs area, state icon/text rendered per display knob, themable); Finance Editor happiness

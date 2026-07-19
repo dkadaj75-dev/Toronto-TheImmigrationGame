@@ -1,5 +1,5 @@
 // happiness.test.ts — headless B6-5 formula coverage. Run: npx tsx test/happiness.test.ts
-import { computeHappiness, normalizeHappinessComponent } from '../game/happiness';
+import { computeHappiness, happinessStateDisplay, happinessStateFor, normalizeHappinessComponent } from '../game/happiness';
 import type { HappinessData } from '../game/data';
 import type { EvalContext } from '../game/quests';
 
@@ -31,6 +31,23 @@ check('non-empty job id becomes an employed 1 bonus', normalizeHappinessComponen
 check('weighted mean scales exactly to 0..100', computeHappiness(data, ctx) === 75);
 check('unknown vars are ignored rather than crashing or diluting', computeHappiness({ components: [{ var: 'needs.missing', weight: 9 }, { var: 'funds', weight: 1, min: 0, max: 5000 }] }, ctx) === 50);
 check('zero usable weight returns zero', computeHappiness({ components: [{ var: 'funds', weight: 0 }] }, ctx) === 0);
+
+const states = [
+  { id: 'low', atLeast: 0, label: 'Low', icon: '/icons/sad.svg' },
+  { id: 'high', atLeast: 80, label: 'High', icon: '/icons/happy.svg' },
+  { id: 'middle', atLeast: 50, label: 'Middle', icon: '/icons/neutral.svg' },
+];
+check('inclusive threshold edge resolves the matching state', happinessStateFor(80, states)?.id === 'high');
+check('greatest matching threshold wins', happinessStateFor(95, states)?.id === 'high');
+check('resolution is independent of array order', happinessStateFor(75, [...states].reverse())?.id === 'middle');
+const tiedStates = [{ id: 'z', atLeast: 50, label: 'Z', icon: '' }, { id: 'a', atLeast: 50, label: 'A', icon: '' }];
+check('equal thresholds also resolve independently of order', happinessStateFor(50, tiedStates)?.id === happinessStateFor(50, [...tiedStates].reverse())?.id);
+check('empty state list resolves null', happinessStateFor(50, []) === null);
+check('absent state list resolves null', happinessStateFor(50, undefined) === null);
+check('below every authored threshold resolves null', happinessStateFor(-1, states) === null);
+check('icon display resolves icon only', happinessStateDisplay('icon').icon && !happinessStateDisplay('icon').text);
+check('text display resolves text only', !happinessStateDisplay('text').icon && happinessStateDisplay('text').text);
+check('both and unknown display data resolve both', happinessStateDisplay('both').icon && happinessStateDisplay(undefined).text);
 
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }
 console.log('\nAll happiness.test checks passed.');

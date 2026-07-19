@@ -46,6 +46,23 @@ const stats = new SimStats(defs);
 const hud = new Hud(stats); // builds the HUD DOM + bars, then refresh() populates values
 const doc = window.document;
 
+check('player HUD contains no numeric happiness output', !doc.querySelector('.happiness-gauge') && !doc.querySelector('#needs-panel output'));
+hud.setHappiness(90, { states: [
+  { id: 'sad', atLeast: 0, label: 'Sad', icon: '/icons/sad.svg' },
+  { id: 'great', atLeast: 90, label: 'Great', icon: '/icons/happy.svg' },
+], stateDisplay: 'both' });
+const happinessState = doc.querySelector<HTMLElement>('.happiness-state')!;
+const happinessIcon = happinessState.querySelector<HTMLImageElement>('img')!;
+const happinessLabel = happinessState.querySelector('span')!;
+check('resolved happiness state renders in place of the number', !happinessState.hidden && happinessState.dataset.stateId === 'great' && happinessLabel.textContent === 'Great');
+check('both mode renders its icon and text', !happinessIcon.hidden && !happinessLabel.hidden && happinessIcon.getAttribute('src') === '/icons/happy.svg');
+hud.setHappiness(25, { states: [{ id: 'sad', atLeast: 0, label: 'Sad', icon: '/icons/sad.svg' }], stateDisplay: 'text' });
+check('text mode hides the icon', happinessIcon.hidden && !happinessLabel.hidden && happinessLabel.textContent === 'Sad');
+hud.setHappiness(25, { states: [{ id: 'sad', atLeast: 0, label: 'Sad', icon: '/icons/sad.svg' }], stateDisplay: 'icon' });
+check('icon mode hides the text', !happinessIcon.hidden && happinessLabel.hidden && happinessLabel.textContent === '');
+hud.setHappiness(25, { stateDisplay: 'both' });
+check('absent states hide the state while the number remains absent', happinessState.hidden && !doc.querySelector('#needs-panel output'));
+
 const needBars = [...doc.querySelectorAll('#needs-panel .bars .bar-row')];
 const skillBars = [...doc.querySelectorAll('#skills-panel .bars .bar-row')];
 check('a bar row is built for every need', needBars.length === 2);

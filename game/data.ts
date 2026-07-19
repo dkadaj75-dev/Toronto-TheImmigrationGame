@@ -432,10 +432,17 @@ export interface JobsData { jobs: JobDef[]; }
 /** B6-5 happiness formula. Every component resolves through quests.ts's namespace, is normalized
  *  between its optional min/max (numeric defaults are 0/100), then contributes to a weighted mean. */
 export interface HappinessComponent { var: string; weight: number; min?: number; max?: number; }
+export type HappinessStateDisplay = 'icon' | 'text' | 'both';
+/** G4 player-facing happiness band. `atLeast` is an inclusive lower bound. */
+export interface HappinessStateDef { id: string; atLeast: number; label: string; icon: string; }
 export interface HappinessData {
   components: HappinessComponent[];
   /** Numeric mapping used only when a component resolves vars.visaStatus's string id. */
   visaStatusRanks?: Record<string, number>;
+  /** Sparse for old/custom data: absent or empty means the player HUD renders no happiness state. */
+  states?: HappinessStateDef[];
+  /** Sparse default is `both`. The raw numeric value is never player-facing. */
+  stateDisplay?: HappinessStateDisplay;
 }
 
 /** Recurring household bill identity/display list (PROJECT_CONTEXT.md §7.24 F1, data/bills.json).

@@ -2,7 +2,7 @@
 // Runtime supplies the same EvalContext used by quests; this module only resolves, normalizes,
 // weights, and clamps. It has no DOM or three.js dependency.
 
-import type { HappinessComponent, HappinessData } from './data';
+import type { HappinessComponent, HappinessData, HappinessStateDef, HappinessStateDisplay } from './data';
 import { resolveVar, type EvalContext, type VarValue } from './quests';
 
 function clamp(value: number, min: number, max: number): number {
@@ -54,4 +54,33 @@ export function computeHappiness(data: HappinessData, ctx: EvalContext): number 
     totalWeight += weight;
   }
   return totalWeight > 0 ? clamp(weighted / totalWeight * 100, 0, 100) : 0;
+}
+
+/**
+ * Resolve a numeric happiness value to its designer-authored state. This deliberately mirrors
+ * social.ts `levelFor`: inclusive bounds, greatest matching `atLeast` wins, and array order has no
+ * ranking meaning. Unlike relationship levels, missing/empty state data has no fallback because G4
+ * specifies sparse data should render nothing on the player HUD.
+ */
+export function happinessStateFor(
+  value: number,
+  states: readonly HappinessStateDef[] | null | undefined,
+): HappinessStateDef | null {
+  if (!states?.length) return null;
+  let best: HappinessStateDef | null = null;
+  for (const state of states) {
+    if (!Number.isFinite(state.atLeast)) continue;
+    if (value >= state.atLeast && (best === null || state.atLeast > best.atLeast
+      || (state.atLeast === best.atLeast && state.id.localeCompare(best.id) < 0))) best = state;
+  }
+  return best;
+}
+
+/** Invalid/absent display data degrades to the authored default: icon and text. */
+export function happinessStateDisplay(
+  display: HappinessStateDisplay | string | null | undefined,
+): { icon: boolean; text: boolean } {
+  if (display === 'icon') return { icon: true, text: false };
+  if (display === 'text') return { icon: false, text: true };
+  return { icon: true, text: true };
 }

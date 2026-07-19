@@ -13,9 +13,10 @@
   .stack{display:grid;gap:18px}.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}.card h2{font-size:15px;margin:0 0 14px}.grid{display:grid;grid-template-columns:minmax(150px,1fr) minmax(100px,160px);gap:10px 14px;align-items:center}
   label{color:#c5d0e4} input{width:100%;padding:7px 9px;border-radius:6px;border:1px solid #35425a;background:#0d131d;color:var(--text)} input:focus{outline:1px solid var(--accent)} input[readonly]{color:var(--muted)}
   .bill{padding-top:13px;margin-top:13px;border-top:1px solid var(--line)}.bill:first-of-type{padding-top:0;margin-top:0;border-top:0}.bill-title{font-weight:650;margin-bottom:10px}
-  .happiness-row{display:grid;grid-template-columns:minmax(150px,1.5fr) repeat(3,minmax(70px,.6fr)) auto;gap:8px;margin:8px 0;align-items:center}.happiness-row select{padding:7px 9px;border-radius:6px;border:1px solid #35425a;background:#0d131d;color:var(--text)}.happiness-head{font-size:11px;color:var(--muted)}
+  .happiness-row{display:grid;grid-template-columns:minmax(150px,1.5fr) repeat(3,minmax(70px,.6fr)) auto;gap:8px;margin:8px 0;align-items:center}.happiness-row select,.state-display{padding:7px 9px;border-radius:6px;border:1px solid #35425a;background:#0d131d;color:var(--text)}.happiness-head{font-size:11px;color:var(--muted)}
+  .state-row{display:grid;grid-template-columns:minmax(105px,.8fr) minmax(130px,1fr) 85px minmax(160px,1.2fr) auto;gap:8px;margin:8px 0;align-items:center}.state-actions{display:flex;gap:4px}.state-actions button{padding:7px 9px}.state-preview{margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:8px}.state-preview-result{margin-top:8px;color:#b9d2ff;font-weight:650}
   .preview-meta{color:var(--muted);font-size:12px;margin-bottom:12px}.preview-row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #252e3f}.preview-row strong{color:#b9d2ff}.status{min-width:120px;text-align:right;color:var(--muted)}
-  @media(max-width:780px){main{grid-template-columns:1fr}header{padding:12px}.status{display:none}}
+  @media(max-width:780px){main{grid-template-columns:1fr}header{padding:12px}.status{display:none}.state-row{grid-template-columns:1fr}.state-actions{justify-content:flex-end}}
 </style>
 </head>
 <body>
@@ -27,7 +28,7 @@
     <section class="card"><h2>Recurring bill formulas</h2><div id="billFields"></div></section>
     <section class="card"><h2>Debt thresholds</h2><div id="thresholdFields" class="grid"></div></section>
     <section class="card"><h2>Credit score</h2><div id="creditFields" class="grid"></div></section>
-    <section class="card"><h2>Happiness formula</h2><p class="preview-meta">Each selected variable is normalized from min to max, then combined by positive weight. Variables use the quest namespace.</p><div id="happinessFields"></div><button id="addHappiness">+ Add component</button><h2 style="margin-top:18px">Visa status ranks</h2><div id="visaRankFields" class="grid"></div></section>
+    <section class="card"><h2>Happiness formula</h2><p class="preview-meta">Each selected variable is normalized from min to max, then combined by positive weight. Variables use the quest namespace.</p><div id="happinessFields"></div><button id="addHappiness">+ Add component</button><h2 style="margin-top:18px">Visa status ranks</h2><div id="visaRankFields" class="grid"></div><h2 style="margin-top:18px">Player-facing states</h2><p class="preview-meta">The player sees the resolved state, never the numeric happiness value. Icon suggestions come from public/icons when the dev-server listing is available.</p><div class="grid"><label for="stateDisplay">Display</label><select id="stateDisplay" class="state-display"><option value="icon">Icon</option><option value="text">Text</option><option value="both">Icon + text</option></select></div><datalist id="happinessIconOptions"></datalist><div id="happinessStates"></div><button id="addHappinessState">+ Add state</button><div class="state-preview"><label for="happinessPreviewValue">Numeric happiness (designer/debug)</label><input id="happinessPreviewValue" type="number" min="0" max="100" step="any" value="75"><div id="happinessStatePreview" class="state-preview-result">Waiting for resolver…</div></div></section>
   </div>
   <aside class="card"><h2>Live preview</h2><div id="previewMeta" class="preview-meta">Waiting for current map…</div><div id="preview"></div></aside>
 </main>
@@ -35,7 +36,7 @@
 (() => {
 'use strict';
 const PROPERTY_TYPES = ['condo','basement','townhouse','house','penthouse'];
-const state = { finance:null, tuning:null, happiness:null, stats:null, simstate:null, visas:null, map:null, assets:null, dirty:new Set(), compute:null };
+const state = { finance:null, tuning:null, happiness:null, stats:null, simstate:null, visas:null, map:null, assets:null, icons:[], dirty:new Set(), compute:null, happinessStateFor:null, happinessStateDisplay:null };
 const $ = (id) => document.getElementById(id);
 function numberInput(value, path, onValue, options={}) {
   const input = document.createElement('input'); input.type = 'number'; input.value = String(value); input.dataset.path = path;
@@ -45,6 +46,8 @@ function numberInput(value, path, onValue, options={}) {
 }
 function appendField(root, labelText, input) { const label=document.createElement('label'); label.textContent=labelText; root.append(label,input); }
 function markDirty(file) { state.dirty.add(file); $('save').disabled=false; $('status').textContent='Unsaved changes'; }
+function normalizeSourcePath(raw){let value=String(raw??'').trim().replace(/\\/g,'/');const match=/\/public(\/.*)$/i.exec(value);if(match)value=match[1];else value=value.replace(/^\/?[a-z]:/i,'');if(value&&!/^(\/|https?:)/i.test(value))value='/'+value;return value;}
+function textInput(value,path,onValue){const input=document.createElement('input');input.value=value??'';input.dataset.path=path;input.addEventListener('input',()=>{onValue(input.value);markDirty('happiness.json');renderHappinessStatePreview();});return input;}
 function happinessVarOptions(current) {
   const groups=[
     ['Needs',(state.stats.needs||[]).map((x)=>[`needs.${x.id}`,`Need: ${x.name}`])],
@@ -70,6 +73,37 @@ function renderHappiness() {
   });
   const ranks=$('visaRankFields');ranks.innerHTML='';
   for(const visa of state.visas.visas){appendField(ranks,visa.name,numberInput(state.happiness.visaStatusRanks?.[visa.id]??0,`happiness.visaStatusRanks.${visa.id}`,(v)=>(state.happiness.visaStatusRanks||={})[visa.id]=v,{file:'happiness.json',step:'any'}));}
+  renderHappinessStates();
+}
+function renderIconOptions(){const list=$('happinessIconOptions');list.innerHTML='';for(const icon of state.icons){const option=document.createElement('option');option.value=normalizeSourcePath(icon);list.appendChild(option);}}
+function renderHappinessStates(){
+  $('stateDisplay').value=state.happiness.stateDisplay||'both';
+  const root=$('happinessStates');root.innerHTML='';
+  const states=state.happiness.states||[];
+  states.forEach((entry,index)=>{
+    const row=document.createElement('div');row.className='state-row';row.dataset.stateIndex=String(index);
+    const id=textInput(entry.id,`happiness.states.${index}.id`,(v)=>entry.id=v);
+    const label=textInput(entry.label,`happiness.states.${index}.label`,(v)=>entry.label=v);
+    const threshold=numberInput(entry.atLeast,`happiness.states.${index}.atLeast`,(v)=>entry.atLeast=v,{file:'happiness.json',step:'any'});
+    const icon=textInput(entry.icon,`happiness.states.${index}.icon`,(v)=>entry.icon=v);icon.setAttribute('list','happinessIconOptions');icon.addEventListener('blur',()=>{const value=normalizeSourcePath(icon.value);if(value!==icon.value){icon.value=value;entry.icon=value;markDirty('happiness.json');renderHappinessStatePreview();}});
+    for(const [placeholder,input] of [['ID',id],['Label',label],['Inclusive minimum',threshold],['Icon path',icon]])input.placeholder=placeholder;
+    const actions=document.createElement('div');actions.className='state-actions';
+    const move=(text,delta)=>{const button=document.createElement('button');button.textContent=text;button.dataset.action=delta<0?'state-up':'state-down';button.disabled=index+delta<0||index+delta>=states.length;button.addEventListener('click',()=>{const [item]=states.splice(index,1);states.splice(index+delta,0,item);markDirty('happiness.json');renderHappinessStates();});return button;};
+    const remove=document.createElement('button');remove.textContent='Remove';remove.dataset.action='remove-state';remove.addEventListener('click',()=>{states.splice(index,1);markDirty('happiness.json');renderHappinessStates();});
+    actions.append(move('↑',-1),move('↓',1),remove);row.append(id,label,threshold,icon,actions);root.appendChild(row);
+  });
+  renderHappinessStatePreview();
+}
+function renderHappinessStatePreview(){
+  const root=$('happinessStatePreview');if(!state.happiness)return;
+  const value=Number($('happinessPreviewValue').value);
+  if(!state.happinessStateFor){root.textContent='Waiting for the real happiness resolver…';return;}
+  const resolved=state.happinessStateFor(Number.isFinite(value)?value:0,state.happiness.states);
+  if(!resolved){delete root.dataset.stateId;root.textContent=`${Number.isFinite(value)?value:0} → no state`;return;}
+  const display=state.happinessStateDisplay?state.happinessStateDisplay(state.happiness.stateDisplay):{icon:true,text:true};
+  const shown=[display.icon&&resolved.icon?`icon ${resolved.icon}`:'',display.text?resolved.label:''].filter(Boolean).join(' + ')||'nothing';
+  root.textContent=`${Number.isFinite(value)?value:0} → ${resolved.id} (${shown})`;
+  root.dataset.stateId=resolved.id;
 }
 function render() {
   const rent=$('rentFields'); rent.innerHTML='';
@@ -114,8 +148,9 @@ function renderPreview() {
 async function load() {
   try {
     const get=async(path)=>{const response=await fetch('/api/data/'+path);if(!response.ok)throw new Error(`${path}: ${response.status}`);return response.json();};
-    const [finance,assets,tuning,happiness,stats,simstate,visas]=await Promise.all([get('finance.json'),get('assets.json'),get('tuning.json'),get('happiness.json'),get('stats.json'),get('simstate.json'),get('visas.json')]);
-    const map=await get(`maps/${tuning.map?.active || 'condo'}.json`); Object.assign(state,{finance,assets,tuning,happiness,stats,simstate,visas,map}); state.dirty.clear(); render(); $('status').textContent='Loaded';
+    const iconListing=async()=>{try{const response=await fetch('/api/icons');if(!response.ok)throw new Error(`HTTP ${response.status}`);const value=await response.json();return Array.isArray(value)?value.filter((x)=>typeof x==='string'):[];}catch(error){console.warn('[finance-editor] Icon listing unavailable',error);return[];}};
+    const [finance,assets,tuning,happiness,stats,simstate,visas,icons]=await Promise.all([get('finance.json'),get('assets.json'),get('tuning.json'),get('happiness.json'),get('stats.json'),get('simstate.json'),get('visas.json'),iconListing()]);
+    const map=await get(`maps/${tuning.map?.active || 'condo'}.json`); Object.assign(state,{finance,assets,tuning,happiness,stats,simstate,visas,icons,map}); state.dirty.clear();renderIconOptions();render(); $('status').textContent='Loaded';
   } catch(error) { $('status').textContent='Load failed'; console.error('[finance-editor]',error); }
 }
 async function save() {
@@ -129,14 +164,20 @@ async function save() {
   $('save').disabled=true; $('status').textContent='Saved';
 }
 function setCompute(fn) { state.compute=fn; renderPreview(); }
+function setHappinessResolver(stateFor,displayFor){state.happinessStateFor=stateFor;state.happinessStateDisplay=displayFor;renderHappinessStatePreview();}
 $('addHappiness').addEventListener('click',()=>{const first=happinessVarOptions('').querySelector('option')?.value||'funds';state.happiness.components.push({var:first,weight:1,min:0,max:100});renderHappiness();markDirty('happiness.json');});
+$('addHappinessState').addEventListener('click',()=>{const states=(state.happiness.states||=[]);let n=states.length+1;const ids=new Set(states.map((x)=>x.id));while(ids.has(`state_${n}`))n++;states.push({id:`state_${n}`,atLeast:0,label:`State ${n}`,icon:''});renderHappinessStates();markDirty('happiness.json');});
+$('stateDisplay').addEventListener('change',()=>{state.happiness.stateDisplay=$('stateDisplay').value;markDirty('happiness.json');renderHappinessStatePreview();});
+$('happinessPreviewValue').addEventListener('input',renderHappinessStatePreview);
 $('save').addEventListener('click',save); window.addEventListener('keydown',(event)=>{if((event.ctrlKey||event.metaKey)&&event.key==='s'){event.preventDefault();save();}}); window.addEventListener('beforeunload',(event)=>{if(state.dirty.size)event.preventDefault();});
-window.FinanceEditor={state,load,save,setCompute,renderPreview}; load();
+window.FinanceEditor={state,load,save,setCompute,setHappinessResolver,renderPreview,renderHappinessStatePreview,normalizeSourcePath}; load();
 })();
 </script>
 <script type="module">
 import { computeFinancePreview } from '/game/bills.ts';
+import { happinessStateDisplay, happinessStateFor } from '/game/happiness.ts';
 window.FinanceEditor.setCompute(computeFinancePreview);
+window.FinanceEditor.setHappinessResolver(happinessStateFor,happinessStateDisplay);
 </script>
 <script src="/tools/nav.js"></script>
 </body>

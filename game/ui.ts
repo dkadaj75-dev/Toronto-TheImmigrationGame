@@ -3,13 +3,14 @@
 // needs no changes. Portrait-first, collapsible panels for small screens.
 // Bar colors/names come from stats.json; action names from interactions.json.
 
-import type { ActionDef, AssetDef, JobDef, VisaDef } from './data';
+import type { ActionDef, AssetDef, HappinessData, JobDef, VisaDef } from './data';
 import type { RentalCardView, RequirementView } from './phone';
 import type { ContactView } from './contacts';
 import { deleteDecision, loadDecision, overwriteDecision, renameDecision, type SlotCardView } from './saveslots';
 import type { SimStats } from './stats';
 import { jobLevelPay, jobLevelTitle } from './work';
 import { relativeAge, type ResolvedNotification } from './notifications';
+import { happinessStateDisplay, happinessStateFor } from './happiness';
 
 /** Phone overlay tabs. ROADMAP_APT R3 adds 'rentals' (the Kijiji tab; its visible label comes
  *  from tuning.phone.rentalTabName, never hardcoded). */
@@ -139,11 +140,11 @@ const CSS = `
   color: #93a3c0; cursor: pointer; user-select: none; }
 .hud-panel h3::after { content: ' ▾'; }
 .hud-panel.collapsed h3::after { content: ' ▸'; }
-.hud-panel.collapsed .bars, .hud-panel.collapsed .happiness-gauge { display: none; }
-.happiness-gauge { display:grid; grid-template-columns:58px 1fr 24px; gap:6px; align-items:center; margin:0 0 5px; }
-.happiness-gauge label, .happiness-gauge output { font-size:10px; }
-.happiness-gauge output { text-align:right; color:#f0b9e7; font-variant-numeric:tabular-nums; }
-.happiness-gauge .bar-fill { background:linear-gradient(90deg,#8e62cf,#e475b9); }
+.hud-panel.collapsed .bars, .hud-panel.collapsed .happiness-state { display: none; }
+.happiness-state { display:flex; align-items:center; gap:7px; min-height:28px; margin:0 0 6px; color:var(--theme-accent, #f0b9e7);
+  font-family:var(--theme-panel-font-family, system-ui, sans-serif); font-weight:650; font-size:11px; }
+.happiness-state[hidden], .happiness-state img[hidden], .happiness-state span[hidden] { display:none; }
+.happiness-state img { width:26px; height:26px; object-fit:contain; flex:0 0 auto; }
 .bar-row { display: grid; grid-template-columns: 58px 1fr; gap: 6px; align-items: center; margin: 3px 0; }
 .bar-row label { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bar-track { position: relative; height: var(--theme-bar-height, 14px); border-radius: var(--theme-bar-radius, 4px); background: var(--theme-bar-bg, rgba(255,255,255,.12)); overflow: hidden; }
@@ -516,8 +517,9 @@ export class Hud {
   private feedbackItems: { el: HTMLElement; elapsed: number }[] = [];
   private fills = new Map<string, HTMLElement>();
   private barValues = new Map<string, HTMLElement>(); // ITEM 4: in-bar "value/max" text elements
-  private happinessFill: HTMLElement;
-  private happinessValue: HTMLOutputElement;
+  private happinessState: HTMLElement;
+  private happinessIcon: HTMLImageElement;
+  private happinessLabel: HTMLElement;
 
   // --- Visa chip + game over (§7.20 B3-6) ---
   private visaChip: HTMLElement;
@@ -623,7 +625,7 @@ export class Hud {
     const root = document.createElement('div');
     root.id = 'hud';
     root.innerHTML = `
-      <div class="hud-panel" id="needs-panel"><h3>Needs</h3><div class="happiness-gauge"><label>Happy</label><div class="bar-track"><div class="bar-fill"></div></div><output>0</output></div><div class="bars"></div></div>
+      <div class="hud-panel" id="needs-panel"><h3>Needs</h3><div class="happiness-state" hidden><img alt="" hidden /><span hidden></span></div><div class="bars"></div></div>
       <div class="hud-panel" id="skills-panel"><h3>Skills</h3><div class="bars"></div></div>
       <div class="hud-panel" id="quest-panel"><h3>Quests</h3><div class="bars" id="quest-body"></div></div>
       <div id="time-bar">
@@ -709,8 +711,9 @@ export class Hud {
     document.body.appendChild(root);
 
     this.needsPanel = root.querySelector('#needs-panel')!;
-    this.happinessFill = root.querySelector('.happiness-gauge .bar-fill')!;
-    this.happinessValue = root.querySelector('.happiness-gauge output')!;
+    this.happinessState = root.querySelector('.happiness-state')!;
+    this.happinessIcon = root.querySelector('.happiness-state img')!;
+    this.happinessLabel = root.querySelector('.happiness-state span')!;
     this.skillsPanel = root.querySelector('#skills-panel')!;
     this.menu = root.querySelector('#action-menu')!;
     this.chip = root.querySelector('#activity-chip')!;
@@ -861,11 +864,26 @@ export class Hud {
     }
   }
 
-  setHappiness(value: number) {
+  setHappiness(value: number, data?: Pick<HappinessData, 'states' | 'stateDisplay'>) {
     const safe = Math.min(100, Math.max(0, Number.isFinite(value) ? value : 0));
-    this.happinessFill.style.width = `${safe}%`;
-    this.happinessValue.value = String(Math.round(safe));
-    this.happinessValue.textContent = String(Math.round(safe));
+    const state = happinessStateFor(safe, data?.states);
+    this.happinessState.hidden = state === null;
+    if (!state) {
+      delete this.happinessState.dataset.stateId;
+      this.happinessIcon.hidden = true;
+      this.happinessLabel.hidden = true;
+      this.happinessIcon.removeAttribute('src');
+      this.happinessLabel.textContent = '';
+      return;
+    }
+    const display = happinessStateDisplay(data?.stateDisplay);
+    this.happinessIcon.hidden = !display.icon || !state.icon;
+    this.happinessIcon.alt = display.icon && !display.text ? state.label : '';
+    if (display.icon && state.icon) this.happinessIcon.src = state.icon;
+    else this.happinessIcon.removeAttribute('src');
+    this.happinessLabel.hidden = !display.text;
+    this.happinessLabel.textContent = display.text ? state.label : '';
+    this.happinessState.dataset.stateId = state.id;
   }
 
   setSpeed(s: number) {

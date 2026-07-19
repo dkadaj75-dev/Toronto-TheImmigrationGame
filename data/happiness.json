@@ -7,6 +7,51 @@
     "permanent_resident": 3,
     "citizen": 4
   },
+  "states": [
+    {
+      "id": "extremely_happy",
+      "atLeast": 90,
+      "label": "Extremely happy",
+      "icon": "/icons/happy.svg"
+    },
+    {
+      "id": "happy",
+      "atLeast": 80,
+      "label": "Happy",
+      "icon": "/icons/happy.svg"
+    },
+    {
+      "id": "content",
+      "atLeast": 65,
+      "label": "Content",
+      "icon": "/icons/happy.svg"
+    },
+    {
+      "id": "fine",
+      "atLeast": 50,
+      "label": "Fine",
+      "icon": "/icons/neutral.svg"
+    },
+    {
+      "id": "unhappy",
+      "atLeast": 30,
+      "label": "Unhappy",
+      "icon": "/icons/sad.svg"
+    },
+    {
+      "id": "sad",
+      "atLeast": 20,
+      "label": "Sad",
+      "icon": "/icons/sad.svg"
+    },
+    {
+      "id": "miserable",
+      "atLeast": 0,
+      "label": "Miserable",
+      "icon": "/icons/sad.svg"
+    }
+  ],
+  "stateDisplay": "both",
   "components": [
     {
       "var": "needs.hunger",

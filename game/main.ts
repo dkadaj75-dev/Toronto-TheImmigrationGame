@@ -1899,7 +1899,7 @@ async function start(initialLoadSlotId?: string) {
       decayAcc -= decayEvery;
       stats.decayTick();
       happiness = computeHappiness(data.happiness, buildEvalContext());
-      hud.setHappiness(happiness);
+      hud.setHappiness(happiness, data.happiness);
       // ROADMAP_NEXT B2-4: zero-crossing check happens right after decay, on the same tick bladder
       // could have just hit 0 — BEFORE autonomy.maybeAct() below, so a fresh failure preempts
       // whatever free will would otherwise have picked this tick (matches "the event preempts
@@ -2039,7 +2039,7 @@ async function start(initialLoadSlotId?: string) {
     phoneJobs.retune(data.jobs, data.tuning.phone?.jobListSize); // defs/tuning only; hourly cadence survives
     bills.retune(data.bills, data.finance, data.tuning.bills?.intervalDays, data.tuning.credit); // formulas/defs/cadence/credit tuning only; runtime state survives
     happiness = computeHappiness(data.happiness, buildEvalContext());
-    hud.setHappiness(happiness);
+    hud.setHappiness(happiness, data.happiness);
     hud.setPhoneIcon(data.tuning.phone?.icon ?? '/icons/Smartphone.png');
     refreshVisaChip();
     refreshPhone();
@@ -2170,7 +2170,7 @@ async function start(initialLoadSlotId?: string) {
   applyEnvironment();
   refreshVisaChip(); // now that gameDay exists, show the starting visa chip immediately
   happiness = computeHappiness(data.happiness, buildEvalContext());
-  hud.setHappiness(happiness);
+  hud.setHappiness(happiness, data.happiness);
   // ROADMAP_NEXT B2-1: single builder for the EvalContext the quest evaluator (`evaluate` from
   // game/quests.ts) runs against — reused by the accident-roll call below (was already inlined
   // here), the tap-menu action-visibility filter, and Autonomy's condition check (passed in as a
@@ -2328,7 +2328,7 @@ async function start(initialLoadSlotId?: string) {
       debtGameOverPending = false;
       hud.hideGameOver();
       happiness = computeHappiness(data.happiness, buildEvalContext());
-      hud.setHappiness(happiness);
+      hud.setHappiness(happiness, data.happiness);
       hud.setFunds(quests.funds, currencyName());
       refreshVisaChip();
       refreshPhone();
