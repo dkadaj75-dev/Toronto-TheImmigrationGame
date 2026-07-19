@@ -137,13 +137,13 @@
     "needs-panel": {
       "anchor": "tl",
       "offsetX": 5,
-      "offsetY": 10,
+      "offsetY": 5,
       "accordion": "Needs"
     },
     "skills-panel": {
       "anchor": "tl",
-      "offsetX": 150,
-      "offsetY": 10,
+      "offsetX": 175,
+      "offsetY": 5,
       "accordion": "Skills"
     },
     "quest-panel": {

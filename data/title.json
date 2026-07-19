@@ -1,7 +1,7 @@
 {
-  "logoText": "Condo Life",
+  "logoText": "",
   "logoImage": null,
-  "background": null,
+  "background": "textures/Title1.jpg",
   "music": null,
   "menu": [
     { "id": "new", "label": "New Game" },
