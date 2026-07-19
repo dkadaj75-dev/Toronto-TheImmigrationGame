@@ -13,6 +13,7 @@ import { resolveWindowConfig, windowFacePositions, windowPaneRect } from './wind
 import { wallCutShownHeight } from './wallview';
 import { resolveAssetLight } from './assetstate';
 import { resolveMetersPerTile, effectiveMetersPerTile, textureRepeat, polygonBounds } from './textures';
+import { publicUrl } from './urls';
 import { aperturesForWall, wallSegments, gapDoorLintel, lintelVisibleUnderCut, isCurtainWall, resolveMullionSpacing, mullionPositions } from './wallaperture';
 
 // ------------------------------------------------------------------ GLB furniture
@@ -160,7 +161,7 @@ export function resolveMeshFitTransform(fit: AssetDef['meshFit']): {
 
 /** public/ serves at root — normalize "models/x.glb" → "/models/x.glb"; leave absolute/http(s) alone. */
 export function normalizeMeshUrl(mesh: string): string {
-  return /^(\/|https?:)/.test(mesh) ? mesh : '/' + mesh;
+  return publicUrl(mesh);
 }
 
 /**

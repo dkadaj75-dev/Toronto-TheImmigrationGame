@@ -4,6 +4,7 @@
 // Bar colors/names come from stats.json; action names from interactions.json.
 
 import type { ActionDef, AssetDef, HappinessData, JobDef, VisaDef } from './data';
+import { publicUrl } from './urls';
 import type { RentalCardView, RequirementView } from './phone';
 import type { ContactView } from './contacts';
 import { deleteDecision, loadDecision, overwriteDecision, renameDecision, type SlotCardView } from './saveslots';
@@ -879,7 +880,7 @@ export class Hud {
     const display = happinessStateDisplay(data?.stateDisplay);
     this.happinessIcon.hidden = !display.icon || !state.icon;
     this.happinessIcon.alt = display.icon && !display.text ? state.label : '';
-    if (display.icon && state.icon) this.happinessIcon.src = state.icon;
+    if (display.icon && state.icon) this.happinessIcon.src = publicUrl(state.icon);
     else this.happinessIcon.removeAttribute('src');
     this.happinessLabel.hidden = !display.text;
     this.happinessLabel.textContent = display.text ? state.label : '';
@@ -1054,7 +1055,7 @@ export class Hud {
         card.style.opacity = String(0.2 + remaining * 0.62);
       }
       if (notification.icon) {
-        const icon = document.createElement('img'); icon.className = 'notification-icon'; icon.src = notification.icon; icon.alt = '';
+        const icon = document.createElement('img'); icon.className = 'notification-icon'; icon.src = publicUrl(notification.icon); icon.alt = '';
         card.appendChild(icon);
       } else {
         const spacer = document.createElement('span'); spacer.className = 'notification-icon'; card.appendChild(spacer);
@@ -1079,7 +1080,7 @@ export class Hud {
     this.notificationModal.classList.toggle('open', !!modal);
     if (!modal) return;
     const card = document.createElement('section'); card.className = 'notification-modal-card'; card.dataset.notificationId = modal.id;
-    if (modal.icon) { const icon = document.createElement('img'); icon.className = 'notification-icon'; icon.src = modal.icon; icon.alt = ''; card.appendChild(icon); }
+    if (modal.icon) { const icon = document.createElement('img'); icon.className = 'notification-icon'; icon.src = publicUrl(modal.icon); icon.alt = ''; card.appendChild(icon); }
     const title = document.createElement('div'); title.className = 'notification-title'; title.textContent = modal.title; card.appendChild(title);
     if (modal.body) { const body = document.createElement('div'); body.className = 'notification-body'; body.textContent = modal.body; card.appendChild(body); }
     const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'notification-ok'; ok.textContent = 'OK'; ok.addEventListener('click', () => this.onNotificationAcknowledge?.());
@@ -1195,7 +1196,7 @@ export class Hud {
     if (wasOpen) this.onPhoneClose?.();
   }
 
-  setPhoneIcon(path: string) { this.phoneIcon.src = path || '/icons/Smartphone.png'; }
+  setPhoneIcon(path: string) { this.phoneIcon.src = publicUrl(path || '/icons/Smartphone.png'); }
 
   setPhoneBadge(count: number) {
     const safeCount = Math.max(0, Math.floor(count));
@@ -1257,7 +1258,7 @@ export class Hud {
         if (contact.portrait) {
           const image = document.createElement('img');
           image.alt = `${contact.name} portrait`;
-          image.src = contact.portrait;
+          image.src = publicUrl(contact.portrait);
           image.addEventListener('error', () => image.remove());
           portrait.appendChild(image);
         }
@@ -1336,7 +1337,7 @@ export class Hud {
           const img = document.createElement('img');
           img.className = 'phone-rental-img';
           img.alt = '';
-          img.src = ad.image;
+          img.src = publicUrl(ad.image);
           card.el.appendChild(img);
         }
         // m² is shown on EVERY ad; the not-available chip / current flag sits beside it.

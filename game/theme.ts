@@ -2,6 +2,7 @@
 // Pure mapping/resolution functions stay DOM-free; applyTheme is the thin browser layer.
 
 import type { ThemeAnchor, ThemeComponentOverrides, ThemeData, ThemeLayoutItem } from './data';
+import { publicUrl } from './urls';
 
 export const KNOWN_THEME_ELEMENT_IDS = [
   'needs-panel', 'skills-panel', 'quest-panel', 'time-bar', 'activity-chip', 'work-chip',
@@ -75,10 +76,10 @@ export function resolveActionMenuStyle(theme?: ThemeData) {
 }
 
 /** Pure @font-face text generation for runtime and tool previews. */
-export function fontFaceCss(theme?: ThemeData): string {
+export function fontFaceCss(theme?: ThemeData, resolveSrc: (src: string) => string = (src) => src): string {
   return (theme?.fonts?.faces ?? [])
     .filter((face) => face.family?.trim() && face.src?.trim())
-    .map((face) => `@font-face{font-family:${JSON.stringify(face.family.trim())};src:url(${JSON.stringify(face.src.trim())});font-weight:${face.weight?.trim() || 'normal'};font-style:${face.style?.trim() || 'normal'};font-display:swap}`)
+    .map((face) => `@font-face{font-family:${JSON.stringify(face.family.trim())};src:url(${JSON.stringify(resolveSrc(face.src.trim()))});font-weight:${face.weight?.trim() || 'normal'};font-style:${face.style?.trim() || 'normal'};font-display:swap}`)
     .join('\n');
 }
 
@@ -227,7 +228,7 @@ export function applyTheme(theme?: ThemeData, doc: Document = document): void {
   if (!fontStyle) {
     fontStyle = doc.createElement('style'); fontStyle.id = 'theme-font-faces'; doc.head.appendChild(fontStyle);
   }
-  fontStyle.textContent = fontFaceCss(source);
+  fontStyle.textContent = fontFaceCss(source, (src) => publicUrl(src, doc.baseURI));
   const hud = doc.getElementById('hud');
   if (!hud) return;
   const previousAccordionState = unwrapAccordions(hud);
@@ -247,7 +248,7 @@ export function applyTheme(theme?: ThemeData, doc: Document = document): void {
     const toggle = doc.createElement('button');
     toggle.type = 'button'; toggle.className = 'theme-accordion-toggle'; toggle.setAttribute('aria-label', group.name);
     if (group.icon) {
-      const icon = doc.createElement('img'); icon.className = 'theme-accordion-icon'; icon.src = group.icon; icon.alt = '';
+      const icon = doc.createElement('img'); icon.className = 'theme-accordion-icon'; icon.src = publicUrl(group.icon, doc.baseURI); icon.alt = '';
       toggle.appendChild(icon);
     }
     if (group.showText || !group.icon) {

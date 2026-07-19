@@ -23,6 +23,9 @@ ok('/tools/assets.html does not match', !isDataOrApiPath('/tools/assets.html'));
 ok('/game/main.ts does not match', !isDataOrApiPath('/game/main.ts'));
 ok('/manifest.webmanifest does not match', !isDataOrApiPath('/manifest.webmanifest'));
 ok('/icons/icon-192.png does not match', !isDataOrApiPath('/icons/icon-192.png'));
+ok('subpath /repo/data matches inside SW scope', isDataOrApiPath('/repo/data/tuning.json', '/repo/'));
+ok('subpath /repo/api matches inside SW scope', isDataOrApiPath('/repo/api/maps', '/repo/'));
+ok('similarly-prefixed sibling is outside scope', !isDataOrApiPath('/repository/data/tuning.json', '/repo/'));
 ok('a path that merely contains "data" is not a false positive', !isDataOrApiPath('/metadata.json'));
 ok('a path that merely contains "api" is not a false positive', !isDataOrApiPath('/rapid.js'));
 

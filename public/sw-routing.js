@@ -15,6 +15,10 @@
  *   and PUT requests must always reach the real dev server anyway (this
  *   function is also used to decide whether to intercept at all).
  */
-export function isDataOrApiPath(pathname) {
-  return pathname.startsWith('/data/') || pathname.startsWith('/api/');
+export function isDataOrApiPath(pathname, scopePathname = '/') {
+  const scope = ('/' + scopePathname.replace(/^\/+|\/+$/g, '') + '/').replace(/^\/\/$/, '/');
+  const scopedPath = scope !== '/' && pathname.startsWith(scope)
+    ? '/' + pathname.slice(scope.length)
+    : pathname;
+  return scopedPath.startsWith('/data/') || scopedPath.startsWith('/api/');
 }

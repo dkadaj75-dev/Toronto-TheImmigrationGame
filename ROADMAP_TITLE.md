@@ -95,7 +95,19 @@ the same surface — whichever ships second implements/merges it (coordinate exp
 build two slot UIs). Confirm-discard dialog when loading while a run is active.
 **Agent: Claude (Sonnet).**
 
-### T4 — Static hosting readiness + deploy config
+### T4 — Static hosting readiness + deploy config — ✅ SHIPPED (2026-07-18)
+> As-built (Codex): the ONLY game-path /api dependency was GET /api/maps (Kijiji) — production
+> now uses a build-generated data/maps/index.json manifest (vite plugin copies data/ into dist
+> and derives the manifest; dev keeps the live endpoint). watchData() is a no-op under the
+> production build (no 2s poll against static hosts). Vite base './' relative build WORKS
+> (subpath-safe incl. SW/manifest — decision 4 resolved in favor of relative); game/urls.ts
+> centralizes runtime URL resolution. SW: /data + /api stay network-only, shell network-first
+> w/ offline fallback, registration subpath-safe; tools/ absent from dist; tool gear dev-only.
+> netlify.toml + docs/HOSTING.md (Netlify, GitHub Pages, custom server, PWA/redeploy notes,
+> per-device localStorage saves + export/import caveat). Coordinator-verified: npm run build →
+> vite preview on :4174 — title renders, New Game boots ~2s, ZERO console errors, ZERO /api
+> network requests; bundle grep /api/ = 0 in app code. sw-routing 17 (incl. /repo/ scope) +
+> static-hosting 5 + title/theme/audio/loading/hud suites green.
 `npm run build` (Vite prod) audit: game makes ZERO /api/* calls in production (guard the
 hot-reload poller + any api fetch behind a dev flag or 404-tolerant degrade), SW caching rules
 verified against a static origin (fresh /data on redeploy, offline shell still works), tools

@@ -2,6 +2,10 @@
 // Loads data/*.json and, in dev, polls for changes so tuning edits hot-reload into a running game.
 
 import type { NotificationsData } from './notifications';
+import { publicUrl } from './urls';
+
+declare const __STATIC_PROD__: boolean;
+const STATIC_PRODUCTION = typeof __STATIC_PROD__ !== 'undefined' && __STATIC_PROD__;
 
 export type ThemeAnchor = 'tl' | 'tr' | 'bl' | 'br' | 'tc' | 'bc';
 export interface ThemeFontFace {
@@ -895,7 +899,7 @@ const FILES = {
 } as const;
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { cache: 'no-cache' });
+  const res = await fetch(publicUrl(url), { cache: 'no-cache' });
   if (!res.ok) throw new Error(`Failed to load ${url}: ${res.status}`);
   return res.json() as Promise<T>;
 }
@@ -976,7 +980,7 @@ export async function loadAll(): Promise<GameData> {
 }
 
 async function fetchOptionalJson<T>(url: string): Promise<T | undefined> {
-  const res = await fetch(url, { cache: 'no-cache' });
+  const res = await fetch(publicUrl(url), { cache: 'no-cache' });
   if (res.status === 404) return undefined;
   if (!res.ok) throw new Error(`Failed to load ${url}: ${res.status}`);
   return res.json() as Promise<T>;
@@ -989,7 +993,8 @@ async function fetchOptionalJson<T>(url: string): Promise<T | undefined> {
  *  map/rental edits are always reflected on the next call. A map that fails to parse is skipped
  *  rather than failing the whole listing (keep-going philosophy). */
 export async function loadAllMaps(): Promise<MapData[]> {
-  const listRes = await fetch('/api/maps', { cache: 'no-store' });
+  const listingUrl = STATIC_PRODUCTION ? '/data/maps/index.json' : '/api/maps';
+  const listRes = await fetch(publicUrl(listingUrl), { cache: 'no-store' });
   if (!listRes.ok) throw new Error(`Failed to list maps: ${listRes.status}`);
   const { maps } = (await listRes.json()) as { maps: string[] };
   const loaded = await Promise.all(
@@ -1006,6 +1011,7 @@ export async function loadAllMaps(): Promise<MapData[]> {
 
 /** Dev hot-reload: polls the data files and invokes callbacks when content changes. */
 export function watchData(onChange: (data: GameData) => void, intervalMs = 2000): () => void {
+  if (!shouldWatchData(STATIC_PRODUCTION)) return () => {};
   let last = '';
   const tick = async () => {
     try {
@@ -1022,3 +1028,6 @@ export function watchData(onChange: (data: GameData) => void, intervalMs = 2000)
   void tick();
   return () => window.clearInterval(handle);
 }
+
+/** Pure production gate kept explicit for headless coverage. */
+export function shouldWatchData(isProduction: boolean): boolean { return !isProduction; }

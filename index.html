@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#1b2230" />
-  <link rel="manifest" href="/manifest.webmanifest" />
-  <link rel="icon" href="/icons/icon-192.png" />
-  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
   <title>Condo Life</title>
   <script>if (new URLSearchParams(location.search).has('dev') || location.hash === '#dev') document.documentElement.classList.add('dev-boot');</script>
   <style>
@@ -116,16 +116,20 @@
     </div>
   </div>
   <script type="module" src="/game/main.ts"></script>
-  <script src="/tools/nav.js"></script>
-  <script>
+  <script type="module">
     // PWA (PROJECT_CONTEXT.md §8): registered on the game page only, never the
     // tool pages (tools/*.html don't include this). Module-typed so the SW can
     // import sw-routing.js's pure predicate directly. Network-first strategy
     // (see sw.js's own comments) means this is safe to leave registered during
     // `npm run dev` too — the cache is only ever an offline fallback.
+    if (import.meta.env.DEV) {
+      const toolNav = document.createElement('script');
+      toolNav.src = new URL('tools/nav.js', document.baseURI).href;
+      document.body.appendChild(toolNav);
+    }
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js', { type: 'module' }).catch((err) => {
+        navigator.serviceWorker.register(new URL('sw.js', document.baseURI), { type: 'module' }).catch((err) => {
           console.warn('service worker registration failed (offline support disabled):', err);
         });
       });

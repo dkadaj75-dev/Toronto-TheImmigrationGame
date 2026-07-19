@@ -26,7 +26,8 @@
 // test/sw-routing.test.mjs) — imported here as an ES module.
 import { isDataOrApiPath } from './sw-routing.js';
 
-const CACHE_VERSION = 'condo-life-v1';
+const CACHE_VERSION = 'condo-life-v2';
+const SCOPE_PATH = new URL(self.registration.scope).pathname;
 
 self.addEventListener('install', () => {
   self.skipWaiting();
@@ -48,7 +49,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // leave cross-origin requests alone
 
-  if (isDataOrApiPath(url.pathname)) {
+  if (isDataOrApiPath(url.pathname, SCOPE_PATH)) {
     event.respondWith(fetch(req));
     return;
   }

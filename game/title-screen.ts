@@ -2,6 +2,7 @@
 import type { TitleConfig, TitleOptionDef } from './data';
 import { deleteDecision, loadDecision, type SlotCardView } from './saveslots';
 import { applyVolumes, PreferencesStore, resolveMenu, resolveOptions, type TitlePreferences, type VolumeAudioTarget } from './title';
+import { publicUrl } from './urls';
 
 export interface TitleScreenActions {
   onNew(): void;
@@ -79,8 +80,8 @@ export class TitleScreen {
     const image = this.root.querySelector<HTMLImageElement>('#title-logo-image')!;
     text.textContent = this.config.logoText?.trim() || 'Condo Life';
     image.hidden = !this.config.logoImage;
-    if (this.config.logoImage) image.src = this.config.logoImage;
-    this.root.style.backgroundImage = this.config.background ? `url(${JSON.stringify(this.config.background)})` : '';
+    if (this.config.logoImage) image.src = publicUrl(this.config.logoImage);
+    this.root.style.backgroundImage = this.config.background ? `url(${JSON.stringify(publicUrl(this.config.background))})` : '';
     const credits = this.root.querySelector<HTMLElement>('#title-credits')!;
     credits.textContent = this.config.credits?.trim() || 'A life simulation';
   }

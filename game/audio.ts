@@ -38,6 +38,7 @@
 
 import type { ActionDef, AssetDef, MapData, TuningData } from './data';
 import { isStatefulAsset } from './assetstate';
+import { publicUrl } from './urls';
 
 // ==================================================================== pure logic (headless-tested)
 
@@ -107,7 +108,7 @@ export function nextPlaylistIndex(list: readonly string[], currentIndex: number)
  *  independent copy here rather than importing world.ts, since audio.ts has zero other dependency
  *  on the three.js/world module and this one-line rule doesn't justify coupling the two. */
 export function normalizeSoundUrl(path: string): string {
-  return /^(\/|https?:)/.test(path) ? path : '/' + path;
+  return publicUrl(path);
 }
 
 // ==================================================================== three.js-free browser layer
