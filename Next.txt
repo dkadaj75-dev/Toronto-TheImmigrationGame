@@ -1,9 +1,7 @@
-For this round, use a bit more claude agents and leave Codex for the more complex tasks. At the end, update handoff json.
-
-- When in assets tool, the grid shown should also be at the same level as the expected ground level, to allow the designer to set the exact height of the model more accurately. Also the purpose of having the same grid than the in-game one is to visualize the model size, the asset tool viewer should show what will be the asset size in-game not the model size based on the glb (or other), for example when applying a custom scale or rotation, we can clearly see the impact on the viewer.
-- How the food fulfills the hunder, when cooked, should be directly proportional to the cooking skill.
-- There is still an issue with loading bar, see screenshot.
-- The Sim still does not go all the way to the fridge before eating a snack.
-- Work schedule: You have approx 2 hours (tunable) to leave for work, otherwise it is missed.
-- Depending on the happiness / energy, the Sim may go to work by himself, even if it was sleeping.
-- Since there are more and more heavy assets, they take some time to load. I want a loading screen (while the screen is loading, no time should pass in-game) that waits until the assets are properly loaded before seeing the map. Also, like for the real Sims game, during the loading screen I want to be able to put stupid sentences (e.g. "Loading visa status", "Going through customs") etc., the number and content of these phrases should be customizable in the tools. The loading screen has its own music as well and the possibility to customize the loading bar and the background image.
+- Social: The time other NPCs stay home depends on the relationship between each others. Some interactions provoque actions: for example "Put the seal on the bed: they both go on the bed, then the action starts, with their own animations). Actions can trigger sounds as well.
+- Theme bug: this is still here, see the empty parameters at Colors, Shapes, Element gallery. See screenshot: D:\WebCreation\condo-life-web\Capture.PNG.
+- Buy mode: do not just show the footprint, but also the mesh itself when we are in buy mode and see where we can put new objects, with some transparency.
+- Autonomy: Add a tunable delay for when we launch the game / change map / sim comes back from work etc to avoid Sim taking decisions too fast before the player.
+- Lights should add some level of comfort when turned on at night (depends on the asset).
+- If a light or sound producing device such as tv is turned on in a certain radius AND in the room (e.g. if separated by door / wall, the sim does not hear / see it), the Sim cannot sleep.
+- We need a schedule for work as well, the Sim should not work every day: we need to be able to choose days and time of the week, which means implementing the weekday feature - can be checked on the smartphone (this will show at the top of the phone, no specific tab for that).
