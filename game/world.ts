@@ -815,7 +815,7 @@ export async function loadFbxClips(
  */
 export function loadRiggedCharacter(character: CharacterTuning, trackInitialLoad?: TrackInitialLoad): Promise<LoadedCharacter> {
   const task = (async (): Promise<LoadedCharacter> => {
-  const norm = (p: string) => (/^(\/|https?:)/.test(p) ? p : '/' + p);
+  const norm = normalizeMeshUrl;
   const loader = new GLTFLoader();
   const load = (u: string) =>
     new Promise<{ scene: THREE.Group; animations: THREE.AnimationClip[] }>(
