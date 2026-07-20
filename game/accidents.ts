@@ -632,6 +632,23 @@ export class AccidentsController {
   /** §7.3 cleanup: call from onActionStop whenever the completed action's target carries an
    *  `accidentKey` (i.e. it WAS an accident instance) — despawns it if `actionId` is in the
    *  accident asset's `clearedBy` list. No-op for any other target. */
+  /** B13-18 radius cleanup: despawn every OTHER runtime accident instance within `radiusMeters`
+   *  of `center` that the completed `actionId` clears (same clearedBy rules as maybeCleanup).
+   *  Returns how many despawned. Call ONLY from a completed-action path (side_effect_rule). */
+  cleanupWithinRadius(center: [number, number], radiusMeters: number, actionId: string, excludeObj?: THREE.Object3D): number {
+    if (!(radiusMeters > 0)) return 0;
+    const excludeKey = excludeObj?.userData?.accidentKey as string | undefined;
+    const assets = this.getData().assets.assets;
+    const victims = this.registry.all.filter((rec) => {
+      if (rec.key === excludeKey) return false;
+      const def = assets.find((a) => a.id === rec.accidentId);
+      if (!shouldDespawnOnCleanup(actionId, def?.clearedBy)) return false;
+      return Math.hypot(rec.pos[0] - center[0], rec.pos[1] - center[1]) <= radiusMeters;
+    });
+    for (const rec of victims) this.despawn(rec.key);
+    return victims.length;
+  }
+
   maybeCleanup(targetObj: THREE.Object3D, actionId: string): boolean {
     const key = targetObj.userData?.accidentKey as string | undefined;
     if (!key) return false;

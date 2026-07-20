@@ -48,10 +48,18 @@ export function socialAnimationFor(interaction: InteractionDef, role: SocialRole
   return override?.trim() || interaction.animation?.trim() || '';
 }
 
-/** `targetAsset` accepts either an exact asset id or a category, with no separate schema branch. */
+/** Merged, trimmed, deduplicated target list: legacy single `targetAsset` + the `targetAssets`
+ *  array (2026-07-19 designer request: as many acceptable assets as wanted). */
+export function socialTargetList(interaction: Pick<InteractionDef, 'targetAsset' | 'targetAssets'>): string[] {
+  const merged = [interaction.targetAsset, ...(interaction.targetAssets ?? [])]
+    .map((entry) => entry?.trim())
+    .filter((entry): entry is string => !!entry);
+  return [...new Set(merged)];
+}
+
+/** Each entry accepts either an exact asset id or a category, with no separate schema branch. */
 export function matchesSocialTarget(interaction: InteractionDef, asset: Pick<AssetDef, 'id' | 'category'>): boolean {
-  const target = interaction.targetAsset?.trim();
-  return !!target && (asset.id === target || asset.category === target);
+  return socialTargetList(interaction).some((target) => asset.id === target || asset.category === target);
 }
 
 /** Pure routing decision shared by runtime/tests. Beds always request the existing lie pose,
@@ -60,7 +68,7 @@ export function socialRoutingDecision(
   interaction: InteractionDef,
   asset?: Pick<AssetDef, 'id' | 'category'>,
 ): { paired: boolean; matches: boolean; pose: 'lie' | null } {
-  const paired = !!interaction.targetAsset?.trim();
+  const paired = socialTargetList(interaction).length > 0;
   return { paired, matches: paired && !!asset && matchesSocialTarget(interaction, asset), pose: asset?.category === 'beds' ? 'lie' : null };
 }
 

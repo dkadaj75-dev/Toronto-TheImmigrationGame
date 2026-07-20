@@ -19,7 +19,7 @@ import { VisaMachine } from './visas';
 import { PhoneJobSearch, applyForJob, applyForVisa, jobListingViews, jobSwitchPrompt, pendingDaysRemaining, rentalCardViews, visaApplicationViews } from './phone';
 import { listRentals, PendingMoveTracker } from './rental';
 import { FinanceState, decideRepoSeizure } from './bills';
-import { WorkTracker, applyNeedsCost, decideAutoDepart, isLeaveForWorkAvailable, isScheduledWorkWindow, isWithinDepartureWindow, jobLevelPay, jobLevelTitle, shouldStartVisaGrace, weekdayName, type WorkReturnPoint, type WorkTickEvent } from './work';
+import { WorkTracker, applyNeedsCost, decideAutoDepart, isLeaveForWorkAvailable, isScheduledWorkWindow, isWithinDepartureWindow, jobLevelPay, jobLevelTitle, promotionRequirementsFor, shouldStartVisaGrace, weekdayName, type WorkReturnPoint, type WorkTickEvent } from './work';
 import { computeHappiness, happinessSkillFactor, isRefusedByMood } from './happiness';
 import { AccidentsController, resolveTapAssetId, shouldDespawnOnCleanup, shouldRemovePlacedOnCleanup } from './accidents';
 import { GarbageController, wasteItemCount } from './garbage';
@@ -39,7 +39,7 @@ import { InitialLoadTracker, phraseAt } from './loading';
 import { applyTheme } from './theme';
 import { compatibility, happinessSocialFactor, visitOutcome, type InteractionDef } from './social';
 import { SocialRuntime } from './socialruntime';
-import { availableSocialInteractions, matchesSocialTarget, pairedAssetPositions, SocialInteractionSession, socialActionDef, socialAnimationFor, socialAutonomyCandidates, socialNpcActionDef, socialRoutingDecision, socialScoringTarget } from './social-interactions';
+import { availableSocialInteractions, matchesSocialTarget, pairedAssetPositions, SocialInteractionSession, socialActionDef, socialAnimationFor, socialAutonomyCandidates, socialNpcActionDef, socialRoutingDecision, socialScoringTarget, socialTargetList } from './social-interactions';
 import { isNpcAvailable, NpcVisitorController, type NpcDef } from './npc';
 import { mutualFacingDeg, usePoseFor } from './facing';
 import { contactViews, PhoneContactSession, phoneAutonomyCandidates } from './contacts';
@@ -393,6 +393,18 @@ async function start(initialLoadSlotId?: string) {
   // the turn-off chain alive across onActionStop completions.
   let angrySleepState: { phase: 'sleeping' | 'mad'; elapsed: number; totalSeconds: number } | null = null;
   let angryShutdownActive = false;
+  // Bugstofix (2026-07-19): the sleep the angry wake interrupted — once the turn-off chain quiets
+  // the home, the sim walks back and resumes it (tuning.ambience.resumeSleepAfterShutdown).
+  let resumeSleep: { action: ActionDef; target: THREE.Object3D } | null = null;
+  const tryResumeSleep = (): boolean => {
+    const pending = resumeSleep;
+    resumeSleep = null;
+    if (!pending || data.tuning.ambience?.resumeSleepAfterShutdown === false) return false;
+    if (sleepDecisionAt([pending.target.position.x, pending.target.position.z]).blocked) return false; // still noisy — stay up
+    const assetId = pending.target.userData?.assetId as string | undefined;
+    const def = assetId ? data.assets.assets.find((x) => x.id === assetId) : undefined;
+    return agent.orderAction(pending.action, pending.target, null, def, false);
+  };
   const orderNextAmbienceShutdown = (): boolean => {
     const match = ambienceMatchesAt([sim.position.x, sim.position.z])
       .filter((m) => m.active && m.instance.def.interactions.includes('turn_off'))
@@ -495,7 +507,7 @@ async function start(initialLoadSlotId?: string) {
     if (!visitor || visitors.state.phase !== 'visiting' || currentVisitor()?.id !== npc.id) return false;
     let target: THREE.Object3D = visitor;
     let targetDef: AssetDef | undefined;
-    if (interaction.targetAsset?.trim()) {
+    if (socialTargetList(interaction).length) {
       const candidates = world.children.flatMap((object) => {
         if (!object.visible || !object.parent) return [];
         const def = data.assets.assets.find((asset) => asset.id === object.userData.assetId);
@@ -504,7 +516,7 @@ async function start(initialLoadSlotId?: string) {
       candidates.sort((a, b) => sim.position.distanceToSquared(a.object.position) - sim.position.distanceToSquared(b.object.position));
       const chosen = candidates[0];
       if (!chosen) {
-        postNotification('actionTargetUnavailable', `No ${interaction.targetAsset} is available`);
+        postNotification('actionTargetUnavailable', `No ${socialTargetList(interaction).join(' / ')} is available`);
         return false;
       }
       target = chosen.object;
@@ -680,7 +692,10 @@ async function start(initialLoadSlotId?: string) {
         // through the same handler so the job-loss tail stays in ONE place).
         if (job) for (const moodEvent of work.recordShiftMood(job, happiness)) handleWorkEvent(moodEvent);
         if (job && work.jobId === job.id) {
-          const promotion = work.rollPromotion(job, happiness, data.tuning.work?.promotionHappinessFactor ?? 1);
+          // B13-19: next-level requirements (skills/happiness/anything in the condition namespace)
+          // gate the roll; absent requirements evaluate true (isActionAvailable's own rule).
+          const requirementsMet = isActionAvailable(promotionRequirementsFor(job, work.getJobLevel(job.id)), buildEvalContext());
+          const promotion = work.rollPromotion(job, happiness, data.tuning.work?.promotionHappinessFactor ?? 1, Math.random, requirementsMet);
           if (promotion.promoted) {
             const pay = `${promotion.payIncrease >= 0 ? '+' : ''}${data.tuning.economy.currencyName}${promotion.payIncrease}`;
             postNotification('promotion', `Promoted to ${promotion.title}! ${pay}`);
@@ -1541,6 +1556,7 @@ async function start(initialLoadSlotId?: string) {
       if (!orderNextAmbienceShutdown()) {
         angryShutdownActive = false;
         postNotification('sleepInterrupted', 'All quiet now');
+        tryResumeSleep(); // Bugstofix (2026-07-19): back to bed once the home is quiet
       }
       return;
     }
@@ -1638,6 +1654,25 @@ async function start(initialLoadSlotId?: string) {
             garbage.syncFillBars(); // designer request (2026-07-16): drop any bar for a destroyed garbage can
           }
         }
+      }
+      // B13-18 (Bugstofix.txt): the completed cleanup ALSO clears every other matching mess within
+      // tuning.cleanup.radiusMeters — runtime accident instances (registry) and designer-placed
+      // transients (buy-mode destroy path). Completion-only by construction (this whole branch is
+      // guarded by `completed`); the primary target keeps its own carry/despawn semantics above.
+      const cleanupRadius = data.tuning.cleanup?.radiusMeters ?? 0;
+      if (cleanupRadius > 0) {
+        const center: [number, number] = [sim.position.x, sim.position.z];
+        let removed = accidents.cleanupWithinRadius(center, cleanupRadius, a.action.id, a.target);
+        for (const object of [...world.children]) {
+          if (object === a.target || !object.visible) continue;
+          const placedDef = data.assets.assets.find((x) => x.id === object.userData.assetId);
+          if (!placedDef || placedDef.category !== 'transient') continue;
+          if (!shouldRemovePlacedOnCleanup(true, a.action.id, placedDef.clearedBy)) continue;
+          if (Math.hypot(object.position.x - center[0], object.position.z - center[1]) > cleanupRadius) continue;
+          const inst = buyMode.instanceForObject(object);
+          if (inst) { buyMode.destroyInstance(inst); removed += 1; }
+        }
+        if (removed > 0) { rebakeNav(); applyEnvironment(); garbage.syncFillBars(); }
       }
     } else if (def && !a.action.duration) {
       accidents.rollFor(a.target, def, buildEvalContext(), simClockSeconds);
@@ -2200,6 +2235,7 @@ async function start(initialLoadSlotId?: string) {
       peeState = null;
       angrySleepState = null;
       angryShutdownActive = false;
+      resumeSleep = null;
       for (const item of [...food.all]) food.discard(item.key);
       accidents.restore({ instances: [], seq: accidents.serialize().seq, destroyedBase: [], spreadRolled: [] });
       buyMode.restore({ additions: [], overrides: [], seq: 0 });
@@ -2353,6 +2389,7 @@ async function start(initialLoadSlotId?: string) {
         peeState = null;
         angrySleepState = null;
         angryShutdownActive = false;
+        resumeSleep = null;
         pendingVisitNpcId = null;
         foodTransitioning = false;
         returnTransitPending = false;
@@ -2687,6 +2724,8 @@ async function start(initialLoadSlotId?: string) {
           angrySleepState = null; // sleep ended some other way (player order, interruption)
         } else if (isDurationComplete(angrySleepState.elapsed, angrySleepState.totalSeconds)) {
           const reason = sleepDecisionAt([sim.position.x, sim.position.z]).reason;
+          const interrupted = agent.current;
+          if (interrupted) resumeSleep = { action: interrupted.action, target: interrupted.target }; // resume after the chain
           agent.stopAction(false);
           const madSeconds = data.tuning.ambience?.angryReactSeconds ?? 2;
           autonomy.forceCooldown(madSeconds + 4); // keep autonomy out until the turn-off chain is underway
@@ -2697,7 +2736,8 @@ async function start(initialLoadSlotId?: string) {
       } else if (isDurationComplete(angrySleepState.elapsed, angrySleepState.totalSeconds)) {
         angrySleepState = null;
         angryShutdownActive = orderNextAmbienceShutdown();
-        if (!angryShutdownActive) anim?.play('idle');
+        // Blockers already quiet (e.g. auto-off during the mad reaction) — go straight back to bed.
+        if (!angryShutdownActive && !tryResumeSleep()) anim?.play('idle');
       }
     }
     // doors advance on the same sim time as the animation mixer (pause freezes them mid-swing,

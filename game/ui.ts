@@ -511,6 +511,8 @@ const CSS = `
 `;
 
 export class Hud {
+  /** Shared 2D context for measuring action-menu labels (adaptive button width). */
+  static menuMeasureCtx: CanvasRenderingContext2D | null | undefined;
   private needsPanel: HTMLElement;
   private skillsPanel: HTMLElement;
   private menu: HTMLElement;
@@ -988,6 +990,25 @@ export class Hud {
       const value = Number.parseFloat(rootStyle.getPropertyValue(name));
       return Number.isFinite(value) ? value : fallback;
     };
+    // Bugstofix (2026-07-19): long action names must widen the buttons instead of overflowing.
+    // The menu is display:none while closed, so measure labels with a canvas using the themed
+    // font; the themed width stays the MINIMUM and the widest label (plus padding) can grow it,
+    // capped so the radial layout still fits a phone screen.
+    const themedWidth = cssNumber('--theme-action-menu-width', 116);
+    const paddingX = cssNumber('--theme-action-menu-padding-x', 10);
+    const fontPx = cssNumber('--theme-action-menu-font-size', 13);
+    const fontFamily = rootStyle.getPropertyValue('--theme-action-menu-font-family').trim()
+      || rootStyle.getPropertyValue('--theme-font-family').trim() || 'system-ui, sans-serif';
+    const measure = Hud.menuMeasureCtx ??= document.createElement('canvas').getContext('2d');
+    let neededWidth = themedWidth;
+    if (measure) {
+      measure.font = `${fontPx}px ${fontFamily}`;
+      for (const button of Array.from(this.menu.querySelectorAll('button'))) {
+        neededWidth = Math.max(neededWidth, Math.ceil(measure.measureText(button.textContent ?? '').width) + paddingX * 2 + 6);
+      }
+    }
+    const widthCap = Math.max(themedWidth, Math.min(260, Math.floor(window.innerWidth * 0.44)));
+    const buttonWidth = Math.min(neededWidth, widthCap);
     const layout = layoutContextMenu(
       screen ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 },
       actions.length + 1,
@@ -995,7 +1016,7 @@ export class Hud {
       readSafeAreaInsets(),
       {
         marginPx: cssNumber('--theme-action-menu-margin', 0),
-        buttonWidthPx: cssNumber('--theme-action-menu-width', 116),
+        buttonWidthPx: buttonWidth,
         buttonHeightPx: cssNumber('--theme-action-menu-height', 48),
         centerRadiusPx: cssNumber('--theme-action-menu-center-radius', 106),
       },

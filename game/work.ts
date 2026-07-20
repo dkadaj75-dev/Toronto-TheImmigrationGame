@@ -130,11 +130,21 @@ export function promotionChancePercent(job: JobDef, rawLevel: number, happiness:
   return Math.min(100, Math.max(0, base * happyScale * tunedFactor));
 }
 
+/** B13-19: the sparse Condition gating promotion INTO the next level (levels[from+1]), or
+ *  undefined when the ladder ends or the level has none. The CALLER evaluates it (quests.ts
+ *  evaluate + live EvalContext) — this module stays free of a quests.ts import. */
+export function promotionRequirementsFor(job: JobDef, rawLevel: number): JobDef['requirements'] | undefined {
+  const next = job.levels?.[jobLevelIndex(job, rawLevel) + 1];
+  return next?.requirements;
+}
+
 export function rollForPromotion(
   job: JobDef, rawLevel: number, happiness: number, factor = 1, rng: () => number = Math.random,
+  requirementsMet = true,
 ): PromotionResult {
   const fromLevel = jobLevelIndex(job, rawLevel);
-  const chancePercent = promotionChancePercent(job, fromLevel, happiness, factor);
+  // B13-19: unmet next-level requirements zero the roll — the chance/happiness math never runs.
+  const chancePercent = requirementsMet ? promotionChancePercent(job, fromLevel, happiness, factor) : 0;
   const rawRoll = rng();
   const roll = Number.isFinite(rawRoll) ? Math.min(0.999999999999, Math.max(0, rawRoll)) : 1;
   const promoted = chancePercent > 0 && roll * 100 < chancePercent;
@@ -401,8 +411,8 @@ export class WorkTracker {
   }
 
   /** Called only by main.ts after a returned/completed shift; updates the serializable per-job map. */
-  rollPromotion(job: JobDef, happiness: number, factor = 1, rng: () => number = Math.random): PromotionResult {
-    const result = rollForPromotion(job, this.getJobLevel(job.id), happiness, factor, rng);
+  rollPromotion(job: JobDef, happiness: number, factor = 1, rng: () => number = Math.random, requirementsMet = true): PromotionResult {
+    const result = rollForPromotion(job, this.getJobLevel(job.id), happiness, factor, rng, requirementsMet);
     if (result.promoted) this.state.jobLevels[job.id] = result.toLevel;
     return result;
   }

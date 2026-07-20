@@ -13,6 +13,8 @@ import {
   isLeaveForWorkAvailable,
   isWithinDepartureWindow,
   isWithinWorkHours,
+  promotionRequirementsFor,
+  rollForPromotion,
   shouldStartVisaGrace,
   weekdayIndex,
   weekdayName,
@@ -244,6 +246,21 @@ console.log('work.test - B13-11 scheduled attendance pipeline');
   const wo = new WorkTracker();
   wo.syncJob(warnOnly, { day: 1, hour: 8 });
   for (let i = 0; i < 5; i++) check(`warn-only job never fires (${i})`, wo.recordShiftMood(warnOnly, 0)[0]?.type === 'unhappy_shift');
+}
+
+// --- B13-19: promotion requirements gate
+{
+  const ladder: JobDef = { ...dayJob, id: 'ladder', levels: [
+    { suffix: 'I', payPerShift: 100, promoteChancePercent: 100 },
+    { suffix: 'II', payPerShift: 150, promoteChancePercent: 0, requirements: { all: [{ var: 'skills.cooking', gte: 5 }] } },
+  ] };
+  check('requirements surface for the NEXT level', JSON.stringify(promotionRequirementsFor(ladder, 0)) === JSON.stringify({ all: [{ var: 'skills.cooking', gte: 5 }] }));
+  check('ladder end has no requirements', promotionRequirementsFor(ladder, 1) === undefined);
+  const met = rollForPromotion(ladder, 0, 100, 1, () => 0, true);
+  const unmet = rollForPromotion(ladder, 0, 100, 1, () => 0, false);
+  check('met requirements promote at 100%', met.promoted === true);
+  check('unmet requirements zero the roll', unmet.promoted === false && unmet.chancePercent === 0);
+  check('default (no requirements arg) keeps old behavior', rollForPromotion(ladder, 0, 100, 1, () => 0).promoted === true);
 }
 
 if (failures > 0) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }

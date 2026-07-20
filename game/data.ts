@@ -461,7 +461,10 @@ export interface JobDef {
   /** B13-11 sparse weekly schedule. Absent means every day; entries may be day indices or names. */
   workDays?: Array<number | string>;
 }
-export interface JobLevelDef { suffix: string; payPerShift: number; promoteChancePercent: number; }
+/** B13-19: `requirements` (sparse) gate promotion INTO this level — the same quest-namespace
+ *  Condition jobs/visas use (skills, happiness, vars…), evaluated when the shift-end roll fires;
+ *  unmet requirements skip the roll entirely. Chance/happiness scaling unchanged. */
+export interface JobLevelDef { suffix: string; payPerShift: number; promoteChancePercent: number; requirements?: Condition; }
 export interface JobsData { jobs: JobDef[]; }
 
 /** B6-5 happiness formula. Every component resolves through quests.ts's namespace, is normalized
@@ -705,7 +708,13 @@ export interface TuningData {
      *  'select' animation holds before the sim walks off to turn the blockers off. */
     angryWakeSeconds?: number;
     angryReactSeconds?: number;
+    /** Bugstofix (2026-07-19): after the angry turn-off chain quiets the home, the sim walks back
+     *  and resumes the interrupted sleep. Only literal false disables. */
+    resumeSleepAfterShutdown?: boolean;
   };
+  /** B13-18 radius cleanup: a COMPLETED clean/sweep/mop also clears every other matching mess
+   *  within this many meters of the sim (same clearedBy rules). Absent/0 = only the tapped one. */
+  cleanup?: { radiusMeters?: number };
   economy: { startingFunds: number; currencyName: string };
   /** B13-8 Buy Mode actual-asset ghost. Opacity is clamped to 0..1; absent defaults to 0.5. */
   buy?: { ghostOpacity?: number };

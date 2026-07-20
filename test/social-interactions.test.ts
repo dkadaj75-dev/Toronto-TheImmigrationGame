@@ -225,4 +225,18 @@ console.log('social-interactions.test — shared runtime persistence');
     restored.relationships.get('amara') === 33 && restored.phone.remainingCooldown('amara', 'text', 130) === 50);
 }
 
+// --- multi-target social interactions (designer request 2026-07-19)
+{
+  const { socialTargetList } = await import('../game/social-interactions');
+  check('single legacy targetAsset lists once', JSON.stringify(socialTargetList({ targetAsset: 'bed' })) === '["bed"]');
+  check('targetAssets merge after the legacy field, deduped/trimmed',
+    JSON.stringify(socialTargetList({ targetAsset: 'bed', targetAssets: [' sofa ', 'bed', ''] })) === '["bed","sofa"]');
+  check('no targets means an empty list (standing pair)', socialTargetList({}).length === 0);
+  check('any listed entry matches by id or category',
+    matchesSocialTarget({ id: 'x', targetAssets: ['seating'] } as never, { id: 'sofa', category: 'seating' })
+    && matchesSocialTarget({ id: 'x', targetAsset: 'bed', targetAssets: ['sofa'] } as never, { id: 'sofa', category: 'seating' })
+    && !matchesSocialTarget({ id: 'x', targetAssets: ['tv'] } as never, { id: 'sofa', category: 'seating' }));
+  check('routing pairs when only targetAssets is set', socialRoutingDecision({ id: 'x', targetAssets: ['bed'] } as never).paired === true);
+}
+
 console.log(`social-interactions.test — ${assertions} assertions passed`);

@@ -21,28 +21,10 @@
 // re-export these when the runtime wiring slice needs them.
 // ---------------------------------------------------------------------------------------------------
 
-/** One non-player Sim (data/npcs.json). `personality` uses the SAME trait vocabulary as
- *  data/stats.json's `personality` family — never a duplicated list. */
-export interface NpcDef {
-  id: string;
-  name: string;
-  portrait: string;
-  /** DEFAULT: the shared player rig (tintable). A per-NPC GLB is optional/designer-provided later. */
-  mesh: string;
-  /** cheap visual differentiation when sharing the rig */
-  tint: string;
-  /** optional clip-map override; null/absent = tuning.character.clipMap */
-  clipMap?: string | null;
-  /** SAME trait ids as data/stats.json personality (e.g. cleanliness, intelligence). */
-  personality: Record<string, number>;
-  /** window (hours, 0..24) during which invites/texts/calls can land */
-  availableHours: { from: number; to: number };
-  /** how long they stay when invited (sim-time hours) */
-  visitDurationHours: number;
-  /** sim-time minutes between an accepted invite and door arrival */
-  arrivalDelayMinutes: number;
-}
-export interface NpcsData { npcs: NpcDef[]; }
+// AUDIT overlap 29 (2026-07-20): the NpcDef/NpcsData interfaces that used to live here were a
+// stale, never-imported duplicate of game/npc.ts's runtime truth (clipMap had drifted to `string`
+// vs the real Record<state, clip>, and visitorActions was missing) — deleted. game/npc.ts is the
+// single owner; import NPC types from there.
 
 /** A named relationship status (Sims-style). `atLeast` is the INCLUSIVE lower score bound. */
 export interface RelationshipLevel { id: string; atLeast: number; }
@@ -79,6 +61,9 @@ export interface InteractionDef {
   npcAnimation?: string;
   /** Sparse asset id OR category. Present routes both Sims to one matching live asset. */
   targetAsset?: string;
+  /** Designer request (2026-07-19): MULTIPLE acceptable target ids/categories — any one placed
+   *  match qualifies (nearest wins). Superset of targetAsset; both merge via socialTargetList. */
+  targetAssets?: string[];
   /** Sparse action loop, using the same lifecycle as ActionDef.sound. */
   sound?: string;
   durationSeconds?: number;
