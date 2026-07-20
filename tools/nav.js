@@ -42,6 +42,7 @@
       { id: 'behavior', label: 'Behavior', href: '/tools/behavior.html' },
       { id: 'social', label: 'Social', href: '/tools/social.html' },
       { id: 'theme', label: 'Theme', href: '/tools/theme.html' },
+      { id: 'system', label: 'System', href: '/tools/system.html' },
     ];
 
     function currentToolId() {

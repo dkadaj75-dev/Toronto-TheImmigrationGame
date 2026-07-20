@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Condo Life — System Editor</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #141a28; color: #dfe6f2; }
+  header { position: sticky; top: 0; z-index: 5; display: flex; gap: 10px; align-items: center; padding: 10px 14px;
+    background: #0f1420ee; backdrop-filter: blur(6px); border-bottom: 1px solid #26304a; }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; }
+  header .grow { flex: 1; }
+  button { border: 0; border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; background: #2c3a58; color: #dfe6f2; }
+  button.primary { background: #3d6fd2; color: #fff; }
+  button.danger { background: #7a3040; }
+  button.mini { padding: 4px 9px; font-size: 11px; }
+  button:disabled { opacity: .45; cursor: default; }
+  #status { min-width: 170px; text-align: right; font-size: 12px; color: #8fa3c8; }
+  #status.ok { color: #7fd98a; } #status.err { color: #e58a8a; }
+  main { max-width: 1100px; margin: 0 auto; padding: 14px; }
+  section { margin: 14px 0; overflow: hidden; background: #1a2133; border: 1px solid #26304a; border-radius: 12px; }
+  section > h2 { display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 14px; font-size: 13px;
+    letter-spacing: .08em; text-transform: uppercase; color: #93a3c0; background: #1f2740; }
+  section > h2 .file { margin-left: auto; font-size: 11px; text-transform: none; letter-spacing: 0; color: #6f7fa3; }
+  .body { padding: 14px; }
+  .hint { color: #8fa3c8; font-size: 12px; margin: 0 0 12px; }
+  .frow { display: grid; grid-template-columns: 230px 1fr; gap: 10px; align-items: center; padding: 5px 0; }
+  .frow label { font-size: 13px; }
+  input, select, textarea { width: 100%; padding: 6px 8px; color: #dfe6f2; background: #10182a;
+    border: 1px solid #2c3a58; border-radius: 6px; font: 13px inherit; }
+  input[type=checkbox] { width: 16px; height: 16px; }
+  textarea { min-height: 64px; resize: vertical; }
+  .rowlist { display: grid; gap: 6px; margin: 8px 0; }
+  .menu-row { display: grid; grid-template-columns: 1fr 1.4fr auto auto auto auto; gap: 7px; align-items: center; }
+  .option-row { display: grid; grid-template-columns: 1fr 1.3fr .8fr repeat(4, .6fr) auto; gap: 6px; align-items: center; }
+  .event-row { display: grid; grid-template-columns: 1.3fr .8fr 1.2fr 1fr 1.4fr auto; gap: 6px; align-items: center; }
+  .tier-row { display: grid; grid-template-columns: .7fr auto auto .9fr 1fr; gap: 10px; align-items: center; }
+  .list-head { font-size: 11px; color: #6f7fa3; text-transform: uppercase; letter-spacing: .05em; }
+  .checkline { display: flex; gap: 7px; align-items: center; font-size: 12px; }
+  .anchor-picker { display: inline-flex; gap: 4px; }
+  .anchor-picker button { padding: 5px 8px; font-size: 11px; background: #1c2940; }
+  .anchor-picker button.selected { background: #356cb9; }
+  .warn { color: #e0a44a; font-size: 12px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛠 System Editor</h1>
+  <span class="grow"></span>
+  <button id="save" class="primary" disabled>Save changes</button>
+  <span id="status">loading…</span>
+</header>
+<main>
+  <section data-file="title.json">
+    <h2>Title screen <span class="file">title.json</span></h2>
+    <div class="body" id="titleBody"></div>
+  </section>
+  <section data-file="notifications.json">
+    <h2>Notifications <span class="file">notifications.json</span></h2>
+    <div class="body" id="notificationsBody"></div>
+  </section>
+  <section data-file="save.json">
+    <h2>Save system <span class="file">save.json</span></h2>
+    <div class="body" id="saveBody"></div>
+  </section>
+</main>
+
+<script>
+// System Editor (AUDIT no-tool-field 54/55/56/57): title.json + notifications.json + save.json.
+// Same architecture as every tool (PROJECT_CONTEXT §5): plain inline script exposed as
+// window.SystemEditor for jsdom, whole-file PUTs, sparse fields pruned, Windows paths normalized.
+window.SystemEditor = (() => {
+'use strict';
+const API = '/api/data/';
+const state = { title: null, notifications: null, save: null, dirty: new Set() };
+const $ = (id) => document.getElementById(id);
+
+function setStatus(msg, cls = '') { const s = $('status'); s.textContent = msg; s.className = cls; }
+function markDirty(file) { state.dirty.add(file); $('save').disabled = false; setStatus('unsaved changes'); }
+
+// Shared public-path normalization (AGENTS.md pitfall): reduce a pasted Windows path to the
+// public/-relative form the game's publicUrl/normalizeMeshUrl accept ("textures/Title1.jpg").
+function normPublicPath(v) {
+  // AUDIT overlap 36: shared tools/pathnorm.js is the primary; the body below is only the jsdom fallback.
+  if (window.PathNorm) return window.PathNorm.publicRelative(v);
+  let s = String(v ?? '').trim().replace(/\\/g, '/');
+  const i = s.toLowerCase().lastIndexOf('/public/');
+  if (i >= 0) s = s.slice(i + '/public/'.length);
+  return s.replace(/^\/+/, '');
+}
+
+function frow(label, input) {
+  const r = document.createElement('div'); r.className = 'frow';
+  const l = document.createElement('label'); l.textContent = label;
+  r.append(l, input); return r;
+}
+function textInput(get, set, path, placeholder = '') {
+  const i = document.createElement('input'); i.type = 'text'; i.value = get() ?? ''; i.placeholder = placeholder;
+  i.dataset.path = path;
+  i.addEventListener('input', () => set(i.value));
+  return i;
+}
+function pathInput(get, set, path, placeholder = '') {
+  return textInput(get, (v) => set(normPublicPath(v)), path, placeholder);
+}
+function numInput(get, set, path, opts = {}) {
+  const i = document.createElement('input'); i.type = 'number'; i.step = opts.step ?? 'any';
+  if (opts.min !== undefined) i.min = opts.min;
+  i.value = get() ?? ''; i.dataset.path = path;
+  i.addEventListener('input', () => set(i.value === '' ? undefined : Number(i.value)));
+  return i;
+}
+function checkInput(get, set, path) {
+  const i = document.createElement('input'); i.type = 'checkbox'; i.checked = !!get(); i.dataset.path = path;
+  i.addEventListener('change', () => set(i.checked));
+  return i;
+}
+function selectInput(options, get, set, path) {
+  const sel = document.createElement('select'); sel.dataset.path = path;
+  for (const [value, label] of options) { const o = document.createElement('option'); o.value = value; o.textContent = label; sel.appendChild(o); }
+  sel.value = get();
+  sel.addEventListener('change', () => set(sel.value));
+  return sel;
+}
+function anchorPicker(get, set, path) {
+  const wrap = document.createElement('div'); wrap.className = 'anchor-picker'; wrap.dataset.path = path;
+  for (const anchor of ['tl', 'tc', 'tr', 'bl', 'bc', 'br']) {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = anchor.toUpperCase(); b.dataset.anchor = anchor;
+    if (get() === anchor) b.className = 'selected';
+    b.addEventListener('click', () => { set(anchor); for (const sib of wrap.children) sib.className = sib === b ? 'selected' : ''; });
+    wrap.appendChild(b);
+  }
+  return wrap;
+}
+
+// ------------------------------------------------------------------ title.json
+function renderTitle() {
+  const t = state.title, root = $('titleBody');
+  root.innerHTML = '<p class="hint">The main title screen (T-track as-built, PROJECT_CONTEXT §7.x): logo, background/music, menu entries, options panel (shared with the in-game system menu), credits. Styling itself lives in theme.json components.titleScreen (Theme Editor).</p>';
+  const d = (file) => () => markDirty(file);
+  root.appendChild(frow('logo text (blank = game name)', textInput(() => t.logoText, (v) => { t.logoText = v; markDirty('title.json'); }, 'title.logoText')));
+  root.appendChild(frow('logo image (blank = text logo)', pathInput(() => t.logoImage, (v) => { t.logoImage = v || null; markDirty('title.json'); }, 'title.logoImage', 'textures/logo.png')));
+  root.appendChild(frow('background image', pathInput(() => t.background, (v) => { t.background = v || null; markDirty('title.json'); }, 'title.background', 'textures/Title1.jpg')));
+  root.appendChild(frow('title music (loops until a choice)', pathInput(() => t.music, (v) => { t.music = v || null; markDirty('title.json'); }, 'title.music', 'sounds/music/title.mp3')));
+  root.appendChild(frow('hide the centered card (buttons float free)', checkInput(() => t.hideCard, (v) => { if (v) t.hideCard = true; else delete t.hideCard; markDirty('title.json'); }, 'title.hideCard')));
+  const layout = (key, label) => {
+    const item = () => t[key] ?? {};
+    const ensure = () => (t[key] ??= { anchor: 'bc', offsetX: 0, offsetY: 0 });
+    const wrap = document.createElement('div'); wrap.style.display = 'flex'; wrap.style.gap = '8px'; wrap.style.alignItems = 'center';
+    wrap.appendChild(anchorPicker(() => item().anchor, (v) => { ensure().anchor = v; markDirty('title.json'); }, `title.${key}.anchor`));
+    const ox = numInput(() => item().offsetX, (v) => { ensure().offsetX = v ?? 0; markDirty('title.json'); }, `title.${key}.offsetX`); ox.style.width = '80px';
+    const oy = numInput(() => item().offsetY, (v) => { ensure().offsetY = v ?? 0; markDirty('title.json'); }, `title.${key}.offsetY`); oy.style.width = '80px';
+    wrap.append(ox, oy);
+    root.appendChild(frow(label, wrap));
+  };
+  layout('titleLayout', 'logo block anchor + offset X/Y');
+  layout('menuLayout', 'menu block anchor + offset X/Y');
+
+  const menuHead = document.createElement('div'); menuHead.className = 'list-head'; menuHead.textContent = 'Menu entries (id · label · enabled · order)';
+  root.appendChild(menuHead);
+  const menuList = document.createElement('div'); menuList.className = 'rowlist';
+  (t.menu ?? []).forEach((entry, index) => {
+    const row = document.createElement('div'); row.className = 'menu-row'; row.dataset.menuIndex = String(index);
+    row.appendChild(textInput(() => entry.id, (v) => { entry.id = v.trim(); markDirty('title.json'); }, `title.menu.${index}.id`, 'new / load / options'));
+    row.appendChild(textInput(() => entry.label, (v) => { entry.label = v; markDirty('title.json'); }, `title.menu.${index}.label`));
+    const enabled = document.createElement('label'); enabled.className = 'checkline';
+    enabled.append(checkInput(() => entry.enabled !== false, (v) => { if (v) delete entry.enabled; else entry.enabled = false; markDirty('title.json'); }, `title.menu.${index}.enabled`), document.createTextNode('on'));
+    row.appendChild(enabled);
+    const up = document.createElement('button'); up.className = 'mini'; up.textContent = '↑'; up.disabled = index === 0;
+    up.addEventListener('click', () => { [t.menu[index - 1], t.menu[index]] = [t.menu[index], t.menu[index - 1]]; markDirty('title.json'); renderTitle(); });
+    const down = document.createElement('button'); down.className = 'mini'; down.textContent = '↓'; down.disabled = index === t.menu.length - 1;
+    down.addEventListener('click', () => { [t.menu[index + 1], t.menu[index]] = [t.menu[index], t.menu[index + 1]]; markDirty('title.json'); renderTitle(); });
+    const del = document.createElement('button'); del.className = 'danger mini'; del.dataset.action = 'remove-menu'; del.textContent = '✕';
+    del.addEventListener('click', () => { t.menu.splice(index, 1); markDirty('title.json'); renderTitle(); });
+    row.append(up, down, del);
+    menuList.appendChild(row);
+  });
+  root.appendChild(menuList);
+  const addMenu = document.createElement('button'); addMenu.className = 'mini'; addMenu.id = 'addMenuEntry'; addMenu.textContent = '+ Add menu entry';
+  addMenu.addEventListener('click', () => { (t.menu ??= []).push({ id: `entry_${t.menu.length + 1}`, label: 'New entry' }); markDirty('title.json'); renderTitle(); });
+  root.appendChild(addMenu);
+  const menuWarn = document.createElement('div'); menuWarn.className = 'warn';
+  const known = new Set(['new', 'load', 'options']);
+  const unknown = (t.menu ?? []).filter((entry) => !known.has(entry.id)).map((entry) => entry.id);
+  menuWarn.textContent = unknown.length ? `⚠ ids the game does not handle yet (button will render but do nothing): ${unknown.join(', ')}` : '';
+  if (unknown.length) root.appendChild(menuWarn);
+
+  const optHead = document.createElement('div'); optHead.className = 'list-head'; optHead.style.marginTop = '12px';
+  optHead.textContent = 'Options panel (id · label · type · min · max · step · default)';
+  root.appendChild(optHead);
+  const optList = document.createElement('div'); optList.className = 'rowlist';
+  (t.options ?? []).forEach((opt, index) => {
+    const row = document.createElement('div'); row.className = 'option-row'; row.dataset.optionIndex = String(index);
+    row.appendChild(textInput(() => opt.id, (v) => { opt.id = v.trim(); markDirty('title.json'); }, `title.options.${index}.id`));
+    row.appendChild(textInput(() => opt.label, (v) => { opt.label = v; markDirty('title.json'); }, `title.options.${index}.label`));
+    row.appendChild(selectInput([['slider', 'slider'], ['toggle', 'toggle']], () => opt.type, (v) => {
+      opt.type = v;
+      opt.default = v === 'toggle' ? !!opt.default : Number(opt.default) || 0;
+      markDirty('title.json'); renderTitle();
+    }, `title.options.${index}.type`));
+    for (const key of ['min', 'max', 'step']) {
+      const el = numInput(() => opt[key], (v) => { if (v === undefined) delete opt[key]; else opt[key] = v; markDirty('title.json'); }, `title.options.${index}.${key}`);
+      el.disabled = opt.type !== 'slider';
+      row.appendChild(el);
+    }
+    if (opt.type === 'toggle') {
+      row.appendChild(checkInput(() => opt.default, (v) => { opt.default = v; markDirty('title.json'); }, `title.options.${index}.default`));
+    } else {
+      row.appendChild(numInput(() => opt.default, (v) => { opt.default = v ?? 0; markDirty('title.json'); }, `title.options.${index}.default`));
+    }
+    const del = document.createElement('button'); del.className = 'danger mini'; del.dataset.action = 'remove-option'; del.textContent = '✕';
+    del.addEventListener('click', () => { t.options.splice(index, 1); markDirty('title.json'); renderTitle(); });
+    row.appendChild(del);
+    optList.appendChild(row);
+  });
+  root.appendChild(optList);
+  const addOpt = document.createElement('button'); addOpt.className = 'mini'; addOpt.id = 'addOptionEntry'; addOpt.textContent = '+ Add option';
+  addOpt.addEventListener('click', () => { (t.options ??= []).push({ id: `option_${t.options.length + 1}`, type: 'slider', label: 'New option', min: 0, max: 1, step: 0.05, default: 1 }); markDirty('title.json'); renderTitle(); });
+  root.appendChild(addOpt);
+
+  const credits = document.createElement('textarea'); credits.dataset.path = 'title.credits';
+  credits.value = t.credits ?? ''; credits.placeholder = 'Credits text shown under the menu (blank = none)';
+  credits.addEventListener('input', () => { t.credits = credits.value || ''; markDirty('title.json'); });
+  root.appendChild(frow('credits', credits));
+}
+
+// ------------------------------------------------------------------ notifications.json
+const TIER_IDS = ['modal', 'card', 'passive'];
+function renderNotifications() {
+  const n = state.notifications, root = $('notificationsBody');
+  root.innerHTML = '<p class="hint">Reward-loop notification behavior (G-track). Tiers: modal pauses + needs OK, card stacks with auto-expire, passive is quiet. Every game event posts through one of the event ids below — the game only knows the id, everything else (tier/icon/sound/action) is yours. Event icons are also editable on the Theme Editor.</p>';
+  root.appendChild(frow('stack cap (visible cards/passives)', numInput(() => n.stackCap, (v) => { n.stackCap = v ?? 0; markDirty('notifications.json'); }, 'notifications.stackCap', { min: 0, step: 1 })));
+
+  const tierHead = document.createElement('div'); tierHead.className = 'list-head'; tierHead.textContent = 'Tiers (pauses · needs OK · auto-expire s · default sound)';
+  root.appendChild(tierHead);
+  const tierList = document.createElement('div'); tierList.className = 'rowlist';
+  for (const tierId of TIER_IDS) {
+    const cfg = (n.tiers[tierId] ??= {});
+    const row = document.createElement('div'); row.className = 'tier-row'; row.dataset.tier = tierId;
+    const name = document.createElement('strong'); name.textContent = tierId; row.appendChild(name);
+    const pauses = document.createElement('label'); pauses.className = 'checkline';
+    pauses.append(checkInput(() => cfg.pausesGame, (v) => { if (v) cfg.pausesGame = true; else delete cfg.pausesGame; markDirty('notifications.json'); }, `notifications.tiers.${tierId}.pausesGame`), document.createTextNode('pauses'));
+    const ok = document.createElement('label'); ok.className = 'checkline';
+    ok.append(checkInput(() => cfg.requiresOk, (v) => { if (v) cfg.requiresOk = true; else delete cfg.requiresOk; markDirty('notifications.json'); }, `notifications.tiers.${tierId}.requiresOk`), document.createTextNode('needs OK'));
+    row.append(pauses, ok);
+    row.appendChild(numInput(() => cfg.autoExpireSeconds, (v) => { if (v === undefined) delete cfg.autoExpireSeconds; else cfg.autoExpireSeconds = v; markDirty('notifications.json'); }, `notifications.tiers.${tierId}.autoExpireSeconds`, { min: 0 }));
+    row.appendChild(textInput(() => cfg.sound, (v) => { const s = v.trim(); if (s) cfg.sound = s; else delete cfg.sound; markDirty('notifications.json'); }, `notifications.tiers.${tierId}.sound`, 'tuned sfx id or blank'));
+    tierList.appendChild(row);
+  }
+  root.appendChild(tierList);
+
+  const evHead = document.createElement('div'); evHead.className = 'list-head'; evHead.style.marginTop = '12px';
+  evHead.textContent = 'Events (id · tier · icon · sound · action type/tab/label)';
+  root.appendChild(evHead);
+  const evList = document.createElement('div'); evList.className = 'rowlist';
+  for (const eventId of Object.keys(n.events)) {
+    const ev = n.events[eventId];
+    const row = document.createElement('div'); row.className = 'event-row'; row.dataset.eventId = eventId;
+    const idEl = document.createElement('code'); idEl.textContent = eventId; idEl.style.fontSize = '12px'; row.appendChild(idEl);
+    row.appendChild(selectInput(TIER_IDS.map((tier) => [tier, tier]), () => ev.tier, (v) => { ev.tier = v; markDirty('notifications.json'); }, `notifications.events.${eventId}.tier`));
+    row.appendChild(pathInput(() => ev.icon, (v) => { if (v) ev.icon = v; else delete ev.icon; markDirty('notifications.json'); }, `notifications.events.${eventId}.icon`, 'icons/….png'));
+    row.appendChild(textInput(() => ev.sound, (v) => { const s = v.trim(); if (s) ev.sound = s; else delete ev.sound; markDirty('notifications.json'); }, `notifications.events.${eventId}.sound`, 'blank = tier sound'));
+    // sparse action: "type:tab:label" compact editor (e.g. "phoneTab:contacts:Contacts"); blank clears.
+    const actionText = ev.action ? [ev.action.type, ev.action.tab ?? '', ev.action.label ?? ''].join(':') : '';
+    row.appendChild(textInput(() => actionText, (v) => {
+      const [type, tab, label] = v.split(':').map((part) => part.trim());
+      if (type) { ev.action = { type, label: label || type }; if (tab) ev.action.tab = tab; }
+      else delete ev.action;
+      markDirty('notifications.json');
+    }, `notifications.events.${eventId}.action`, 'type:tab:label (blank = none)'));
+    const del = document.createElement('button'); del.className = 'danger mini'; del.dataset.action = 'remove-event'; del.textContent = '✕';
+    del.addEventListener('click', () => { delete n.events[eventId]; markDirty('notifications.json'); renderNotifications(); });
+    row.appendChild(del);
+    evList.appendChild(row);
+  }
+  root.appendChild(evList);
+  const addWrap = document.createElement('div'); addWrap.style.display = 'flex'; addWrap.style.gap = '7px'; addWrap.style.marginTop = '7px';
+  const newId = document.createElement('input'); newId.id = 'newEventId'; newId.placeholder = 'new event id (the game must post it for it to fire)'; newId.style.maxWidth = '340px';
+  const addEv = document.createElement('button'); addEv.className = 'mini'; addEv.id = 'addEvent'; addEv.textContent = '+ Add event';
+  addEv.addEventListener('click', () => {
+    const id = newId.value.trim();
+    if (!id || n.events[id]) return;
+    n.events[id] = { tier: 'card' };
+    markDirty('notifications.json'); renderNotifications();
+  });
+  addWrap.append(newId, addEv);
+  root.appendChild(addWrap);
+  const evWarn = document.createElement('div'); evWarn.className = 'warn';
+  evWarn.textContent = '⚠ Deleting an event the game still posts falls back to a plain passive notification; adding an id does nothing until game code posts it.';
+  root.appendChild(evWarn);
+}
+
+// ------------------------------------------------------------------ save.json
+const KNOWN_AUTOSAVE_EVENTS = ['moveIn', 'dayRollover'];
+function renderSave() {
+  const s = state.save, root = $('saveBody');
+  root.innerHTML = '<p class="hint">Save-system settings (V-track). Slots are localStorage; the autosave slot is extra and overwritten on interval/events.</p>';
+  root.appendChild(frow('manual save slots', numInput(() => s.slots, (v) => { s.slots = Math.max(1, Math.floor(v ?? 1)); markDirty('save.json'); }, 'save.slots', { min: 1, step: 1 })));
+  root.appendChild(frow('autosave slot id', textInput(() => s.autosaveSlotId, (v) => { s.autosaveSlotId = v.trim() || 'autosave'; markDirty('save.json'); }, 'save.autosaveSlotId')));
+  root.appendChild(frow('autosave interval (sim hours)', numInput(() => s.autosaveIntervalHours, (v) => { s.autosaveIntervalHours = v ?? 0; markDirty('save.json'); }, 'save.autosaveIntervalHours', { min: 0 })));
+  const events = document.createElement('div'); events.style.display = 'flex'; events.style.gap = '14px';
+  for (const eventId of KNOWN_AUTOSAVE_EVENTS) {
+    const line = document.createElement('label'); line.className = 'checkline';
+    line.append(checkInput(
+      () => (s.autosaveOnEvents ?? []).includes(eventId),
+      (v) => {
+        const list = new Set(s.autosaveOnEvents ?? []);
+        if (v) list.add(eventId); else list.delete(eventId);
+        s.autosaveOnEvents = [...list];
+        markDirty('save.json');
+      }, `save.autosaveOnEvents.${eventId}`), document.createTextNode(eventId));
+    events.appendChild(line);
+  }
+  root.appendChild(frow('autosave on events', events));
+  const prefix = textInput(() => s.storageKeyPrefix, (v) => { s.storageKeyPrefix = v.trim() || 'condo-life-save'; markDirty('save.json'); }, 'save.storageKeyPrefix');
+  root.appendChild(frow('storage key prefix', prefix));
+  const warn = document.createElement('div'); warn.className = 'warn';
+  warn.textContent = '⚠ Changing the storage key prefix ORPHANS every existing save (they stay in the browser under the old prefix but the game will not list them).';
+  root.appendChild(warn);
+}
+
+// ------------------------------------------------------------------ io
+async function load() {
+  setStatus('loading…');
+  try {
+    const [title, notifications, save] = await Promise.all(['title.json', 'notifications.json', 'save.json'].map(async (f) => {
+      const res = await fetch(API + f);
+      if (!res.ok) throw new Error(`${f}: HTTP ${res.status}`);
+      return res.json();
+    }));
+    state.title = title; state.notifications = notifications; state.save = save;
+    state.dirty.clear();
+    renderAll();
+    setStatus('loaded', 'ok');
+  } catch (e) { setStatus(String(e.message || e), 'err'); }
+}
+async function saveAll() {
+  setStatus('saving…');
+  try {
+    const files = { 'title.json': state.title, 'notifications.json': state.notifications, 'save.json': state.save };
+    for (const f of [...state.dirty]) {
+      const res = await fetch(API + f, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(files[f], null, 2) });
+      if (!res.ok) throw new Error(`${f}: HTTP ${res.status}`);
+      state.dirty.delete(f);
+    }
+    $('save').disabled = state.dirty.size === 0;
+    setStatus('saved — title/save apply on next boot; notifications hot-reload', 'ok');
+  } catch (e) { setStatus(String(e.message || e), 'err'); }
+}
+function renderAll() { renderTitle(); renderNotifications(); renderSave(); }
+
+document.getElementById('save').addEventListener('click', saveAll);
+load();
+return { state, load, saveAll, renderAll };
+})();
+</script>
+<script src="/tools/pathnorm.js"></script>
+<script src="/tools/nav.js"></script>
+</body>
+</html>

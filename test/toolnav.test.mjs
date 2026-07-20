@@ -42,7 +42,7 @@ function loadPage(url, bodyHtml) {
   check('no corner button on tool pages', doc.getElementById('condo-toolnav-corner') === null);
 
   const links = [...strip.querySelectorAll('a')];
-  check('all 12 tools listed', links.length === 12, `got ${links.length}`);
+  check('all 13 tools listed', links.length === 13, `got ${links.length}`);
   check('Career tool is listed', links.some((link) => link.textContent === 'Career' && link.getAttribute('href') === '/tools/career.html'));
   check('Finance tool is listed', links.some((link) => link.textContent === 'Finance' && link.getAttribute('href') === '/tools/finance.html'));
   check('Behavior tool is listed', links.some((link) => link.textContent === 'Behavior' && link.getAttribute('href') === '/tools/behavior.html'));
