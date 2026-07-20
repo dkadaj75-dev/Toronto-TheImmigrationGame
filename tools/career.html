@@ -41,6 +41,11 @@
   .frow input[readonly] { color: #6f7fa3; }
   .inline-control { display: flex; align-items: center; gap: 8px; }
   .inline-control input[type=number] { flex: 1; }
+  /* Bugstofix (2026-07-19): needs-cost rows have no label — span the full card width instead of
+     being squeezed into the 210px label column, and let the need select breathe. */
+  .need-cost-row { grid-template-columns: 1fr; }
+  .need-cost-row .inline-control select { flex: 1.4; min-width: 140px; }
+  .need-cost-row .inline-control input[type=number] { min-width: 90px; }
   .weekday-grid { display: grid; grid-template-columns: repeat(7, minmax(58px, 1fr)); gap: 7px; }
   .weekday-check { display: flex; align-items: center; justify-content: center; gap: 5px; padding: 8px 5px;
     background: #10182a; border: 1px solid #2c3a58; border-radius: 8px; font-size: 12px; }
@@ -100,6 +105,7 @@
   </section>
 </main>
 
+<script src="/tools/condition-builder.js"></script>
 <script>
 // Career Editor V4: plain inline script for jsdom. It edits visas.json and jobs.json only;
 // tuning/stats/simstate/quests are read-only references for integrity checks and dropdowns.
@@ -203,125 +209,16 @@ function selectInput(options, value, onChange, path) {
   el.addEventListener('change', () => onChange(el.value)); return el;
 }
 
-// Quest Editor condition builder, adapted with an owner callback so the same renderer edits
-// either visa.requirements or job.requirements. IDs are offered only from reference JSON.
-function isLeafCond(c) { return c != null && typeof c === 'object' && !('all' in c) && !('any' in c); }
-function getLeafOp(leaf) { for (const op of ['gte', 'lte', 'eq', 'neq']) if (op in leaf) return op; return null; }
-function describeVarPath(path) {
-  if (path === 'funds' || path === 'time.hour' || path === 'time.day') return { kind: 'number' };
-  if (path.startsWith('needs.') || path.startsWith('skills.')) return { kind: 'number' };
-  if (path.startsWith('vars.')) {
-    const v = state.simstate.variables.find((x) => x.id === path.slice(5));
-    return { kind: 'var', varType: v ? v.type : 'string' };
-  }
-  if (/^quests\.(.+)\.state$/.test(path)) return { kind: 'queststate' };
-  return { kind: 'unknown' };
-}
-function defaultVarPath() { return state.stats.needs.length ? `needs.${state.stats.needs[0].id}` : 'funds'; }
-function defaultValueFor(path, op, oldValue) {
-  const info = describeVarPath(path);
-  if (op === 'gte' || op === 'lte') return typeof oldValue === 'number' ? oldValue : 0;
-  if (info.kind === 'queststate') return ['locked', 'active', 'done'].includes(oldValue) ? oldValue : 'locked';
-  if (info.kind === 'var') {
-    if (info.varType === 'boolean') return typeof oldValue === 'boolean' ? oldValue : false;
-    if (info.varType === 'number') return typeof oldValue === 'number' ? oldValue : 0;
-    return typeof oldValue === 'string' ? oldValue : '';
-  }
-  return typeof oldValue === 'number' ? oldValue : 0;
-}
-function resetLeaf(leaf, op) {
-  const oldOp = getLeafOp(leaf), oldValue = oldOp ? leaf[oldOp] : undefined;
-  delete leaf.gte; delete leaf.lte; delete leaf.eq; delete leaf.neq;
-  leaf[op] = defaultValueFor(leaf.var, op, oldValue);
-}
-function appendVarOptions(select, current) {
-  const groups = [
-    ['Needs', state.stats.needs.map((x) => [`needs.${x.id}`, x.name])],
-    ['Skills', state.stats.skills.map((x) => [`skills.${x.id}`, x.name])],
-    ['Economy', [['funds', 'Funds'], ['creditScore', 'Credit score']]], ['Mood', [['happiness', 'Happiness']]],
-    ['Time', [['time.hour', 'Hour of day'], ['time.day', 'Day']]],
-    ['Variables', state.simstate.variables.map((x) => [`vars.${x.id}`, x.name])],
-    ['Quests', state.quests.quests.map((x) => [`quests.${x.id}.state`, `${x.name} (state)`])],
-  ];
-  const known = new Set();
-  for (const [label, values] of groups) {
-    if (!values.length) continue;
-    const group = document.createElement('optgroup'); group.label = label;
-    for (const [value, text] of values) { const o = document.createElement('option'); o.value = value; o.textContent = text; group.appendChild(o); known.add(value); }
-    select.appendChild(group);
-  }
-  if (current && !known.has(current)) {
-    const group = document.createElement('optgroup'); group.label = 'Unknown (stale id)';
-    const o = document.createElement('option'); o.value = current; o.textContent = current; group.appendChild(o); select.appendChild(group);
-  }
-  select.value = current;
-}
-function conditionValueInput(path, value, onChange, condPath) {
-  const info = describeVarPath(path); let el;
-  if (info.kind === 'queststate') {
-    el = selectInput([['locked', 'locked'], ['active', 'active'], ['done', 'done']], value, onChange, '');
-  } else if (info.kind === 'var' && info.varType === 'boolean') {
-    el = selectInput([['true', 'true'], ['false', 'false']], String(!!value), (v) => onChange(v === 'true'), '');
-  } else if (info.kind === 'number' || (info.kind === 'var' && info.varType === 'number')) {
-    el = numberInput(value, onChange, '', { emptyValue: 0 });
-  } else {
-    el = textInput(value, onChange, '');
-  }
-  delete el.dataset.path; el.dataset.role = 'value'; el.dataset.condPath = condPath; return el;
-}
-function renderConditionNode(node, path, context) { return isLeafCond(node) ? renderLeaf(node, path, context) : renderGroup(node, path, context); }
-function commitCondition(context) {
-  context.owner.requirements = context.root;
-  markDirty(context.file);
-  renderAll();
-}
-function renderGroup(node, path, context) {
-  const key = 'all' in node ? 'all' : 'any';
-  const box = document.createElement('div'); box.className = 'cond-group'; box.dataset.condPath = path; box.dataset.owner = context.kind;
-  const head = document.createElement('div'); head.className = 'cond-group-head';
-  const combinator = selectInput([['all', 'ALL'], ['any', 'ANY']], key, (next) => {
-    const children = node[key]; delete node.all; delete node.any; node[next] = children; commitCondition(context);
-  }, '');
-  delete combinator.dataset.path; combinator.dataset.role = 'combinator'; combinator.dataset.condPath = path;
-  combinator.dataset.owner = context.kind;
-  const hint = document.createElement('span'); hint.className = 'cond-hint';
-  hint.textContent = key === 'all' ? '(every child must hold; empty = vacuously TRUE)' : '(any child must hold; empty = FALSE)';
-  head.append(combinator, hint); box.appendChild(head);
-  const children = document.createElement('div'); children.className = 'cond-children';
-  (node[key] || []).forEach((child, index) => {
-    const childPath = `${path}.${index}`, wrap = document.createElement('div'); wrap.className = 'cond-child';
-    wrap.appendChild(renderConditionNode(child, childPath, context));
-    const remove = document.createElement('button'); remove.className = 'cond-remove'; remove.textContent = '× remove';
-    remove.dataset.action = 'remove-cond'; remove.dataset.condPath = childPath; remove.dataset.owner = context.kind;
-    remove.addEventListener('click', () => { node[key].splice(index, 1); commitCondition(context); });
-    wrap.appendChild(remove); children.appendChild(wrap);
-  });
-  box.appendChild(children);
-  const addRow = document.createElement('div'); addRow.className = 'cond-add-row';
-  const addLeaf = document.createElement('button'); addLeaf.textContent = '+ Condition'; addLeaf.dataset.action = 'add-leaf';
-  addLeaf.dataset.condPath = path; addLeaf.dataset.owner = context.kind;
-  addLeaf.addEventListener('click', () => { node[key].push({ var: defaultVarPath(), gte: 0 }); commitCondition(context); });
-  const addGroup = document.createElement('button'); addGroup.textContent = '+ Group'; addGroup.dataset.action = 'add-group';
-  addGroup.dataset.condPath = path; addGroup.dataset.owner = context.kind;
-  addGroup.addEventListener('click', () => { node[key].push({ all: [] }); commitCondition(context); });
-  addRow.append(addLeaf, addGroup); box.appendChild(addRow); return box;
-}
-function renderLeaf(leaf, path, context) {
-  const row = document.createElement('div'); row.className = 'cond-leaf'; row.dataset.condPath = path; row.dataset.owner = context.kind;
-  const variable = document.createElement('select'); variable.className = 'cond-var-select'; variable.dataset.role = 'var';
-  variable.dataset.condPath = path; variable.dataset.owner = context.kind; appendVarOptions(variable, leaf.var);
-  variable.addEventListener('change', () => { const op = getLeafOp(leaf) || 'gte'; leaf.var = variable.value; resetLeaf(leaf, op); commitCondition(context); });
-  const operator = selectInput(['gte', 'lte', 'eq', 'neq'].map((x) => [x, x]), getLeafOp(leaf) || 'gte', (op) => { resetLeaf(leaf, op); commitCondition(context); }, '');
-  delete operator.dataset.path; operator.dataset.role = 'op'; operator.dataset.condPath = path; operator.dataset.owner = context.kind;
-  const op = getLeafOp(leaf) || 'gte';
-  const value = conditionValueInput(leaf.var, leaf[op], (next) => { leaf[op] = next; context.owner.requirements = context.root; markDirty(context.file); renderValidation(); }, path);
-  value.dataset.owner = context.kind;
-  row.append(variable, operator, value); return row;
-}
+const { isLeafCond, getLeafOp } = window.ConditionBuilder;
 function conditionEditor(owner, kind, file) {
   const root = owner.requirements || { all: [] };
   const wrap = document.createElement('div'); wrap.dataset.condRoot = 'requirements'; wrap.dataset.owner = kind;
-  wrap.appendChild(renderConditionNode(root, 'requirements', { owner, kind, file, root }));
+  const builder = window.ConditionBuilder.create({
+    data: () => ({ stats: state.stats, simstate: state.simstate, quests: state.quests }),
+    onStructuralChange: () => { owner.requirements = root; markDirty(file); renderAll(); },
+    onValueChange: () => { owner.requirements = root; markDirty(file); renderValidation(); },
+  });
+  wrap.appendChild(builder.render(root, 'requirements'));
   if (!owner.requirements) {
     const hint = document.createElement('div'); hint.className = 'hint-line'; hint.textContent = 'No requirements saved. Adding a condition or group creates the tree.';
     wrap.appendChild(hint);
@@ -381,7 +278,9 @@ function renderJobEditor() {
   const hours = job.hours || (job.hours = { startHour: 9, endHour: 17 });
   details.appendChild(frow('start hour', numberInput(hours.startHour, (v) => { hours.startHour = v; markDirty('jobs.json'); renderValidation(); }, 'job.startHour', { min: 0, max: 23 })));
   details.appendChild(frow('end hour', numberInput(hours.endHour, (v) => { hours.endHour = v; markDirty('jobs.json'); renderValidation(); }, 'job.endHour', { min: 0, max: 23 })));
-  details.appendChild(frow('pay per shift', numberInput(job.payPerShift, (v) => { job.payPerShift = v; markDirty('jobs.json'); renderValidation(); }, 'job.payPerShift')));
+  // AUDIT bug 16: level 0's snapshot pay must follow the top-level field (the level row already
+  // syncs the other direction) or phone income and actual level-0 shift pay diverge.
+  details.appendChild(frow('pay per shift', numberInput(job.payPerShift, (v) => { job.payPerShift = v; if (job.levels?.length) job.levels[0].payPerShift = v; markDirty('jobs.json'); renderValidation(); }, 'job.payPerShift')));
   details.appendChild(frow('minimum credit score', numberInput(job.minCreditScore, (v) => {
     if (v === null) delete job.minCreditScore; else job.minCreditScore = v;
     markDirty('jobs.json'); renderValidation();
@@ -428,6 +327,16 @@ function renderJobEditor() {
     const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove'; remove.dataset.action = 'remove-level';
     remove.addEventListener('click', () => { job.levels.splice(index, 1); if (!job.levels.length) delete job.levels; if (job.levels?.length) job.payPerShift = job.levels[0].payPerShift; markDirty('jobs.json'); renderJobEditor(); renderValidation(); });
     row.append(field('Suffix', suffix), field('Pay / shift', pay), field('Promotion %', chance), remove); levels.appendChild(row);
+    // B13-19 (Bugstofix.txt): sparse per-level promotion requirements — the same condition tree
+    // jobs/visas use (skills, happiness, vars…), gating promotion INTO this level. Level 0 is the
+    // hiring level; its gate is the job's own Requirements card above.
+    if (index > 0) {
+      const reqWrap = document.createElement('div'); reqWrap.className = 'level-requirements'; reqWrap.dataset.levelIndex = String(index);
+      const reqLabel = document.createElement('div'); reqLabel.className = 'hint-line';
+      reqLabel.textContent = `Promotion requirements into "${level.suffix || index + 1}" (blank = chance/happiness only):`;
+      reqWrap.append(reqLabel, conditionEditor(level, `job-level-${index}`, 'jobs.json'));
+      levels.appendChild(reqWrap);
+    }
   });
   const addLevel = document.createElement('button'); addLevel.type = 'button'; addLevel.id = 'addJobLevel'; addLevel.textContent = '+ Add level';
   addLevel.addEventListener('click', () => {
@@ -486,6 +395,9 @@ function addJob() {
 }
 function removeVisa(id) {
   const visa = state.visas.visas.find((v) => v.id === id); if (!visa) return;
+  // AUDIT bugs 4-13: after the in-tool reconciliation, scan every OTHER data file and surface
+  // still-dangling references in the status bar (refscan.js) instead of leaving them silent.
+  window.RefScan?.warnAfterDelete(id, [id], { skipFiles: ['visas.json', 'jobs.json'] }, (w) => setStatus(w, 'err'));
   if (state.tuning.visa && state.tuning.visa.startStatus === id) {
     window.alert(`Cannot delete "${visa.name}": tuning.visa.startStatus is "${id}". Choose another start status in tuning.json first.`); return;
   }
@@ -509,6 +421,7 @@ function collectValidationIssues() {
   const issues = []; if (!state.visas) return issues;
   const needIds = new Set(state.stats.needs.map((x) => x.id));
   const skillIds = new Set(state.stats.skills.map((x) => x.id));
+  const personalityIds = new Set((state.stats.personality || []).map((x) => x.id));
   const variableIds = new Set(state.simstate.variables.map((x) => x.id));
   const questIds = new Set(state.quests.quests.map((x) => x.id));
   const visaIds = new Set(state.visas.visas.map((x) => x.id));
@@ -523,10 +436,11 @@ function collectValidationIssues() {
     if (!getLeafOp(node)) issues.push(`${owner} — requirements: "${node.var}" has no operator.`);
     if (node.var.startsWith('needs.') && !needIds.has(node.var.slice(6))) issues.push(`${owner} — requirements: unknown need id "${node.var}".`);
     else if (node.var.startsWith('skills.') && !skillIds.has(node.var.slice(7))) issues.push(`${owner} — requirements: unknown skill id "${node.var}".`);
+    else if (node.var.startsWith('personality.') && !personalityIds.has(node.var.slice(12))) issues.push(`${owner} — requirements: unknown personality id "${node.var}".`);
     else if (node.var.startsWith('vars.') && !variableIds.has(node.var.slice(5))) issues.push(`${owner} — requirements: unknown variable "${node.var.slice(5)}".`);
     else if (/^quests\.(.+)\.state$/.test(node.var)) {
       const id = /^quests\.(.+)\.state$/.exec(node.var)[1]; if (!questIds.has(id)) issues.push(`${owner} — requirements: unknown quest id "${node.var}".`);
-    } else if (!(node.var.startsWith('needs.') || node.var.startsWith('skills.') || node.var.startsWith('vars.') || node.var === 'funds' || node.var === 'creditScore' || node.var === 'happiness' || node.var === 'time.hour' || node.var === 'time.day')) {
+    } else if (!(node.var.startsWith('needs.') || node.var.startsWith('skills.') || node.var.startsWith('personality.') || node.var.startsWith('vars.') || node.var === 'funds' || node.var === 'creditScore' || node.var === 'happiness' || node.var === 'time.hour' || node.var === 'time.day')) {
       issues.push(`${owner} — requirements: unrecognized condition id "${node.var}".`);
     }
   }
@@ -538,6 +452,7 @@ function collectValidationIssues() {
     if (typeof job.payPerShift === 'number' && job.payPerShift < 0) issues.push(`Job "${job.name || job.id}" — payPerShift is negative (${job.payPerShift}).`);
     if (typeof job.minCreditScore === 'number' && job.minCreditScore < 0) issues.push(`Job "${job.name || job.id}" — minCreditScore is negative (${job.minCreditScore}).`);
     for (const [index, level] of (job.levels || []).entries()) {
+      checkCondition(level.requirements, `Job "${job.name || job.id}" level ${index + 1}`);
       if (!String(level.suffix || '').trim()) issues.push(`Job "${job.name || job.id}" - level ${index + 1} has an empty suffix.`);
       if (typeof level.payPerShift !== 'number' || level.payPerShift < 0) issues.push(`Job "${job.name || job.id}" - level ${index + 1} pay is invalid.`);
       if (typeof level.promoteChancePercent !== 'number' || level.promoteChancePercent < 0 || level.promoteChancePercent > 100) issues.push(`Job "${job.name || job.id}" - level ${index + 1} promotion chance must be 0..100.`);
@@ -568,6 +483,7 @@ window.addEventListener('beforeunload', (e) => { if (state.dirty.size) e.prevent
 window.CareerEditor = { state, load, saveAll, slugify, uniqueId, collectValidationIssues, removeVisa, removeJob };
 load();
 </script>
+<script src="/tools/refscan.js"></script>
 <script src="/tools/nav.js"></script>
 </body>
 </html>

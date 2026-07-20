@@ -120,6 +120,27 @@ assert(items.length === 5, `sidebar shows 5 assets (${items.length})`);
 assert(doc.querySelector('[data-asset-id="couch"] .badge')?.textContent === '×2 placed', 'couch shows ×2 placed badge');
 assert(doc.querySelector('[data-asset-id="tv"] .badge') === null, 'tv has no badge');
 
+// --- categories card: counts, unique add, reference-following rename, guarded delete, stale option
+const categoryRows = [...doc.querySelectorAll('[data-category-row]')];
+assert(categoryRows.length === assets.categories.length, 'categories card renders every category row');
+assert(doc.querySelector('[data-category-row="seating"] label')?.textContent === '1 asset', 'category row shows its current asset usage count');
+doc.getElementById('add-category').click();
+assert(doc.querySelector('input[data-path="categories.5"]')?.value === 'category_1', 'add category chooses the first unique category_1-style id');
+const seatingRename = doc.querySelector('input[data-path="categories.0"]');
+seatingRename.value = 'living_room';
+seatingRename.dispatchEvent(new window.Event('change', { bubbles: true }));
+assert(window.AssetEditor.state.assets.assets.filter((asset) => asset.category === 'seating').length === 0, 'category rename updates every old asset reference');
+assert(window.AssetEditor.state.assets.assets.find((asset) => asset.id === 'couch').category === 'living_room', 'category rename follows the couch reference');
+let categoryDeleteConfirm = '';
+window.confirm = (message) => { categoryDeleteConfirm = message; return true; };
+doc.querySelector('button[data-category-delete="living_room"]').click();
+assert(categoryDeleteConfirm.includes('1 asset'), 'deleting an in-use category confirms with the usage count');
+assert(window.AssetEditor.state.assets.assets.find((asset) => asset.id === 'couch').category === 'living_room', 'in-use category delete leaves the asset category untouched');
+const staleCategory = doc.querySelector('select[data-path="category"]');
+assert(staleCategory.value === 'living_room', 'asset with a stale category keeps its selected value');
+assert([...staleCategory.options].some((option) => option.value === 'living_room' && option.textContent === 'living_room (unknown)'), 'asset select includes the stale category as an unknown option');
+window.confirm = () => true;
+
 // --- couch selected by default; edit price
 assert(doc.querySelector('input[data-path="buyPrice"]').value === '500', 'buy price rendered');
 const price = doc.querySelector('input[data-path="buyPrice"]');
@@ -500,6 +521,7 @@ doc.getElementById('save').click();
 await new Promise((r) => setTimeout(r, 50));
 const saved = puts['assets.json'];
 assert(saved, 'PUT sent to assets.json');
+assert(JSON.stringify(saved.categories) === JSON.stringify(['electronics', 'door', 'appliances', 'transient', 'category_1']), 'PUT carries the edited categories array');
 const savedCouch = saved.assets.find((a) => a.id === 'couch');
 assert(savedCouch.buyPrice === 650, 'PUT carries edited price');
 assert(savedCouch.interactions.includes('nap'), 'PUT carries toggled interaction');
@@ -529,8 +551,8 @@ assert(savedStoveUsePose.usePose.use.offset[0] === 0 && savedStoveUsePose.usePos
 assert(savedStoveUsePose.usePose.use.y === 0.05, 'PUT carries usePose.use.y (B2-3)');
 assert(!('sit' in savedStoveUsePose.usePose), 'stove usePose.use set without ever touching sit (sparse, per-pose)');
 assert(savedCouch.requiresQuestUnlock === true, 'PUT carries checked requiresQuestUnlock');
-assert(savedCouch.icon === '/models/icons/sofa.png', 'PUT carries edited icon path');
-assert(savedCouch.sound === '/sounds/couch_creak.wav', 'PUT carries edited sound path');
+assert(savedCouch.icon === 'models/icons/sofa.png', 'PUT carries the edited icon path normalized to public/-relative (AUDIT bug 18)');
+assert(savedCouch.sound === 'sounds/couch_creak.wav', 'PUT carries the edited sound path normalized to public/-relative (AUDIT bug 19)');
 assert(savedCouch.light.color === '#ffeeaa' && savedCouch.light.intensity === 3.5 && savedCouch.light.environmentBonus === 0.08 && savedCouch.light.defaultOn === true, 'PUT carries sparse Light card fields including night Environment bonus');
 assert(!('distance' in savedCouch.light) && !('yOffset' in savedCouch.light), 'untouched Light fields stay absent');
 assert(savedCouch.wallMounted.heightY === 1.8, 'PUT carries wall-mounted height');
@@ -582,7 +604,7 @@ assert(savedStove.combustibility.delaySeconds === 15, 'PUT carries combustibilit
 
 const savedFire = saved.assets.find((a) => a.id === 'fire');
 assert(JSON.stringify(savedFire.clearedBy) === JSON.stringify(['extinguish']), 'PUT preserves fire\'s untouched clearedBy');
-assert(savedFire.mesh === '/models/fire.gif', 'PUT carries fire\'s mesh path change to .gif');
+assert(savedFire.mesh === 'models/fire.gif', 'PUT carries fire mesh path normalized to public/-relative (AUDIT bug 20)');
 assert(savedFire.sprite.orientation === 'flat', 'PUT carries sprite.orientation');
 assert(savedFire.sprite.fps === 12, 'PUT carries sprite.fps');
 assert(savedFire.food.hungerGain === 18 && savedFire.food.perishHours === 3, 'PUT carries transient food fields');

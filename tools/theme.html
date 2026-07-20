@@ -44,7 +44,7 @@ const EXTRA_OVERRIDES={actionMenu:[['Margin','marginPx'],['Padding X','paddingXP
 const COLOR_LABELS={panelBg:'Panel background',panelFg:'Panel foreground',accent:'Accent',warn:'Warning',error:'Error',buttonBg:'Button background',buttonFg:'Button foreground',outline:'Outline'};
 const state={theme:null,notifications:null,knownIds:[],applyTheme:null,selectedId:'',dirty:false,fonts:[],icons:[]};
 const $=(id)=>document.getElementById(id);
-function normalizeSourcePath(raw){let value=String(raw??'').trim().replace(/\\/g,'/');const match=/\/public(\/.*)$/i.exec(value);if(match)value=match[1];else value=value.replace(/^\/?[a-z]:/i,'');if(value&&!/^(\/|https?:)/i.test(value))value='/'+value;return value;}
+function normalizeSourcePath(raw){if(window.PathNorm)return window.PathNorm.publicUrl(raw);/* AUDIT overlap 36: jsdom fallback below */let value=String(raw??'').trim().replace(/\\/g,'/');const match=/\/public(\/.*)$/i.exec(value);if(match)value=match[1];else value=value.replace(/^\/?[a-z]:/i,'');if(value&&!/^(\/|https?:)/i.test(value))value='/'+value;return value;}
 function markDirty(){state.dirty=true;$('save').disabled=false;$('status').textContent='Unsaved changes';renderPreview();}
 function setOptional(object,key,value){if(value===undefined||value==='')delete object[key];else object[key]=value;}
 function textInput(value,path,onValue,list){const input=document.createElement('input');input.type='text';input.value=value??'';input.dataset.path=path;if(list)input.setAttribute('list',list);input.addEventListener('input',()=>{onValue(input.value);markDirty();});return input;}
@@ -87,6 +87,7 @@ window.ThemeEditor={state,load,save,setThemeEngine,renderPreview,renderLayoutFie
 })();
 </script>
 <script type="module">import { applyTheme, KNOWN_THEME_ELEMENT_IDS } from '/game/theme.ts';window.ThemeEditor.setThemeEngine(applyTheme,KNOWN_THEME_ELEMENT_IDS);</script>
+<script src="/tools/pathnorm.js"></script>
 <script src="/tools/nav.js"></script>
 </body>
 </html>

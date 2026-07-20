@@ -130,6 +130,7 @@ window.AnimTool = (() => {
     { id: 'panic', detail: 'core — ROADMAP_NEXT B2-5 fire panic: plays for tuning.fire.panicSeconds whenever any fire spawns (initial roll or spread), then autonomy resumes' },
     { id: 'collapse', detail: 'core — ROADMAP_NEXT B6-14: energy-zero collapse before sleeping on the ground' },
     { id: 'starve', detail: 'core — ROADMAP_NEXT B6-15: starvation collapse before game over' },
+    { id: 'select', detail: 'core — angry-wake reaction (Next.txt): plays for tuning.ambience.angryReactSeconds when noise/light wakes the sim' },
   ];
   const DEFAULT_CHARACTER = {
     meshPath: '/models/character.glb', heightMeters: 1.55, yawOffsetDeg: 0,
@@ -416,6 +417,14 @@ window.AnimTool = (() => {
   // If the path contains a "public" segment, everything after it IS the served URL; otherwise
   // we can't guess, so return null and let addSource show why.
   function normalizeSourcePath(raw) {
+    // AUDIT overlap 36: shared tools/pathnorm.js is the primary; the body below is only the jsdom fallback.
+    if (window.PathNorm) {
+      const trimmed = String(raw ?? '').trim();
+      if (!trimmed) return null;
+      const r = window.PathNorm.reduce(raw);
+      if (!r.ok) return { error: 'That looks like a Windows file path. Use the URL under public/ instead, e.g. /models/anims/Walking.fbx' };
+      return '/' + r.path;
+    }
     let p = String(raw ?? '').trim();
     if (!p) return null;
     const looksWindows = /^\/?[a-zA-Z]:[\\/]/.test(p) || p.includes('\\');
@@ -488,16 +497,23 @@ window.AnimTool = (() => {
   // ------------------------------------------------------------------ wiring
   document.addEventListener('DOMContentLoaded', () => {
     $('#save').addEventListener('click', save);
+    // AUDIT bug 24: mesh fields reduce a pasted Windows path under public/ instead of saving it
+    // near-verbatim (same reduction normalizeSourcePath applies to animation sources).
+    const reduceMeshPath = (raw) => {
+      let v = String(raw ?? '').trim().replace(/\\/g, '/');
+      const m = /\/public(\/.+)$/i.exec(v);
+      if (m) v = m[1]; else v = v.replace(/^\/?[a-zA-Z]:\//, '/');
+      return v && !/^(\/|https?:)/.test(v) ? '/' + v : v;
+    };
     $('#f-meshPath').addEventListener('change', () => {
-      const v = $('#f-meshPath').value.trim();
-      tuning.character.meshPath = /^(\/|https?:)/.test(v) || v === '' ? v : '/' + v;
+      const v = reduceMeshPath($('#f-meshPath').value);
+      tuning.character.meshPath = v;
       $('#f-meshPath').value = tuning.character.meshPath;
       setDirty(true);
       T.onSourcesChanged && T.onSourcesChanged();
     });
     $('#f-marker-mesh').addEventListener('change', () => {
-      let v = $('#f-marker-mesh').value.trim();
-      if (v && !/^(\/|https?:)/.test(v)) v = '/' + v;
+      let v = reduceMeshPath($('#f-marker-mesh').value); // AUDIT bug 24
       $('#f-marker-mesh').value = v;
       setMarkerField('mesh', v === '' ? undefined : v); // blank = unset → built-in default octahedron
     });
@@ -677,6 +693,7 @@ window.addEventListener('resize', () => {
 
 void loadCharacter();
 </script>
+<script src="/tools/pathnorm.js"></script>
 <script src="/tools/nav.js"></script>
 </body>
 </html>

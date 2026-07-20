@@ -1033,6 +1033,8 @@ function colorField(labelText, value, onChange, dataField) {
 // effort: a path containing a "public" segment keeps everything after it; otherwise the drive
 // letter is dropped and a leading slash added, so we never save an unfetchable "D:\..." string.
 function normalizeAdImagePath(raw) {
+  // AUDIT overlap 36: shared tools/pathnorm.js is the primary; the body below is only the jsdom fallback.
+  if (window.PathNorm) return window.PathNorm.publicUrl(raw);
   let p = String(raw ?? '').trim();
   if (!p) return '';
   const looksWindows = /^\/?[a-zA-Z]:[\\/]/.test(p) || p.includes('\\');
@@ -1256,7 +1258,7 @@ function renderInspector() {
     // ROADMAP_NEXT item 7 (audio): comma-separated playlist this map's music context cycles
     // through (advances to the next entry when one finishes — see game/audio.ts). Blank = silence.
     host.appendChild(field('music (comma-separated paths)', (doc.music ?? []).join(', '), edit((v) => {
-      const list = v.split(',').map((s) => s.trim()).filter(Boolean);
+      const list = v.split(',').map((s) => normalizeAdImagePath(s)).filter(Boolean); // AUDIT bug 25: normalize each entry
       if (list.length) doc.music = list; else delete doc.music;
     }), { text: true, data: 'map.music' }));
     renderRentalCard(host, doc);
@@ -1789,6 +1791,7 @@ document.getElementById('preview-toggle')?.addEventListener('click', () => {
 window.MapPreview.sync(); // first paint once the editor has booted
 </script>
 
+<script src="/tools/pathnorm.js"></script>
 <script src="/tools/nav.js"></script>
 </body>
 </html>

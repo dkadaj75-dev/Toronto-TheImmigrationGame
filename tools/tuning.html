@@ -66,6 +66,9 @@
 const API = '/api/data/'; // matches server.js GET/PUT /api/data/*
 const FILES = ['tuning.json', 'stats.json', 'interactions.json', 'loading.json'];
 const state = { docs: {}, dirty: new Set() };
+// AUDIT UX 48: the one engine-backed computed-need formula (game/main.ts recomputes the FIRST
+// need carrying a truthy `computed` from the placed objects' environment scores).
+const COMPUTED_ENV_FORMULA = 'sumOfPlacedObjectEnvScores';
 
 // soft sanity ranges (warn, never block — the designer is in charge)
 const HINTS = [
@@ -133,6 +136,12 @@ function setStatus(msg, cls = '') { const s = document.getElementById('status');
 
 // Same Windows-paste convention as the Animation Mapper: public/ is the served URL root.
 function normalizeLoadingPath(raw) {
+  // AUDIT overlap 36: shared tools/pathnorm.js is the primary; the body below is only the jsdom fallback.
+  if (window.PathNorm) {
+    const r = window.PathNorm.reduce(raw);
+    if (!r.ok) throw new Error('Loading paths pasted from Windows must point inside public/.');
+    return r.path ? '/' + r.path : '';
+  }
   let path = String(raw ?? '').trim();
   if (!path) return '';
   if (/^\/?[a-zA-Z]:[\\/]/.test(path) || path.includes('\\')) {
@@ -165,6 +174,13 @@ function fieldRow(label, path, get, set, file, kind = 'number') {
     input.type = 'color';
     input.value = get() || '#888888';
     input.addEventListener('input', () => { set(input.value); markDirty(file); });
+  } else if (kind === 'list') {
+    // AUDIT UX 40: string arrays (calendar.dayNames, character.animationPaths) edit as a
+    // comma-separated line instead of rendering as a broken number input.
+    input = document.createElement('input');
+    input.type = 'text';
+    input.value = (get() ?? []).join(', ');
+    input.addEventListener('input', () => { set(input.value.split(',').map((s) => s.trim()).filter(Boolean)); markDirty(file); });
   } else if (kind === 'text') {
     input = document.createElement('input');
     input.type = 'text';
@@ -247,13 +263,15 @@ function renderTuning() {
         sub.innerHTML = `<h4>${groupName}.${key}</h4>`;
         for (const subKey of Object.keys(val)) {
           const subVal = val[subKey];
-          const kind = typeof subVal === 'boolean' ? 'checkbox' : typeof subVal === 'string' ? (/color/i.test(subKey) ? 'color' : 'text') : 'number';
+          const kind = Array.isArray(subVal) && subVal.every((x) => typeof x === 'string') ? 'list' : typeof subVal === 'boolean' ? 'checkbox' : typeof subVal === 'string' ? (/color/i.test(subKey) ? 'color' : 'text') : 'number';
           sub.appendChild(fieldRow(subKey, `${groupName}.${key}.${subKey}`, () => val[subKey], (v) => { val[subKey] = v; }, file, kind));
         }
         g.appendChild(sub);
         continue;
       }
-      const kind = typeof val === 'string' ? 'text' : 'number';
+      // AUDIT bug 2: flat booleans (e.g. ambience.nightEnvironmentEnabled) must render as
+      // checkboxes — the number input wrote 0/1 numbers over designer booleans.
+      const kind = Array.isArray(val) && val.every((x) => typeof x === 'string') ? 'list' : typeof val === 'boolean' ? 'checkbox' : typeof val === 'string' ? (/color/i.test(key) ? 'color' : 'text') : 'number';
       g.appendChild(fieldRow(key, `${groupName}.${key}`, () => group[key], (v) => { group[key] = v; }, file, kind));
     }
     s.appendChild(g);
@@ -300,7 +318,9 @@ function renderLoading() {
   return s;
 }
 
-window.TuningEditor = { normalizeLoadingPath };
+// `state`/`render` exposed for the jsdom suite (same convention as FinanceEditor/SystemEditor) so
+// tests can assert edits write THROUGH to the in-memory docs, not just to the DOM.
+window.TuningEditor = { state, render, normalizeLoadingPath };
 
 function renderNeeds() {
   const file = 'stats.json';
@@ -315,12 +335,43 @@ function renderNeeds() {
   addBtn.addEventListener('click', addNeed);
   toolbar.appendChild(addBtn);
   s.appendChild(toolbar);
+  // AUDIT UX 48: only the FIRST computed need is engine-wired (main.ts envNeedId) — say so loudly
+  // rather than letting a second one silently never update.
+  const computedNeeds = doc.needs.filter((n) => n.computed);
+  if (computedNeeds.length > 1) {
+    const warn = document.createElement('div');
+    warn.className = 'muted';
+    warn.dataset.warn = 'multiple-computed';
+    warn.style.color = '#e0b05f';
+    warn.textContent = `⚠ ${computedNeeds.length} needs are marked computed (${computedNeeds.map((n) => n.id).join(', ')}) — the engine only recomputes the first (${computedNeeds[0].id}); the rest never change.`;
+    s.appendChild(warn);
+  }
 
   for (const need of doc.needs) {
     const g = document.createElement('div');
     g.className = 'group';
     g.innerHTML = `<h3>${need.name} <span style="color:#5f6f93">(${need.id})${need.computed ? ' · computed' : ''}</span></h3>`;
+    // AUDIT UX 47: display name is editable (the ID stays immutable — it is the reference key used
+    // by every action/asset/condition; renaming the label breaks nothing).
+    g.appendChild(fieldRow('display name', `need.${need.id}.name`, () => need.name, (v) => {
+      need.name = v;
+      g.querySelector('h3').innerHTML = `${need.name} <span style="color:#5f6f93">(${need.id})${need.computed ? ' · computed' : ''}</span>`;
+    }, file, 'text'));
     g.appendChild(fieldRow('default', `need.${need.id}.default`, () => need.default, (v) => { need.default = v ?? 0; }, file));
+    // AUDIT UX 48 / no-tool 60: `computed` needs are recomputed by the engine on events instead of
+    // decaying per tick. The engine only tests truthiness and wires the FIRST computed need
+    // (main.ts envNeedId), so this is a select of engine-backed formulas, not a free text field.
+    const computedOpts = [
+      { value: '', label: '(not computed — decays per tick)' },
+      { value: COMPUTED_ENV_FORMULA, label: `${COMPUTED_ENV_FORMULA} (Environment)` },
+    ];
+    if (need.computed && need.computed !== COMPUTED_ENV_FORMULA) {
+      computedOpts.push({ value: need.computed, label: `${need.computed} (unknown — not engine-backed)` });
+    }
+    g.appendChild(fieldRow('computed by', `need.${need.id}.computed`, () => need.computed ?? '', (v) => {
+      if (v) need.computed = v; else delete need.computed;
+      render(); // toggles the decay row + the computed badge
+    }, file, computedOpts));
     if (!need.computed) {
       g.appendChild(fieldRow('decay per tick', `need.${need.id}.decayPerTick`, () => need.decayPerTick, (v) => { need.decayPerTick = v ?? 0; }, file));
     }
@@ -357,6 +408,10 @@ function renderSkills() {
     const g = document.createElement('div');
     g.className = 'group';
     g.innerHTML = `<h3>${skill.name} <span style="color:#5f6f93">(${skill.id})</span></h3>`;
+    g.appendChild(fieldRow('display name', `skill.${skill.id}.name`, () => skill.name, (v) => { // AUDIT UX 47
+      skill.name = v;
+      g.querySelector('h3').innerHTML = `${skill.name} <span style="color:#5f6f93">(${skill.id})</span>`;
+    }, file, 'text'));
     g.appendChild(fieldRow('enabled', `skill.${skill.id}.enabled`, () => skill.enabled !== false, (v) => { skill.enabled = v; }, file, 'checkbox'));
     g.appendChild(fieldRow('default', `skill.${skill.id}.default`, () => skill.default, (v) => { skill.default = v ?? 0; }, file));
     g.appendChild(fieldRow('max', `skill.${skill.id}.max`, () => skill.max, (v) => { skill.max = v ?? 10; }, file));
@@ -404,6 +459,10 @@ function renderPersonality() {
     const g = document.createElement('div');
     g.className = 'group';
     g.innerHTML = `<h3>${trait.name} <span style="color:#5f6f93">(${trait.id})</span></h3>`;
+    g.appendChild(fieldRow('display name', `personality.${trait.id}.name`, () => trait.name, (v) => { // AUDIT UX 47
+      trait.name = v;
+      g.querySelector('h3').innerHTML = `${trait.name} <span style="color:#5f6f93">(${trait.id})</span>`;
+    }, file, 'text'));
     g.appendChild(fieldRow('default', `personality.${trait.id}.default`, () => trait.default, (v) => { trait.default = v ?? 0; }, file));
     g.appendChild(fieldRow('max', `personality.${trait.id}.max`, () => trait.max, (v) => { trait.max = v ?? 10; }, file));
     g.appendChild(fieldRow('bar color (unused today — no HUD yet)', `personality.${trait.id}.color`, () => trait.color, (v) => { trait.color = v; }, file, 'color'));
@@ -448,6 +507,7 @@ function personalityUsages(id) {
 }
 
 function removePersonality(id) {
+  window.RefScan?.warnAfterDelete(id, ['personality.' + id, id], { skipFiles: ['stats.json'] }, (w) => setStatus(w, 'err'));
   const stats = state.docs['stats.json'];
   const trait = (stats.personality ?? []).find((p) => p.id === id);
   if (!trait) return;
@@ -550,6 +610,9 @@ function removeNeed(id) {
   const stats = state.docs['stats.json'];
   const need = stats.needs.find((n) => n.id === id);
   if (!need) return;
+  // AUDIT bugs 4-13: after the in-tool reconciliation, scan every OTHER data file and surface
+  // still-dangling references in the status bar (refscan.js) instead of leaving them silent.
+  window.RefScan?.warnAfterDelete(id, ['needs.' + id, id], { skipFiles: ['stats.json', 'interactions.json'] }, (w) => setStatus(w, 'err'));
   const uses = needUsages(id);
   const msg = uses.length
     ? `"${need.name}" is referenced by: ${uses.join(', ')}.\n\nDeleting it will strip those references (gain removed / primary need cleared). Continue?`
@@ -571,6 +634,7 @@ function removeNeed(id) {
 }
 
 function removeSkill(id) {
+  window.RefScan?.warnAfterDelete(id, ['skills.' + id, id], { skipFiles: ['stats.json', 'interactions.json'] }, (w) => setStatus(w, 'err'));
   const stats = state.docs['stats.json'];
   const skill = stats.skills.find((s) => s.id === id);
   if (!skill) return;
@@ -603,10 +667,11 @@ function renderActions() {
   for (const action of doc.actions) {
     const g = document.createElement('div');
     g.className = 'group';
-    g.innerHTML = `<h3>${action.name} <span style="color:#5f6f93">(${action.id} · anim: ${action.animation})</span></h3>`;
-    g.appendChild(fieldRow('autonomy eligible', `action.${action.id}.autonomyEligible`, () => action.autonomyEligible, (v) => { action.autonomyEligible = v; }, file, 'checkbox'));
-    g.appendChild(fieldRow('seat aware', `action.${action.id}.seatAware`, () => !!action.seatAware, (v) => { action.seatAware = v; }, file, 'checkbox'));
-    g.appendChild(fieldRow('primary need (auto-stop)', `action.${action.id}.primaryNeed`, () => action.primaryNeed, (v) => { action.primaryNeed = v; }, file, needOpts));
+    // AUDIT overlap 33: this section is the BALANCING view (per-tick numbers only). The behavior
+    // flags it used to duplicate (autonomy eligible / seat aware / primary need) are owned by the
+    // Interaction Editor — the copy here had already drifted (it wrote an explicit seatAware:false
+    // where the Interaction Editor prunes the key).
+    g.innerHTML = `<h3>${action.name} <span style="color:#5f6f93">(${action.id} · anim: ${action.animation} · behavior flags: Interaction Editor)</span></h3>`;
 
     const sub = document.createElement('div');
     sub.className = 'sub';
@@ -657,6 +722,8 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('beforeunload', (e) => { if (state.dirty.size > 0) e.preventDefault(); });
 load();
 </script>
+<script src="/tools/refscan.js"></script>
+<script src="/tools/pathnorm.js"></script>
 <script src="/tools/nav.js"></script>
 </body>
 </html>

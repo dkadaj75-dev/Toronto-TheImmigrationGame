@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(here, '../tools/career.html'), 'utf8');
+const condBuilderSrc = readFileSync(join(here, '../tools/condition-builder.js'), 'utf8');
 
 const visas = {
   _comment: 'fixture visas',
@@ -58,6 +59,7 @@ const dom = new JSDOM(html, {
     window.confirm = () => true;
     window.prompt = () => '';
     window.alert = (message) => { alertMessage = message; };
+    window.eval(condBuilderSrc);
   },
 });
 const { window } = dom;
@@ -123,17 +125,17 @@ const obtained = doc.querySelector('select[data-path="visa.obtainedVia"]'); obta
 const appDays = doc.querySelector('input[data-path="visa.applicationDays"]'); appDays.value = '20'; fire(appDays, 'input');
 
 // Visa requirements exact nested JSON: funds eq 500 + ANY(skills.english gte 5).
-doc.querySelector('[data-owner="visa"][data-action="add-leaf"][data-cond-path="requirements"]').click();
-let variable = doc.querySelector('[data-owner="visa"][data-role="var"][data-cond-path="requirements.0"]');
+doc.querySelector('[data-owner="visa"] [data-action="add-leaf"][data-cond-path="requirements"]').click();
+let variable = doc.querySelector('[data-owner="visa"] [data-role="var"][data-cond-path="requirements.0"]');
 variable.value = 'funds'; fire(variable, 'change');
-let operator = doc.querySelector('[data-owner="visa"][data-role="op"][data-cond-path="requirements.0"]');
+let operator = doc.querySelector('[data-owner="visa"] [data-role="op"][data-cond-path="requirements.0"]');
 operator.value = 'eq'; fire(operator, 'change');
-let value = doc.querySelector('[data-owner="visa"][data-role="value"][data-cond-path="requirements.0"]'); value.value = '500'; fire(value, 'input');
-doc.querySelector('[data-owner="visa"][data-action="add-group"][data-cond-path="requirements"]').click();
-doc.querySelector('[data-owner="visa"][data-action="add-leaf"][data-cond-path="requirements.1"]').click();
-variable = doc.querySelector('[data-owner="visa"][data-role="var"][data-cond-path="requirements.1.0"]'); variable.value = 'skills.english'; fire(variable, 'change');
-value = doc.querySelector('[data-owner="visa"][data-role="value"][data-cond-path="requirements.1.0"]'); value.value = '5'; fire(value, 'input');
-const combo = doc.querySelector('[data-owner="visa"][data-role="combinator"][data-cond-path="requirements.1"]'); combo.value = 'any'; fire(combo, 'change');
+let value = doc.querySelector('[data-owner="visa"] [data-role="value"][data-cond-path="requirements.0"]'); value.value = '500'; fire(value, 'input');
+doc.querySelector('[data-owner="visa"] [data-action="add-group"][data-cond-path="requirements"]').click();
+doc.querySelector('[data-owner="visa"] [data-action="add-leaf"][data-cond-path="requirements.1"]').click();
+variable = doc.querySelector('[data-owner="visa"] [data-role="var"][data-cond-path="requirements.1.0"]'); variable.value = 'skills.english'; fire(variable, 'change');
+value = doc.querySelector('[data-owner="visa"] [data-role="value"][data-cond-path="requirements.1.0"]'); value.value = '5'; fire(value, 'input');
+const combo = doc.querySelector('[data-owner="visa"] [data-role="combinator"][data-cond-path="requirements.1"]'); combo.value = 'any'; fire(combo, 'change');
 const studyVisa = window.CareerEditor.state.visas.visas.find((visa) => visa.id === 'study_permit');
 const expectedVisaRequirements = { all: [{ var: 'funds', eq: 500 }, { any: [{ var: 'skills.english', gte: 5 }] }] };
 assert(JSON.stringify(studyVisa.requirements) === JSON.stringify(expectedVisaRequirements), 'visa condition builder produces exact nested JSON');
@@ -171,10 +173,10 @@ let costAmount = doc.querySelector('input[data-path="job.needsCost.hunger.amount
 let costNeed = doc.querySelector('select[data-path="job.needsCost.hunger.need"]'); costNeed.value = 'energy'; fire(costNeed, 'change');
 assert(cashier.needsCost.energy === 18 && !('hunger' in cashier.needsCost), 'job needsCost add row and need dropdown stay sparse');
 
-doc.querySelector('[data-owner="job"][data-action="add-leaf"][data-cond-path="requirements"]').click();
-variable = doc.querySelector('[data-owner="job"][data-role="var"][data-cond-path="requirements.0"]'); variable.value = 'vars.income'; fire(variable, 'change');
-operator = doc.querySelector('[data-owner="job"][data-role="op"][data-cond-path="requirements.0"]'); operator.value = 'gte'; fire(operator, 'change');
-value = doc.querySelector('[data-owner="job"][data-role="value"][data-cond-path="requirements.0"]'); value.value = '100'; fire(value, 'input');
+doc.querySelector('[data-owner="job"] [data-action="add-leaf"][data-cond-path="requirements"]').click();
+variable = doc.querySelector('[data-owner="job"] [data-role="var"][data-cond-path="requirements.0"]'); variable.value = 'vars.income'; fire(variable, 'change');
+operator = doc.querySelector('[data-owner="job"] [data-role="op"][data-cond-path="requirements.0"]'); operator.value = 'gte'; fire(operator, 'change');
+value = doc.querySelector('[data-owner="job"] [data-role="value"][data-cond-path="requirements.0"]'); value.value = '100'; fire(value, 'input');
 assert(JSON.stringify(cashier.requirements) === JSON.stringify({ all: [{ var: 'vars.income', gte: 100 }] }), 'job condition builder produces exact JSON');
 assert(cashier.grantsVisa === 'study_permit' && cashier.hours.startHour === 7 && cashier.hours.endHour === 15 && cashier.payPerShift === 215 && cashier.maxSkips === 4 && cashier.minCreditScore === 575, 'job fields update their schema values');
 

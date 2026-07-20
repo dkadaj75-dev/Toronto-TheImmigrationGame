@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 const here=dirname(fileURLToPath(import.meta.url));
 const html=readFileSync(join(here,'finance.html'),'utf8');
 const finance={rent:{base:100,perFloorTile:2,byPropertyType:{condo:20,basement:-10,townhouse:50,house:100,penthouse:250}},bills:[{id:'phone',name:'Phone',base:10,perAssetValue:.1}],overdueDays:3,tooLateDays:7,negativeGraceDays:2};
+const bills={bills:[{id:'rent',name:'Rent'},{id:'phone',name:'Phone'}]};
 const assets={assets:[{id:'chair',buyPrice:100}]};
 const tuning={map:{active:'condo'},credit:{min:300,max:900,startingScore:500,onTimePaymentDelta:8,overdueDelta:-20,debtEntryDelta:-10,debtDailyDelta:-3,repoDelta:-100,lowScoreDebtWindowFactor:.75,highScoreDebtWindowFactor:1.5,historyLimit:6}};
 const happiness={components:[{var:'needs.hunger',weight:2,min:0,max:100}],visaStatusRanks:{visitor:0,lmia:1},states:[{id:'low',atLeast:0,label:'Low',icon:'/icons/sad.svg'},{id:'high',atLeast:80,label:'High',icon:'/icons/happy.svg'}],stateDisplay:'both'};
@@ -15,13 +16,13 @@ const simstate={variables:[{id:'visaStatus',name:'Visa Status'},{id:'job',name:'
 const visas={visas:[{id:'visitor',name:'Visitor'},{id:'lmia',name:'LMIA'}]};
 const map={id:'condo',propertyType:'condo',gridSize:1,bounds:{w:2,h:2},floors:[{polygon:[[0,0],[2,0],[2,2],[0,2]]}],placedObjects:[{asset:'chair'}]};
 const rawPuts={};
-const fetchMock=async(url,opts={})=>{if(String(url)==='/api/icons')return{ok:true,status:200,json:async()=>['icons/happy.svg','icons/neutral.svg','icons/sad.svg']};const path=String(url).replace('/api/data/','');if(opts.method==='PUT'){rawPuts[path]=opts.body;return{ok:true,status:200,json:async()=>({})};}const body={'finance.json':finance,'assets.json':assets,'tuning.json':tuning,'happiness.json':happiness,'stats.json':stats,'simstate.json':simstate,'visas.json':visas,'maps/condo.json':map}[path];return{ok:!!body,status:body?200:404,json:async()=>structuredClone(body)};};
+const fetchMock=async(url,opts={})=>{if(String(url)==='/api/icons')return{ok:true,status:200,json:async()=>['icons/happy.svg','icons/neutral.svg','icons/sad.svg']};const path=String(url).replace('/api/data/','');if(opts.method==='PUT'){rawPuts[path]=opts.body;return{ok:true,status:200,json:async()=>({})};}const body={'finance.json':finance,'bills.json':bills,'assets.json':assets,'tuning.json':tuning,'happiness.json':happiness,'stats.json':stats,'simstate.json':simstate,'visas.json':visas,'maps/condo.json':map}[path];return{ok:!!body,status:body?200:404,json:async()=>structuredClone(body)};};
 const dom=new JSDOM(html,{url:'http://localhost:5173/tools/finance.html',runScripts:'dangerously',beforeParse(window){window.fetch=fetchMock;}});
 const {window}=dom,doc=window.document; await new Promise((resolve)=>setTimeout(resolve,50));
 let failures=0;function check(cond,msg){if(cond)console.log('  ok  '+msg);else{failures++;console.error('FAIL  '+msg);}}function fire(el,type){el.dispatchEvent(new window.Event(type,{bubbles:true}));}
 
 check(!!window.FinanceEditor,'plain script exposes window.FinanceEditor');
-check(doc.querySelector('input[data-path="rent.base"]').value==='100' && doc.querySelectorAll('.bill').length===1,'renders rent and bill formula fields');
+check(doc.querySelector('input[data-path="rent.base"]').value==='100' && doc.querySelectorAll('.bill').length===2,'renders every bills.json identity row (rent + phone)');
 check(doc.querySelector('input[data-path="rent.byPropertyType.penthouse"]').value==='250','renders complete property-type table');
 check(doc.querySelector('input[data-path="credit.startingScore"]').value==='500','renders tuning.credit fields');
 check(doc.querySelectorAll('.happiness-row[data-component-index]').length===1&&doc.querySelector('select[data-path="happiness.components.0.var"]').value==='needs.hunger','renders happiness components with dropdown variables');
@@ -60,4 +61,26 @@ check(rawPuts['finance.json']===JSON.stringify(saved,null,2)&&rawPuts['tuning.js
 const degradedFetch=async(url,opts={})=>String(url)==='/api/icons'?{ok:false,status:500,json:async()=>[]} : fetchMock(url,opts);
 const degradedDom=new JSDOM(html,{url:'http://localhost:5173/tools/finance.html',runScripts:'dangerously',beforeParse(w){w.fetch=degradedFetch;w.console.warn=()=>{};}});await new Promise((resolve)=>setTimeout(resolve,50));
 check(degradedDom.window.document.getElementById('status').textContent==='Loaded'&&degradedDom.window.FinanceEditor.state.icons.length===0&&degradedDom.window.document.querySelectorAll('.state-row').length===2,'missing /api/icons degrades gracefully without blocking state editing');
+
+// AUDIT overlap 34 / no-tool 58: joint bills.json + finance.json editing
+{
+  const phoneRow=doc.querySelector('.bill[data-bill-id="phone"]');
+  const nameInput=phoneRow.querySelector('input[data-path="bills.1.name"]');
+  nameInput.value='Mobile'; fire(nameInput,'input');
+  check(window.FinanceEditor.state.bills.bills[1].name==='Mobile'&&window.FinanceEditor.state.finance.bills[0].name==='Mobile','renaming a bill syncs identity AND formula');
+  const rentRow=doc.querySelector('.bill[data-bill-id="rent"]');
+  check(rentRow&&rentRow.textContent.includes('rent formula above'),'rent row explains its amount source');
+  doc.getElementById('addBill').click();
+  check(window.FinanceEditor.state.bills.bills.some((b)=>b.id==='bill_1')&&window.FinanceEditor.state.finance.bills.some((b)=>b.id==='bill_1'),'add bill creates identity + formula together');
+  const newRow=doc.querySelector('.bill[data-bill-id="bill_1"]');
+  newRow.querySelector('[data-action="remove-bill"]').click();
+  check(!window.FinanceEditor.state.bills.bills.some((b)=>b.id==='bill_1')&&!window.FinanceEditor.state.finance.bills.some((b)=>b.id==='bill_1'),'delete bill removes both files');
+  window.FinanceEditor.state.finance.bills.push({id:'ghost',name:'Ghost',base:5,perAssetValue:0});
+  window.FinanceEditor.render();
+  const orphan=doc.querySelector('[data-orphan-id="ghost"]');
+  check(!!orphan,'orphan formula (no identity) warns');
+  orphan.querySelector('[data-action="adopt-orphan"]').click();
+  check(window.FinanceEditor.state.bills.bills.some((b)=>b.id==='ghost'),'adopt-orphan creates the identity');
+}
+
 if(failures){console.error(`\n${failures} failure(s)`);process.exit(1);}console.log('\nall finance editor tests passed');

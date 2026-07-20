@@ -120,11 +120,15 @@ async function load() {
     const [a, i, m, s, t] = await Promise.all([
       fetch(API + 'assets.json').then((r) => { if (!r.ok) throw new Error('assets.json HTTP ' + r.status); return r.json(); }),
       fetch(API + 'interactions.json').then((r) => { if (!r.ok) throw new Error('interactions.json HTTP ' + r.status); return r.json(); }),
-      fetch(API + 'maps/condo.json').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      // AUDIT bug 17: placement counts / delete warnings must consider EVERY map, not just condo.
+      fetch('/api/maps').then((r) => (r.ok ? r.json() : { maps: ['condo'] })).catch(() => ({ maps: ['condo'] }))
+        .then(({ maps }) => Promise.all(maps.map((name) =>
+          fetch(API + 'maps/' + name + '.json').then((r) => (r.ok ? r.json() : null)).catch(() => null))))
+        .then((loaded) => loaded.filter(Boolean)),
       fetch(API + 'stats.json').then((r) => (r.ok ? r.json() : { needs: [], skills: [] })).catch(() => ({ needs: [], skills: [] })),
       fetch(API + 'tuning.json').then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ]);
-    state.assets = a; state.interactions = i; state.map = m; state.stats = s; state.tuning = t;
+    state.assets = a; state.interactions = i; state.maps = m; state.map = m[0] ?? null; state.stats = s; state.tuning = t;
     state.dirty = false;
     if (!state.selected && a.assets.length) state.selected = a.assets[0].id;
     renderAll();
@@ -150,7 +154,7 @@ async function save() {
 function markDirty() { state.dirty = true; updateSave(); setStatus('unsaved changes'); schedulePreview(); }
 function updateSave() { document.getElementById('save').disabled = !state.dirty; }
 function setStatus(msg, cls = '') { const s = document.getElementById('status'); s.textContent = msg; s.className = cls; }
-const placedCount = (id) => (state.map?.placedObjects ?? []).filter((p) => p.asset === id).length;
+const placedCount = (id) => (state.maps ?? []).reduce((sum, m) => sum + (m.placedObjects ?? []).filter((p) => p.asset === id).length, 0);
 const selectedAsset = () => state.assets.assets.find((a) => a.id === state.selected) ?? null;
 
 // ------------------------------------------------------------------ sidebar
@@ -176,7 +180,8 @@ function renderSidebar() {
     }
   }
   // uncategorized safety net
-  const stray = state.assets.assets.filter((a) => !state.assets.categories.includes(a.category));
+  const stray = state.assets.assets.filter((a) => !state.assets.categories.includes(a.category) &&
+    (q === '' || a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q)));
   if (stray.length) {
     const h = document.createElement('h4');
     h.textContent = '(uncategorized)';
@@ -235,13 +240,70 @@ function selectInput(options, get, set, path) {
   sel.addEventListener('change', () => { set(sel.value); markDirty(); });
   return sel;
 }
-// §7.5: same extension list as game/sprites.ts's classifyMeshPath (kept in sync manually — this
-// classic inline script deliberately doesn't import game/*.ts, same convention as every other
-// tool's plain-script half, e.g. the Interaction Editor's own slugify).
+// AUDIT overlap 35: the REAL game/sprites.ts classifyMeshPath is bridged in by the module script
+// below (window.AssetEditorEngine, same pattern as the Theme Editor's setThemeEngine); this local
+// list is only the jsdom/module-load-failure fallback, no longer the primary.
 const IMAGE_MESH_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
 function isImageMesh(mesh) {
+  const engine = window.AssetEditorEngine;
+  if (engine?.classifyMeshPath) return engine.classifyMeshPath(String(mesh || '').trim()) === 'image';
   const m = /\.([a-z0-9]+)(?:[?#].*)?$/i.exec(String(mesh || '').trim());
   return !!m && IMAGE_MESH_EXTENSIONS.includes(m[1].toLowerCase());
+}
+
+function nextCategoryId() {
+  let n = 1;
+  while (state.assets.categories.includes(`category_${n}`)) n++;
+  return `category_${n}`;
+}
+
+function renderCategoriesCard() {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = '<h2>Categories</h2>';
+  state.assets.categories.forEach((category, index) => {
+    const count = state.assets.assets.filter((asset) => asset.category === category).length;
+    const controls = document.createElement('div');
+    controls.className = 'pair';
+    const rename = document.createElement('input');
+    rename.type = 'text'; rename.value = category; rename.dataset.path = `categories.${index}`;
+    rename.addEventListener('change', () => {
+      const next = rename.value.trim();
+      if (!next || (next !== category && state.assets.categories.includes(next))) {
+        window.alert(next ? `category "${next}" already exists` : 'category id cannot be blank');
+        renderAll();
+        return;
+      }
+      if (next === category) return;
+      state.assets.categories[index] = next;
+      for (const asset of state.assets.assets) if (asset.category === category) asset.category = next;
+      window.RefScan?.warnAfterDelete(category, [category], { skipFiles: ['assets.json'] }, (w) => setStatus(w, 'err'));
+      markDirty();
+      renderAll();
+    });
+    const del = document.createElement('button');
+    del.className = 'danger'; del.textContent = 'Delete'; del.dataset.categoryDelete = category;
+    del.addEventListener('click', () => {
+      if (count && !window.confirm(`Category "${category}" is used by ${count} asset${count === 1 ? '' : 's'}. Delete the category anyway?`)) return;
+      state.assets.categories.splice(index, 1);
+      window.RefScan?.warnAfterDelete(category, [category], { skipFiles: ['assets.json'] }, (w) => setStatus(w, 'err'));
+      markDirty();
+      renderAll();
+    });
+    controls.append(rename, del);
+    const row = frow(`${count} asset${count === 1 ? '' : 's'}`, controls);
+    row.dataset.categoryRow = category;
+    card.appendChild(row);
+  });
+  const add = document.createElement('button');
+  add.textContent = '+ Add category'; add.id = 'add-category';
+  add.addEventListener('click', () => {
+    state.assets.categories.push(nextCategoryId());
+    markDirty();
+    renderAll();
+  });
+  card.appendChild(add);
+  return card;
 }
 
 // needs.<id> / skills.<id> namespace, matching game/quests.ts's resolveVar / accidents.ts's
@@ -358,11 +420,23 @@ function renderAccidentsCard(a) {
   return card;
 }
 
+// AUDIT bugs 18-21: ONE public-path normalizer for every path field (icon/mesh/sound/pane/state
+// visuals) — pasted Windows paths reduce to public/-relative, legacy "/public/..." values heal.
+function normPublicPath(v) {
+  // AUDIT overlap 36: shared tools/pathnorm.js is the primary; the body below is only the jsdom fallback.
+  if (window.PathNorm) return window.PathNorm.publicRelative(v);
+  let s = String(v).trim().replace(/\\/g, '/');
+  const i = s.toLowerCase().lastIndexOf('/public/');
+  if (i >= 0) s = s.slice(i + '/public/'.length);
+  return s.replace(/^\/+/, '');
+}
+
 function renderEditor() {
   const root = document.getElementById('editor');
   const a = selectedAsset();
   root.innerHTML = '';
-  if (!a) { root.innerHTML = '<div class="empty">Select an asset</div>'; return; }
+  root.appendChild(renderCategoriesCard());
+  if (!a) { root.insertAdjacentHTML('beforeend', '<div class="empty">Select an asset</div>'); return; }
 
   // --- identity & economy
   const card1 = document.createElement('div');
@@ -374,6 +448,9 @@ function renderEditor() {
   catSel.dataset.path = 'category';
   for (const c of state.assets.categories) {
     const o = document.createElement('option'); o.value = c; o.textContent = c; catSel.appendChild(o);
+  }
+  if (a.category && !state.assets.categories.includes(a.category)) {
+    const o = document.createElement('option'); o.value = a.category; o.textContent = `${a.category} (unknown)`; catSel.appendChild(o);
   }
   catSel.value = a.category;
   catSel.addEventListener('change', () => { a.category = catSel.value; markDirty(); renderSidebar(); });
@@ -406,7 +483,7 @@ function renderEditor() {
   const cardIcon = document.createElement('div');
   cardIcon.className = 'card';
   cardIcon.innerHTML = '<h2>Catalog icon</h2><div class="hint">Image path under public/ shown on the Buy/Sell catalog card. Leave blank for a category-colored initials tile instead — never a broken image.</div>';
-  const iconInput = textInput(() => a.icon, (v) => { if (v) a.icon = v; else delete a.icon; updateIconThumb(); }, 'icon');
+  const iconInput = textInput(() => a.icon, (v) => { const t = normPublicPath(v); if (t) a.icon = t; else delete a.icon; updateIconThumb(); }, 'icon');
   iconInput.placeholder = '/models/icons/sofa.png';
   cardIcon.appendChild(frow('icon path', iconInput));
   cardIcon.insertAdjacentHTML('beforeend', '<img id="icon-thumb" alt="" style="max-width:96px;max-height:96px;border-radius:8px;border:1px solid #26304a;display:none;margin-top:4px;" /><div id="icon-thumb-msg" class="hint"></div>');
@@ -604,7 +681,7 @@ function renderEditor() {
   const cardSound = document.createElement('div');
   cardSound.className = 'card';
   cardSound.innerHTML = '<h2>Sound</h2><div class="hint">Assets offering Turn On/Off loop this sound while the placed instance is ON (e.g. TV). Other assets loop it only while targeted by an action (e.g. shower/stove). Path under public/; leave blank for none.</div>';
-  const soundInput = textInput(() => a.sound, (v) => { if (v) a.sound = v; else delete a.sound; }, 'sound');
+  const soundInput = textInput(() => a.sound, (v) => { const t = normPublicPath(v); if (t) a.sound = t; else delete a.sound; }, 'sound');
   soundInput.placeholder = '/sounds/tv_hum.wav';
   cardSound.appendChild(frow('loop sound path', soundInput));
   root.appendChild(cardSound);
@@ -659,12 +736,6 @@ function renderEditor() {
   // both keyed off the SAME Turn On/Off instance state as light/sound/power above. Sparse: the
   // whole screenOverlay block exists only while an image path is set; stateMeshes only while a
   // variant path is set. Pasted Windows paths normalize to public/-relative (designer pitfall).
-  const normPublicPath = (v) => {
-    let s = String(v).trim().replace(/\\/g, '/');
-    const i = s.toLowerCase().lastIndexOf('/public/');
-    if (i >= 0) s = s.slice(i + '/public/'.length);
-    return s.replace(/^\/+/, '');
-  };
   const cardState = document.createElement('div');
   cardState.className = 'card';
   cardState.innerHTML = '<h2>State visuals</h2><div class="hint">Both features follow the instance\'s Turn On/Off state (the same state that drives light, sound, and hydro). <b>Screen overlay</b>: an image or animated GIF plane (e.g. a TV picture) — sized in meters, positioned in asset-local meters from the footprint center at ground level, rotating with the placed asset. <b>State meshes</b>: alternate models shown instead of the base mesh for a state (e.g. an open fridge while ON); blank keeps the base mesh.</div>';
@@ -764,7 +835,7 @@ function renderEditor() {
   card4.className = 'card';
   card4.id = 'preview-wrap';
   card4.innerHTML = '<h2>Mesh</h2>';
-  const mesh = textInput(() => a.mesh, (v) => { a.mesh = v; schedulePreview(); }, 'mesh');
+  const mesh = textInput(() => a.mesh, (v) => { a.mesh = normPublicPath(v); schedulePreview(); }, 'mesh');
   mesh.placeholder = '/models/furniture/couch.glb — or an image: /models/fire.gif';
   card4.appendChild(frow('GLB or image path (under public/) — png/jpg/webp/gif render as sprites', mesh));
   const poses = availablePreviewPoses(a);
@@ -985,8 +1056,11 @@ function renderEditor() {
       () => a.door?.paneNode, setPaneField('paneNode'), 'door.paneNode',
     )));
     card4c.appendChild(frow('pane mesh GLB (separate pane combined with the frame — blank = none)', textInput(
-      () => a.door?.paneMesh, setPaneField('paneMesh'), 'door.paneMesh',
+      () => a.door?.paneMesh, (v) => setPaneField('paneMesh')(normPublicPath(v)), 'door.paneMesh',
     )));
+    if (a.door?.paneNode && a.door?.paneMesh) {
+      card4c.insertAdjacentHTML('beforeend', '<div class="hint" style="color:#e0a44a">⚠ Both pane node AND pane mesh are set — the game uses the NODE and ignores the mesh (Bugstofix door case). Clear one.</div>');
+    }
     // ROADMAP_NEXT item 9: exterior doors never open/close on path-crossing (game/doors.ts skips
     // them in the tick) — they're tappable interactables instead. Sparse: absent = false/interior.
     card4c.appendChild(frow('exterior (tappable interactable, never opens/closes automatically)', checkInput(
@@ -1016,6 +1090,8 @@ function renderEditor() {
       ? `"${a.name}" is placed ${n}× in the condo map. Deleting it will break those placements. Delete anyway?`
       : `Delete "${a.name}"?`;
     if (!window.confirm(msg)) return;
+    // AUDIT bugs 4-13: surface still-dangling references in other files (refscan.js).
+    window.RefScan?.warnAfterDelete(a.id, [a.id], { skipFiles: ['assets.json'] }, (w) => setStatus(w, 'err'));
     state.assets.assets = state.assets.assets.filter((x) => x.id !== a.id);
     state.selected = state.assets.assets[0]?.id ?? null;
     markDirty();
@@ -1072,6 +1148,7 @@ import { AnimController } from '/game/anim.ts';
 import { usePoseFor, useSpotFor } from '/game/facing.ts';
 import { classifyMeshPath, createSpriteInstance, createOverlayInstance } from '/game/sprites.ts';
 import { normalizeModelToFootprint, applyMeshFit, loadMeshTemplate, loadRiggedCharacter, applyOverlayTransform } from '/game/world.ts';
+import { resolvePaneConfig } from '/game/doors.ts';
 import { resolveScreenOverlay, overlayVisibleWhenOn, meshForState } from '/game/stateviz.ts';
 
 let renderer = null, scene, camera, controls, current = null, raf = 0;
@@ -1246,6 +1323,8 @@ function ensure(canvas) {
   return true;
 }
 
+// AUDIT overlap 35: expose the game's own classifier to the inline script (see isImageMesh).
+window.AssetEditorEngine = { classifyMeshPath };
 window.AssetPreview = {
   show(meshPath, assetDef, previewOn = false) {
     const canvas = document.getElementById('preview');
@@ -1314,7 +1393,9 @@ window.AssetPreview = {
     // D2: a separate pane GLB (door.paneMesh) is combined with the frame mesh in ONE 3D — fitted to
     // the footprint TOGETHER, exactly as game/doors.ts combines them at runtime — so the preview
     // shows what actually spawns. loadMeshTemplate caches both per URL (cheap re-clone on edits).
-    const paneRaw = def.door?.paneMesh;
+    // Bugstofix (2026-07-19): use the GAME's precedence (resolvePaneConfig: paneNode WINS over
+    // paneMesh) so the preview can never show a pane combine the runtime would skip.
+    const paneRaw = resolvePaneConfig(def)?.paneMesh;
     const paneUrl = paneRaw ? (/^(\/|https?:)/.test(paneRaw) ? paneRaw : '/' + paneRaw) : null;
     if (paneUrl) {
       Promise.all([loadMeshTemplate(url), loadMeshTemplate(paneUrl)])
@@ -1362,6 +1443,8 @@ window.AssetPreview = {
   },
 };
 </script>
+<script src="/tools/refscan.js"></script>
+<script src="/tools/pathnorm.js"></script>
 <script src="/tools/nav.js"></script>
 </body>
 </html>

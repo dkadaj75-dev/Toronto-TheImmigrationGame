@@ -36,7 +36,7 @@
 (() => {
 'use strict';
 const PROPERTY_TYPES = ['condo','basement','townhouse','house','penthouse'];
-const state = { finance:null, tuning:null, happiness:null, stats:null, simstate:null, visas:null, map:null, assets:null, icons:[], dirty:new Set(), compute:null, happinessStateFor:null, happinessStateDisplay:null };
+const state = { finance:null, bills:null, tuning:null, happiness:null, stats:null, simstate:null, visas:null, map:null, assets:null, icons:[], dirty:new Set(), compute:null, happinessStateFor:null, happinessStateDisplay:null };
 const $ = (id) => document.getElementById(id);
 function numberInput(value, path, onValue, options={}) {
   const input = document.createElement('input'); input.type = 'number'; input.value = String(value); input.dataset.path = path;
@@ -46,14 +46,17 @@ function numberInput(value, path, onValue, options={}) {
 }
 function appendField(root, labelText, input) { const label=document.createElement('label'); label.textContent=labelText; root.append(label,input); }
 function markDirty(file) { state.dirty.add(file); $('save').disabled=false; $('status').textContent='Unsaved changes'; }
-function normalizeSourcePath(raw){let value=String(raw??'').trim().replace(/\\/g,'/');const match=/\/public(\/.*)$/i.exec(value);if(match)value=match[1];else value=value.replace(/^\/?[a-z]:/i,'');if(value&&!/^(\/|https?:)/i.test(value))value='/'+value;return value;}
+function normalizeSourcePath(raw){if(window.PathNorm)return window.PathNorm.publicUrl(raw);/* AUDIT overlap 36: jsdom fallback below */let value=String(raw??'').trim().replace(/\\/g,'/');const match=/\/public(\/.*)$/i.exec(value);if(match)value=match[1];else value=value.replace(/^\/?[a-z]:/i,'');if(value&&!/^(\/|https?:)/i.test(value))value='/'+value;return value;}
 function textInput(value,path,onValue){const input=document.createElement('input');input.value=value??'';input.dataset.path=path;input.addEventListener('input',()=>{onValue(input.value);markDirty('happiness.json');renderHappinessStatePreview();});return input;}
 function happinessVarOptions(current) {
   const groups=[
     ['Needs',(state.stats.needs||[]).map((x)=>[`needs.${x.id}`,`Need: ${x.name}`])],
     ['Skills',(state.stats.skills||[]).map((x)=>[`skills.${x.id}`,`Skill: ${x.name}`])],
+    ['Personality',(state.stats.personality||[]).map((x)=>[`personality.${x.id}`,`Trait: ${x.name}`])],
     ['Economy',[['funds','Funds'],['creditScore','Credit score']]],
+    ['Time',[['time.hour','Hour of day'],['time.day','Day']]],
     ['Variables',(state.simstate.variables||[]).map((x)=>[`vars.${x.id}`,`Variable: ${x.name}`])],
+    ['Quests',(state.quests?.quests||[]).map((x)=>[`quests.${x.id}.state`,`${x.name} (state)`])],
   ];
   const select=document.createElement('select'),known=new Set();
   for(const [label,rows] of groups){const group=document.createElement('optgroup');group.label=label;for(const [value,text] of rows){const option=document.createElement('option');option.value=value;option.textContent=text;group.appendChild(option);known.add(value);}if(rows.length)select.appendChild(group);}
@@ -111,13 +114,50 @@ function render() {
   appendField(rent,'Per floor tile',numberInput(state.finance.rent.perFloorTile,'rent.perFloorTile',(v)=>state.finance.rent.perFloorTile=v,{step:'any'}));
   const props=$('propertyFields'); props.innerHTML='';
   for (const type of PROPERTY_TYPES) appendField(props,type[0].toUpperCase()+type.slice(1),numberInput(state.finance.rent.byPropertyType[type] ?? 0,`rent.byPropertyType.${type}`,(v)=>state.finance.rent.byPropertyType[type]=v,{step:'any'}));
+  // AUDIT overlap 34 + no-tool 58: bills.json (identity/display/order — what the phone Bills tab
+  // lists) and finance.json.bills (formulas) are edited TOGETHER here. bills.json is the master
+  // list; a row without a formula bills 0 (rent's amount comes from the rent system above).
   const bills=$('billFields'); bills.innerHTML='';
-  state.finance.bills.forEach((bill,index)=>{
-    const box=document.createElement('div'); box.className='bill'; const title=document.createElement('div'); title.className='bill-title'; title.textContent=`${bill.name} (${bill.id})`; box.appendChild(title);
+  const financeById=new Map(state.finance.bills.map((bill)=>[bill.id,bill]));
+  (state.bills?.bills??[]).forEach((identity,index)=>{
+    const formula=financeById.get(identity.id);
+    const box=document.createElement('div'); box.className='bill'; box.dataset.billId=identity.id;
+    const title=document.createElement('div'); title.className='bill-title'; title.textContent=`(${identity.id})`;
     const grid=document.createElement('div'); grid.className='grid';
-    appendField(grid,'Base',numberInput(bill.base,`bills.${index}.base`,(v)=>bill.base=v,{step:'any'}));
-    appendField(grid,'Per asset value',numberInput(bill.perAssetValue,`bills.${index}.perAssetValue`,(v)=>bill.perAssetValue=v,{step:'any'})); box.appendChild(grid); bills.appendChild(box);
+    const nameInput=document.createElement('input'); nameInput.type='text'; nameInput.value=identity.name??''; nameInput.dataset.path=`bills.${index}.name`;
+    nameInput.addEventListener('input',()=>{ identity.name=nameInput.value; if(formula){formula.name=nameInput.value; markDirty('finance.json');} markDirty('bills.json'); });
+    const nameLabel=document.createElement('label'); nameLabel.textContent='Name'; grid.append(nameLabel,nameInput);
+    if(formula){
+      const fIndex=state.finance.bills.indexOf(formula);
+      appendField(grid,'Base',numberInput(formula.base,`bills.${fIndex}.base`,(v)=>formula.base=v,{step:'any'}));
+      appendField(grid,'Per asset value',numberInput(formula.perAssetValue,`bills.${fIndex}.perAssetValue`,(v)=>formula.perAssetValue=v,{step:'any'}));
+    } else {
+      const note=document.createElement('div'); note.className='preview-meta'; note.style.gridColumn='1 / -1';
+      note.textContent=identity.id==='rent'?'Amount comes from the rent formula above.':'No formula — bills 0 each cycle.';
+      grid.appendChild(note);
+      if(identity.id!=='rent'){
+        const addFormula=document.createElement('button'); addFormula.className='mini'; addFormula.dataset.action='add-formula'; addFormula.textContent='+ Add formula';
+        addFormula.addEventListener('click',()=>{ state.finance.bills.push({id:identity.id,name:identity.name,base:0,perAssetValue:0}); markDirty('finance.json'); render(); });
+        grid.appendChild(addFormula);
+      }
+    }
+    const remove=document.createElement('button'); remove.className='danger mini'; remove.dataset.action='remove-bill'; remove.textContent='Delete bill';
+    remove.addEventListener('click',()=>{ state.bills.bills.splice(index,1); const fi=state.finance.bills.findIndex((bill)=>bill.id===identity.id); if(fi>=0){state.finance.bills.splice(fi,1); markDirty('finance.json');} markDirty('bills.json'); render(); });
+    box.append(title,grid,remove); bills.appendChild(box);
   });
+  // Formula entries whose id is MISSING from bills.json never get billed — surface, one-click fix.
+  for(const orphan of state.finance.bills.filter((bill)=>!(state.bills?.bills??[]).some((identity)=>identity.id===bill.id))){
+    const warn=document.createElement('div'); warn.className='preview-meta'; warn.style.color='#e0a44a'; warn.dataset.orphanId=orphan.id;
+    warn.textContent=`⚠ formula "${orphan.id}" has no bills.json identity — it is never billed. `;
+    const fix=document.createElement('button'); fix.className='mini'; fix.dataset.action='adopt-orphan'; fix.textContent='Add identity';
+    fix.addEventListener('click',()=>{ (state.bills.bills??=[]).push({id:orphan.id,name:orphan.name||orphan.id}); markDirty('bills.json'); render(); });
+    warn.appendChild(fix); bills.appendChild(warn);
+  }
+  const addBill=document.createElement('button'); addBill.className='mini'; addBill.id='addBill'; addBill.textContent='+ Add bill';
+  addBill.addEventListener('click',()=>{ let n=1; const ids=new Set((state.bills.bills??[]).map((bill)=>bill.id)); while(ids.has(`bill_${n}`))n++;
+    state.bills.bills.push({id:`bill_${n}`,name:`Bill ${n}`}); state.finance.bills.push({id:`bill_${n}`,name:`Bill ${n}`,base:0,perAssetValue:0});
+    markDirty('bills.json'); markDirty('finance.json'); render(); });
+  bills.appendChild(addBill);
   const thresholds=$('thresholdFields'); thresholds.innerHTML='';
   [['Overdue days','overdueDays'],['Too-late days','tooLateDays'],['Negative-balance grace days','negativeGraceDays']].forEach(([label,key])=>appendField(thresholds,label,numberInput(state.finance[key],key,(v)=>state.finance[key]=v,{min:0,step:1})));
   const credit=$('creditFields'); credit.innerHTML='';
@@ -149,13 +189,13 @@ async function load() {
   try {
     const get=async(path)=>{const response=await fetch('/api/data/'+path);if(!response.ok)throw new Error(`${path}: ${response.status}`);return response.json();};
     const iconListing=async()=>{try{const response=await fetch('/api/icons');if(!response.ok)throw new Error(`HTTP ${response.status}`);const value=await response.json();return Array.isArray(value)?value.filter((x)=>typeof x==='string'):[];}catch(error){console.warn('[finance-editor] Icon listing unavailable',error);return[];}};
-    const [finance,assets,tuning,happiness,stats,simstate,visas,icons]=await Promise.all([get('finance.json'),get('assets.json'),get('tuning.json'),get('happiness.json'),get('stats.json'),get('simstate.json'),get('visas.json'),iconListing()]);
-    const map=await get(`maps/${tuning.map?.active || 'condo'}.json`); Object.assign(state,{finance,assets,tuning,happiness,stats,simstate,visas,icons,map}); state.dirty.clear();renderIconOptions();render(); $('status').textContent='Loaded';
+    const [finance,bills,assets,tuning,happiness,stats,simstate,visas,icons]=await Promise.all([get('finance.json'),get('bills.json'),get('assets.json'),get('tuning.json'),get('happiness.json'),get('stats.json'),get('simstate.json'),get('visas.json'),iconListing()]);
+    const map=await get(`maps/${tuning.map?.active || 'condo'}.json`); Object.assign(state,{finance,bills,assets,tuning,happiness,stats,simstate,visas,icons,map}); state.dirty.clear();renderIconOptions();render(); $('status').textContent='Loaded';
   } catch(error) { $('status').textContent='Load failed'; console.error('[finance-editor]',error); }
 }
 async function save() {
   if (!state.dirty.size) return;
-  const files={'finance.json':state.finance,'tuning.json':state.tuning,'happiness.json':state.happiness};
+  const files={'finance.json':state.finance,'bills.json':state.bills,'tuning.json':state.tuning,'happiness.json':state.happiness};
   for (const file of [...state.dirty]) {
     const response=await fetch('/api/data/'+file,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(files[file],null,2)});
     if (!response.ok) { $('status').textContent='Save failed'; return; }
@@ -170,7 +210,7 @@ $('addHappinessState').addEventListener('click',()=>{const states=(state.happine
 $('stateDisplay').addEventListener('change',()=>{state.happiness.stateDisplay=$('stateDisplay').value;markDirty('happiness.json');renderHappinessStatePreview();});
 $('happinessPreviewValue').addEventListener('input',renderHappinessStatePreview);
 $('save').addEventListener('click',save); window.addEventListener('keydown',(event)=>{if((event.ctrlKey||event.metaKey)&&event.key==='s'){event.preventDefault();save();}}); window.addEventListener('beforeunload',(event)=>{if(state.dirty.size)event.preventDefault();});
-window.FinanceEditor={state,load,save,setCompute,setHappinessResolver,renderPreview,renderHappinessStatePreview,normalizeSourcePath}; load();
+window.FinanceEditor={state,load,save,render,setCompute,setHappinessResolver,renderPreview,renderHappinessStatePreview,normalizeSourcePath}; load();
 })();
 </script>
 <script type="module">
@@ -179,6 +219,7 @@ import { happinessStateDisplay, happinessStateFor } from '/game/happiness.ts';
 window.FinanceEditor.setCompute(computeFinancePreview);
 window.FinanceEditor.setHappinessResolver(happinessStateFor,happinessStateDisplay);
 </script>
+<script src="/tools/pathnorm.js"></script>
 <script src="/tools/nav.js"></script>
 </body>
 </html>

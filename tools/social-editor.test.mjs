@@ -16,7 +16,8 @@ const html = readFileSync(join(here, 'social.html'), 'utf8');
 
 const npcs = { npcs: [
   { id:'amara', name:'Amara', portrait:'npcs/amara.png', mesh:'/models/character.glb', tint:'#d9a066', clipMap:null,
-    personality:{ cleanliness:7, intelligence:6 }, availableHours:{from:10,to:22}, visitDurationHours:3, arrivalDelayMinutes:30 },
+    personality:{ cleanliness:7, intelligence:6 }, availableHours:{from:10,to:22}, visitDurationHours:3, arrivalDelayMinutes:30,
+    visitorActions:['watch_tv','ghost_action'] },
 ]};
 const social = {
   relationship:{ min:-100, max:100, start:0, decayPerDay:0.5, levels:[
@@ -35,6 +36,11 @@ const stats = {
   skills:[{id:'cooking', name:'Cooking'}],
   personality:[{id:'cleanliness', name:'Cleanliness', default:5, max:10}, {id:'intelligence', name:'Intelligence', default:5, max:10}],
 };
+const interactions = { actions:[
+  { id:'watch_tv', name:'Watch TV', autonomyEligible:true },
+  { id:'nap', name:'Nap', autonomyEligible:true },
+  { id:'extinguish', name:'Extinguish', autonomyEligible:false },
+] };
 const assets = { categories:['beds','seating'], assets:[
   { id:'bed', name:'Double Bed', category:'beds' }, { id:'sofa', name:'Sofa', category:'seating' },
 ] };
@@ -43,7 +49,7 @@ const rawPuts = {};
 const fetchMock = async (url, opts={}) => {
   const path = String(url).replace('/api/data/','');
   if (opts.method === 'PUT') { rawPuts[path] = opts.body; return { ok:true, status:200, json:async()=>({}) }; }
-  const body = { 'npcs.json':npcs, 'social.json':social, 'stats.json':stats, 'assets.json':assets }[path];
+  const body = { 'npcs.json':npcs, 'social.json':social, 'stats.json':stats, 'assets.json':assets, 'interactions.json':interactions }[path];
   return { ok:!!body, status:body?200:404, json:async()=>structuredClone(body) };
 };
 
@@ -197,6 +203,22 @@ check(savedNpcs.npcs[0].name==='Amara Renamed' && savedNpcs.npcs[0].portrait==='
 check(savedSocial.interactions.length===2 && savedSocial.relationship.levels.length===3, 'social.json PUT carries the edited collections');
 check(savedSocial.visitDuration.byLevel.enemy===0.25 && savedSocial.interactions[0].targetAsset==='beds' && savedSocial.interactions[0].playerAnimation==='player_talk' && savedSocial.interactions[0].npcAnimation==='npc_talk' && savedSocial.interactions[0].sound==='/sounds/chat.wav', 'new sparse social fields survive whole-file save round-trip');
 check(rawPuts['npcs.json']===JSON.stringify(savedNpcs,null,2) && rawPuts['social.json']===JSON.stringify(savedSocial,null,2), 'both saves use exact 2-space pretty whole-file JSON');
+
+// --- AUDIT no-tool 59: per-NPC visitorActions picker
+{
+  const box = (id) => doc.querySelector(`input[data-path="npc.amara.visitorActions.${id}"]`);
+  check(!!box('watch_tv') && box('watch_tv').checked, 'authored visitorAction renders checked');
+  check(!!box('nap') && !box('nap').checked, 'other autonomy-eligible actions render unchecked');
+  check(!box('extinguish'), 'non-autonomy-eligible actions are not offered');
+  const stale = doc.querySelector('[data-stale="ghost_action"]');
+  check(!!stale, 'an authored id that no longer resolves is kept and flagged, never silently dropped');
+
+  box('nap').checked = true; box('nap').dispatchEvent(new window.Event('change', { bubbles:true }));
+  const live = () => window.SocialTool.state.npcs.npcs[0].visitorActions;
+  check(live().includes('nap') && live().includes('watch_tv'), 'checking an action appends it');
+  box('watch_tv').checked = false; box('watch_tv').dispatchEvent(new window.Event('change', { bubbles:true }));
+  check(!live().includes('watch_tv') && live().includes('nap'), 'unchecking removes only that action');
+}
 
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }
 console.log('\nall social editor tests passed');

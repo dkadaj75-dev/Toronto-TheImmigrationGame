@@ -4,7 +4,8 @@
 // card (and any future tool) reuses ONE builder instead of adding a fourth hand-rolled copy — the
 // PROJECT_CONTEXT §5 "tools import game logic, never reimplement" rule applied to shared tool UI.
 // The Condition tree shape/namespace it edits is the SAME one game/quests.ts evaluates (needs.<id>,
-// skills.<id>, funds, time.hour/day, vars.<name>, quests.<id>.state — PROJECT_CONTEXT §3.2).
+// skills.<id>, personality.<id>, funds/creditScore/happiness, time.hour/day, vars.<name>,
+// quests.<id>.state — PROJECT_CONTEXT §3.2).
 //
 // Classic script (like tools/nav.js) exposing window.ConditionBuilder. jsdom note: jsdom does not
 // fetch <script src> by default, so the tool jsdom suites inject this source manually before
@@ -64,13 +65,14 @@
     };
     const needs = () => (d().stats && d().stats.needs) || [];
     const skills = () => (d().stats && d().stats.skills) || [];
+    const personality = () => (d().stats && d().stats.personality) || [];
     const variables = () => (d().simstate && d().simstate.variables) || [];
     const quests = () => (d().quests && d().quests.quests) || [];
 
     // ------------------------------------------------------------ var-path namespace helpers
     function describeVarPath(path) {
-      if (path === 'funds' || path === 'time.hour' || path === 'time.day') return { kind: 'number' };
-      if (path.startsWith('needs.') || path.startsWith('skills.')) return { kind: 'number' };
+      if (path === 'funds' || path === 'creditScore' || path === 'happiness' || path === 'time.hour' || path === 'time.day') return { kind: 'number' };
+      if (path.startsWith('needs.') || path.startsWith('skills.') || path.startsWith('personality.')) return { kind: 'number' };
       if (path.startsWith('vars.')) {
         const v = variables().find((x) => x.id === path.slice(5));
         return { kind: 'var', varType: v ? v.type : 'string' };
@@ -106,6 +108,7 @@
       const groups = [
         ['Needs', needs().map((n) => ({ value: 'needs.' + n.id, label: n.name }))],
         ['Skills', skills().map((s) => ({ value: 'skills.' + s.id, label: s.name }))],
+        ['Personality', personality().map((p) => ({ value: 'personality.' + p.id, label: p.name }))],
         ['Economy', [{ value: 'funds', label: 'Funds' }, { value: 'creditScore', label: 'Credit score' }]],
         ['Mood', [{ value: 'happiness', label: 'Happiness' }]],
         ['Time', [{ value: 'time.hour', label: 'Hour of day' }, { value: 'time.day', label: 'Day' }]],
@@ -241,8 +244,14 @@
 
       const opSel = document.createElement('select');
       opSel.dataset.role = 'op'; opSel.dataset.condPath = path;
-      for (const op of ['gte', 'lte', 'eq', 'neq']) { const o = document.createElement('option'); o.value = op; o.textContent = op; opSel.appendChild(o); }
-      const currentOp = getLeafOp(leaf) || 'gte';
+      // AUDIT bug 3: gte/lte are evaluator-valid only for NUMBERS — quest-state and string/boolean
+      // vars get eq/neq only (a gte on a string is a dead gate that always fails).
+      const varInfo = describeVarPath(leaf.var);
+      const numericVar = varInfo.kind !== 'queststate' && !(varInfo.kind === 'var' && varInfo.varType !== 'number');
+      const allowedOps = numericVar ? ['gte', 'lte', 'eq', 'neq'] : ['eq', 'neq'];
+      for (const op of allowedOps) { const o = document.createElement('option'); o.value = op; o.textContent = op; opSel.appendChild(o); }
+      const currentOp = allowedOps.includes(getLeafOp(leaf) || 'gte') ? (getLeafOp(leaf) || 'gte') : 'eq';
+      if (currentOp !== getLeafOp(leaf) && getLeafOp(leaf)) resetLeafOperatorAndValue(leaf, currentOp); // migrate a stored dead gate
       opSel.value = currentOp;
       opSel.addEventListener('change', () => {
         resetLeafOperatorAndValue(leaf, opSel.value);

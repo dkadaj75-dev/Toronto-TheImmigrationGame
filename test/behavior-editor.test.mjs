@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 
 const here=dirname(fileURLToPath(import.meta.url));
 const html=readFileSync(join(here,'../tools/behavior.html'),'utf8');
+const condBuilderSrc=readFileSync(join(here,'../tools/condition-builder.js'),'utf8');
 const behavior={weights:{needDeficit:.1,distance:.5,personalityAffinity:1},decisionThreshold:2,needWeights:{energy:1.2,fun:.8},rules:[{id:'tired_bed',name:'Tired prefers bed',action:'sleep',assetId:'bed',conditions:{all:[{var:'personality.cleanliness',gte:7}]},scoreBonus:12,enabled:true}]};
 const stats={needs:[{id:'energy',name:'Energy',default:70},{id:'fun',name:'Fun',default:60}],skills:[{id:'cooking',name:'Cooking',default:10,max:100}],personality:[{id:'cleanliness',name:'Cleanliness',default:5,max:10}]};
 const assets={categories:['comfort','fun'],assets:[{id:'bed',name:'Bed',category:'comfort',interactions:['sleep']},{id:'tv',name:'TV',category:'fun',interactions:['watch_tv']}]};
@@ -19,7 +20,7 @@ const map={spawn:{pos:[0,0]},placedObjects:[{asset:'bed',pos:[2,0],rotDeg:0},{as
 const rawPuts={};
 const fixtures={'behavior.json':behavior,'stats.json':stats,'assets.json':assets,'interactions.json':interactions,'tuning.json':tuning,'simstate.json':simstate,'quests.json':quests,'maps/condo.json':map};
 const fetchMock=async(url,opts={})=>{const path=String(url).replace('/api/data/','');if(opts.method==='PUT'){rawPuts[path]=opts.body;return{ok:true,status:200,json:async()=>({})};}const body=fixtures[path];return{ok:!!body,status:body?200:404,json:async()=>structuredClone(body)};};
-const dom=new JSDOM(html,{url:'http://localhost:5173/tools/behavior.html',runScripts:'dangerously',beforeParse(window){window.fetch=fetchMock;}});
+const dom=new JSDOM(html,{url:'http://localhost:5173/tools/behavior.html',runScripts:'dangerously',beforeParse(window){window.fetch=fetchMock;window.eval(condBuilderSrc);}});
 const {window}=dom,doc=window.document;
 await new Promise((resolve)=>setTimeout(resolve,50));
 let failures=0;
@@ -30,7 +31,7 @@ check(!!window.BehaviorEditor,'plain script exposes window.BehaviorEditor');
 check(doc.querySelector('input[data-path="weights.needDeficit"]').value==='0.1'&&doc.querySelector('input[data-path="decisionThreshold"]').value==='2','renders formula weights and decision threshold');
 check(doc.querySelector('input[data-path="needWeights.energy"]').value==='1.2'&&doc.querySelectorAll('.rule').length===1,'renders per-need weights and rules');
 check(doc.querySelector('input[data-path="preview.needs.energy"]').value==='70'&&doc.querySelector('input[data-path="preview.skills.cooking"]').value==='10'&&doc.querySelector('input[data-path="preview.personality.cleanliness"]').value==='5','hypothetical stats are seeded from defaults');
-check([...doc.querySelectorAll('.cond-var option')].some((option)=>option.value==='personality.cleanliness'),'condition namespace includes personality dropdown paths');
+check([...doc.querySelectorAll('.cond-var-select option')].some((option)=>option.value==='personality.cleanliness'),'condition namespace includes personality dropdown paths');
 
 const needWeight=doc.querySelector('input[data-path="needWeights.energy"]');needWeight.value='1.6';fire(needWeight,'input');
 const threshold=doc.querySelector('input[data-path="decisionThreshold"]');threshold.value='4';fire(threshold,'input');
@@ -42,7 +43,7 @@ const ruleIndex=1;
 const action=doc.querySelector(`select[data-path="rules.${ruleIndex}.action"]`);action.value='watch_tv';fire(action,'change');
 const category=doc.querySelector(`select[data-path="rules.${ruleIndex}.assetCategory"]`);category.value='fun';fire(category,'change');
 const bonus=doc.querySelector(`input[data-path="rules.${ruleIndex}.scoreBonus"]`);bonus.value='9';fire(bonus,'input');
-doc.querySelector(`.rule[data-rule-index="${ruleIndex}"] [data-action="add-condition"]`).click();
+doc.querySelector(`.rule[data-rule-index="${ruleIndex}"] [data-action="add-leaf"]`).click();
 let varSelect=doc.querySelector(`.rule[data-rule-index="${ruleIndex}"] select[data-role="var"]`);varSelect.value='personality.cleanliness';fire(varSelect,'change');
 let opSelect=doc.querySelector(`.rule[data-rule-index="${ruleIndex}"] select[data-role="op"]`);opSelect.value='lte';fire(opSelect,'change');
 let value=doc.querySelector(`.rule[data-rule-index="${ruleIndex}"] [data-role="value"]`);value.value='3';fire(value,'input');

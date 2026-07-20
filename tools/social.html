@@ -16,6 +16,8 @@
   .grid{display:grid;grid-template-columns:minmax(150px,1fr) minmax(90px,160px);gap:9px 14px;align-items:center}
   label{color:#c5d0e4} input,select{width:100%;padding:7px 9px;border-radius:6px;border:1px solid #35425a;background:#0d131d;color:var(--text)} input:focus,select:focus{outline:1px solid var(--accent)} input[type=checkbox]{width:auto} input[type=range]{padding:0} input[type=color]{padding:2px;height:34px}
   .checkline{display:flex;gap:7px;align-items:center}
+  .visitor-actions{display:grid;gap:4px;max-height:150px;overflow:auto;padding:6px 8px;background:#0d131d;border:1px solid #35425a;border-radius:6px}
+  .visitor-actions input[type=checkbox]{width:auto}
   .entity{border-top:1px solid var(--line);padding-top:14px;margin-top:14px} .entity:first-of-type{border-top:0;padding-top:0;margin-top:0}
   .entity-head{display:flex;gap:9px;align-items:center;margin-bottom:10px} .entity-head strong{flex:1}
   .slider-row{display:grid;grid-template-columns:minmax(120px,1fr) 1fr 48px;gap:10px;align-items:center;margin:5px 0} .slider-row .sv{text-align:right;font-variant-numeric:tabular-nums;color:#b9d2ff}
@@ -86,7 +88,7 @@
 'use strict';
 const API = '/api/data/';
 const NPCS_FILE = 'npcs.json', SOCIAL_FILE = 'social.json';
-const state = { npcs:null, social:null, stats:null, assets:null, dirty:new Set(), fns:null, previewNpcId:null };
+const state = { npcs:null, social:null, stats:null, assets:null, interactions:null, dirty:new Set(), fns:null, previewNpcId:null };
 const $ = (id) => document.getElementById(id);
 
 function markDirty(file){ state.dirty.add(file); $('save').disabled=false; $('status').textContent='Unsaved changes'; }
@@ -97,6 +99,8 @@ function needDefs(){ return state.stats.needs || []; }
 // A path containing a "public" segment keeps everything after it; otherwise the drive letter is
 // dropped and a leading slash added, so we never store an unfetchable "D:\..." string.
 function normalizeSourcePath(raw){
+  // AUDIT overlap 36: shared tools/pathnorm.js is the primary; the body below is only the jsdom fallback.
+  if (window.PathNorm) return window.PathNorm.publicUrl(raw);
   let p = String(raw ?? '').trim();
   if (!p) return '';
   const looksWindows = /^[a-zA-Z]:[\\/]/.test(p) || p.includes('\\');
@@ -167,13 +171,56 @@ function renderNpcs(){
     const portrait=textInput(npc.portrait,(v)=>{ npc.portrait=v; },NPCS_FILE,{placeholder:'npcs/amara.png'});
     portrait.addEventListener('blur',()=>{ const norm=normalizeSourcePath(portrait.value); if(norm!==portrait.value){ portrait.value=norm; npc.portrait=norm; markDirty(NPCS_FILE); } });
     appendField(grid,'Portrait',portrait);
-    appendField(grid,'Mesh',textInput(npc.mesh,(v)=>npc.mesh=v,NPCS_FILE,{placeholder:'/models/character.glb'}));
+    // AUDIT bug 23: NPC mesh gets the same normalization portrait/sound already had.
+    appendField(grid,'Mesh',textInput(npc.mesh,(v)=>npc.mesh=normalizeSourcePath(v)||v,NPCS_FILE,{placeholder:'/models/character.glb'}));
     const tint=document.createElement('input'); tint.type='color'; tint.value=/^#[0-9a-fA-F]{6}$/.test(npc.tint||'')?npc.tint:'#d9a066'; tint.addEventListener('input',()=>{ npc.tint=tint.value; markDirty(NPCS_FILE); }); appendField(grid,'Tint',tint);
-    appendField(grid,'Clip map (blank = default)',textInput(npc.clipMap??'',(v)=>{ if(v.trim()) npc.clipMap=v; else npc.clipMap=null; },NPCS_FILE));
+    // AUDIT bug 1: runtime clipMap is Record<state,clip>|null — edit as "state=clip, state2=clip2"
+    // pairs and store the parsed OBJECT (a raw string corrupted the NPC animation schema).
+    const clipMapText=npc.clipMap&&typeof npc.clipMap==='object'?Object.entries(npc.clipMap).map(([k,v])=>`${k}=${v}`).join(', '):'';
+    appendField(grid,'Clip map (state=clip, … blank = default)',textInput(clipMapText,(v)=>{
+      const entries=v.split(',').map((pair)=>pair.split('=').map((part)=>part.trim())).filter((kv)=>kv.length===2&&kv[0]&&kv[1]);
+      npc.clipMap=entries.length?Object.fromEntries(entries):null;
+    },NPCS_FILE,{placeholder:'idle=Idle_A, walk=Walk'}));
     appendField(grid,'Available from (h)',numberInput(npc.availableHours?.from??0,(v)=>{ (npc.availableHours||={}).from=v; },NPCS_FILE,{min:0,max:24,step:1}));
     appendField(grid,'Available to (h)',numberInput(npc.availableHours?.to??24,(v)=>{ (npc.availableHours||={}).to=v; },NPCS_FILE,{min:0,max:24,step:1}));
     appendField(grid,'Visit duration (h)',numberInput(npc.visitDurationHours,(v)=>npc.visitDurationHours=v,NPCS_FILE,{min:0,step:'any'}));
     appendField(grid,'Arrival delay (min)',numberInput(npc.arrivalDelayMinutes,(v)=>npc.arrivalDelayMinutes=v,NPCS_FILE,{min:0,step:'any'}));
+    // AUDIT no-tool 59: visitorActions — the per-NPC allow-list of OBJECT actions this visitor may
+    // autonomously perform while visiting (game/npc.ts feeds it to the ordinary autonomy scorer).
+    // Only autonomy-eligible actions are offered; an authored id that no longer exists is kept and
+    // flagged rather than silently dropped.
+    const visitorWrap=document.createElement('div'); visitorWrap.className='visitor-actions'; visitorWrap.dataset.npcId=npc.id;
+    const eligible=(state.interactions?.actions||[]).filter((action)=>action.autonomyEligible);
+    const authored=Array.isArray(npc.visitorActions)?npc.visitorActions:[];
+    const setVisitorActions=(list)=>{ if(list.length) npc.visitorActions=list; else delete npc.visitorActions; markDirty(NPCS_FILE); };
+    for(const action of eligible){
+      const line=document.createElement('label'); line.className='checkline';
+      const box=document.createElement('input'); box.type='checkbox'; box.checked=authored.includes(action.id);
+      box.dataset.path='npc.'+npc.id+'.visitorActions.'+action.id;
+      box.addEventListener('change',()=>{
+        const current=Array.isArray(npc.visitorActions)?[...npc.visitorActions]:[];
+        if(box.checked){ if(!current.includes(action.id)) current.push(action.id); }
+        else { const at=current.indexOf(action.id); if(at>=0) current.splice(at,1); }
+        setVisitorActions(current);
+      });
+      line.append(box,document.createTextNode(action.name||action.id));
+      visitorWrap.appendChild(line);
+    }
+    for(const staleId of authored.filter((id)=>!eligible.some((action)=>action.id===id))){
+      const line=document.createElement('label'); line.className='checkline'; line.dataset.stale=staleId;
+      const box=document.createElement('input'); box.type='checkbox'; box.checked=true;
+      box.dataset.path='npc.'+npc.id+'.visitorActions.'+staleId;
+      box.addEventListener('change',()=>{ setVisitorActions(authored.filter((id)=>id!==staleId)); renderNpcs(); });
+      const why=(state.interactions?.actions||[]).some((action)=>action.id===staleId)?'not autonomy-eligible':'unknown action';
+      line.append(box,document.createTextNode(staleId+' ⚠ '+why));
+      line.style.color='#e0a44a';
+      visitorWrap.appendChild(line);
+    }
+    if(!visitorWrap.children.length){ const none=document.createElement('div'); none.className='hint'; none.textContent='No autonomy-eligible actions defined yet (Interaction Editor).'; visitorWrap.appendChild(none); }
+    appendField(grid,'Visitor actions (autonomy while visiting)',visitorWrap);
+    // AUDIT no-tool-field 59: which sim-to-sim interactions this NPC may start on its own.
+    const visitorActionsText=textInput((npc.visitorActions||[]).join(', '),(v)=>{ const list=v.split(',').map((x)=>x.trim()).filter(Boolean); if(list.length) npc.visitorActions=list; else delete npc.visitorActions; },NPCS_FILE,{placeholder:'chat, hug (interaction ids, comma-separated)'});
+    appendField(grid,'Visitor actions (autonomy)',visitorActionsText);
     box.appendChild(grid);
 
     const persTitle=document.createElement('h3'); persTitle.textContent='Personality'; box.appendChild(persTitle);
@@ -207,7 +254,16 @@ function renderRelationship(){
   rel.levels.forEach((level,index)=>{
     const row=document.createElement('div'); row.className='level-row'; row.dataset.levelIndex=String(index);
     let previousId=level.id;
-    const id=textInput(level.id,(v)=>{ if(previousId!==v && Object.prototype.hasOwnProperty.call(byLevel,previousId)){ byLevel[v]=byLevel[previousId]; delete byLevel[previousId]; } level.id=v; previousId=v; },SOCIAL_FILE); id.placeholder='level id';
+    // AUDIT bug 14: renaming a level must follow EVERY reference — visit-duration keys (below),
+    // interaction level gates, and visitTheirPlace.minLevel — or gates silently point at nothing.
+    const renameLevelRefs=(oldId,newId)=>{
+      for(const act of state.social.interactions||[]){
+        if(act.requiresLevelAtLeast===oldId) act.requiresLevelAtLeast=newId;
+        if(act.requiresLevelAtMost===oldId) act.requiresLevelAtMost=newId;
+      }
+      if(state.social.visitTheirPlace?.minLevel===oldId) state.social.visitTheirPlace.minLevel=newId;
+    };
+    const id=textInput(level.id,(v)=>{ if(previousId!==v){ if(Object.prototype.hasOwnProperty.call(byLevel,previousId)){ byLevel[v]=byLevel[previousId]; delete byLevel[previousId]; } renameLevelRefs(previousId,v); } level.id=v; previousId=v; },SOCIAL_FILE); id.placeholder='level id';
     const atLeast=numberInput(level.atLeast,(v)=>level.atLeast=v,SOCIAL_FILE,{step:'any'});
     const visitMultiplier=sparseNumberInput(byLevel[level.id],(v)=>{ if(v===null) delete byLevel[level.id]; else { attachByLevel(); byLevel[level.id]=v; } },SOCIAL_FILE,{min:0,placeholder:'x1 default'});
     const up=document.createElement('button'); up.className='mini'; up.dataset.action='level-up'; up.textContent='↑'; up.disabled=index===0;
@@ -215,7 +271,15 @@ function renderRelationship(){
     const down=document.createElement('button'); down.className='mini'; down.dataset.action='level-down'; down.textContent='↓'; down.disabled=index===rel.levels.length-1;
     down.addEventListener('click',()=>{ const a=rel.levels; [a[index+1],a[index]]=[a[index],a[index+1]]; markDirty(SOCIAL_FILE); renderRelationship(); renderInteractions(); renderVisit(); renderPreview(); });
     const del=document.createElement('button'); del.className='danger mini'; del.dataset.action='remove-level'; del.textContent='✕';
-    del.addEventListener('click',()=>{ delete byLevel[level.id]; rel.levels.splice(index,1); markDirty(SOCIAL_FILE); renderRelationship(); renderInteractions(); renderVisit(); renderPreview(); });
+    // AUDIT bug 15: deleting a level clears gates that pointed at it (absent = ungated) instead of
+    // leaving them referencing a nonexistent id.
+    del.addEventListener('click',()=>{ delete byLevel[level.id];
+      for(const act of state.social.interactions||[]){
+        if(act.requiresLevelAtLeast===level.id) delete act.requiresLevelAtLeast;
+        if(act.requiresLevelAtMost===level.id) delete act.requiresLevelAtMost;
+      }
+      if(state.social.visitTheirPlace?.minLevel===level.id) state.social.visitTheirPlace.minLevel=null;
+      rel.levels.splice(index,1); markDirty(SOCIAL_FILE); renderRelationship(); renderInteractions(); renderVisit(); renderPreview(); });
     row.append(id,atLeast,visitMultiplier,up,down,del); root.appendChild(row);
   });
 }
@@ -262,7 +326,26 @@ function renderInteractions(){
     const updateWarn=()=>{ warn.style.display=anim.value.trim()?'none':''; };
     anim.addEventListener('input',updateWarn); updateWarn();
     animWrap.append(anim,warn); appendField(grid,'Animation',animWrap);
-    appendField(grid,'Target asset / category',selectInput(assetRows(),it.targetAsset??'',(v)=>{ if(v) it.targetAsset=v; else delete it.targetAsset; },SOCIAL_FILE,'-- standing pair --'));
+    // Designer request (2026-07-19): MULTIPLE acceptable target assets/categories per interaction.
+    // Legacy single targetAsset keeps working; extra rows write the targetAssets array.
+    const targetsWrap=document.createElement('div');
+    const targetList=()=>[it.targetAsset,...(it.targetAssets??[])].filter((x)=>x&&String(x).trim());
+    // Writes without re-rendering (in-place slot updates keep test/DOM references stable);
+    // structural changes (remove row / explicit add) re-render via renderInteractions.
+    const writeTargets=(list,rerender)=>{ const clean=[...new Set(list.map((x)=>String(x).trim()).filter(Boolean))]; if(clean.length){ it.targetAsset=clean[0]; if(clean.length>1) it.targetAssets=clean.slice(1); else delete it.targetAssets; } else { delete it.targetAsset; delete it.targetAssets; } markDirty(SOCIAL_FILE); if(rerender) renderInteractions(); };
+    targetList().forEach((value,ti)=>{
+      const row=document.createElement('div'); row.style.display='flex'; row.style.gap='6px'; row.style.margin='3px 0';
+      const sel=selectInput(assetRows(),value,(v)=>{ const list=targetList(); if(v){ list[ti]=v; writeTargets(list,false); } else { list.splice(ti,1); writeTargets(list,true); } },SOCIAL_FILE,'-- remove --');
+      sel.dataset.path=`interactions.${index}.targets.${ti}`; sel.style.flex='1';
+      row.appendChild(sel); targetsWrap.appendChild(row);
+    });
+    // Trailing picker doubles as the legacy single-target select (first pick fills slot 0) and
+    // as "+ add another": each rendered picker owns ONE slot once used.
+    let pendingSlot=null;
+    const addSel=selectInput(assetRows(),'',(v)=>{ const list=targetList(); if(pendingSlot===null){ if(v){ pendingSlot=list.length; list.push(v); writeTargets(list,false); } } else if(v){ list[pendingSlot]=v; writeTargets(list,false); } else { list.splice(pendingSlot,1); pendingSlot=null; writeTargets(list,true); } },SOCIAL_FILE,targetList().length?'-- add another --':'-- standing pair --');
+    addSel.dataset.path=`interactions.${index}.targets.add`;
+    targetsWrap.appendChild(addSel);
+    appendField(grid,'Target assets / categories (blank = standing pair)',targetsWrap);
     appendField(grid,'Player animation override',textInput(it.playerAnimation??'',(v)=>{ if(v.trim()) it.playerAnimation=v; else delete it.playerAnimation; },SOCIAL_FILE,{placeholder:'blank = base animation'}));
     appendField(grid,'NPC animation override',textInput(it.npcAnimation??'',(v)=>{ if(v.trim()) it.npcAnimation=v; else delete it.npcAnimation; },SOCIAL_FILE,{placeholder:'blank = base animation'}));
     const sound=textInput(it.sound??'',(v)=>{ if(v.trim()) it.sound=v; else delete it.sound; },SOCIAL_FILE,{placeholder:'/sounds/social.wav'});
@@ -359,8 +442,9 @@ function renderAll(){ renderNpcs(); renderRelationship(); renderCompatibility();
 async function load(){
   try{
     const get=async(path)=>{ const r=await fetch(API+path); if(!r.ok) throw new Error(path+': '+r.status); return r.json(); };
-    const [npcs,social,stats,assets]=await Promise.all([get(NPCS_FILE),get(SOCIAL_FILE),get('stats.json'),get('assets.json')]);
-    Object.assign(state,{npcs,social,stats,assets}); state.dirty.clear();
+    // interactions.json is READ-ONLY reference data here (feeds the visitorActions picker); never PUT.
+    const [npcs,social,stats,assets,interactions]=await Promise.all([get(NPCS_FILE),get(SOCIAL_FILE),get('stats.json'),get('assets.json'),get('interactions.json')]);
+    Object.assign(state,{npcs,social,stats,assets,interactions}); state.dirty.clear();
     renderAll(); $('save').disabled=true; $('status').textContent='Loaded';
   }catch(error){ $('status').textContent='Load failed'; console.error('[social-editor]',error); }
 }
@@ -404,6 +488,7 @@ load();
 import { compatibility, levelAllows, levelFor } from '/game/social.ts';
 window.SocialTool.setSocial({ compatibility, levelAllows, levelFor });
 </script>
+<script src="/tools/pathnorm.js"></script>
 <script src="/tools/nav.js"></script>
 </body>
 </html>

@@ -425,6 +425,9 @@ function removeQuest(id) {
     ? `"${quest.name}" is referenced by: ${uses.join(', ')}.\n\nDeleting it will remove those condition leaves (an emptied "all" group becomes vacuously TRUE; an emptied "any" group becomes FALSE). Continue?`
     : `Delete "${quest.name}"? No other quests reference it.`;
   if (!window.confirm(msg)) return;
+  // AUDIT bugs 4-13: after the in-tool reconciliation, scan every OTHER data file and surface
+  // still-dangling references in the status bar (refscan.js) instead of leaving them silent.
+  window.RefScan?.warnAfterDelete(id, [id, 'quests.' + id + '.state'], { skipFiles: ['quests.json'] }, (w) => setStatus(w, 'err'));
   state.quests.quests = state.quests.quests.filter((q) => q.id !== id);
   if (uses.length) {
     for (const q of state.quests.quests) {
@@ -529,6 +532,9 @@ function removeVariable(id) {
     ? `"${v.name}" is referenced by: ${uses.join(', ')}.\n\nDeleting it will remove those condition leaves (an emptied "all" group becomes vacuously TRUE; an emptied "any" group becomes FALSE) and delete the matching setVar reward(s). Continue?`
     : `Delete "${v.name}"? No quests reference it.`;
   if (!window.confirm(msg)) return;
+  // AUDIT bugs 4-13: after the in-tool reconciliation, scan every OTHER data file and surface
+  // still-dangling references in the status bar (refscan.js) instead of leaving them silent.
+  window.RefScan?.warnAfterDelete(id, [id, 'vars.' + id], { skipFiles: ['quests.json', 'simstate.json'] }, (w) => setStatus(w, 'err'));
   state.simstate.variables = state.simstate.variables.filter((x) => x.id !== id);
   let alsoQuests = false;
   if (uses.length) {
@@ -628,6 +634,7 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('beforeunload', (e) => { if (state.dirty.size > 0) e.preventDefault(); });
 load();
 </script>
+<script src="/tools/refscan.js"></script>
 <script src="/tools/nav.js"></script>
 </body>
 </html>

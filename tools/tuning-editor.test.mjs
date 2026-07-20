@@ -268,6 +268,57 @@ assert(!savedStats.personality.some((p) => p.id === 'grit' || p.id === 'neatness
 assert(!('cleanlinessVar' in (puts['tuning.json']?.garbage ?? {})), 'PUT tuning.json reflects the stripped cleanlinessVar');
 assert(doc.getElementById('save').disabled, 'save disabled again after saving the add/remove changes');
 
+// --- AUDIT UX 47/48/60: editable display names + engine-backed `computed` select
+{
+  const hungerName = doc.querySelector('input[data-path="need.hunger.name"]');
+  assert(!!hungerName && hungerName.value === 'Hunger', 'need display name is editable, not display-only');
+  hungerName.value = 'Appetite';
+  hungerName.dispatchEvent(new window.Event('input', { bubbles: true }));
+
+  // (earlier cases add/delete skills, so target whichever skill row is present now)
+  // earlier cases delete every seeded skill/trait, so create fresh ones to rename
+  doc.querySelector('button[data-action="add-skill"]').click();
+  const skillName = doc.querySelector('input[data-path^="skill."][data-path$=".name"]');
+  assert(!!skillName, 'skill display name is editable');
+  skillName.value = 'Renamed skill';
+  skillName.dispatchEvent(new window.Event('input', { bubbles: true }));
+  const skillDoc = window.TuningEditor.state.docs['stats.json'];
+  assert(skillDoc.skills.some((x) => x.name === 'Renamed skill'), 'skill rename writes through to stats.json');
+
+  doc.querySelector('button[data-action="add-personality"]').click();
+  const traitName = doc.querySelector('input[data-path^="personality."][data-path$=".name"]');
+  assert(!!traitName, 'personality display name is editable');
+  traitName.value = 'Renamed trait';
+  traitName.dispatchEvent(new window.Event('input', { bubbles: true }));
+  assert(skillDoc.personality.some((x) => x.name === 'Renamed trait'), 'trait rename writes through to stats.json');
+
+  const computedSel = doc.querySelector('[data-path="need.environment.computed"]');
+  assert(!!computedSel && computedSel.tagName === 'SELECT', 'computed is a select of engine-backed formulas, never free text');
+  const optionValues = [...computedSel.options].map((o) => o.value);
+  assert(optionValues.includes('') && optionValues.includes('sumOfPlacedObjectEnvScores'),
+    'computed offers "not computed" plus the engine formula');
+  assert(optionValues.includes('sum'), 'an unknown authored computed value is preserved as an option, never silently dropped');
+  assert([...computedSel.options].some((o) => o.value === 'sum' && /unknown/i.test(o.textContent)),
+    'the unknown computed value is labelled as not engine-backed');
+
+  // Turning a plain need into a computed one hides its decay row (computed needs never tick-decay).
+  const hungerComputed = doc.querySelector('[data-path="need.hunger.computed"]');
+  hungerComputed.value = 'sumOfPlacedObjectEnvScores';
+  hungerComputed.dispatchEvent(new window.Event('change', { bubbles: true }));
+  assert(!doc.querySelector('[data-path="need.hunger.decayPerTick"]'), 'a computed need loses its decay-per-tick row');
+  assert(!!doc.querySelector('[data-warn="multiple-computed"]'), 'two computed needs warn that only the first is engine-wired');
+
+  // Back off again: the key is deleted (sparse), decay row returns, warning clears.
+  const hungerComputed2 = doc.querySelector('[data-path="need.hunger.computed"]');
+  hungerComputed2.value = '';
+  hungerComputed2.dispatchEvent(new window.Event('change', { bubbles: true }));
+  assert(!!doc.querySelector('[data-path="need.hunger.decayPerTick"]'), 'clearing computed restores the decay row');
+  assert(!doc.querySelector('[data-warn="multiple-computed"]'), 'single computed need raises no warning');
+  const liveHunger = window.TuningEditor.state.docs['stats.json'].needs.find((n) => n.id === 'hunger');
+  assert(liveHunger.name === 'Appetite', 'need rename writes through to stats.json');
+  assert(!('computed' in liveHunger), 'clearing computed deletes the key (sparse), never stores empty string');
+}
+
 console.log('ALL TUNING-EDITOR TESTS PASSED');
 
 function assert(cond, msg) {

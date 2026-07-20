@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(here, '../tools/interactions.html'), 'utf8');
+const condBuilderSrc = readFileSync(join(here, '../tools/condition-builder.js'), 'utf8');
 
 const interactions = {
   actions: [
@@ -64,6 +65,7 @@ const dom = new JSDOM(html, {
     window.confirm = () => true;
     window.prompt = () => 'Do Yoga';
     window.alert = () => {};
+    window.eval(condBuilderSrc);
   },
 });
 const { window } = dom;
@@ -359,7 +361,7 @@ assert(!('conditions' in savedYoga), 'PUT: conditions key fully removed (sparse)
   const dom2 = new JSDOM(html, {
     url: 'http://localhost:5173/tools/interactions.html',
     runScripts: 'dangerously',
-    beforeParse(window) { window.fetch = fetchMock2; window.confirm = () => true; window.prompt = () => ''; window.alert = () => {}; },
+    beforeParse(window) { window.fetch = fetchMock2; window.confirm = () => true; window.prompt = () => ''; window.alert = () => {}; window.eval(condBuilderSrc); },
   });
   await new Promise((r) => setTimeout(r, 50));
   const doc2 = dom2.window.document;

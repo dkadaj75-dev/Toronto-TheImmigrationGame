@@ -194,7 +194,8 @@ console.log('map-editor.test — floors: draw rect / material / edit / delete');
   check('music field reflects the fixture\'s current playlist', musicField.value === (st.doc.music ?? []).join(', '), musicField.value);
   musicField.value = 'sounds/a.wav, sounds/b.wav';
   musicField.dispatchEvent(new window.Event('change', { bubbles: true }));
-  check('music comma-separated input parses to a trimmed array', JSON.stringify(st.doc.music) === JSON.stringify(['sounds/a.wav', 'sounds/b.wav']), JSON.stringify(st.doc.music));
+  // AUDIT bug 25: entries are normalized to served URLs (leading slash) like the ad-photo field.
+  check('music comma-separated input parses to a trimmed, normalized array', JSON.stringify(st.doc.music) === JSON.stringify(['/sounds/a.wav', '/sounds/b.wav']), JSON.stringify(st.doc.music));
   musicField.value = '';
   musicField.dispatchEvent(new window.Event('change', { bubbles: true }));
   check('clearing the music field prunes the key entirely (sparse)', !('music' in st.doc));
