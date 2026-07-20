@@ -52,7 +52,7 @@
         "chancePercent": 45,
         "delaySeconds": 12
       },
-      "icon": "/public/icons/sofa.png",
+      "icon": "icons/sofa.png",
       "needMultipliers": {
         "comfort": 1.25
       }
@@ -161,7 +161,7 @@
         "chancePercent": 35,
         "delaySeconds": 15
       },
-      "icon": "/public/icons/bed.png",
+      "icon": "icons/bed.png",
       "needMultipliers": {
         "comfort": 1.5
       }
@@ -190,7 +190,7 @@
           1
         ]
       },
-      "icon": "/public/icons/fridge.png"
+      "icon": "icons/fridge.png"
     },
     {
       "id": "stove",
@@ -218,7 +218,7 @@
           "modifiers": [
             {
               "var": "skills.cooking",
-              "pctAt0": 15,
+              "pctAt0": 5,
               "pctAtMax": -2
             }
           ],
@@ -230,7 +230,7 @@
         "chancePercent": 25,
         "delaySeconds": 10
       },
-      "icon": "/public/icons/stove.png",
+      "icon": "icons/stove.png",
       "meshFit": {
         "scale": [
           1.15,
@@ -305,7 +305,7 @@
           ]
         }
       },
-      "icon": "/public/icons/WC.png"
+      "icon": "icons/WC.png"
     },
     {
       "id": "shower",
@@ -338,6 +338,11 @@
               "var": "needs.energy",
               "pctAt0": 50,
               "pctAtMax": 0
+            },
+            {
+              "var": "needs.hygiene",
+              "pctAt0": 20,
+              "pctAtMax": 1
             }
           ]
         }
@@ -355,7 +360,7 @@
         }
       },
       "_usePoseNote": "ROADMAP_NEXT B2-3: offset [0,0] = footprint center = inside the shower stall (the shower action's animation is 'stand_use', a standing pose — without this explicit usePose.use entry the sim would stay at its walk-up approach spot just outside the footprint, per usePoseFor's 'no default for use' rule).",
-      "icon": "/public/icons/shower.png",
+      "icon": "icons/shower.png",
       "needMultipliers": {
         "hygiene": 0.8
       }
@@ -375,7 +380,7 @@
       "interactions": [
         "wash_hands"
       ],
-      "icon": "/public/icons/sink.png",
+      "icon": "icons/sink.png",
       "meshFit": {
         "scale": [
           1,
@@ -419,7 +424,7 @@
         "defaultOn": false
       },
       "_powerNote": "B6-12: sound and screen-glow light persist while this placed TV is ON. Watch TV auto-turns it on and leaves it on.",
-      "icon": "/public/icons/tv.png",
+      "icon": "icons/tv.png",
       "combustibility": {
         "chancePercent": 50,
         "delaySeconds": 5
@@ -457,7 +462,8 @@
       "interactions": [
         "read_book",
         "practice_english",
-        "learn_cooking"
+        "learn_cooking",
+        "read_the_psychology_of_money"
       ],
       "meshFit": {
         "yawOffsetDeg": 90,
@@ -470,7 +476,7 @@
         "chancePercent": 80,
         "delaySeconds": 3
       },
-      "icon": "/public/icons/bookshelf.png",
+      "icon": "icons/bookshelf.png",
       "needMultipliers": {
         "fun": 0.8
       }
@@ -517,7 +523,7 @@
         "defaultOn": false,
         "environmentBonus": 3
       },
-      "icon": "/public/icons/lamp.png",
+      "icon": "icons/lamp.png",
       "meshFit": {
         "scale": 0.8
       },
@@ -555,7 +561,7 @@
         "defaultOn": false,
         "environmentBonus": 1.5
       },
-      "icon": "/public/icons/walllight.png",
+      "icon": "icons/walllight.png",
       "power": {
         "ratePerHour": 0.05
       },
@@ -601,7 +607,6 @@
         ],
         "openSeconds": 0.1,
         "closeSeconds": 0.1,
-        "paneNode": "Door pane 1",
         "paneMesh": "/models/doorpane1.glb",
         "openAngleDeg": 90
       },
@@ -766,7 +771,7 @@
         "yawOffsetDeg": 90,
         "scale": 0.8
       },
-      "icon": "/public/icons/trash.png"
+      "icon": "icons/trash.png"
     },
     {
       "id": "dirty_dishes",
@@ -877,7 +882,7 @@
           1
         ]
       },
-      "icon": "/public/icons/stinkyfridge.png"
+      "icon": "icons/stinkyfridge.png"
     },
     {
       "id": "kitchen_sink",
@@ -894,7 +899,7 @@
       "interactions": [
         "wash_hands"
       ],
-      "icon": "/public/icons/kitchensink.png",
+      "icon": "icons/kitchensink.png",
       "meshFit": {
         "scale": [
           1,
@@ -903,7 +908,19 @@
         ],
         "xOffset": 0,
         "zOffset": 0
-      }
+      },
+      "accidents": [
+        {
+          "accidentId": "water_puddle",
+          "trigger": "onUse",
+          "baseChancePercent": 10,
+          "placement": "adjacent",
+          "adjacentRange": [
+            1,
+            2
+          ]
+        }
+      ]
     },
     {
       "id": "rustic_bed",
@@ -937,6 +954,48 @@
           ]
         }
       }
+    },
+    {
+      "id": "basement_toilet",
+      "name": "Basement Toilet",
+      "category": "plumbing",
+      "mesh": "models/WC_basement.glb",
+      "buyPrice": 300,
+      "sellPrice": 225,
+      "environmentScore": 0,
+      "footprint": [
+        1,
+        1
+      ],
+      "interactions": [
+        "use_toilet"
+      ],
+      "usePose": {
+        "sit": {
+          "y": 0.05,
+          "offset": [
+            0,
+            0.15
+          ]
+        }
+      },
+      "icon": "icons/WC.png",
+      "needMultipliers": {
+        "bladder": 0.8,
+        "hygiene": 2
+      },
+      "accidents": [
+        {
+          "accidentId": "water_puddle",
+          "trigger": "onUse",
+          "baseChancePercent": 25,
+          "placement": "adjacent",
+          "adjacentRange": [
+            1,
+            2
+          ]
+        }
+      ]
     }
   ]
 }

@@ -5,7 +5,8 @@
       "id": "eat",
       "name": "Eat a cheese slice",
       "needGains": {
-        "hunger": 5
+        "hunger": 5,
+        "bladder": -2
       },
       "skillGains": {},
       "animation": "sit_eat",
@@ -58,7 +59,8 @@
       "id": "use_toilet",
       "name": "Use toilet",
       "needGains": {
-        "bladder": 6
+        "bladder": 6,
+        "hygiene": -1
       },
       "skillGains": {},
       "animation": "sit_idle",
@@ -109,7 +111,10 @@
     {
       "id": "cook",
       "name": "Cook a light meal",
-      "needGains": {},
+      "needGains": {
+        "hunger": 10,
+        "bladder": -5
+      },
       "skillGains": {
         "cooking": 0.05
       },
@@ -439,7 +444,10 @@
     {
       "id": "cook_a_large_meal",
       "name": "Cook a large meal",
-      "needGains": {},
+      "needGains": {
+        "hunger": 40,
+        "bladder": -10
+      },
       "skillGains": {},
       "animation": "stand_use",
       "autonomyEligible": true,
@@ -451,6 +459,20 @@
         "skillVar": "skills.cooking"
       },
       "producesWaste": "dirty_dishes"
+    },
+    {
+      "id": "read_the_psychology_of_money",
+      "name": "Read \"The Psychology of Money\"",
+      "needGains": {},
+      "skillGains": {
+        "finance": 0.5
+      },
+      "animation": "sit_idle",
+      "autonomyEligible": true,
+      "primaryNeed": null,
+      "fetchBeforeSeat": true,
+      "faceTarget": false,
+      "seatAware": true
     }
   ]
 }

@@ -1,7 +1,7 @@
 {
   "_comment": "EVERY global tunable lives here (design pillar #2). Game hot-reloads this file in dev. Values documented in docs/roadmaps/WEB_GAME_ROADMAP.md are marked; the rest are PLACEHOLDER pending CLAUDE.md verification.",
   "simulation": {
-    "needsDecayTickSeconds": 1,
+    "needsDecayTickSeconds": 1.5,
     "activityGainTickSeconds": 2,
     "_source": "roadmap §5 — matches Unreal prototype exactly"
   },
@@ -264,5 +264,8 @@
     "twistDeadzoneDeg": 1.5,
     "twistSpeed": 1.2,
     "_source": "PLACEHOLDER — clamps to be tuned against Sims reference screenshots. rotateSpeedDegPerPx = desktop right-drag yaw sensitivity; twistDeadzoneDeg/twistSpeed = mobile two-finger twist (coexists with pinch-zoom), deadzone keeps pinch jitter from spinning the camera"
+  },
+  "cleanup": {
+    "radiusMeters": 2
   }
 }

@@ -1,5 +1,0 @@
-When setting a door as the frame and adding the pane, it shows correctly in the asset editor but not in game.
-
-When the character cleans up or mops up something, they should be able to clean everything around in a set, tunable, radius.
-In the Career tool, section "Needs cost on return" - fields are too small.
-Job promotions: this requires specific skills and is also tied to hapiness with a random possibility to get promoted while meeting all criterias, tunable.

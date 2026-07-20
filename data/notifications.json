@@ -79,32 +79,32 @@
     },
     "workDue": {
       "tier": "card",
-      "icon": "icons/work.svg"
+      "icon": "icons/work.png"
     },
     "offToWork": {
       "tier": "passive",
-      "icon": "icons/work.svg"
+      "icon": "icons/work.png"
     },
     "workReturned": {
       "tier": "passive",
-      "icon": "icons/work.svg"
+      "icon": "icons/work.pnh"
     },
     "workMissed": {
       "tier": "card",
-      "icon": "icons/work.svg"
+      "icon": "icons/work.png"
     },
     "jobLost": {
       "tier": "card",
-      "icon": "icons/work.svg"
+      "icon": "icons/work.png"
     },
     "promotion": {
       "tier": "card",
-      "icon": "icons/work.svg",
+      "icon": "icons/work.png",
       "sound": "questCompleted"
     },
     "jobAccepted": {
       "tier": "card",
-      "icon": "icons/work.svg"
+      "icon": "icons/work.png"
     },
     "jobRequirementsUnmet": {
       "tier": "passive",

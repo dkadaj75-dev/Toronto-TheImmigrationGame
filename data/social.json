@@ -130,7 +130,7 @@
       "requiresLevelAtLeast": "beloved",
       "requiresLevelAtMost": null,
       "autonomyEligible": true,
-      "censor": false
+      "censor": true
     },
     {
       "id": "foreplay",
@@ -139,7 +139,7 @@
       "durationSeconds": 10,
       "needGains": {},
       "relationshipGain": 0,
-      "requiresLevelAtLeast": "beloved",
+      "requiresLevelAtLeast": "good_friend",
       "requiresLevelAtMost": null,
       "autonomyEligible": true,
       "censor": true
@@ -148,17 +148,27 @@
       "id": "bed",
       "name": "Put the seal on the bed",
       "animation": "lie",
-      "targetAsset": "bed",
+      "targetAsset": "beds",
       "playerAnimation": "lie_sleep",
       "npcAnimation": "lie_sleep",
       "sound": "/sounds/action_beep.wav",
-      "durationSeconds": 20,
-      "needGains": {},
-      "relationshipGain": 0,
-      "requiresLevelAtLeast": "beloved",
+      "durationSeconds": 10,
+      "needGains": {
+        "comfort": 15,
+        "bladder": -10,
+        "energy": -5,
+        "fun": 25,
+        "social": 50,
+        "hygiene": -15
+      },
+      "relationshipGain": 50,
+      "requiresLevelAtLeast": "acquaintance",
       "requiresLevelAtMost": null,
       "autonomyEligible": true,
-      "censor": true
+      "censor": true,
+      "targetAssets": [
+        "sofa"
+      ]
     }
   ],
   "phone": {
