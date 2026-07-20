@@ -1,8 +1,0 @@
-- When moving certain blocks in the theme editor, like the time barif I anchor it at the bottom of the screen the block is streched from top to bottom (graphical bug) some others have similar bugs like visa chip, but the opposite when I anchor it at the top...
-- Also, when I put even a 0 Y offset at the bottom for example for the visa chip or funds, they do not go all the way down, as if something is blocking them.
-- For notifications: I do not have access to the icons! I cannot change them.
-- For the Titlke: I want to change the title, also I do not want the background card, just the buttons (that I should be able to reposition as well).
-- When the TV is ON, the action to sleep should still be present, however the Sim would wake up a few seconds after and play a select animation (he is mad) and go turn off the TV and lights. And there should be (low importance)  notifications.
-- Low importance notifications are weirdly flickering also.
-- I don't know why, but when there is a fire, most of the time the game freezes, especially on phone.
-- In the map editor AND the buy menu, I want the assets to have a snap to wall / other assets options (kinda like the wall mounted object that snap to the wall). This is to avoid awward gaps.

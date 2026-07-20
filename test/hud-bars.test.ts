@@ -63,6 +63,30 @@ check('icon mode hides the text', !happinessIcon.hidden && happinessLabel.hidden
 hud.setHappiness(25, { stateDisplay: 'both' });
 check('absent states hide the state while the number remains absent', happinessState.hidden && !doc.querySelector('#needs-panel output'));
 
+// happinessHeader accordions (theme.json) take over the display: the accordion toggle shows the
+// live state icon+text, the static accordion icon hides, and the in-panel row stays hidden.
+const { applyTheme, DEFAULT_THEME } = await import('../game/theme');
+applyTheme({
+  ...DEFAULT_THEME,
+  layout: { ...DEFAULT_THEME.layout, 'needs-panel': { ...DEFAULT_THEME.layout['needs-panel'], accordion: 'Needs' } },
+  accordions: [{ name: 'Needs', icon: '/icons/needs.svg', happinessHeader: true }],
+}, doc);
+const toggle = doc.querySelector<HTMLElement>('.theme-accordion-toggle[data-happiness-header]')!;
+check('happinessHeader accordion toggle carries hidden live slots', !!toggle
+  && !!toggle.querySelector('.theme-accordion-happiness-icon') && !!toggle.querySelector('.theme-accordion-happiness-label'));
+hud.setHappiness(95, { states: [{ id: 'great', atLeast: 0, label: 'Great', icon: '/icons/happy.svg' }], stateDisplay: 'both' });
+const headerIcon = toggle.querySelector<HTMLImageElement>('.theme-accordion-happiness-icon')!;
+const headerLabel = toggle.querySelector<HTMLElement>('.theme-accordion-happiness-label')!;
+const staticIcon = toggle.querySelector<HTMLElement>('.theme-accordion-static')!;
+check('resolved state renders in the accordion header', !headerIcon.hidden && headerIcon.getAttribute('src') === '/icons/happy.svg'
+  && !headerLabel.hidden && headerLabel.textContent === 'Great' && toggle.dataset.stateId === 'great');
+check('static accordion icon hides while a state is shown', staticIcon.hidden);
+check('in-panel happiness row stays hidden when a header exists', happinessState.hidden && !happinessState.dataset.stateId);
+hud.setHappiness(50, { stateDisplay: 'both' }); // no states authored → header reverts to static
+check('absent states revert the header to the static icon', headerIcon.hidden && headerLabel.hidden && !staticIcon.hidden && !toggle.dataset.stateId);
+applyTheme(DEFAULT_THEME, doc); // ungroup again so the bar assertions below see the legacy DOM
+hud.setHappiness(25, { stateDisplay: 'both' });
+
 const needBars = [...doc.querySelectorAll('#needs-panel .bars .bar-row')];
 const skillBars = [...doc.querySelectorAll('#skills-panel .bars .bar-row')];
 check('a bar row is built for every need', needBars.length === 2);

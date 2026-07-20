@@ -238,7 +238,7 @@ function appendVarOptions(select, current) {
   const groups = [
     ['Needs', state.stats.needs.map((x) => [`needs.${x.id}`, x.name])],
     ['Skills', state.stats.skills.map((x) => [`skills.${x.id}`, x.name])],
-    ['Economy', [['funds', 'Funds']]],
+    ['Economy', [['funds', 'Funds'], ['creditScore', 'Credit score']]], ['Mood', [['happiness', 'Happiness']]],
     ['Time', [['time.hour', 'Hour of day'], ['time.day', 'Day']]],
     ['Variables', state.simstate.variables.map((x) => [`vars.${x.id}`, x.name])],
     ['Quests', state.quests.quests.map((x) => [`quests.${x.id}.state`, `${x.name} (state)`])],
@@ -388,6 +388,17 @@ function renderJobEditor() {
   }, 'job.minCreditScore', { min: 0, emptyValue: null })));
   details.appendChild(frow('max skips', numberInput(job.maxSkips, (v) => { job.maxSkips = v; markDirty('jobs.json'); }, 'job.maxSkips', { min: 0 })));
   root.appendChild(details);
+  // H4 (ROADMAP_HAPPY): sparse unhappy-streak firing. Blank fields = this job never mood-fires.
+  const firingCard = card('Firing (happiness)');
+  firingCard.insertAdjacentHTML('beforeend', '<div class="hint">A completed shift with happiness below the minimum counts toward a consecutive streak; exceeding max unhappy shifts fires the sim (job lost + a non-permanent visa opens its grace window). Blank = never fired for mood.</div>');
+  const setFiring = (key) => (v) => {
+    if (v === undefined || v === null || Number.isNaN(v)) { if (job.firing) { delete job.firing[key]; if (!Object.keys(job.firing).length) delete job.firing; } }
+    else (job.firing ??= {})[key] = v;
+    markDirty('jobs.json');
+  };
+  firingCard.appendChild(frow('min happiness per shift', numberInput(job.firing?.minHappiness, setFiring('minHappiness'), 'job.firing.minHappiness', { min: 0, emptyValue: null })));
+  firingCard.appendChild(frow('max unhappy shifts in a row', numberInput(job.firing?.maxUnhappyShifts, setFiring('maxUnhappyShifts'), 'job.firing.maxUnhappyShifts', { min: 0, emptyValue: null })));
+  root.appendChild(firingCard);
   const schedule = card('Weekly schedule');
   const dayGrid = document.createElement('div'); dayGrid.className = 'weekday-grid';
   const dayNames = calendarDayNames(), selectedDays = selectedWorkDayIndices(job);
@@ -515,7 +526,7 @@ function collectValidationIssues() {
     else if (node.var.startsWith('vars.') && !variableIds.has(node.var.slice(5))) issues.push(`${owner} — requirements: unknown variable "${node.var.slice(5)}".`);
     else if (/^quests\.(.+)\.state$/.test(node.var)) {
       const id = /^quests\.(.+)\.state$/.exec(node.var)[1]; if (!questIds.has(id)) issues.push(`${owner} — requirements: unknown quest id "${node.var}".`);
-    } else if (!(node.var.startsWith('needs.') || node.var.startsWith('skills.') || node.var.startsWith('vars.') || node.var === 'funds' || node.var === 'time.hour' || node.var === 'time.day')) {
+    } else if (!(node.var.startsWith('needs.') || node.var.startsWith('skills.') || node.var.startsWith('vars.') || node.var === 'funds' || node.var === 'creditScore' || node.var === 'happiness' || node.var === 'time.hour' || node.var === 'time.day')) {
       issues.push(`${owner} — requirements: unrecognized condition id "${node.var}".`);
     }
   }

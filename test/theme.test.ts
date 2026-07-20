@@ -104,13 +104,21 @@ const accordionTheme: ThemeData = {
 };
 equal(resolveAccordionGroups(accordionTheme), [{
   name: 'Vitals', collapsedByDefault: true, elementIds: ['needs-panel', 'skills-panel'],
-  layout: accordionTheme.layout['needs-panel'], icon: '/icons/needs.svg', showText: false,
+  layout: accordionTheme.layout['needs-panel'], icon: '/icons/needs.svg', showText: false, happinessHeader: false,
 }], 'accordion resolution is ordered, deduplicated, known-id-only, and definition-gated');
+equal(
+  resolveAccordionGroups({
+    ...accordionTheme,
+    accordions: [{ name: 'Vitals', happinessHeader: true }],
+  })[0]?.happinessHeader,
+  true,
+  'sparse happinessHeader flag passes through accordion resolution',
+);
 equal(KNOWN_THEME_ELEMENT_IDS.includes('phone-button'), true, 'smartphone is a known layout target');
 equal(resolveAccordionGroups(DEFAULT_THEME), [], 'shipped theme leaves the legacy DOM ungrouped');
-equal(resolveAccordionGroups(shippedTheme).map((group) => ({ name: group.name, collapsed: group.collapsedByDefault, icon: group.icon, showText: group.showText })), [
-  { name: 'Needs', collapsed: true, icon: '/icons/needs.svg', showText: false },
-  { name: 'Skills', collapsed: true, icon: '/icons/skills.svg', showText: false },
-], 'shipped needs and skills resolve as collapsed icon-only accordions');
+equal(resolveAccordionGroups(shippedTheme).map((group) => ({ name: group.name, collapsed: group.collapsedByDefault, icon: group.icon, showText: group.showText, happinessHeader: group.happinessHeader })), [
+  { name: 'Needs', collapsed: true, icon: '/icons/needs.svg', showText: false, happinessHeader: true },
+  { name: 'Skills', collapsed: true, icon: '/icons/skills.svg', showText: false, happinessHeader: false },
+], 'shipped needs accordion carries the happiness header; skills stays static');
 
 console.log(`theme engine: ${assertions} assertions passed`);

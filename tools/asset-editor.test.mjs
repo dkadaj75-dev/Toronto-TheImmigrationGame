@@ -202,6 +202,26 @@ wallEnabled.checked = true; wallEnabled.dispatchEvent(new window.Event('change',
 const wallHeight = doc.querySelector('input[data-path="wallMounted.heightY"]');
 wallHeight.value = '1.8'; wallHeight.dispatchEvent(new window.Event('input', { bubbles: true }));
 
+// --- State visuals card (2026-07-19, game/stateviz.ts): sparse screen overlay + state meshes.
+// A pasted Windows path must normalize to a public/-relative path (designer pitfall precedent).
+const overlayImg = doc.querySelector('input[data-path="screenOverlay.image"]');
+assert(overlayImg && overlayImg.value === '', 'State visuals card rendered; overlay image blank when absent');
+overlayImg.value = 'C:\\Users\\me\\proj\\public\\textures\\tv_screen.gif';
+overlayImg.dispatchEvent(new window.Event('input', { bubbles: true }));
+const overlayWidth = doc.querySelector('input[data-path="screenOverlay.widthMeters"]');
+overlayWidth.value = '1.55'; overlayWidth.dispatchEvent(new window.Event('input', { bubbles: true }));
+const overlayOffY = doc.querySelector('input[data-path="screenOverlay.offset.1"]');
+overlayOffY.value = '0.5'; overlayOffY.dispatchEvent(new window.Event('input', { bubbles: true }));
+const overlayWhen = doc.querySelector('select[data-path="screenOverlay.when"]');
+assert(overlayWhen && overlayWhen.value === 'on', 'overlay when defaults to ON');
+overlayWhen.value = 'off'; overlayWhen.dispatchEvent(new window.Event('change', { bubbles: true }));
+overlayWhen.value = 'on'; overlayWhen.dispatchEvent(new window.Event('change', { bubbles: true })); // back to default → key pruned
+const stateMeshOn = doc.querySelector('input[data-path="stateMeshes.on"]');
+assert(stateMeshOn && stateMeshOn.value === '', 'stateMeshes.on blank when absent');
+stateMeshOn.value = 'models/couch_on.glb';
+stateMeshOn.dispatchEvent(new window.Event('input', { bubbles: true }));
+assert(doc.querySelector('input[data-path="preview.stateOn"]'), 'preview power-state toggle rendered (view-only)');
+
 // --- usePose (§7.8, roadmap item 1): sparse per-pose sit/lie override, offset/y/facingDeg
 const sitOffsetX = doc.querySelector('input[data-path="usePose.sit.offsetX"]');
 assert(sitOffsetX, 'usePose.sit offset fields rendered');
@@ -514,6 +534,10 @@ assert(savedCouch.sound === '/sounds/couch_creak.wav', 'PUT carries edited sound
 assert(savedCouch.light.color === '#ffeeaa' && savedCouch.light.intensity === 3.5 && savedCouch.light.environmentBonus === 0.08 && savedCouch.light.defaultOn === true, 'PUT carries sparse Light card fields including night Environment bonus');
 assert(!('distance' in savedCouch.light) && !('yOffset' in savedCouch.light), 'untouched Light fields stay absent');
 assert(savedCouch.wallMounted.heightY === 1.8, 'PUT carries wall-mounted height');
+assert(savedCouch.screenOverlay.image === 'textures/tv_screen.gif', 'PUT normalizes a pasted Windows overlay path to public/-relative');
+assert(savedCouch.screenOverlay.widthMeters === 1.55 && JSON.stringify(savedCouch.screenOverlay.offset) === '[0,0.5,0]', 'PUT carries sparse overlay size + partial offset');
+assert(!('when' in savedCouch.screenOverlay) && !('heightMeters' in savedCouch.screenOverlay) && !('fps' in savedCouch.screenOverlay), 'default when=ON and untouched overlay fields stay absent');
+assert(savedCouch.stateMeshes.on === 'models/couch_on.glb' && !('off' in savedCouch.stateMeshes), 'PUT carries sparse stateMeshes.on only');
 const savedLamp = saved.assets.find((a) => a.id === 'lamp');
 assert(!('buyable' in savedLamp), 'new asset has no buyable key (defaults true)');
 assert(!('blocksNav' in savedLamp), 'new asset has no blocksNav key (defaults to blocking)');

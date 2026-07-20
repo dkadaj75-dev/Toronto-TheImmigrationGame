@@ -153,7 +153,12 @@
       "primaryNeed": null,
       "seatAware": true,
       "fetchBeforeSeat": true,
-      "faceTarget": false
+      "faceTarget": false,
+      "happinessMod": {
+        "skillEffAtMin": 0,
+        "skillEffAtMax": 2,
+        "refuseBelow": 35
+      }
     },
     {
       "id": "use_phone",

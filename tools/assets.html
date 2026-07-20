@@ -70,7 +70,7 @@ const state = {
   assets: null, interactions: null, map: null, stats: null, tuning: null,
   selected: null, dirty: false,
   // Preview-only state: never written to assets.json. Character starts hidden on every load.
-  showCharacter: false, previewPose: null,
+  showCharacter: false, previewPose: null, previewOn: false,
 };
 const previewGridSize = () => {
   const size = Number(state.map?.gridSize);
@@ -655,6 +655,94 @@ function renderEditor() {
   )));
   root.appendChild(cardPower);
 
+  // --- State visuals (2026-07-19, game/stateviz.ts): screen overlay + per-state mesh variants,
+  // both keyed off the SAME Turn On/Off instance state as light/sound/power above. Sparse: the
+  // whole screenOverlay block exists only while an image path is set; stateMeshes only while a
+  // variant path is set. Pasted Windows paths normalize to public/-relative (designer pitfall).
+  const normPublicPath = (v) => {
+    let s = String(v).trim().replace(/\\/g, '/');
+    const i = s.toLowerCase().lastIndexOf('/public/');
+    if (i >= 0) s = s.slice(i + '/public/'.length);
+    return s.replace(/^\/+/, '');
+  };
+  const cardState = document.createElement('div');
+  cardState.className = 'card';
+  cardState.innerHTML = '<h2>State visuals</h2><div class="hint">Both features follow the instance\'s Turn On/Off state (the same state that drives light, sound, and hydro). <b>Screen overlay</b>: an image or animated GIF plane (e.g. a TV picture) — sized in meters, positioned in asset-local meters from the footprint center at ground level, rotating with the placed asset. <b>State meshes</b>: alternate models shown instead of the base mesh for a state (e.g. an open fridge while ON); blank keeps the base mesh.</div>';
+  const pairRow = (...inputs) => {
+    const p = document.createElement('div');
+    p.className = 'pair';
+    p.append(...inputs);
+    return p;
+  };
+  const ensureOverlay = () => (a.screenOverlay ??= {});
+  const overlayField = (key) => (v) => {
+    if (v === undefined) { if (a.screenOverlay) delete a.screenOverlay[key]; }
+    else ensureOverlay()[key] = v;
+  };
+  const overlayImage = textInput(
+    () => a.screenOverlay?.image,
+    (v) => { const t = (v || '').trim(); if (t) ensureOverlay().image = normPublicPath(t); else delete a.screenOverlay; },
+    'screenOverlay.image',
+  );
+  overlayImage.placeholder = 'textures/tv_screen.gif (blank = no overlay)';
+  cardState.appendChild(frow('overlay image / GIF path', overlayImage));
+  cardState.appendChild(frow('overlay size W × H (meters)', pairRow(
+    numInput(() => a.screenOverlay?.widthMeters, overlayField('widthMeters'), 'screenOverlay.widthMeters'),
+    numInput(() => a.screenOverlay?.heightMeters, overlayField('heightMeters'), 'screenOverlay.heightMeters'),
+  )));
+  cardState.appendChild(frow('overlay offset X / Y / Z (meters)', pairRow(
+    numInput(() => a.screenOverlay?.offset?.[0], (v) => setOverlayOffset(0, v), 'screenOverlay.offset.0'),
+    numInput(() => a.screenOverlay?.offset?.[1], (v) => setOverlayOffset(1, v), 'screenOverlay.offset.1'),
+    numInput(() => a.screenOverlay?.offset?.[2], (v) => setOverlayOffset(2, v), 'screenOverlay.offset.2'),
+  )));
+  function setOverlayOffset(axis, v) {
+    const cur = Array.isArray(a.screenOverlay?.offset) ? [...a.screenOverlay.offset] : [0, 0, 0];
+    cur[axis] = v ?? 0;
+    if (cur.every((n) => !n)) { if (a.screenOverlay) delete a.screenOverlay.offset; }
+    else ensureOverlay().offset = cur;
+  }
+  cardState.appendChild(frow('overlay yaw ° / pitch °', pairRow(
+    numInput(() => a.screenOverlay?.yawDeg, overlayField('yawDeg'), 'screenOverlay.yawDeg'),
+    numInput(() => a.screenOverlay?.pitchDeg, overlayField('pitchDeg'), 'screenOverlay.pitchDeg'),
+  )));
+  cardState.appendChild(frow('overlay GIF fps override (blank = GIF timing)', numInput(
+    () => a.screenOverlay?.fps, overlayField('fps'), 'screenOverlay.fps',
+  )));
+  cardState.appendChild(frow('overlay double-sided', checkInput(
+    () => a.screenOverlay?.doubleSided,
+    (v) => { if (v) ensureOverlay().doubleSided = true; else if (a.screenOverlay) delete a.screenOverlay.doubleSided; },
+    'screenOverlay.doubleSided',
+  )));
+  cardState.appendChild(frow('overlay shown while', selectInput(
+    [{ value: 'on', label: 'ON (default)' }, { value: 'off', label: 'OFF' }],
+    () => a.screenOverlay?.when ?? 'on',
+    (v) => { if (v === 'off') ensureOverlay().when = 'off'; else if (a.screenOverlay) delete a.screenOverlay.when; },
+    'screenOverlay.when',
+  )));
+  const stateMeshField = (key) => textInput(
+    () => a.stateMeshes?.[key],
+    (v) => {
+      const t = (v || '').trim();
+      if (t) (a.stateMeshes ??= {})[key] = normPublicPath(t);
+      else if (a.stateMeshes) { delete a.stateMeshes[key]; if (!Object.keys(a.stateMeshes).length) delete a.stateMeshes; }
+    },
+    `stateMeshes.${key}`,
+  );
+  const onMesh = stateMeshField('on'); onMesh.placeholder = 'models/fridge_open.glb (blank = base mesh)';
+  const offMesh = stateMeshField('off'); offMesh.placeholder = 'blank = base mesh';
+  cardState.appendChild(frow('mesh while ON', onMesh));
+  cardState.appendChild(frow('mesh while OFF', offMesh));
+  // View-only preview toggle (never written to assets.json, mirrors the Show character pattern).
+  const previewOn = document.createElement('input');
+  previewOn.type = 'checkbox';
+  previewOn.dataset.path = 'preview.stateOn';
+  previewOn.checked = state.previewOn;
+  previewOn.addEventListener('change', () => { state.previewOn = previewOn.checked; schedulePreview(); });
+  const previewOnLabel = document.createElement('label');
+  previewOnLabel.append(previewOn, document.createTextNode(' preview the ON state (overlay + ON mesh) in the 3D preview above'));
+  cardState.appendChild(frow('Preview power state', previewOnLabel));
+  root.appendChild(cardState);
+
   // --- B6-13 wall mount: an empty block is meaningful (enabled, default height 1.5m).
   const cardWall = document.createElement('div');
   cardWall.className = 'card';
@@ -963,7 +1051,7 @@ function schedulePreview() {
   const a = selectedAsset();
   // §7.5: pass the whole asset so the preview can render image meshes with the real footprint/
   // sprite config (the preview module ignores everything but mesh for GLBs).
-  window.AssetPreview?.show(a?.mesh || '', a);
+  window.AssetPreview?.show(a?.mesh || '', a, state.previewOn);
 }
 
 document.getElementById('search').addEventListener('input', renderSidebar);
@@ -982,12 +1070,14 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { AnimController } from '/game/anim.ts';
 import { usePoseFor, useSpotFor } from '/game/facing.ts';
-import { classifyMeshPath, createSpriteInstance } from '/game/sprites.ts';
-import { normalizeModelToFootprint, applyMeshFit, loadMeshTemplate, loadRiggedCharacter } from '/game/world.ts';
+import { classifyMeshPath, createSpriteInstance, createOverlayInstance } from '/game/sprites.ts';
+import { normalizeModelToFootprint, applyMeshFit, loadMeshTemplate, loadRiggedCharacter, applyOverlayTransform } from '/game/world.ts';
+import { resolveScreenOverlay, overlayVisibleWhenOn, meshForState } from '/game/stateviz.ts';
 
 let renderer = null, scene, camera, controls, current = null, raf = 0;
 let footprintHelper = null; // translucent ground rect + outline at y=0 showing the asset's footprint
 let activeSprite = null; // §7.5: SpriteInstance being previewed — its update() drives GIF frames (real time here, sim time in-game)
+let activeOverlay = null; // state-visuals screen overlay preview (game/stateviz.ts), animated like activeSprite
 let previewSeq = 0; // staleness token: a slow decode must not clobber a newer show()
 let characterPromise = null, characterRoot = null, characterAnim = null;
 let assetStatus = '', characterStatus = '';
@@ -1148,6 +1238,7 @@ function ensure(canvas) {
     controls.update();
     const dt = previewClock.getDelta();
     activeSprite?.update(dt); // advance GIF frames while previewing
+    activeOverlay?.update(dt); // state-visuals overlay GIF, also real time in the preview
     characterAnim?.update(dt); // preview has no sim clock/pause, so animate in real time
     renderer.render(scene, camera);
   };
@@ -1156,14 +1247,30 @@ function ensure(canvas) {
 }
 
 window.AssetPreview = {
-  show(meshPath, assetDef) {
+  show(meshPath, assetDef, previewOn = false) {
     const canvas = document.getElementById('preview');
     if (!canvas || !ensure(canvas)) return;
     previewSeq++; // invalidate any in-flight async load from a previous show()
     const seq = previewSeq;
     if (current) { scene.remove(current); current = null; }
     if (activeSprite) { activeSprite.dispose(); activeSprite = null; }
+    if (activeOverlay) { scene.remove(activeOverlay.object); activeOverlay.dispose(); activeOverlay = null; }
     if (characterRoot) characterRoot.visible = false;
+    // State visuals (game/stateviz.ts): the previewed mesh follows the toggled power state through
+    // the game's OWN resolution, and the screen overlay renders through the game's own instance +
+    // transform, so the preview is exactly what a placed instance shows in that state.
+    if (assetDef) meshPath = meshForState({ mesh: meshPath, stateMeshes: assetDef.stateMeshes }, previewOn);
+    const overlayCfg = assetDef ? resolveScreenOverlay(assetDef) : null;
+    if (overlayCfg && overlayVisibleWhenOn(overlayCfg, previewOn)) {
+      const overlayUrl = /^(\/|https?:)/.test(overlayCfg.image) ? overlayCfg.image : '/' + overlayCfg.image;
+      const inst = createOverlayInstance(overlayCfg, overlayUrl, assetDef.id || 'preview');
+      applyOverlayTransform(inst.object, overlayCfg);
+      activeOverlay = inst;
+      scene.add(inst.object);
+      inst.ready
+        .then(() => { if (seq === previewSeq) framePreview(); })
+        .catch(() => { assetStatus += ` · overlay image failed (${overlayUrl}) — file should be under public/`; previewMessage(); });
+    }
     updateFootprintHelper(assetDef); // live footprint ground rect (rebuilt each show → follows footprint edits)
     assetStatus = meshPath ? '' : 'No mesh assigned — set a GLB or image path to preview it.';
     characterStatus = '';

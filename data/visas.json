@@ -17,8 +17,8 @@
     },
     {
       "id": "temp_worker",
-      "name": "Temporary Worker",
-      "durationDays": 20,
+      "name": "Temporary Foreign Worker",
+      "durationDays": 30,
       "losable": true,
       "graceDays": 3,
       "obtainedVia": "quest"

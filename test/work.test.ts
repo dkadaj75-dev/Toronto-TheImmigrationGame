@@ -215,5 +215,36 @@ console.log('work.test - B13-11 scheduled attendance pipeline');
   check('next scheduled day still triggers', work.tick(scheduled, { day: 3, hour: 9 }, 2, calendar).some((event) => event.type === 'due'));
 }
 
+// --- H4 (ROADMAP_HAPPY): unhappy-streak firing (recordShiftMood)
+{
+  const moodJob: JobDef = { ...dayJob, id: 'mood', firing: { minHappiness: 40, maxUnhappyShifts: 2 } };
+  const work = new WorkTracker();
+  work.syncJob(moodJob, { day: 1, hour: 8 });
+  check('happy shift emits nothing and keeps streak 0', work.recordShiftMood(moodJob, 80).length === 0);
+  const w1 = work.recordShiftMood(moodJob, 10);
+  check('first unhappy shift warns with streak 1', w1.length === 1 && w1[0].type === 'unhappy_shift' && (w1[0] as { streak: number }).streak === 1);
+  check('a happy shift resets the streak', work.recordShiftMood(moodJob, 60).length === 0
+    && (work.recordShiftMood(moodJob, 0)[0] as { streak: number }).streak === 1);
+  work.recordShiftMood(moodJob, 0); // streak 2
+  const fired = work.recordShiftMood(moodJob, 0); // streak 3 > max 2
+  check('exceeding maxUnhappyShifts fires and clears the job', fired[0]?.type === 'fired' && work.jobId === null);
+  const work2 = new WorkTracker();
+  work2.syncJob(moodJob, { day: 1, hour: 8 });
+  work2.recordShiftMood(moodJob, 0);
+  const saved = work2.serialize();
+  check('unhappyStreak serializes', saved.unhappyStreak === 1);
+  const restored2 = new WorkTracker();
+  restored2.restore({ ...saved, unhappyStreak: undefined }); // pre-batch-15 save shape
+  check('sparse old save restores streak 0 and still warns before firing',
+    restored2.recordShiftMood(moodJob, 0)[0]?.type === 'unhappy_shift');
+  const noFire = new WorkTracker();
+  noFire.syncJob(dayJob, { day: 1, hour: 8 });
+  check('job without firing config never warns or fires', noFire.recordShiftMood(dayJob, 0).length === 0);
+  const warnOnly = { ...dayJob, id: 'warn', firing: { minHappiness: 40 } };
+  const wo = new WorkTracker();
+  wo.syncJob(warnOnly, { day: 1, hour: 8 });
+  for (let i = 0; i < 5; i++) check(`warn-only job never fires (${i})`, wo.recordShiftMood(warnOnly, 0)[0]?.type === 'unhappy_shift');
+}
+
 if (failures > 0) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }
 console.log('\nAll work.test checks passed.');

@@ -11,11 +11,29 @@
         "endHour": 17
       },
       "payPerShift": 120,
-      "workDays": [0, 1, 2, 3, 4],
+      "workDays": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
       "levels": [
-        { "suffix": "I", "payPerShift": 120, "promoteChancePercent": 22 },
-        { "suffix": "II", "payPerShift": 150, "promoteChancePercent": 14 },
-        { "suffix": "III", "payPerShift": 190, "promoteChancePercent": 0 }
+        {
+          "suffix": "I",
+          "payPerShift": 120,
+          "promoteChancePercent": 22
+        },
+        {
+          "suffix": "II",
+          "payPerShift": 150,
+          "promoteChancePercent": 14
+        },
+        {
+          "suffix": "III",
+          "payPerShift": 190,
+          "promoteChancePercent": 0
+        }
       ],
       "maxSkips": 3,
       "needsCost": {
@@ -24,6 +42,10 @@
       },
       "requirements": {
         "all": []
+      },
+      "firing": {
+        "minHappiness": 30,
+        "maxUnhappyShifts": 2
       }
     },
     {
@@ -40,15 +62,31 @@
       },
       "payPerShift": 190,
       "levels": [
-        { "suffix": "I", "payPerShift": 190, "promoteChancePercent": 18 },
-        { "suffix": "II", "payPerShift": 235, "promoteChancePercent": 10 },
-        { "suffix": "III", "payPerShift": 290, "promoteChancePercent": 0 }
+        {
+          "suffix": "I",
+          "payPerShift": 190,
+          "promoteChancePercent": 18
+        },
+        {
+          "suffix": "II",
+          "payPerShift": 235,
+          "promoteChancePercent": 10
+        },
+        {
+          "suffix": "III",
+          "payPerShift": 290,
+          "promoteChancePercent": 0
+        }
       ],
       "maxSkips": 2,
       "minCreditScore": 0,
       "needsCost": {
         "energy": 30,
         "hygiene": 15
+      },
+      "firing": {
+        "minHappiness": 30,
+        "maxUnhappyShifts": 3
       }
     },
     {
@@ -65,9 +103,21 @@
       },
       "payPerShift": 150,
       "levels": [
-        { "suffix": "I", "payPerShift": 150, "promoteChancePercent": 20 },
-        { "suffix": "II", "payPerShift": 180, "promoteChancePercent": 12 },
-        { "suffix": "III", "payPerShift": 220, "promoteChancePercent": 0 }
+        {
+          "suffix": "I",
+          "payPerShift": 150,
+          "promoteChancePercent": 20
+        },
+        {
+          "suffix": "II",
+          "payPerShift": 180,
+          "promoteChancePercent": 12
+        },
+        {
+          "suffix": "III",
+          "payPerShift": 220,
+          "promoteChancePercent": 0
+        }
       ],
       "maxSkips": 3,
       "minCreditScore": 0,
@@ -75,6 +125,10 @@
         "energy": 25,
         "hunger": 15,
         "social": 10
+      },
+      "firing": {
+        "minHappiness": 35,
+        "maxUnhappyShifts": 2
       }
     },
     {
@@ -110,15 +164,31 @@
       },
       "payPerShift": 260,
       "levels": [
-        { "suffix": "I", "payPerShift": 260, "promoteChancePercent": 15 },
-        { "suffix": "II", "payPerShift": 320, "promoteChancePercent": 8 },
-        { "suffix": "III", "payPerShift": 390, "promoteChancePercent": 0 }
+        {
+          "suffix": "I",
+          "payPerShift": 260,
+          "promoteChancePercent": 15
+        },
+        {
+          "suffix": "II",
+          "payPerShift": 320,
+          "promoteChancePercent": 8
+        },
+        {
+          "suffix": "III",
+          "payPerShift": 390,
+          "promoteChancePercent": 0
+        }
       ],
       "maxSkips": 2,
       "minCreditScore": 0,
       "needsCost": {
         "energy": 20,
         "social": 15
+      },
+      "firing": {
+        "minHappiness": 25,
+        "maxUnhappyShifts": 3
       }
     },
     {
@@ -146,12 +216,28 @@
       },
       "payPerShift": 500,
       "levels": [
-        { "suffix": "I", "payPerShift": 500, "promoteChancePercent": 10 },
-        { "suffix": "II", "payPerShift": 625, "promoteChancePercent": 5 },
-        { "suffix": "III", "payPerShift": 775, "promoteChancePercent": 0 }
+        {
+          "suffix": "I",
+          "payPerShift": 500,
+          "promoteChancePercent": 10
+        },
+        {
+          "suffix": "II",
+          "payPerShift": 625,
+          "promoteChancePercent": 5
+        },
+        {
+          "suffix": "III",
+          "payPerShift": 775,
+          "promoteChancePercent": 0
+        }
       ],
       "maxSkips": 2,
-      "minCreditScore": 700
+      "minCreditScore": 700,
+      "firing": {
+        "minHappiness": 30,
+        "maxUnhappyShifts": 4
+      }
     }
   ]
 }

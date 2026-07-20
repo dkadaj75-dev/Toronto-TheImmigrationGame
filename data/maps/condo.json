@@ -100,7 +100,7 @@
         ]
       ],
       "material": "tile",
-      "texture": "textures/ShittyTiling2.jpg"
+      "texture": "textures/ChineseTiles.jpg"
     }
   ],
   "walls": [
@@ -296,14 +296,6 @@
       "rotDeg": 0
     },
     {
-      "asset": "bed",
-      "pos": [
-        1.25,
-        6
-      ],
-      "rotDeg": 90
-    },
-    {
       "asset": "garbage_can",
       "pos": [
         5.69,
@@ -422,6 +414,14 @@
         1.75
       ],
       "rotDeg": 270
+    },
+    {
+      "asset": "rustic_bed",
+      "pos": [
+        1.06,
+        5.75
+      ],
+      "rotDeg": 90
     }
   ],
   "music": [

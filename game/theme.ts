@@ -169,6 +169,7 @@ export interface AccordionResolution {
   layout: ThemeLayoutItem;
   icon?: string;
   showText: boolean;
+  happinessHeader: boolean;
 }
 
 /** Pure accordion membership/order resolution; unknown group names and HUD ids are ignored. */
@@ -189,6 +190,7 @@ export function resolveAccordionGroups(theme?: ThemeData): AccordionResolution[]
       name, collapsedByDefault: accordion.collapsedByDefault === true, elementIds,
       layout: source.layout[elementIds[0]], icon: accordion.icon?.trim() || undefined,
       showText: accordion.showText === true,
+      happinessHeader: accordion.happinessHeader === true,
     });
   }
   return groups;
@@ -262,11 +264,18 @@ export function applyTheme(theme?: ThemeData, doc: Document = document): void {
     const toggle = doc.createElement('button');
     toggle.type = 'button'; toggle.className = 'theme-accordion-toggle'; toggle.setAttribute('aria-label', group.name);
     if (group.icon) {
-      const icon = doc.createElement('img'); icon.className = 'theme-accordion-icon'; icon.src = publicUrl(group.icon, doc.baseURI); icon.alt = '';
+      const icon = doc.createElement('img'); icon.className = 'theme-accordion-icon theme-accordion-static'; icon.src = publicUrl(group.icon, doc.baseURI); icon.alt = '';
       toggle.appendChild(icon);
     }
     if (group.showText || !group.icon) {
-      const text = doc.createElement('span'); text.textContent = group.name; toggle.appendChild(text);
+      const text = doc.createElement('span'); text.className = 'theme-accordion-static'; text.textContent = group.name; toggle.appendChild(text);
+    }
+    if (group.happinessHeader) {
+      // Live slots the HUD's setHappiness fills; static icon/text stay as the fallback until then.
+      toggle.dataset.happinessHeader = 'true';
+      const icon = doc.createElement('img'); icon.className = 'theme-accordion-icon theme-accordion-happiness-icon'; icon.alt = ''; icon.hidden = true;
+      const label = doc.createElement('span'); label.className = 'theme-accordion-happiness-label'; label.hidden = true;
+      toggle.append(icon, label);
     }
     toggle.setAttribute('aria-expanded', String(!collapsed));
     const body = doc.createElement('div'); body.className = 'theme-accordion-body';

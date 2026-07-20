@@ -121,6 +121,11 @@ export interface SocialData {
   /** Sparse relationship-level multipliers for an NPC's authored base visit duration. */
   visitDuration?: { byLevel?: Record<string, number> };
   compatibility: CompatibilityConfig;
+  /** H3 (ROADMAP_HAPPY, sparse): player-happiness relationship scaling. The factor lerps
+   *  atMin→atMax over happiness 0→100 (absent ends = 1) and multiplies into the compatibility
+   *  multiplier at every scaleGain seam — the existing love/hate flip then makes low happiness
+   *  cut negative gains deeper, symmetrically with how it boosts positive ones when happy. */
+  happinessScaling?: { atMin?: number; atMax?: number };
   interactions: InteractionDef[];
   phone: PhoneConfig;
   visitTheirPlace: VisitTheirPlaceConfig;
@@ -206,6 +211,14 @@ export function compatibility(
  * A zero base gain returns 0. This is the single scaling seam shared by applyGain, phone gains and
  * visit outcomes so the love/hate asymmetry can never drift between call sites.
  */
+/** H3 (ROADMAP_HAPPY): pure happiness→relationship factor; 1 when unconfigured or ends absent. */
+export function happinessSocialFactor(data: Pick<SocialData, 'happinessScaling'>, happiness: number): number {
+  const lo = Number.isFinite(data.happinessScaling?.atMin) ? data.happinessScaling!.atMin! : 1;
+  const hi = Number.isFinite(data.happinessScaling?.atMax) ? data.happinessScaling!.atMax! : 1;
+  const t = Math.min(100, Math.max(0, Number.isFinite(happiness) ? happiness : 0)) / 100;
+  return Math.max(0, lo + (hi - lo) * t);
+}
+
 export function scaleGain(baseGain: number, multiplier: number, data: SocialData): number {
   if (baseGain === 0) return 0;
   const { minMultiplier, maxMultiplier } = data.compatibility;

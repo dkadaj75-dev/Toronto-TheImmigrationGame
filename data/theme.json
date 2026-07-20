@@ -168,8 +168,8 @@
       "offsetY": 120
     },
     "notification-stack": {
-      "anchor": "tr",
-      "offsetX": 5,
+      "anchor": "tc",
+      "offsetX": 0,
       "offsetY": 66
     },
     "visa-chip": {
@@ -218,7 +218,8 @@
       "name": "Needs",
       "collapsedByDefault": true,
       "icon": "/icons/needs.svg",
-      "showText": false
+      "showText": false,
+      "happinessHeader": true
     },
     {
       "name": "Skills",

@@ -882,8 +882,35 @@ export class Hud {
   setHappiness(value: number, data?: Pick<HappinessData, 'states' | 'stateDisplay'>) {
     const safe = Math.min(100, Math.max(0, Number.isFinite(value) ? value : 0));
     const state = happinessStateFor(safe, data?.states);
-    this.happinessState.hidden = state === null;
-    if (!state) {
+    const display = happinessStateDisplay(data?.stateDisplay);
+    // Accordion headers flagged happinessHeader (theme.json) take over the display; the in-panel
+    // row then stays hidden. Toggles are rebuilt by every applyTheme, so query fresh each time.
+    const headerToggles = Array.from(document.querySelectorAll<HTMLElement>('.theme-accordion-toggle[data-happiness-header]'));
+    for (const toggle of headerToggles) {
+      const icon = toggle.querySelector<HTMLImageElement>('.theme-accordion-happiness-icon');
+      const label = toggle.querySelector<HTMLElement>('.theme-accordion-happiness-label');
+      const showIcon = state !== null && display.icon && !!state.icon;
+      const showText = state !== null && display.text;
+      if (icon) {
+        icon.hidden = !showIcon;
+        if (showIcon) icon.src = publicUrl(state!.icon!);
+        else icon.removeAttribute('src');
+        icon.alt = showIcon && !showText ? state!.label : '';
+      }
+      if (label) {
+        label.hidden = !showText;
+        label.textContent = showText ? state!.label : '';
+      }
+      // Static icon/text are the fallback while no state resolves.
+      for (const fallback of Array.from(toggle.querySelectorAll<HTMLElement>('.theme-accordion-static'))) {
+        fallback.hidden = state !== null && (showIcon || showText);
+      }
+      if (state) toggle.dataset.stateId = state.id;
+      else delete toggle.dataset.stateId;
+    }
+    const headerActive = headerToggles.length > 0;
+    this.happinessState.hidden = headerActive || state === null;
+    if (!state || headerActive) {
       delete this.happinessState.dataset.stateId;
       this.happinessIcon.hidden = true;
       this.happinessLabel.hidden = true;
@@ -891,7 +918,6 @@ export class Hud {
       this.happinessLabel.textContent = '';
       return;
     }
-    const display = happinessStateDisplay(data?.stateDisplay);
     this.happinessIcon.hidden = !display.icon || !state.icon;
     this.happinessIcon.alt = display.icon && !display.text ? state.label : '';
     if (display.icon && state.icon) this.happinessIcon.src = publicUrl(state.icon);

@@ -61,7 +61,7 @@ export interface ThemeData {
     [name: string]: ThemeComponentOverrides | undefined;
   };
   layout: Record<string, ThemeLayoutItem>;
-  accordions?: { name: string; collapsedByDefault?: boolean; icon?: string; showText?: boolean }[];
+  accordions?: { name: string; collapsedByDefault?: boolean; icon?: string; showText?: boolean; happinessHeader?: boolean }[];
 }
 
 export interface TitleMenuDef { id: string; label: string; enabled?: boolean; }
@@ -95,6 +95,12 @@ export interface ActionDef {
   id: string; name: string;
   needGains: Record<string, number>;
   skillGains: Record<string, number>;
+  /** H2 (ROADMAP_HAPPY, sparse): designer-selected happiness coupling for THIS action only.
+   *  skillEffAtMin/skillEffAtMax: skill-gain multiplier lerped over happiness 0→100 (absent = 1/1,
+   *  no effect). refuseBelow: happiness strictly below this disables the action in the radial menu
+   *  (with the reason) and posts the actionRefusedUnhappy notification if ordered anyway; autonomy
+   *  skips it. See game/happiness.ts happinessSkillFactor/isRefusedByMood. */
+  happinessMod?: { skillEffAtMin?: number; skillEffAtMax?: number; refuseBelow?: number };
   animation: string;
   autonomyEligible: boolean;
   primaryNeed: string | null;
@@ -267,6 +273,21 @@ export interface AssetDef {
    *  "flat" (lies on the floor — puddles, debris, scorch marks). fps overrides an animated GIF's
    *  own per-frame delays if set. See game/sprites.ts. */
   sprite?: { orientation?: 'billboard' | 'flat'; fps?: number };
+  /** State-visuals: animated screen overlay (game/stateviz.ts). A textured plane (GIF frames play
+   *  via the sprites.ts decode pipeline, static images work too) attached to every placed instance
+   *  and shown only while the instance's power state matches `when` (sparse, default 'on') — e.g.
+   *  a TV picture. All placement fields are sparse and asset-LOCAL: `offset` [x,y,z] meters from
+   *  the footprint center at ground level (rotates with the placed instance), `widthMeters`/
+   *  `heightMeters` size the plane (defaults 1 × 0.6), `yawDeg`/`pitchDeg` orient it (0 = facing
+   *  the asset's local +Z, upright), `fps` overrides GIF frame delays, `doubleSided` renders the
+   *  back face too (default false). Editable on the Asset Editor's State visuals card. */
+  screenOverlay?: { image?: string; widthMeters?: number; heightMeters?: number; offset?: [number, number, number]; yawDeg?: number; pitchDeg?: number; fps?: number; doubleSided?: boolean; when?: 'on' | 'off' };
+  /** State-visuals: per-power-state mesh variants (game/stateviz.ts). Sparse map from state to a
+   *  mesh path under public/ (same drop-in convention as `mesh`): when the instance's state has a
+   *  variant, that model is shown INSTEAD of the base `mesh`; states without a variant keep the
+   *  base (e.g. { "on": "models/fridge_open.glb" } — base shows while OFF). Variants load through
+   *  the same loader cache + normalization/meshFit pipeline as the base mesh. */
+  stateMeshes?: { on?: string; off?: string };
   /** Designer-editable sit/lie perch override (§7.8, roadmap item 1 fix). Sparse per-pose: any
    *  field left unset falls back to the computed default (see game/facing.ts's usePoseFor).
    *  `offset` is MODEL-LOCAL [x,z] meters from the footprint center, rotated by the placed
@@ -423,6 +444,11 @@ export interface JobDef {
   hours: { startHour: number; endHour: number };
   payPerShift: number;
   maxSkips: number;
+  /** H4 (ROADMAP_HAPPY, sparse): unhappy-streak firing, Career Editor card. A completed shift with
+   *  happiness < minHappiness increments a persisted streak; streak > maxUnhappyShifts fires the
+   *  sim (job lost + notification; a non-permanent visa then opens its own grace window per its
+   *  losable/graceDays config). Absent = this job never fires for mood. */
+  firing?: { minHappiness?: number; maxUnhappyShifts?: number };
   /** B6-5 ordered career ladder. Index 0 is the base level; each row's promotion chance advances
    *  to the following row and its pay is snapshotted when a shift starts. */
   levels?: JobLevelDef[];

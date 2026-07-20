@@ -20,7 +20,7 @@ import { PhoneJobSearch, applyForJob, applyForVisa, jobListingViews, jobSwitchPr
 import { listRentals, PendingMoveTracker } from './rental';
 import { FinanceState, decideRepoSeizure } from './bills';
 import { WorkTracker, applyNeedsCost, decideAutoDepart, isLeaveForWorkAvailable, isScheduledWorkWindow, isWithinDepartureWindow, jobLevelPay, jobLevelTitle, shouldStartVisaGrace, weekdayName, type WorkReturnPoint, type WorkTickEvent } from './work';
-import { computeHappiness } from './happiness';
+import { computeHappiness, happinessSkillFactor, isRefusedByMood } from './happiness';
 import { AccidentsController, resolveTapAssetId, shouldDespawnOnCleanup, shouldRemovePlacedOnCleanup } from './accidents';
 import { GarbageController, wasteItemCount } from './garbage';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials, isSelectableForSell } from './buymode';
@@ -37,7 +37,7 @@ import { AssetStateRegistry, isAssetStateActionAvailable, isStatefulAsset, power
 import { HydroMeter, resolveAssetPower, HYDRO_BILL_ID } from './hydro';
 import { InitialLoadTracker, phraseAt } from './loading';
 import { applyTheme } from './theme';
-import { compatibility, visitOutcome, type InteractionDef } from './social';
+import { compatibility, happinessSocialFactor, visitOutcome, type InteractionDef } from './social';
 import { SocialRuntime } from './socialruntime';
 import { availableSocialInteractions, matchesSocialTarget, pairedAssetPositions, SocialInteractionSession, socialActionDef, socialAnimationFor, socialAutonomyCandidates, socialNpcActionDef, socialRoutingDecision, socialScoringTarget } from './social-interactions';
 import { isNpcAvailable, NpcVisitorController, type NpcDef } from './npc';
@@ -436,7 +436,9 @@ async function start(initialLoadSlotId?: string) {
     getHour: () => gameSeconds / 3600,
     getEvalContext: buildEvalContext,
     getCompatibilityMultiplier: (npc) => data.social
+      // H3 (ROADMAP_HAPPY): mood scaling folds into the ONE multiplier every scaleGain seam consumes.
       ? compatibility(Object.fromEntries(stats.personality), npc.personality, data.social).multiplier
+        * happinessSocialFactor(data.social, happiness)
       : 1,
     getRelationshipLevel: (npcId) => socialRuntime.relationships.levelFor(npcId),
     exteriorDoorUsable: (doorObject, doorDef) => !accidents.isBlocked(doorObject, doorDef),
@@ -531,8 +533,9 @@ async function start(initialLoadSlotId?: string) {
   autonomy = new Autonomy(
     () => data, () => world, agent, stats, accidents, buildEvalContext,
     {
-      candidateAvailable: (action, object) => !sleepAction(action)
-        || !sleepDecisionAt([object.position.x, object.position.z]).blocked,
+      candidateAvailable: (action, object) => !isRefusedByMood(action.happinessMod, happiness) // H2: autonomy respects mood refusal
+        && (!sleepAction(action)
+          || !sleepDecisionAt([object.position.x, object.position.z]).blocked),
       extraCandidates: () => {
         if (!data.social || socialSession.active || phoneContactSession.active) return [];
         if (visitors.state.phase === 'visiting') {
@@ -673,7 +676,10 @@ async function start(initialLoadSlotId?: string) {
         hud.setFunds(quests.funds, data.tuning.economy.currencyName);
         postNotification('workReturned', `Back from work · +${data.tuning.economy.currencyName}${event.pay.toLocaleString()}`);
         const job = data.jobs.jobs.find((entry) => entry.id === event.jobId);
-        if (job) {
+        // H4 (ROADMAP_HAPPY): completed-shift mood check — warnings, then firing (handled below
+        // through the same handler so the job-loss tail stays in ONE place).
+        if (job) for (const moodEvent of work.recordShiftMood(job, happiness)) handleWorkEvent(moodEvent);
+        if (job && work.jobId === job.id) {
           const promotion = work.rollPromotion(job, happiness, data.tuning.work?.promotionHappinessFactor ?? 1);
           if (promotion.promoted) {
             const pay = `${promotion.payIncrease >= 0 ? '+' : ''}${data.tuning.economy.currencyName}${promotion.payIncrease}`;
@@ -701,6 +707,23 @@ async function start(initialLoadSlotId?: string) {
         agent.teleportTo(sim.position.x, sim.position.z, THREE.MathUtils.radToDeg(sim.rotation.y));
       }
       postNotification('workMissed', 'You missed your shift');
+      return;
+    }
+    // H4 (ROADMAP_HAPPY): mood-firing pipeline (recordShiftMood on each completed shift, above).
+    if (event.type === 'unhappy_shift') {
+      const cap = event.maxUnhappyShifts > 0 ? ` (${event.streak}/${event.maxUnhappyShifts + 1})` : '';
+      postNotification('unhappyShift', `Rough shift${cap}`, 'Keep working this unhappy and you will be fired');
+      return;
+    }
+    if (event.type === 'fired') {
+      quests.vars.job = null;
+      quests.vars.income = 0;
+      // Designer rule: firing costs a NON-permanent visa its status — the visa's own losable/
+      // graceDays config governs the grace window (permanent statuses are untouchable).
+      if (visaMachine.currentDef()?.durationDays != null) visaMachine.startGrace(gameDay);
+      postNotification('firedUnhappy', `Fired from ${job?.name ?? event.jobId}`, 'Too many miserable shifts in a row');
+      refreshVisaChip();
+      refreshPhone();
       return;
     }
 
@@ -735,7 +758,9 @@ async function start(initialLoadSlotId?: string) {
       const npc = data.npcs?.npcs.find((entry) => entry.id === event.npcId);
       if (npc && data.social) {
         const compat = compatibility(Object.fromEntries(stats.personality), npc.personality, data.social);
-        const outcome = visitOutcome(event.npcId, socialRuntime.relationships, compat, data.social);
+        // H3 (ROADMAP_HAPPY): same mood scaling as getCompatibilityMultiplier, applied to visits.
+        const moodCompat = { ...compat, multiplier: compat.multiplier * happinessSocialFactor(data.social, happiness) };
+        const outcome = visitOutcome(event.npcId, socialRuntime.relationships, moodCompat, data.social);
         socialRuntime.relationships.set(npc.id, socialRuntime.relationships.get(npc.id) + outcome.relationshipDelta);
         for (const [needId, delta] of Object.entries(outcome.needsRestored)) {
           const current = stats.needs.get(needId);
@@ -1702,6 +1727,9 @@ async function start(initialLoadSlotId?: string) {
           .map((id) => data.interactions.actions.find((x) => x.id === id))
           .filter((x): x is NonNullable<typeof x> => !!x)
           .filter((x) => isActionAvailable(x.conditions, evalCtx))
+          // H2 (ROADMAP_HAPPY): mood refusal — hidden from the menu like unmet conditions, and the
+          // order-time guard below posts the explanatory notification if anything still gets through.
+          .filter((x) => !isRefusedByMood(x.happinessMod, happiness))
           // B6-12 adds a second, orthogonal availability dimension: generic power actions read
           // this placed instance's live state (Turn On only while OFF; Turn Off only while ON).
           .filter((x) => {
@@ -1730,6 +1758,12 @@ async function start(initialLoadSlotId?: string) {
             // re-verifies and shows the same toast then, transient left untouched either way.)
             if (CARRY_TO_GARBAGE_ACTIONS.has(action.id) && !garbage.hasNonFullCan()) {
               postNotification('garbageUnavailable', 'No empty garbage can available');
+              return;
+            }
+            // H2 (ROADMAP_HAPPY): defense-in-depth mood refusal (happiness can drop between menu
+            // open and tap) — the sim refuses with the explanatory notification, no walk ordered.
+            if (isRefusedByMood(action.happinessMod, happiness)) {
+              postNotification('actionRefusedUnhappy', `Too unhappy for ${action.name}`, `Happiness is below ${action.happinessMod?.refuseBelow} — cheer up first`);
               return;
             }
             autonomy.notePlayerCommand();
@@ -1969,7 +2003,8 @@ async function start(initialLoadSlotId?: string) {
           : undefined;
         // Social interaction gains are atomic completion effects (SOCIAL S4), never per-tick.
         // Their needGains remain on ActionDef solely so the ordinary behavior scorer can rank them.
-        if (socialSession.active?.action !== active.action) stats.applyGains(active.action, gainMultipliers);
+        // H2 (ROADMAP_HAPPY): mood-scaled learning efficiency for actions that opt in (1x otherwise).
+        if (socialSession.active?.action !== active.action) stats.applyGains(active.action, gainMultipliers, happinessSkillFactor(active.action.happinessMod, happiness));
         const skillsAfter = Object.fromEntries(stats.skills);
         for (const up of skillLevelUps(skillsBefore, skillsAfter)) {
           const name = data.stats.skills.find((def) => def.id === up.id)?.name ?? up.id;
@@ -2210,6 +2245,7 @@ async function start(initialLoadSlotId?: string) {
       funds: quests.funds,
       creditScore: bills.creditScore,
       time: { hour: Math.floor(gameSeconds / 3600), day: gameDay },
+      happiness,
       vars: quests.vars,
       quests: quests.quests,
     };

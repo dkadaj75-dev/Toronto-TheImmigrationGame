@@ -340,5 +340,15 @@ console.log('social.test — serialize/restore round-trips');
   check('phone restore is a deep copy (original untouched)', phone.remainingCooldown('amara', 'text', 500) === 60);
 }
 
+// --- H3 (ROADMAP_HAPPY): happiness relationship factor
+{
+  const { happinessSocialFactor } = await import('../game/social');
+  check('unconfigured scaling is x1', happinessSocialFactor({}, 0) === 1 && happinessSocialFactor({}, 100) === 1);
+  const cfg = { happinessScaling: { atMin: 0.5, atMax: 1.5 } };
+  check('scaling lerps over happiness', happinessSocialFactor(cfg, 0) === 0.5 && happinessSocialFactor(cfg, 100) === 1.5 && happinessSocialFactor(cfg, 50) === 1);
+  check('sparse atMax defaults to 1', happinessSocialFactor({ happinessScaling: { atMin: 0.5 } }, 100) === 1);
+  check('factor clamps at 0', happinessSocialFactor({ happinessScaling: { atMin: -2 } }, 0) === 0);
+}
+
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }
 console.log('\nall social tests passed');

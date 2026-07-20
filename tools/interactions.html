@@ -233,7 +233,8 @@ function appendVarOptions(sel, currentValue) {
   const groups = [
     ['Needs', state.stats.needs.map((n) => ({ value: 'needs.' + n.id, label: n.name }))],
     ['Skills', state.stats.skills.map((s) => ({ value: 'skills.' + s.id, label: s.name }))],
-    ['Economy', [{ value: 'funds', label: 'Funds' }]],
+    ['Economy', [{ value: 'funds', label: 'Funds' }, { value: 'creditScore', label: 'Credit score' }]],
+        ['Mood', [{ value: 'happiness', label: 'Happiness' }]],
     ['Time', [{ value: 'time.hour', label: 'Hour of day' }, { value: 'time.day', label: 'Day' }]],
     ['Variables', state.simstate.variables.map((v) => ({ value: 'vars.' + v.id, label: v.name }))],
     ['Quests', state.quests.quests.map((q) => ({ value: 'quests.' + q.id + '.state', label: q.name + ' (state)' }))],
@@ -477,6 +478,19 @@ function renderEditor() {
   card2.appendChild(frow('cost (optional — charged from funds when the action starts)',
     numInput(() => a.cost, (v) => { if (v === undefined) delete a.cost; else a.cost = Math.max(0, v); }, 'cost')));
 
+  // --- H4/H2 (ROADMAP_HAPPY): sparse per-action happiness coupling — only for actions the
+  // designer opts in; blank fields keep the whole block absent (no effect anywhere).
+  const cardMood = document.createElement('div');
+  cardMood.className = 'card';
+  cardMood.innerHTML = '<h2>Happiness coupling</h2><div class="hint">Sparse, per-action. Skill efficiency: skill gains multiply by the value lerped from "at 0 happiness" to "at 100 happiness" (blank ends = ×1, no effect). Refuse below: happiness under this hides the action from the menu, the sim refuses with a notification if ordered, and autonomy skips it.</div>';
+  const setMood = (key) => (v) => {
+    if (v === undefined) { if (a.happinessMod) { delete a.happinessMod[key]; if (!Object.keys(a.happinessMod).length) delete a.happinessMod; } }
+    else (a.happinessMod ??= {})[key] = v;
+  };
+  cardMood.appendChild(frow('skill efficiency at 0 happiness', numInput(() => a.happinessMod?.skillEffAtMin, setMood('skillEffAtMin'), 'happinessMod.skillEffAtMin')));
+  cardMood.appendChild(frow('skill efficiency at 100 happiness', numInput(() => a.happinessMod?.skillEffAtMax, setMood('skillEffAtMax'), 'happinessMod.skillEffAtMax')));
+  cardMood.appendChild(frow('refuse below happiness (blank = never refuses)', numInput(() => a.happinessMod?.refuseBelow, setMood('refuseBelow'), 'happinessMod.refuseBelow')));
+
   const needSel = document.createElement('select');
   needSel.dataset.path = 'primaryNeed';
   const noneOpt = document.createElement('option'); noneOpt.value = ''; noneOpt.textContent = '(none)';
@@ -489,6 +503,7 @@ function renderEditor() {
   needSel.addEventListener('change', () => { a.primaryNeed = needSel.value || null; markDirty('interactions.json'); });
   card2.appendChild(frow('primary need (auto-stop threshold target)', needSel));
   root.appendChild(card2);
+  root.appendChild(cardMood);
 
   // --- sound (ROADMAP_NEXT item 7): loops for as long as the sim is performing THIS action,
   // regardless of which asset it targets — a target asset's own `sound` (Asset Editor) wins if

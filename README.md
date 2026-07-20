@@ -1,6 +1,6 @@
 # Condo Life — Web Edition
 
-A Sims-like life simulation for smartphone browsers. three.js game + browser-based designer tool constellation. See `WEB_GAME_ROADMAP.md` for the full plan; the Unreal 5.8 prototype is the design reference.
+A Sims-like life simulation for smartphone browsers. three.js game + browser-based designer tool constellation. See `docs/roadmaps/WEB_GAME_ROADMAP.md` for the full plan; the Unreal 5.8 prototype is the design reference.
 
 ## Run
 

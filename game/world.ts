@@ -7,11 +7,12 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import type { GameData, AssetDef, CharacterTuning, MapData } from './data';
 import { resolveExterior, DEFAULT_BACKDROP_DISTANCE, type ResolvedBackdrop } from './exterior';
-import { classifyMeshPath, createSpriteInstance, preloadGif } from './sprites';
+import { classifyMeshPath, createSpriteInstance, createOverlayInstance, preloadGif } from './sprites';
+import { resolveScreenOverlay, overlayVisibleWhenOn, meshForState, allStateMeshes, type ResolvedScreenOverlay } from './stateviz';
 import { retargetTrackName, stripPositionTracks, resolveClipName, fileStem } from './fbxclips';
 import { resolveWindowConfig, windowFacePositions, windowPaneRect } from './windows';
 import { wallCutShownHeight } from './wallview';
-import { resolveAssetLight } from './assetstate';
+import { resolveAssetLight, defaultAssetOn } from './assetstate';
 import { resolveMetersPerTile, effectiveMetersPerTile, textureRepeat, polygonBounds } from './textures';
 import { publicUrl } from './urls';
 import { aperturesForWall, wallSegments, gapDoorLintel, lintelVisibleUnderCut, isCurtainWall, resolveMullionSpacing, mullionPositions } from './wallaperture';
@@ -207,23 +208,39 @@ export function attachMesh(group: THREE.Group, def: AssetDef, opts: { allowSprit
     void tracked;
     return tracked;
   }
-  const ready = loadMeshTemplate(url)
-    .then((template) => {
-      const model = template.clone(true);
-      normalizeModelToFootprint(model, def.footprint);
-      applyMeshFit(model, def.meshFit);
-      if (def.wallMounted) {
-        // Center the (already scale/offset-corrected) mesh vertically on its mount point; runs
-        // AFTER applyMeshFit so a wall asset carrying meshFit.scale still centers on its final size.
-        const box = new THREE.Box3().setFromObject(model);
-        model.position.y -= box.getCenter(new THREE.Vector3()).y;
-      }
-      model.traverse((o) => {
-        if (o instanceof THREE.Mesh) { o.castShadow = true; o.userData.sharedResource = true; }
+  // State-visuals (game/stateviz.ts): the base mesh plus any per-state variant meshes all load
+  // through the same template cache and get IDENTICAL normalization/meshFit/wall-mount transforms;
+  // only the variant matching the instance's power state is visible (setAssetObjectOn toggles).
+  // A single-path asset (the overwhelmingly common case) behaves exactly as before.
+  const paths = allStateMeshes(def);
+  const ready = Promise.all(paths.map((p) => loadMeshTemplate(normalizeMeshUrl(p))))
+    .then((templates) => {
+      const models = templates.map((template) => {
+        const model = template.clone(true);
+        normalizeModelToFootprint(model, def.footprint);
+        applyMeshFit(model, def.meshFit);
+        if (def.wallMounted) {
+          // Center the (already scale/offset-corrected) mesh vertically on its mount point; runs
+          // AFTER applyMeshFit so a wall asset carrying meshFit.scale still centers on its final size.
+          const box = new THREE.Box3().setFromObject(model);
+          model.position.y -= box.getCenter(new THREE.Vector3()).y;
+        }
+        model.traverse((o) => {
+          if (o instanceof THREE.Mesh) { o.castShadow = true; o.userData.sharedResource = true; }
+        });
+        return model;
       });
+      if (paths.length > 1) {
+        const on = (group.userData.assetOn as boolean | undefined) ?? defaultAssetOn(def);
+        models.forEach((model, i) => {
+          const path = paths[i];
+          model.userData.stateMeshVisibleWhenOn = (isOn: boolean) => meshForState(def, isOn) === path;
+          model.visible = meshForState(def, on) === path;
+        });
+      }
       const persistent = group.children.filter((child) => child.userData.assetPersistent);
       group.clear();
-      group.add(model, ...persistent);
+      group.add(...models, ...persistent);
     })
     .catch(() => console.warn(`Could not load mesh for "${def.id}" (${url}) — keeping stand-in.`));
   const tracked = opts.trackInitialLoad ? opts.trackInitialLoad(ready) : ready;
@@ -251,7 +268,44 @@ export function setAssetObjectOn(group: THREE.Object3D, on: boolean): void {
     light.visible = on;
     light.intensity = on ? ((light.userData.onIntensity as number | undefined) ?? light.intensity) : 0;
   }
+  // State-visuals: screen overlays and per-state mesh variants tag themselves with a visibility
+  // predicate at attach time (attachScreenOverlay / attachMesh) so this stays def-agnostic.
+  for (const child of group.children) {
+    const overlayFn = child.userData.overlayVisibleWhenOn as ((isOn: boolean) => boolean) | undefined;
+    if (overlayFn) child.visible = overlayFn(on);
+    const meshFn = child.userData.stateMeshVisibleWhenOn as ((isOn: boolean) => boolean) | undefined;
+    if (meshFn) child.visible = meshFn(on);
+  }
   group.userData.assetOn = on;
+}
+
+/** Position/orient a screen-overlay plane per its authored config: asset-local offset from the
+ *  footprint center at ground level, yaw about Y (0 = facing local +Z), then pitch about X.
+ *  Exported so the Asset Editor preview places its overlay identically to the game. */
+export function applyOverlayTransform(object: THREE.Object3D, overlay: ResolvedScreenOverlay): void {
+  object.position.set(overlay.offset[0], overlay.offset[1], overlay.offset[2]);
+  object.rotation.set(THREE.MathUtils.degToRad(overlay.pitchDeg), THREE.MathUtils.degToRad(overlay.yawDeg), 0, 'YXZ');
+}
+
+/** State-visuals thin layer: attach the asset's screen overlay (if authored) to a placed group.
+ *  The plane survives attachMesh's stand-in swap (assetPersistent), advances its GIF on the same
+ *  sim-time spriteUpdate hook sprites use (skipped while hidden), and shows only when the
+ *  instance's power state matches the overlay's `when` (setAssetObjectOn keeps it in sync). */
+export function attachScreenOverlay(group: THREE.Group, def: AssetDef, trackInitialLoad?: TrackInitialLoad): THREE.Object3D | null {
+  const overlay = resolveScreenOverlay(def);
+  if (!overlay) return null;
+  const inst = createOverlayInstance(overlay, normalizeMeshUrl(overlay.image), def.id);
+  const object = inst.object;
+  object.name = 'asset-screen-overlay';
+  applyOverlayTransform(object, overlay);
+  object.userData.assetPersistent = true;
+  object.userData.spriteUpdate = (dt: number) => { if (object.visible) inst.update(dt); };
+  object.userData.overlayVisibleWhenOn = (isOn: boolean) => overlayVisibleWhenOn(overlay, isOn);
+  object.visible = overlayVisibleWhenOn(overlay, (group.userData.assetOn as boolean | undefined) ?? defaultAssetOn(def));
+  const ready = inst.ready.catch(() => console.warn(`Could not load screen overlay for "${def.id}" (${overlay.image}).`));
+  void (trackInitialLoad ? trackInitialLoad(ready) : ready);
+  group.add(object);
+  return object;
 }
 
 export function resolveAssetPlacementTransform(def: Pick<AssetDef, 'wallMounted'>, pos: [number, number], rotDeg: number): {
@@ -285,6 +339,13 @@ export function applyAssetPlacement(group: THREE.Object3D, def: AssetDef, pos: [
  */
 function warmTransientAssets(data: GameData, trackInitialLoad?: TrackInitialLoad) {
   for (const def of data.assets.assets) {
+    // Screen-overlay GIFs warm alongside transients: decode is expensive and the overlay should
+    // appear the instant the designer (or autonomy) first powers the asset on.
+    const overlay = resolveScreenOverlay(def);
+    if (overlay) {
+      const warmed = preloadGif(normalizeMeshUrl(overlay.image)).catch(() => undefined);
+      void (trackInitialLoad ? trackInitialLoad(warmed) : warmed);
+    }
     if (def.category !== 'transient' || !def.mesh) continue;
     const url = normalizeMeshUrl(def.mesh);
     const ready = classifyMeshPath(url) === 'image'
@@ -544,6 +605,7 @@ export function buildWorld(data: GameData, trackInitialLoad?: TrackInitialLoad):
     applyAssetPlacement(obj, def, placed.pos, placed.rotDeg);
     obj.userData = { assetId: def.id, interactions: def.interactions, placedIndex, assetStateKey: `designer:${placedIndex}` };
     attachAssetLight(obj, def);
+    attachScreenOverlay(obj, def, trackInitialLoad);
     attachMesh(obj, def, { trackInitialLoad });
     root.add(obj);
   });

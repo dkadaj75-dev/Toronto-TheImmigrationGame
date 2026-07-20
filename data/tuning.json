@@ -1,34 +1,34 @@
 {
-  "_comment": "EVERY global tunable lives here (design pillar #2). Game hot-reloads this file in dev. Values documented in WEB_GAME_ROADMAP.md are marked; the rest are PLACEHOLDER pending CLAUDE.md verification.",
+  "_comment": "EVERY global tunable lives here (design pillar #2). Game hot-reloads this file in dev. Values documented in docs/roadmaps/WEB_GAME_ROADMAP.md are marked; the rest are PLACEHOLDER pending CLAUDE.md verification.",
   "simulation": {
-    "needsDecayTickSeconds": 0.5,
+    "needsDecayTickSeconds": 1,
     "activityGainTickSeconds": 2,
     "_source": "roadmap §5 — matches Unreal prototype exactly"
   },
   "skills": {
-    "growthCurveExp": 1.5,
+    "growthCurveExp": 1.2,
     "_source": "ROADMAP_NEXT B5-1: positive skill gains are multiplied by (1 - level/max)^growthCurveExp; 0 restores linear gains, higher values slow growth near max."
   },
   "autonomy": {
     "seekBelowThreshold": 30,
     "stopAtThreshold": 95,
-    "postPlayerCommandCooldownSeconds": 15,
+    "postPlayerCommandCooldownSeconds": 10,
     "decisionGraceSeconds": 5,
     "_source": "seek/stop from roadmap §2; cooldown PLACEHOLDER — verify vs CLAUDE.md. decisionGraceSeconds (B13-7): sim-time grace window suppressing AUTONOMOUS decisions right after a 'fresh start' moment (boot, map switch, return from work, return from a visit) so the Sim doesn't act before the player gets their bearings; default 5 sim-seconds, PLACEHOLDER pending designer tuning. Player-issued orders are never affected."
   },
   "time": {
-    "secondsPerGameDay": 180,
+    "secondsPerGameDay": 200,
     "nightStartHour": 22,
-    "nightEndHour": 6,
+    "nightEndHour": 7,
     "_source": "60 s/day is the Unreal DEBUG speed — open decision #2, retune in Phase 1"
   },
   "ambience": {
     "radiusMeters": 5,
     "nightEnvironmentEnabled": 1,
     "nightEnvironmentPenalty": -7,
-    "sleepBlockingEnabled": true,
+    "sleepBlockingEnabled": 1,
     "_source": "B13-9/B13-10/B13-14 shared room-aware ambience. radiusMeters is the maximum sim-to-device range for both the night light Environment bonus and sleep blockers. Walls and closed doors block; open apertures connect. nightEnvironmentEnabled gates BOTH nightEnvironmentPenalty and ON in-room light.environmentBonus contributions; sleepBlockingEnabled is independent. nightEnvironmentPenalty is the signed flat delta added at night exactly as authored (normally negative; -7 lowers Environment by 7).",
-    "angryWakeSeconds": 4,
+    "angryWakeSeconds": 3,
     "angryReactSeconds": 2
   },
   "textures": {
@@ -41,11 +41,11 @@
   },
   "economy": {
     "startingFunds": 250,
-    "currencyName": "$",
+    "currencyName": "C$",
     "_source": "PLACEHOLDER — open decision #1 (Phase 3)"
   },
   "buy": {
-    "ghostOpacity": 0.5,
+    "ghostOpacity": 0.67,
     "_source": "ROADMAP_NEXT B13-8: opacity of the actual asset mesh/sprite shown beside the green/red footprint while placing or moving in Buy Mode. Clamped to 0..1; game default is 0.5 when absent."
   },
   "credit": {
@@ -63,7 +63,7 @@
     "_source": "PROJECT_CONTEXT.md §7.24 F3. Score changes are signed deltas. Debt windows scale linearly from the low-score factor at min to the high-score factor at max."
   },
   "quests": {
-    "toastDurationSeconds": 4,
+    "toastDurationSeconds": 3,
     "completedLogLimit": 5,
     "_source": "Quest system slice (PROJECT_CONTEXT.md §3) — toast on-screen time and how many completed quests the HUD log keeps."
   },
@@ -123,7 +123,7 @@
   },
   "garbage": {
     "autoTidyRadius": 5,
-    "cleanlinessThreshold": 5,
+    "cleanlinessThreshold": 4,
     "cleanlinessVar": "cleanliness",
     "fillBar": {
       "widthMeters": 0.4,
@@ -144,10 +144,10 @@
     "_source": "ROADMAP_NEXT B6-4. Every waste-producing completion creates one baseline item; this is the chance of one extra item, linearly interpolated from extraAtMin at stat 0 to extraAtMax at that stat's authored maximum."
   },
   "doors": {
-    "openSeconds": 0.25,
-    "closeSeconds": 0.25,
+    "openSeconds": 0.2,
+    "closeSeconds": 0.2,
     "openAngleDeg": 90,
-    "triggerDistance": 1.75,
+    "triggerDistance": 1.5,
     "_source": "Doors-as-assets slice (PROJECT_CONTEXT.md §7.1). Defaults for AssetDef.door fields a door instance doesn't override. 0.5s open/close is the designer's requested default; triggerDistance is meters, independent from map gridSize, sized so the door swings open a beat before the sim (walkSpeed 2 m/s) reaches it."
   },
   "view": {

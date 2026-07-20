@@ -308,5 +308,15 @@ console.log('quests.test — BUG 1: job acquisition completes a boolean job ques
   check('boolean job condition is UNMET again once jobless', evaluate({ var: 'vars.job', eq: true }, evalCtx) === false);
 }
 
+// --- H1 (ROADMAP_HAPPY): top-level happiness in the condition namespace
+{
+  const { resolveVar, evaluate } = await import('../game/quests');
+  const ctx = { needs: {}, skills: {}, funds: 0, time: { hour: 0, day: 0 }, happiness: 42, vars: {}, quests: {} };
+  check('resolveVar reads happiness', resolveVar('happiness', ctx) === 42);
+  check('conditions can gate on happiness', evaluate({ all: [{ var: 'happiness', gte: 40 }] }, ctx) === true
+    && evaluate({ all: [{ var: 'happiness', gte: 50 }] }, ctx) === false);
+  check('absent happiness stays safe-false', evaluate({ all: [{ var: 'happiness', gte: 0 }] }, { ...ctx, happiness: undefined }) === false);
+}
+
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }
 console.log('\nall quests tests passed');

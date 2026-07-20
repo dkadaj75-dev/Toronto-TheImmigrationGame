@@ -429,6 +429,16 @@
       },
       "needMultipliers": {
         "fun": 1
+      },
+      "screenOverlay": {
+        "image": "textures/tv_screen2.gif",
+        "widthMeters": 1.55,
+        "heightMeters": 0.82,
+        "offset": [
+          0,
+          0.5,
+          0.03
+        ]
       }
     },
     {
@@ -574,7 +584,7 @@
       "id": "door_basic",
       "name": "Basic door",
       "category": "door",
-      "mesh": "models/door.glb",
+      "mesh": "models/doorframe.glb",
       "buyPrice": 150,
       "sellPrice": 110,
       "environmentScore": 0,
@@ -590,7 +600,10 @@
           0
         ],
         "openSeconds": 0.1,
-        "closeSeconds": 0.1
+        "closeSeconds": 0.1,
+        "paneNode": "Door pane 1",
+        "paneMesh": "/models/doorpane1.glb",
+        "openAngleDeg": 90
       },
       "meshFit": {
         "scale": [
@@ -737,8 +750,8 @@
       "sellPrice": 65,
       "environmentScore": -1,
       "footprint": [
-        0.6,
-        0.6
+        0.5,
+        0.5
       ],
       "interactions": [],
       "garbage": {
@@ -750,7 +763,8 @@
         "delaySeconds": 5
       },
       "meshFit": {
-        "yawOffsetDeg": 90
+        "yawOffsetDeg": 90,
+        "scale": 0.8
       },
       "icon": "/public/icons/trash.png"
     },
@@ -763,8 +777,8 @@
       "sellPrice": 0,
       "environmentScore": -5,
       "footprint": [
-        0.5,
-        0.5
+        0.25,
+        0.25
       ],
       "interactions": [
         "clean_up"
@@ -889,6 +903,39 @@
         ],
         "xOffset": 0,
         "zOffset": 0
+      }
+    },
+    {
+      "id": "rustic_bed",
+      "name": "Rustic Bed",
+      "category": "beds",
+      "mesh": "/models/prisonbed.glb",
+      "buyPrice": 0,
+      "sellPrice": 0,
+      "environmentScore": 0,
+      "footprint": [
+        1,
+        2
+      ],
+      "interactions": [
+        "sleep"
+      ],
+      "meshFit": {
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "yawOffsetDeg": 180
+      },
+      "usePose": {
+        "lie": {
+          "y": -0.2,
+          "offset": [
+            0,
+            -0.1
+          ]
+        }
       }
     }
   ]

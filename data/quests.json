@@ -2,34 +2,6 @@
   "_comment": "Quest definitions (PROJECT_CONTEXT.md §3.2). trigger: locked→active condition, evaluated on the needs-decay tick. completion: active→done condition; on success rewards are applied. onceOnly:true quests stay 'done' forever; onceOnly:false quests reset to 'locked' after completion so they can trigger again later (repeatable) — see the doc comment on QuestRunner.tick in game/quests.ts.",
   "quests": [
     {
-      "id": "first_words",
-      "name": "Watch TV",
-      "description": "Watch TV like the larva you are",
-      "trigger": {
-        "all": [
-          {
-            "var": "needs.fun",
-            "gte": 70
-          }
-        ]
-      },
-      "completion": {
-        "all": [
-          {
-            "var": "needs.fun",
-            "gte": 80
-          }
-        ]
-      },
-      "rewards": [
-        {
-          "type": "funds",
-          "amount": 200
-        }
-      ],
-      "onceOnly": true
-    },
-    {
       "id": "find_a_job",
       "name": "The arrival",
       "description": "Welcome to Toronto!\nYou successfully passed the immigration and got your first (very bad) basement apartment!\nYou have a TOURIST Visa of 3 days only. Quick! Find a job!\nUse your smartphone to find your first job as a temporary foreign worker.\nRefresh jobs, new jobs appear regularly!\n\nBut first, let's mop all of these disgusting puddles on the floor! Toronto real estate is a nightmare.",

@@ -223,6 +223,87 @@ export function createSpriteInstance(def: AssetDef, url: string): SpriteInstance
 }
 
 /**
+ * State-visuals screen overlay (game/stateviz.ts): an upright textured plane playing an animated
+ * GIF (or showing a static image) through the SAME decode cache and frame-timing math as sprites.
+ * Unlike createSpriteInstance, the plane is sized/oriented by the designer's authored overlay
+ * config, not the asset footprint, and it stays VERTICAL (a screen), never billboarding.
+ * Positioning/rotation into the asset group is the caller's job (world.ts attachScreenOverlay) —
+ * this returns the plane at the local origin facing +Z.
+ */
+export function createOverlayInstance(
+  overlay: { widthMeters: number; heightMeters: number; fps?: number; doubleSided: boolean },
+  url: string,
+  ownerLabel = 'overlay',
+): SpriteInstance {
+  const geo = new THREE.PlaneGeometry(Math.max(overlay.widthMeters, 1e-3), Math.max(overlay.heightMeters, 1e-3));
+  const material = new THREE.MeshBasicMaterial({
+    transparent: true,
+    side: overlay.doubleSided ? THREE.DoubleSide : THREE.FrontSide,
+    depthWrite: false,
+    toneMapped: false, // a lit screen should not be dimmed by scene tone mapping
+  });
+  const mesh = new THREE.Mesh(geo, material);
+  mesh.raycast = () => {}; // never a tap/hover target — taps must reach the asset behind it
+
+  let canvas: HTMLCanvasElement | null = null;
+  let ctx: CanvasRenderingContext2D | null = null;
+  let canvasTexture: THREE.CanvasTexture | null = null;
+  let frames: CanvasImageSource[] = [];
+  let durationsMs: number[] = [];
+  let lastIndex = -1;
+  let elapsedMs = 0;
+
+  const applyTexture = (tex: THREE.Texture) => {
+    tex.colorSpace = THREE.SRGBColorSpace;
+    material.map = tex;
+    material.needsUpdate = true;
+  };
+  const loadStatic = (): Promise<void> =>
+    new Promise((resolve, reject) => {
+      new THREE.TextureLoader().load(url, (tex) => { applyTexture(tex); resolve(); }, undefined, reject);
+    });
+  const canTryGifDecode = isGifPath(url) && typeof (globalThis as { ImageDecoder?: unknown }).ImageDecoder !== 'undefined';
+  const ready: Promise<void> = canTryGifDecode
+    ? cachedDecodeGifFrames(url)
+        .then(({ frames: decoded, delaysMs }) => {
+          frames = decoded;
+          durationsMs = frameDurationsMs(delaysMs, overlay.fps);
+          const first = decoded[0];
+          canvas = document.createElement('canvas');
+          canvas.width = first.width; canvas.height = first.height;
+          ctx = canvas.getContext('2d');
+          ctx?.drawImage(first, 0, 0);
+          canvasTexture = new THREE.CanvasTexture(canvas);
+          applyTexture(canvasTexture);
+        })
+        .catch((err) => {
+          console.warn(`GIF frame decode failed for "${ownerLabel}" (${url}) — falling back to a static first frame.`, err);
+          return loadStatic();
+        })
+    : loadStatic();
+
+  return {
+    object: mesh,
+    ready,
+    update(dtSeconds) {
+      if (!ctx || !canvas || !canvasTexture || durationsMs.length < 2) return;
+      elapsedMs += dtSeconds * 1000;
+      const idx = clamp(frameIndexAtTime(durationsMs, elapsedMs), 0, frames.length - 1);
+      if (idx === lastIndex) return;
+      lastIndex = idx;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(frames[idx], 0, 0);
+      canvasTexture.needsUpdate = true;
+    },
+    dispose() {
+      material.map?.dispose();
+      material.dispose();
+      geo.dispose();
+    },
+  };
+}
+
+/**
  * Decodes every frame of an animated GIF via the WebCodecs `ImageDecoder` API into an array of
  * small canvases plus that frame's delay (ms). Browser-only (uses `fetch`, `ImageDecoder`,
  * `VideoFrame`, `document.createElement('canvas')`) — not exercised by the headless suite; see

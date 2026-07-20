@@ -229,6 +229,14 @@ function renderCompatibility(){
   appendField(tuning,'Trait range',numberInput(compat.traitRange,(v)=>compat.traitRange=v,SOCIAL_FILE,{min:0,step:'any'}));
   appendField(tuning,'Min multiplier',numberInput(compat.minMultiplier,(v)=>compat.minMultiplier=v,SOCIAL_FILE,{step:'any'}));
   appendField(tuning,'Max multiplier',numberInput(compat.maxMultiplier,(v)=>compat.maxMultiplier=v,SOCIAL_FILE,{step:'any'}));
+  // H3 (ROADMAP_HAPPY): sparse player-happiness scaling folded into the compatibility multiplier
+  // at every relationship-gain seam (interactions, phone, visits). Blank ends = x1 (no effect).
+  const setHappyScale=(key)=>(v)=>{
+    if(v===undefined||v===null||Number.isNaN(v)){const s=state.social.happinessScaling;if(s){delete s[key];if(!Object.keys(s).length)delete state.social.happinessScaling;}}
+    else (state.social.happinessScaling??={})[key]=v;
+  };
+  appendField(tuning,'Happiness factor at 0',sparseNumberInput(state.social.happinessScaling?.atMin,setHappyScale('atMin'),SOCIAL_FILE,{step:'any',placeholder:'x1'}));
+  appendField(tuning,'Happiness factor at 100',sparseNumberInput(state.social.happinessScaling?.atMax,setHappyScale('atMax'),SOCIAL_FILE,{step:'any',placeholder:'x1'}));
 }
 
 // --------------------------------------------------------------------------------------- Interactions

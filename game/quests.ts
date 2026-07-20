@@ -28,6 +28,9 @@ export interface EvalContext {
   /** Current FinanceState score. Optional so older quest/test contexts remain valid. */
   creditScore?: number;
   time: { hour: number; day: number };
+  /** H1 (ROADMAP_HAPPY): live 0-100 happiness — lets interaction conditions, behavior.json
+   *  autonomy rules, and quest conditions gate on mood. Optional for older fixtures. */
+  happiness?: number;
   vars: Record<string, VarValue>;
   quests: Record<string, QuestState>;
 }
@@ -39,6 +42,7 @@ export interface EvalContext {
 export function resolveVar(path: string, ctx: EvalContext): number | VarValue | undefined {
   if (path === 'funds') return ctx.funds;
   if (path === 'creditScore') return ctx.creditScore;
+  if (path === 'happiness') return ctx.happiness;
   if (path === 'time.hour') return ctx.time.hour;
   if (path === 'time.day') return ctx.time.day;
   if (path.startsWith('needs.')) return ctx.needs[path.slice('needs.'.length)];

@@ -38,6 +38,24 @@ export function normalizeHappinessComponent(
 }
 
 /** Invalid/unknown components and non-positive weights are ignored. No usable weight yields 0. */
+/** H2 (ROADMAP_HAPPY): per-action skill-learning efficiency. Lerps skillEffAtMin→skillEffAtMax
+ *  over happiness 0→100; sparse/absent ends default to 1 so an untouched action is a strict no-op.
+ *  Result is clamped to ≥ 0 (a designer typo can slow learning to zero, never reverse it). */
+export function happinessSkillFactor(mod: { skillEffAtMin?: number; skillEffAtMax?: number } | undefined, happiness: number): number {
+  const lo = Number.isFinite(mod?.skillEffAtMin) ? mod!.skillEffAtMin! : 1;
+  const hi = Number.isFinite(mod?.skillEffAtMax) ? mod!.skillEffAtMax! : 1;
+  const t = clamp(Number.isFinite(happiness) ? happiness : 0, 0, 100) / 100;
+  return Math.max(0, lo + (hi - lo) * t);
+}
+
+/** H2: whether the sim refuses this action at the given happiness. Strictly-below semantics;
+ *  absent refuseBelow never refuses. */
+export function isRefusedByMood(mod: { refuseBelow?: number } | undefined, happiness: number): boolean {
+  const cutoff = mod?.refuseBelow;
+  if (typeof cutoff !== 'number' || !Number.isFinite(cutoff)) return false;
+  return (Number.isFinite(happiness) ? happiness : 0) < cutoff;
+}
+
 export function computeHappiness(data: HappinessData, ctx: EvalContext): number {
   let weighted = 0;
   let totalWeight = 0;

@@ -21,6 +21,9 @@ export interface ActiveWorkShift extends WorkWindow {
 export interface WorkSaveState {
   jobId: string | null;
   skips: number;
+  /** H4 (ROADMAP_HAPPY): consecutive completed shifts below the job's firing.minHappiness.
+   *  Sparse in old saves (restore defaults 0); resets on job change and on any happy-enough shift. */
+  unhappyStreak?: number;
   nextShiftStartAbsHour: number | null;
   attendedShiftStartAbsHour: number | null;
   notifiedShiftStartAbsHour: number | null;
@@ -45,7 +48,10 @@ export type WorkTickEvent =
   | { type: 'due'; jobId: string; endHour: number; departByHour: number }
   | { type: 'returned'; jobId: string; pay: number; needsCost: Record<string, number>; returnPoint: WorkReturnPoint }
   | { type: 'skipped'; jobId: string; skips: number }
-  | { type: 'job_lost'; jobId: string; skips: number };
+  | { type: 'job_lost'; jobId: string; skips: number }
+  // H4 (ROADMAP_HAPPY): unhappy-streak firing (recordShiftMood, called on each completed shift).
+  | { type: 'unhappy_shift'; jobId: string; streak: number; maxUnhappyShifts: number }
+  | { type: 'fired'; jobId: string; streak: number };
 
 const EPSILON = 1e-9;
 export const DEFAULT_DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
@@ -329,6 +335,29 @@ export class WorkTracker {
   get activeShift(): ActiveWorkShift | null { return cloneActive(this.state.activeShift); }
   getJobLevel(jobId: string): number { return Math.max(0, Math.floor(this.state.jobLevels[jobId] ?? 0)); }
 
+  /** H4 (ROADMAP_HAPPY): record a COMPLETED shift's mood against the job's sparse firing config.
+   *  happiness < firing.minHappiness increments the streak (warning event); streak >
+   *  firing.maxUnhappyShifts fires (caller handles job loss + visa consequences). A happy-enough
+   *  shift, or a job with no firing config, resets the streak. Pure decision, no side effects. */
+  recordShiftMood(job: JobDef, happiness: number): WorkTickEvent[] {
+    const firing = job.firing;
+    const min = firing?.minHappiness;
+    if (job.id !== this.state.jobId || typeof min !== 'number' || !Number.isFinite(min)
+      || (Number.isFinite(happiness) ? happiness : 0) >= min) {
+      this.state.unhappyStreak = 0;
+      return [];
+    }
+    const streak = (this.state.unhappyStreak ?? 0) + 1;
+    this.state.unhappyStreak = streak;
+    const max = Math.max(0, Math.floor(Number.isFinite(firing?.maxUnhappyShifts) ? firing!.maxUnhappyShifts! : Infinity));
+    if (Number.isFinite(max) && streak > max) {
+      this.state.jobId = null; // same clearing the job_lost path performs (caller mirrors quests.vars)
+      this.state.unhappyStreak = 0;
+      return [{ type: 'fired', jobId: job.id, streak }];
+    }
+    return [{ type: 'unhappy_shift', jobId: job.id, streak, maxUnhappyShifts: Number.isFinite(max) ? max : 0 }];
+  }
+
   /** Changing jobs starts fresh attendance. Runtime state for the same job is left untouched. */
   syncJob(job: JobDef | null, time: WorkTime, calendar?: CalendarTuning) {
     const nextId = job?.id ?? null;
@@ -336,6 +365,7 @@ export class WorkTracker {
     this.state = {
       jobId: nextId,
       skips: 0,
+      unhappyStreak: 0,
       nextShiftStartAbsHour: job ? firstShiftStartAtOrAfter(time, job, calendar) : null,
       attendedShiftStartAbsHour: null,
       notifiedShiftStartAbsHour: null,
@@ -466,6 +496,8 @@ export class WorkTracker {
     this.state = {
       jobId: saved.jobId,
       skips: saved.skips,
+      unhappyStreak: saved.unhappyStreak ?? 0, // H4: sparse in pre-batch-15 saves
+
       nextShiftStartAbsHour: saved.nextShiftStartAbsHour,
       attendedShiftStartAbsHour: saved.attendedShiftStartAbsHour,
       notifiedShiftStartAbsHour: saved.notifiedShiftStartAbsHour ?? null,

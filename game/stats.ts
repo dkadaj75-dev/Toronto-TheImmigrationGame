@@ -119,7 +119,7 @@ export class SimStats {
    *  per-need gain by the asset the gain is credited to (main.ts passes the perched seat's map for
    *  seat-aware actions, the target asset's otherwise — see its call site). Absent = every need
    *  multiplies by 1x (old behavior). */
-  applyGains(action: ActionDef, needMultipliers?: AssetDef['needMultipliers']) {
+  applyGains(action: ActionDef, needMultipliers?: AssetDef['needMultipliers'], skillGainFactor = 1) {
     for (const [needId, gain] of Object.entries(action.needGains)) {
       const v = this.needs.get(needId);
       if (v !== undefined) this.needs.set(needId, clamp(v + effectiveNeedGain(needId, gain, needMultipliers), 0, 100));
@@ -128,7 +128,8 @@ export class SimStats {
       const v = this.skills.get(skillId);
       if (v === undefined) continue;
       const max = this.defs.skills.find((s) => s.id === skillId)?.max ?? 100;
-      const effectiveGain = scaleSkillGain(gain, v, max, this.growthCurveExp);
+      // H2 (ROADMAP_HAPPY): happiness learning-efficiency multiplier — 1 unless the action opts in.
+      const effectiveGain = scaleSkillGain(gain, v, max, this.growthCurveExp) * skillGainFactor;
       this.skills.set(skillId, clamp(v + effectiveGain, 0, max));
     }
   }

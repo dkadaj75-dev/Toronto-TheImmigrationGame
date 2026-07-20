@@ -51,3 +51,16 @@ check('both and unknown display data resolve both', happinessStateDisplay('both'
 
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }
 console.log('\nAll happiness.test checks passed.');
+
+// --- H2 (ROADMAP_HAPPY): per-action mood coupling
+import { happinessSkillFactor, isRefusedByMood } from '../game/happiness';
+check('absent mod is a strict no-op', happinessSkillFactor(undefined, 50) === 1);
+check('midpoint lerps to 1', happinessSkillFactor({ skillEffAtMin: 0.5, skillEffAtMax: 1.5 }, 50) === 1);
+check('floor at 0 happiness', happinessSkillFactor({ skillEffAtMin: 0.5, skillEffAtMax: 1.5 }, 0) === 0.5);
+check('ceiling at 100 happiness', happinessSkillFactor({ skillEffAtMin: 0.5, skillEffAtMax: 1.5 }, 100) === 1.5);
+check('sparse min defaults to 1', happinessSkillFactor({ skillEffAtMax: 2 }, 100) === 2);
+check('factor clamps at 0, never reverses learning', happinessSkillFactor({ skillEffAtMin: -5 }, 0) === 0);
+check('no cutoff never refuses', isRefusedByMood(undefined, 0) === false);
+check('below cutoff refuses', isRefusedByMood({ refuseBelow: 30 }, 29.9) === true);
+check('cutoff is strictly-below', isRefusedByMood({ refuseBelow: 30 }, 30) === false);
+console.log('H2 mood-coupling checks passed');

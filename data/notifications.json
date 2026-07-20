@@ -228,6 +228,15 @@
     "sleepInterrupted": {
       "tier": "passive",
       "icon": "icons/bed.png"
+    },
+    "actionRefusedUnhappy": {
+      "tier": "card"
+    },
+    "unhappyShift": {
+      "tier": "card"
+    },
+    "firedUnhappy": {
+      "tier": "modal"
     }
   }
 }
