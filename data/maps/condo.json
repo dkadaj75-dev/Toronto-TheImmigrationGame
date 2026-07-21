@@ -11,52 +11,6 @@
   },
   "floors": [
     {
-      "id": "floor_1",
-      "polygon": [
-        [
-          0,
-          0
-        ],
-        [
-          4,
-          0
-        ],
-        [
-          4,
-          5
-        ],
-        [
-          0,
-          5
-        ]
-      ],
-      "material": "wood",
-      "texture": "textures/ShittyFloor.jpg"
-    },
-    {
-      "id": "floor_2",
-      "polygon": [
-        [
-          4,
-          0
-        ],
-        [
-          6,
-          0
-        ],
-        [
-          6,
-          4
-        ],
-        [
-          4,
-          4
-        ]
-      ],
-      "material": "tile",
-      "texture": "textures/ShittyTiling.jpg"
-    },
-    {
       "id": "floor_3",
       "polygon": [
         [
@@ -101,6 +55,52 @@
       ],
       "material": "tile",
       "texture": "textures/ChineseTiles.jpg"
+    },
+    {
+      "id": "floor_1",
+      "polygon": [
+        [
+          0,
+          1
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          0,
+          5
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/ShittyFloor.jpg"
+    },
+    {
+      "id": "floor_2",
+      "polygon": [
+        [
+          4,
+          1
+        ],
+        [
+          6,
+          1
+        ],
+        [
+          6,
+          4
+        ],
+        [
+          4,
+          4
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/ShittyTiling.jpg"
     }
   ],
   "walls": [
@@ -111,7 +111,7 @@
       ],
       "to": [
         0,
-        0
+        1
       ],
       "texture": "textures/wallpaint.jpg",
       "textureB": "textures/Concrete.jpg"
@@ -135,7 +135,7 @@
       ],
       "to": [
         6,
-        0
+        1
       ],
       "texture": "textures/Concrete.jpg",
       "textureB": "textures/ShittyTiling2.jpg"
@@ -143,11 +143,11 @@
     {
       "from": [
         6,
-        0
+        1
       ],
       "to": [
         0,
-        0
+        1
       ],
       "texture": "textures/wallpaint.jpg",
       "textureB": "textures/Concrete.jpg"
@@ -163,18 +163,6 @@
       ],
       "texture": "textures/Concrete.jpg",
       "textureB": "textures/wallpaper.jpg"
-    },
-    {
-      "from": [
-        3,
-        1
-      ],
-      "to": [
-        3,
-        0
-      ],
-      "texture": "textures/ShittyTiling2.jpg",
-      "textureB": "textures/wallpaint.jpg"
     },
     {
       "from": [
@@ -258,42 +246,34 @@
     {
       "asset": "dining_table",
       "pos": [
-        4,
-        0.5
+        3.5,
+        1.5
       ],
       "rotDeg": 0
     },
     {
       "asset": "dining_chair",
       "pos": [
-        3.5,
-        1.5
+        3.25,
+        2.5
       ],
       "rotDeg": 180
     },
     {
       "asset": "bookshelf",
       "pos": [
-        1.5,
-        0.25
+        1.25,
+        1.25
       ],
       "rotDeg": 0
     },
     {
       "asset": "garbage_can",
       "pos": [
-        5.69,
-        1
+        4.75,
+        1.25
       ],
-      "rotDeg": 270
-    },
-    {
-      "asset": "armchair",
-      "pos": [
-        2.25,
-        3.75
-      ],
-      "rotDeg": 270
+      "rotDeg": 0
     },
     {
       "asset": "lamp",
@@ -306,16 +286,16 @@
     {
       "asset": "wall_lamp",
       "pos": [
-        5.5,
-        0.14
+        4.5,
+        3.86
       ],
-      "rotDeg": 0
+      "rotDeg": 180
     },
     {
       "asset": "wall_lamp",
       "pos": [
         0.14,
-        1
+        1.25
       ],
       "rotDeg": 90
     },
@@ -338,16 +318,16 @@
     {
       "asset": "water_puddle",
       "pos": [
-        4,
-        2.75
+        3,
+        3.75
       ],
       "rotDeg": 0
     },
     {
       "asset": "water_puddle",
       "pos": [
-        1.25,
-        2
+        1.5,
+        2.5
       ],
       "rotDeg": 0
     },
@@ -362,8 +342,8 @@
     {
       "asset": "water_puddle",
       "pos": [
-        2.5,
-        1.25
+        2.25,
+        3.25
       ],
       "rotDeg": 0
     },
@@ -420,6 +400,14 @@
       "pos": [
         5.565,
         2.625
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "oldarmchair",
+      "pos": [
+        1.5,
+        3.75
       ],
       "rotDeg": 270
     }

@@ -1048,6 +1048,37 @@
       "needMultipliers": {
         "hunger": 1
       }
+    },
+    {
+      "id": "oldarmchair",
+      "name": "Old Armchair",
+      "category": "seating",
+      "mesh": "models/oldarmchair.glb",
+      "buyPrice": 180,
+      "sellPrice": 135,
+      "environmentScore": 2,
+      "footprint": [
+        1,
+        1
+      ],
+      "seats": 1,
+      "interactions": [
+        "sit"
+      ],
+      "seatTarget": true,
+      "usePose": {
+        "sit": {
+          "y": 0.15,
+          "facingDeg": 0
+        }
+      },
+      "combustibility": {
+        "chancePercent": 50,
+        "delaySeconds": 10
+      },
+      "needMultipliers": {
+        "comfort": 1.1
+      }
     }
   ]
 }
