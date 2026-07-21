@@ -126,7 +126,11 @@ const condoAssets = JSON.parse(readFileSync(new URL('../data/assets.json', impor
 const bakeStarted = performance.now();
 const condoGrid = bakeNavGrid(condo, condoAssets);
 const bakeMs = performance.now() - bakeStarted;
-assert(condo.gridSize === 0.5 && condo.snapStep === 0.25, 'shipped condo separates 0.5m tiles from 0.25m placement snap');
+// Self-deriving (AGENTS.md: never hardcode live map values — the designer retunes gridSize in the
+// Map Editor, and this assertion pinned 0.5 until they moved the condo to 0.25m tiles). What
+// actually matters is the INVARIANT: both are positive and placement snaps at or below tile size.
+assert(condo.gridSize > 0 && condo.snapStep > 0 && condo.snapStep <= condo.gridSize,
+  `shipped condo keeps a valid tile/snap pair (grid ${condo.gridSize}, snap ${condo.snapStep})`);
 // Derive expected cells from the LIVE map's own bounds (self-deriving fixture rule — the designer
 // resizes the map; a hardcoded 18x18 broke under live data drift).
 const expCols = Math.ceil(condo.bounds.w / condo.gridSize), expRows = Math.ceil(condo.bounds.h / condo.gridSize);

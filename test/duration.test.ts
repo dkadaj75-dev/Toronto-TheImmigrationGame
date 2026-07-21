@@ -110,7 +110,11 @@ console.log('duration.test — shipped data sanity (data/interactions.json + dat
   const interactions = JSON.parse(readFileSync(new URL('../data/interactions.json', import.meta.url), 'utf8'));
   const stats = JSON.parse(readFileSync(new URL('../data/stats.json', import.meta.url), 'utf8'));
   const intel = stats.skills.find((s: SkillDef) => s.id === 'intelligence');
-  check('stats.json ships an "intelligence" skill, default 0 max 10', !!intel && intel.default === 0 && intel.max === 10, JSON.stringify(intel));
+  // Self-deriving (AGENTS.md: never hardcode live data — this pinned max 10 until the designer
+  // retuned intelligence to max 100 in the Tuning Editor). Only the SHAPE is asserted here; the
+  // behavioural checks below feed the skill's own live max so the maths stays meaningful.
+  check('stats.json ships an "intelligence" skill with a usable range',
+    !!intel && Number.isFinite(intel.default) && typeof intel.max === 'number' && intel.max > 0, JSON.stringify(intel));
 
   for (const id of ['extinguish', 'clean_up', 'sweep', 'mop']) {
     const action = interactions.actions.find((a: ActionDef) => a.id === id);
@@ -120,10 +124,10 @@ console.log('duration.test — shipped data sanity (data/interactions.json + dat
   }
 
   const extinguish = interactions.actions.find((a: ActionDef) => a.id === 'extinguish');
-  const fastExtinguish = computeDurationSeconds(extinguish.duration, { intelligence: 10 }, stats.skills, { energy: 100 });
+  const fastExtinguish = computeDurationSeconds(extinguish.duration, { intelligence: intel.max }, stats.skills, { energy: 100 });
   const slowExtinguish = computeDurationSeconds(extinguish.duration, { intelligence: 0 }, stats.skills, { energy: 0 });
   check('extinguish: smart + energetic sim is faster than dumb + tired sim', fastExtinguish! < slowExtinguish!, `${fastExtinguish} vs ${slowExtinguish}`);
-  check('extinguish base 10s: smart+energetic ≈ 5s (10 * 0.5 * 1)', approx(fastExtinguish!, 5), String(fastExtinguish));
+  check('extinguish base 10s: a maxed-intelligence, rested sim halves it (10 * 0.5 * 1)', approx(fastExtinguish!, 5), String(fastExtinguish));
   check('extinguish base 10s: dumb+tired ≈ 16s (10 * 1 * 1.6)', approx(slowExtinguish!, 16), String(slowExtinguish));
 }
 
