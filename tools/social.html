@@ -326,25 +326,41 @@ function renderInteractions(){
     const updateWarn=()=>{ warn.style.display=anim.value.trim()?'none':''; };
     anim.addEventListener('input',updateWarn); updateWarn();
     animWrap.append(anim,warn); appendField(grid,'Animation',animWrap);
-    // Designer request (2026-07-19): MULTIPLE acceptable target assets/categories per interaction.
-    // Legacy single targetAsset keeps working; extra rows write the targetAssets array.
-    const targetsWrap=document.createElement('div');
-    const targetList=()=>[it.targetAsset,...(it.targetAssets??[])].filter((x)=>x&&String(x).trim());
-    // Writes without re-rendering (in-place slot updates keep test/DOM references stable);
-    // structural changes (remove row / explicit add) re-render via renderInteractions.
-    const writeTargets=(list,rerender)=>{ const clean=[...new Set(list.map((x)=>String(x).trim()).filter(Boolean))]; if(clean.length){ it.targetAsset=clean[0]; if(clean.length>1) it.targetAssets=clean.slice(1); else delete it.targetAssets; } else { delete it.targetAsset; delete it.targetAssets; } markDirty(SOCIAL_FILE); if(rerender) renderInteractions(); };
-    targetList().forEach((value,ti)=>{
-      const row=document.createElement('div'); row.style.display='flex'; row.style.gap='6px'; row.style.margin='3px 0';
-      const sel=selectInput(assetRows(),value,(v)=>{ const list=targetList(); if(v){ list[ti]=v; writeTargets(list,false); } else { list.splice(ti,1); writeTargets(list,true); } },SOCIAL_FILE,'-- remove --');
+    // Designer request (2026-07-20): MULTIPLE acceptable target assets/categories per interaction,
+    // added/removed via explicit buttons (the old "-- remove --" blank option was unclear).
+    // Data is normalized into targetAssets on every write; a legacy single targetAsset (from data
+    // authored before this UI existed) is migrated into the array on first edit and the legacy key
+    // dropped so the value is never carried in both places at once.
+    const targetsWrap=document.createElement('div'); targetsWrap.className='targets-wrap';
+    const targetList=()=>{ const legacy=it.targetAsset?[it.targetAsset]:[]; return [...new Set([...legacy,...(it.targetAssets??[])].map((x)=>String(x).trim()).filter(Boolean))]; };
+    const writeTargets=(list,rerender)=>{
+      const clean=[...new Set(list.map((x)=>String(x).trim()).filter(Boolean))];
+      if(clean.length) it.targetAssets=clean; else delete it.targetAssets;
+      delete it.targetAsset; // always migrated/cleared — targetAssets is the sole source of truth after any edit
+      markDirty(SOCIAL_FILE);
+      if(rerender){ renderInteractions(); renderPreview(); }
+    };
+    const list=targetList();
+    list.forEach((value,ti)=>{
+      const row=document.createElement('div'); row.className='target-row'; row.style.display='flex'; row.style.gap='6px'; row.style.margin='3px 0';
+      const usedElsewhere=new Set(list.filter((_,i)=>i!==ti));
+      const options=assetRows().filter(([v])=>!usedElsewhere.has(v));
+      // In-place value swap keeps DOM/test references stable (no row added/removed); only the
+      // explicit add/remove buttons below trigger a structural rerender.
+      const sel=selectInput(options,value,(v)=>{ if(!v||usedElsewhere.has(v)) return; const next=[...list]; next[ti]=v; writeTargets(next,false); },SOCIAL_FILE);
       sel.dataset.path=`interactions.${index}.targets.${ti}`; sel.style.flex='1';
-      row.appendChild(sel); targetsWrap.appendChild(row);
+      const removeBtn=document.createElement('button'); removeBtn.className='danger mini'; removeBtn.dataset.action='remove-target-asset'; removeBtn.textContent='Remove';
+      removeBtn.addEventListener('click',()=>{ const next=[...list]; next.splice(ti,1); writeTargets(next,true); });
+      row.append(sel,removeBtn); targetsWrap.appendChild(row);
     });
-    // Trailing picker doubles as the legacy single-target select (first pick fills slot 0) and
-    // as "+ add another": each rendered picker owns ONE slot once used.
-    let pendingSlot=null;
-    const addSel=selectInput(assetRows(),'',(v)=>{ const list=targetList(); if(pendingSlot===null){ if(v){ pendingSlot=list.length; list.push(v); writeTargets(list,false); } } else if(v){ list[pendingSlot]=v; writeTargets(list,false); } else { list.splice(pendingSlot,1); pendingSlot=null; writeTargets(list,true); } },SOCIAL_FILE,targetList().length?'-- add another --':'-- standing pair --');
-    addSel.dataset.path=`interactions.${index}.targets.add`;
-    targetsWrap.appendChild(addSel);
+    const addBtn=document.createElement('button'); addBtn.className='mini'; addBtn.dataset.action='add-target-asset'; addBtn.textContent='+ Add asset/category';
+    addBtn.addEventListener('click',()=>{
+      const current=targetList(); const used=new Set(current);
+      const next=assetRows().find(([v])=>!used.has(v));
+      if(!next) return; // nothing left to add without creating a duplicate
+      writeTargets([...current,next[0]],true);
+    });
+    targetsWrap.appendChild(addBtn);
     appendField(grid,'Target assets / categories (blank = standing pair)',targetsWrap);
     appendField(grid,'Player animation override',textInput(it.playerAnimation??'',(v)=>{ if(v.trim()) it.playerAnimation=v; else delete it.playerAnimation; },SOCIAL_FILE,{placeholder:'blank = base animation'}));
     appendField(grid,'NPC animation override',textInput(it.npcAnimation??'',(v)=>{ if(v.trim()) it.npcAnimation=v; else delete it.npcAnimation; },SOCIAL_FILE,{placeholder:'blank = base animation'}));

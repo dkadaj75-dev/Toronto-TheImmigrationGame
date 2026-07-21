@@ -25,8 +25,12 @@ const social = {
   ]},
   compatibility:{ traitWeights:{ cleanliness:0.5, intelligence:1.0 }, traitRange:10, minMultiplier:0.25, maxMultiplier:1.75 },
   interactions:[
-    { id:'chat', name:'Chat', animation:'stand_talk', durationSeconds:20, needGains:{social:3}, relationshipGain:4, requiresLevelAtLeast:'acquaintance', requiresLevelAtMost:null, autonomyEligible:true, censor:false },
-    { id:'ask_to_leave', name:'Ask to Leave', animation:'stand_talk', durationSeconds:8, needGains:{}, relationshipGain:0, special:'endVisit', requiresLevelAtLeast:null, requiresLevelAtMost:null, autonomyEligible:false, censor:false },
+    // targetAssets carries an unknown/stale id on purpose — proves it survives as a flagged option
+    // instead of being silently dropped (career.html grantsVisa precedent).
+    { id:'chat', name:'Chat', animation:'stand_talk', durationSeconds:20, needGains:{social:3}, relationshipGain:4, requiresLevelAtLeast:'acquaintance', requiresLevelAtMost:null, autonomyEligible:true, censor:false, targetAssets:['ghost_item'] },
+    // legacy single-field target (authored before the add/remove row UI existed) — proves migration
+    // into targetAssets on first edit, not on render.
+    { id:'ask_to_leave', name:'Ask to Leave', animation:'stand_talk', durationSeconds:8, needGains:{}, relationshipGain:0, special:'endVisit', requiresLevelAtLeast:null, requiresLevelAtMost:null, autonomyEligible:false, censor:false, targetAsset:'sofa' },
   ],
   phone:{ text:{ durationSeconds:10, needGains:{social:1}, relationshipGain:1, cooldownMinutes:60 }, call:{ durationSeconds:45, needGains:{social:2.5}, relationshipGain:2, cooldownMinutes:120 } },
   visitTheirPlace:{ awayHours:4, needsRestored:{social:60, fun:30}, relationshipGain:8, minLevel:'friend' },
@@ -60,6 +64,12 @@ await new Promise((resolve)=>setTimeout(resolve, 50));
 let failures = 0;
 function check(cond, msg){ if(cond) console.log('  ok  '+msg); else { failures++; console.error('FAIL  '+msg); } }
 function fire(el, type){ el.dispatchEvent(new window.Event(type, { bubbles:true })); }
+// appendField() puts a <label> then its control as direct siblings in the .grid — look up a field by
+// its label text instead of a fragile select/input index (the target-row count varies per interaction).
+function fieldControl(card, labelText){
+  const label = [...card.querySelectorAll('.grid > label')].find((l)=>l.textContent===labelText);
+  return label ? label.nextElementSibling : null;
+}
 const T = window.SocialTool;
 
 // ---- boot / render ------------------------------------------------------------------------------
@@ -72,12 +82,20 @@ check(doc.querySelectorAll('#interactions .entity').length===2, 'renders two int
 
 // ---- level-gate dropdown consistency: options are fed by the levels list + a null option ---------
 {
-  const atLeast = doc.querySelectorAll('#interactions .entity')[0].querySelectorAll('select')[1];
+  const atLeast = fieldControl(doc.querySelectorAll('#interactions .entity')[0], 'Requires level ≥');
   const opts = [...atLeast.options].map((o)=>o.value);
   check(opts[0]==='' && opts.slice(1).join(',')==='enemy,acquaintance,friend', 'level ≥ dropdown = blank + every level id in order');
   const visitMin = doc.querySelector('#visitFields select');
   const vopts = [...visitMin.options].map((o)=>o.value);
   check(vopts[0]==='' && vopts.includes('friend'), 'visit minLevel dropdown is fed by the levels list + null option');
+}
+
+// ---- target assets/categories: unknown authored id survives, never silently dropped --------------
+{
+  const card = doc.querySelectorAll('#interactions .entity')[0]; // chat, authored with targetAssets:['ghost_item']
+  const sel = card.querySelector('.targets-wrap .target-row select');
+  check(!!sel && sel.value==='ghost_item', 'unknown authored target id renders as the row\'s selected value');
+  check([...sel.options].some((o)=>o.value==='ghost_item' && /unknown/.test(o.textContent)), 'unknown id kept as a flagged "(unknown)" option instead of being dropped');
 }
 
 // ---- NPC CRUD round-trip ------------------------------------------------------------------------
@@ -134,25 +152,31 @@ check(T.state.social.relationship.levels.length===3, 'remove level deletes it');
 doc.getElementById('addInteraction').click();
 check(T.state.social.interactions.length===3 && T.state.social.interactions[2].id==='interaction3', 'add interaction appends unique id');
 {
-  const card = doc.querySelectorAll('#interactions .entity')[2];
+  let card = doc.querySelectorAll('#interactions .entity')[2];
   const warn = card.querySelector('[data-role="anim-warn"]');
   check(warn && warn.style.display==='', 'new interaction with blank animation shows the warn line');
   const anim = card.querySelector('.grid input[type=text][placeholder="stand_talk"]');
   anim.value = 'wave'; fire(anim, 'input');
   check(warn.style.display==='none', 'setting an animation hides the warn line');
   check(T.state.social.interactions[2].animation==='wave', 'animation edit round-trips');
-  // level gate select → maps blank to null
-  const targetPicker = card.querySelectorAll('.grid select')[0];
-  check([...targetPicker.options].some((o)=>o.value==='beds') && [...targetPicker.options].some((o)=>o.value==='bed'), 'target picker is fetched from asset categories + ids');
-  targetPicker.value='bed'; fire(targetPicker,'change');
+  check(!card.querySelector('.targets-wrap .target-row'), 'new interaction starts with zero target rows (blank = standing pair)');
+
+  // add appends a row and writes targetAssets (structural change → renderInteractions rebuilds the
+  // card, so re-fetch it from the document afterward).
+  card.querySelector('[data-action="add-target-asset"]').click();
+  card = doc.querySelectorAll('#interactions .entity')[2];
+  check(T.state.social.interactions[2].targetAssets?.length===1, 'add appends exactly one entry to targetAssets');
+  const targetSel = card.querySelector('.targets-wrap .target-row select');
+  check(!!targetSel && [...targetSel.options].some((o)=>o.value==='beds') && [...targetSel.options].some((o)=>o.value==='bed'), 'target row picker is fed from asset categories + ids');
+  targetSel.value='bed'; fire(targetSel,'change');
   const playerAnimation = card.querySelector('input[placeholder="blank = base animation"]');
   const npcAnimation = card.querySelectorAll('input[placeholder="blank = base animation"]')[1];
   const sound = card.querySelector('input[placeholder="/sounds/social.wav"]');
   playerAnimation.value='lie_player'; fire(playerAnimation,'input');
   npcAnimation.value='lie_npc'; fire(npcAnimation,'input');
   sound.value='C:\\game\\public\\sounds\\cuddle.wav'; fire(sound,'input'); fire(sound,'blur');
-  check(T.state.social.interactions[2].targetAsset==='bed' && T.state.social.interactions[2].playerAnimation==='lie_player' && T.state.social.interactions[2].npcAnimation==='lie_npc' && T.state.social.interactions[2].sound==='/sounds/cuddle.wav', 'paired target, role animations, and normalized sound CRUD round-trip');
-  const atLeast = card.querySelectorAll('.grid select')[1];
+  check(T.state.social.interactions[2].targetAssets?.join(',')==='bed' && T.state.social.interactions[2].targetAsset===undefined && T.state.social.interactions[2].playerAnimation==='lie_player' && T.state.social.interactions[2].npcAnimation==='lie_npc' && T.state.social.interactions[2].sound==='/sounds/cuddle.wav', 'target row, role animations, and normalized sound CRUD round-trip into targetAssets');
+  const atLeast = fieldControl(card,'Requires level ≥');
   atLeast.value = 'friend'; fire(atLeast, 'change');
   check(T.state.social.interactions[2].requiresLevelAtLeast==='friend', 'requiresLevelAtLeast picks a level id');
   atLeast.value = ''; fire(atLeast, 'change');
@@ -165,10 +189,46 @@ check(T.state.social.interactions.length===3 && T.state.social.interactions[2].i
 doc.querySelectorAll('#interactions [data-action="remove-interaction"]')[2].click();
 check(T.state.social.interactions.length===2, 'remove interaction deletes it');
 
+// ---- target assets/categories: explicit add/remove buttons, legacy migration, dupe prevention -----
+{
+  let card = doc.querySelectorAll('#interactions .entity')[1]; // ask_to_leave, authored with legacy targetAsset:'sofa'
+  const rowSelects = () => [...card.querySelectorAll('.targets-wrap .target-row select')];
+  check(rowSelects().length===1 && rowSelects()[0].value==='sofa', 'legacy targetAsset renders as a single row');
+  check(T.state.social.interactions[1].targetAssets===undefined && T.state.social.interactions[1].targetAsset==='sofa', 'legacy field is left alone until the first edit — no premature migration just from rendering');
+
+  // add: migrates the legacy value into targetAssets AND appends a second, defaulted-to-unused entry.
+  card.querySelector('[data-action="add-target-asset"]').click();
+  card = doc.querySelectorAll('#interactions .entity')[1];
+  check(T.state.social.interactions[1].targetAssets?.join(',')==='sofa,beds' && T.state.social.interactions[1].targetAsset===undefined, 'add migrates the legacy target into targetAssets, appends a default unused option, and drops the legacy key');
+  check(rowSelects().length===2, 'add appends a second row to the DOM');
+
+  // duplicates cannot be created: each row's options exclude every value already used by another row.
+  {
+    const rows = rowSelects();
+    const opts0 = [...rows[0].options].map((o)=>o.value);
+    const opts1 = [...rows[1].options].map((o)=>o.value);
+    check(opts0.includes('sofa') && !opts0.includes('beds'), 'row 0 keeps its own value as an option but excludes the value used by row 1');
+    check(opts1.includes('beds') && !opts1.includes('sofa'), 'row 1 keeps its own value as an option but excludes the value used by row 0');
+  }
+
+  // remove deletes only that entry.
+  card.querySelectorAll('.targets-wrap [data-action="remove-target-asset"]')[0].click();
+  card = doc.querySelectorAll('#interactions .entity')[1];
+  check(T.state.social.interactions[1].targetAssets?.join(',')==='beds', 'remove deletes only the targeted entry, leaving the other intact');
+  check(rowSelects().length===1, 'removed row disappears from the DOM');
+
+  // emptying the list deletes both keys (a standing/no-target pair), and the add button still works.
+  card.querySelectorAll('.targets-wrap [data-action="remove-target-asset"]')[0].click();
+  card = doc.querySelectorAll('#interactions .entity')[1];
+  check(T.state.social.interactions[1].targetAssets===undefined && T.state.social.interactions[1].targetAsset===undefined, 'emptying the list deletes both targetAssets and targetAsset');
+  check(rowSelects().length===0, 'no rows remain once the list is empty');
+  check(!!card.querySelector('[data-action="add-target-asset"]'), 'add button remains available once the list is empty');
+}
+
 // Keep one paired interaction through the save round-trip.
 {
   const card = doc.querySelectorAll('#interactions .entity')[0];
-  const selects = card.querySelectorAll('.grid select'); selects[0].value='beds'; fire(selects[0],'change');
+  const sel = card.querySelector('.targets-wrap .target-row select'); sel.value='beds'; fire(sel,'change');
   const roles = card.querySelectorAll('input[placeholder="blank = base animation"]');
   roles[0].value='player_talk'; fire(roles[0],'input'); roles[1].value='npc_talk'; fire(roles[1],'input');
   const sound = card.querySelector('input[placeholder="/sounds/social.wav"]'); sound.value='/sounds/chat.wav'; fire(sound,'input');
@@ -201,7 +261,7 @@ check(rawPuts['npcs.json'] && rawPuts['social.json'], 'save PUTs both edited fil
 const savedNpcs = JSON.parse(rawPuts['npcs.json']), savedSocial = JSON.parse(rawPuts['social.json']);
 check(savedNpcs.npcs[0].name==='Amara Renamed' && savedNpcs.npcs[0].portrait==='/npcs/amara.png', 'npcs.json PUT carries the edited values');
 check(savedSocial.interactions.length===2 && savedSocial.relationship.levels.length===3, 'social.json PUT carries the edited collections');
-check(savedSocial.visitDuration.byLevel.enemy===0.25 && savedSocial.interactions[0].targetAsset==='beds' && savedSocial.interactions[0].playerAnimation==='player_talk' && savedSocial.interactions[0].npcAnimation==='npc_talk' && savedSocial.interactions[0].sound==='/sounds/chat.wav', 'new sparse social fields survive whole-file save round-trip');
+check(savedSocial.visitDuration.byLevel.enemy===0.25 && savedSocial.interactions[0].targetAssets?.join(',')==='beds' && savedSocial.interactions[0].targetAsset===undefined && savedSocial.interactions[0].playerAnimation==='player_talk' && savedSocial.interactions[0].npcAnimation==='npc_talk' && savedSocial.interactions[0].sound==='/sounds/chat.wav', 'new sparse social fields (including the migrated targetAssets array) survive whole-file save round-trip');
 check(rawPuts['npcs.json']===JSON.stringify(savedNpcs,null,2) && rawPuts['social.json']===JSON.stringify(savedSocial,null,2), 'both saves use exact 2-space pretty whole-file JSON');
 
 // --- AUDIT no-tool 59: per-NPC visitorActions picker
