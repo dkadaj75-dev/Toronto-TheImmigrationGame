@@ -1,7 +1,7 @@
 {
   "_comment": "EVERY global tunable lives here (design pillar #2). Game hot-reloads this file in dev. Values documented in docs/roadmaps/WEB_GAME_ROADMAP.md are marked; the rest are PLACEHOLDER pending CLAUDE.md verification.",
   "simulation": {
-    "needsDecayTickSeconds": 1.5,
+    "needsDecayTickSeconds": 0.8,
     "activityGainTickSeconds": 2,
     "_source": "roadmap §5 — matches Unreal prototype exactly"
   },
@@ -40,7 +40,7 @@
     "_source": "which data/maps/<active>.json the game plays; set from the Map Editor \"Play this map\" button"
   },
   "economy": {
-    "startingFunds": 250,
+    "startingFunds": 300,
     "currencyName": "C$",
     "_source": "PLACEHOLDER — open decision #1 (Phase 3)"
   },

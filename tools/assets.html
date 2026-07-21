@@ -28,9 +28,9 @@
   .asset-item:hover { background: #1c2436; }
   .asset-item.active { background: rgba(90,120,190,.28); }
   .asset-item .badge { margin-left: auto; font-size: 10px; color: #8fa3c8; background: #1c2436; border-radius: 999px; padding: 2px 7px; }
-  #editor { overflow-y: auto; padding: 16px; }
+  #editor { overflow-y: auto; padding: 16px; display: grid; grid-template-columns: minmax(440px, 660px) minmax(420px, 1fr); gap: 0 18px; align-items: start; }
   #editor .empty { color: #5f6f93; padding: 40px; text-align: center; }
-  .card { background: #1a2133; border: 1px solid #26304a; border-radius: 12px; padding: 14px; margin-bottom: 14px; max-width: 660px; }
+  .card { background: #1a2133; border: 1px solid #26304a; border-radius: 12px; padding: 14px; margin-bottom: 14px; max-width: 660px; grid-column: 1; }
   .card h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: #93a3c0; }
   .frow { display: grid; grid-template-columns: 160px 1fr; gap: 10px; align-items: center; padding: 5px 0; }
   .frow label { font-size: 13px; }
@@ -42,11 +42,16 @@
   .checks label { display: flex; align-items: center; gap: 5px; font-size: 13px; background: #10182a;
     border: 1px solid #2c3a58; border-radius: 8px; padding: 5px 9px; cursor: pointer; }
   .checks label:has(input:checked) { border-color: #3d6fd2; background: rgba(61,111,210,.15); }
-  #preview-wrap { max-width: 660px; }
-  #preview { width: 100%; height: 280px; background: #0d1220; border: 1px solid #26304a; border-radius: 12px; display: block; }
+  #preview-wrap { max-width: none; width: 100%; grid-column: 2; grid-row: 1 / span 12; position: sticky; top: 0; align-self: start; }
+  #preview { width: 100%; height: min(520px, calc(100vh - 165px)); min-height: 360px; background: #0d1220; border: 1px solid #26304a; border-radius: 12px; display: block; }
   #preview-msg { font-size: 12px; color: #5f6f93; margin-top: 6px; }
   .row-actions { display: flex; gap: 8px; margin-top: 8px; }
   .hint { font-size: 11px; color: #5f6f93; margin-top: 6px; line-height: 1.5; }
+  @media (max-width: 1050px) {
+    #editor { display: block; }
+    #preview-wrap { position: relative; top: auto; }
+    #preview { height: 340px; min-height: 0; }
+  }
 </style>
 </head>
 <body>
@@ -74,7 +79,7 @@ const FEATURE_CATEGORY_CARDS = Object.freeze({
   kitchen: ['Food', 'Combustibility'],
 });
 const state = {
-  assets: null, interactions: null, map: null, stats: null, tuning: null,
+  assets: null, interactions: null, map: null, stats: null, tuning: null, events: null,
   selected: null, dirty: false,
   // Preview-only state: never written to assets.json. Character starts hidden on every load.
   showCharacter: false, previewPose: null, previewOn: false, previewSeatLocation: null,
@@ -124,7 +129,7 @@ window.AssetEditor = { state, previewGridSize, previewGridSpec, availablePreview
 async function load() {
   setStatus('loading…');
   try {
-    const [a, i, m, s, t] = await Promise.all([
+    const [a, i, m, s, t, e] = await Promise.all([
       fetch(API + 'assets.json').then((r) => { if (!r.ok) throw new Error('assets.json HTTP ' + r.status); return r.json(); }),
       fetch(API + 'interactions.json').then((r) => { if (!r.ok) throw new Error('interactions.json HTTP ' + r.status); return r.json(); }),
       // AUDIT bug 17: placement counts / delete warnings must consider EVERY map, not just condo.
@@ -134,8 +139,9 @@ async function load() {
         .then((loaded) => loaded.filter(Boolean)),
       fetch(API + 'stats.json').then((r) => (r.ok ? r.json() : { needs: [], skills: [] })).catch(() => ({ needs: [], skills: [] })),
       fetch(API + 'tuning.json').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(API + 'events.json').then((r) => (r.ok ? r.json() : { events: [] })).catch(() => ({ events: [] })),
     ]);
-    state.assets = a; state.interactions = i; state.maps = m; state.map = m[0] ?? null; state.stats = s; state.tuning = t;
+    state.assets = a; state.interactions = i; state.maps = m; state.map = m[0] ?? null; state.stats = s; state.tuning = t; state.events = e;
     state.dirty = false;
     if (!state.selected && a.assets.length) state.selected = a.assets[0].id;
     renderAll();
@@ -282,6 +288,11 @@ function selectInput(options, get, set, path) {
   sel.addEventListener('change', () => { set(sel.value); markDirty(); });
   return sel;
 }
+function eventOptions(current) {
+  const options = [{ value: '', label: '(none)' }, ...(state.events?.events ?? []).map((event) => ({ value: event.id, label: event.id }))];
+  if (current && !options.some((option) => option.value === current)) options.push({ value: current, label: current + ' (unknown)' });
+  return options;
+}
 // AUDIT overlap 35: the REAL game/sprites.ts classifyMeshPath is bridged in by the module script
 // below (window.AssetEditorEngine, same pattern as the Theme Editor's setThemeEngine); this local
 // list is only the jsdom/module-load-failure fallback, no longer the primary.
@@ -394,6 +405,12 @@ function renderStatesCard(a) {
     );
     stateMesh.placeholder = 'blank = base mesh';
     box.appendChild(frow('mesh path', stateMesh));
+    box.appendChild(frow('on enter \u2192 event', selectInput(
+      eventOptions(assetState.onEnter),
+      () => assetState.onEnter ?? '',
+      (v) => { if (v) assetState.onEnter = v; else delete assetState.onEnter; },
+      `states.${index}.onEnter`,
+    )));
 
     const defaultCb = document.createElement('input');
     defaultCb.type = 'checkbox'; defaultCb.checked = assetState.default === true;
@@ -492,7 +509,7 @@ function accidentAssetOptions() {
 function renderAccidentsCard(a) {
   const card = document.createElement('div');
   card.className = 'card';
-  card.innerHTML = '<h2>Accidents</h2><div class="hint">What can go wrong while this asset is used, and how likely — accidentId options are transient-category assets only. A plumbing leak is an onUse accident spawning water_puddle.</div>';
+  card.innerHTML = '<h2>Accidents</h2><div class="hint">What can go wrong while this asset is used, and how likely — accidentId options are transient-category assets only.</div><div class="hint">A plumbing leak = an onUse accident that spawns water_puddle AND emits a  event.</div>';
   const accOpts = accidentAssetOptions();
   const risks = a.accidents ?? [];
 
@@ -508,6 +525,12 @@ function renderAccidentsCard(a) {
     )));
     box.appendChild(frow('trigger', selectInput([{ value: 'onUse', label: 'onUse' }], () => 'onUse', () => { risk.trigger = 'onUse'; }, `accidents.${i}.trigger`)));
     box.appendChild(frow('base chance %', numInput(() => risk.baseChancePercent, (v) => { risk.baseChancePercent = v ?? 0; }, `accidents.${i}.baseChancePercent`)));
+    box.appendChild(frow('emits event', selectInput(
+      eventOptions(risk.emitsEvent),
+      () => risk.emitsEvent ?? '',
+      (v) => { if (v) risk.emitsEvent = v; else delete risk.emitsEvent; },
+      `accidents.${i}.emitsEvent`,
+    )));
     box.appendChild(frow('placement', selectInput(
       [{ value: 'on', label: 'on (same cells as this asset)' }, { value: 'adjacent', label: 'adjacent (nearby free cell)' }],
       () => risk.placement, (v) => { risk.placement = v; renderAll(); }, `accidents.${i}.placement`,
@@ -693,6 +716,30 @@ function renderEditor() {
   card2.appendChild(frow('facing ° (blank = 0)', numInput(() => a.facingDeg, (v) => { if (v === undefined) delete a.facingDeg; else a.facingDeg = v; }, 'facingDeg')));
   card2.insertAdjacentHTML('beforeend', '<div class="hint">direction the object faces, degrees — world facing = the map instance\'s rot° + this. 0 means the model\'s local +Z (its "front") already points the way rot° faces; only set this if the mesh itself is authored facing a different local axis.</div>');
   root.appendChild(card2);
+
+  // Newnew.txt: data-only point the character faces during direct use; the preview module draws it.
+  const faceCard = document.createElement('div');
+  faceCard.className = 'card';
+  faceCard.innerHTML = '<h2>Character use-facing target</h2><div class="hint">Optional model-local point the character looks toward while directly using this asset. Enable it to show a yellow ghost cube in the 3D preview. The point rotates with placed assets; it never appears in game.</div>';
+  const faceEnabled = checkInput(
+    () => Array.isArray(a.useFacingTarget),
+    (v) => { if (v) a.useFacingTarget = [0, 0]; else delete a.useFacingTarget; renderAll(); },
+    'useFacingTarget.enabled',
+  );
+  faceCard.appendChild(frow('custom facing target', faceEnabled));
+  const targetPair = document.createElement('div'); targetPair.className = 'pair';
+  for (const [index, axis] of [[0, 'x'], [1, 'z']]) {
+    const input = numInput(
+      () => a.useFacingTarget?.[index],
+      (v) => { if (a.useFacingTarget) a.useFacingTarget[index] = v ?? 0; },
+      `useFacingTarget.${axis}`,
+    );
+    input.placeholder = axis;
+    input.disabled = !a.useFacingTarget;
+    targetPair.appendChild(input);
+  }
+  faceCard.appendChild(frow('target x / z (model-local meters)', targetPair));
+  root.appendChild(faceCard);
 
   // --- sit/lie/use perch override (§7.8, roadmap item 1; `use` added ROADMAP_NEXT B2-3): sparse
   // per-pose fields, same ensure/prune convention as meshFit/door/sprite below. Defaults with
@@ -1419,18 +1466,20 @@ load();
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { AnimController } from '/game/anim.ts';
-import { usePoseFor, usePoseForEntry, useSpotFor } from '/game/facing.ts';
+import { facingVector, seatLocationEntries, useFacingTargetFor, usePoseFor, usePoseForEntry, useSpotFor } from '/game/facing.ts';
 import { classifyMeshPath, createSpriteInstance, createOverlayInstance } from '/game/sprites.ts';
-import { normalizeModelToFootprint, applyMeshFit, loadMeshTemplate, loadRiggedCharacter, applyOverlayTransform } from '/game/world.ts';
+import { normalizeModelToFootprint, applyMeshFit, loadMeshTemplate, loadRiggedCharacter, makeSimStandIn, applyOverlayTransform } from '/game/world.ts';
 import { resolvePaneConfig } from '/game/doors.ts';
 import { resolveScreenOverlay, overlayVisibleWhenOn, meshForState } from '/game/stateviz.ts';
 
 let renderer = null, scene, camera, controls, current = null, raf = 0;
 let footprintHelper = null; // translucent ground rect + outline at y=0 showing the asset's footprint
+let useHelpers = null; // preview-only seat/lie markers and the custom facing-target cube
 let activeSprite = null; // §7.5: SpriteInstance being previewed — its update() drives GIF frames (real time here, sim time in-game)
 let activeOverlay = null; // state-visuals screen overlay preview (game/stateviz.ts), animated like activeSprite
 let previewSeq = 0; // staleness token: a slow decode must not clobber a newer show()
 let characterPromise = null, characterRoot = null, characterAnim = null;
+let characterFallback = false;
 let assetStatus = '', characterStatus = '';
 const previewClock = new THREE.Clock();
 
@@ -1471,8 +1520,44 @@ function updateFootprintHelper(def) {
   scene.add(footprintHelper);
 }
 
+function updateUseHelpers(def) {
+  if (useHelpers) {
+    scene.remove(useHelpers);
+    useHelpers.traverse((object) => { object.geometry?.dispose?.(); object.material?.dispose?.(); });
+  }
+  useHelpers = new THREE.Group();
+  useHelpers.name = 'asset-editor-use-helpers';
+  const instance = { pos: [0, 0], rotDeg: 0 };
+  for (const pose of ['sit', 'lie']) {
+    (def ? seatLocationEntries(def, pose) : []).forEach((entry, index) => {
+      const transform = usePoseForEntry(pose, entry, instance, def, window.AssetEditor.state.tuning);
+      const color = pose === 'sit' ? 0x43d9ff : 0xd66bff;
+      const marker = new THREE.Mesh(
+        new THREE.SphereGeometry(0.09, 12, 8),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, depthWrite: false }),
+      );
+      marker.name = `${pose}-location-${index}`;
+      marker.position.set(transform.pos[0], Math.max(0.06, transform.y), transform.pos[1]);
+      const [dx, dz] = facingVector(transform.facingDeg);
+      const arrow = new THREE.ArrowHelper(new THREE.Vector3(dx, 0, dz), marker.position, 0.42, color, 0.12, 0.07);
+      useHelpers.add(marker, arrow);
+    });
+  }
+  const target = def ? useFacingTargetFor(instance, def) : null;
+  if (target) {
+    const cube = new THREE.Mesh(
+      new THREE.BoxGeometry(0.16, 0.16, 0.16),
+      new THREE.MeshBasicMaterial({ color: 0xffcc33, wireframe: true, transparent: true, opacity: 0.95 }),
+    );
+    cube.name = 'use-facing-target';
+    cube.position.set(target[0], 0.12, target[1]);
+    useHelpers.add(cube);
+  }
+  scene.add(useHelpers);
+}
+
 function framePreview() {
-  const visible = [current, characterRoot?.visible ? characterRoot : null, footprintHelper].filter(Boolean);
+  const visible = [current, characterRoot?.visible ? characterRoot : null, footprintHelper, useHelpers].filter(Boolean);
   if (!visible.length) return;
   const box = new THREE.Box3();
   for (const object of visible) box.expandByObject(object);
@@ -1491,6 +1576,7 @@ function ensureCharacter(character) {
   if (!characterPromise) {
     characterStatus = 'loading character…'; previewMessage();
     characterPromise = loadRiggedCharacter(character).then(({ model, clips }) => {
+      characterFallback = false;
       characterRoot = new THREE.Group();
       characterRoot.name = 'asset-editor-character-preview';
       characterRoot.add(model);
@@ -1499,8 +1585,16 @@ function ensureCharacter(character) {
       scene.add(characterRoot);
       return { clips };
     }).catch((error) => {
-      characterPromise = null;
-      throw error;
+      // The game itself keeps its capsule when a custom rig cannot load. The editor must do the
+      // same so Show character never becomes a blank/broken control.
+      console.warn('Asset Editor character rig failed; using the in-game stand-in.', error);
+      characterFallback = true;
+      characterRoot = makeSimStandIn();
+      characterRoot.name = 'asset-editor-character-preview-fallback';
+      characterRoot.visible = false;
+      characterAnim = null;
+      scene.add(characterRoot);
+      return { clips: [] };
     });
   }
   return characterPromise;
@@ -1548,10 +1642,12 @@ function updateCharacter(seq, assetDef) {
     characterRoot.rotation.set(0, THREE.MathUtils.degToRad(transform.facingDeg), 0);
     characterRoot.visible = true;
     const resolved = editor.resolvePoseAnimation(pose, assetDef);
-    characterAnim.retune(character);
-    characterAnim.play(resolved.logicalState);
+    characterAnim?.retune(character);
+    characterAnim?.play(resolved.logicalState);
     const sourceLabel = pose === 'use' ? `${source} standing spot; ` : '';
-    characterStatus = resolved.clipName
+    characterStatus = characterFallback
+      ? `${sourceLabel}${pose} character shown with the in-game stand-in (custom rig unavailable)`
+      : resolved.clipName
       ? `${sourceLabel}${pose} character animation: ${resolved.logicalState} -> ${resolved.clipName}`
       : `${sourceLabel}${pose} character animation "${resolved.logicalState}" is unmapped; game fallback applies`;
     previewMessage();
@@ -1571,6 +1667,7 @@ function ensure(canvas) {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   } catch { renderer = null; return false; }
   scene = new THREE.Scene();
+  useHelpers = null;
   // renderEditor replaces the canvas when selecting another asset. Reattach the one cached rig
   // to the new preview scene instead of loading the character again.
   if (characterRoot) scene.add(characterRoot);
@@ -1632,6 +1729,7 @@ window.AssetPreview = {
         .catch(() => { assetStatus += ` · overlay image failed (${overlayUrl}) — file should be under public/`; previewMessage(); });
     }
     updateFootprintHelper(assetDef); // live footprint ground rect (rebuilt each show → follows footprint edits)
+    updateUseHelpers(assetDef);
     assetStatus = meshPath ? '' : 'No mesh assigned — set a GLB or image path to preview it.';
     characterStatus = '';
     previewMessage();

@@ -14,6 +14,43 @@ import {
 } from './social';
 import { visitGate, visitGateReasonLabel } from './visit';
 
+/** Persisted phone-book ownership. NPC definitions remain content; this set is progression state. */
+export interface ContactBookSaveState { knownIds: string[]; }
+
+export class ContactBook {
+  private known = new Set<string>();
+
+  has(npcId: string): boolean { return this.known.has(npcId); }
+  add(npcId: string): boolean {
+    const id = npcId.trim();
+    if (!id || this.known.has(id)) return false;
+    this.known.add(id);
+    return true;
+  }
+  all(): string[] { return [...this.known]; }
+  serialize(): ContactBookSaveState { return { knownIds: this.all() }; }
+  restore(saved?: Partial<ContactBookSaveState> | null): void {
+    this.known = new Set((saved?.knownIds ?? []).filter((id): id is string => typeof id === 'string' && !!id.trim()));
+  }
+}
+
+/** One completed shift can discover at most one unknown authored NPC. */
+export function discoverWorkContact(
+  npcs: readonly NpcDef[], contacts: Pick<ContactBook, 'has'>, chancePercent: number,
+  rng: () => number = Math.random,
+): NpcDef | null {
+  const chance = Math.min(100, Math.max(0, Number.isFinite(chancePercent) ? chancePercent : 0));
+  if (chance <= 0) return null;
+  const unknown = npcs.filter((npc) => !contacts.has(npc.id));
+  if (!unknown.length) return null;
+  const rollRaw = rng();
+  const roll = Math.min(0.999999999999, Math.max(0, Number.isFinite(rollRaw) ? rollRaw : 1));
+  if (roll * 100 >= chance) return null;
+  const pickRaw = rng();
+  const pick = Math.min(0.999999999999, Math.max(0, Number.isFinite(pickRaw) ? pickRaw : 0));
+  return unknown[Math.floor(pick * unknown.length)] ?? null;
+}
+
 function clamp(value: number, min: number, max: number): number {
   return value < min ? min : value > max ? max : value;
 }

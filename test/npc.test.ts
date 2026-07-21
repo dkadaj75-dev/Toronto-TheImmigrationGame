@@ -1,4 +1,4 @@
-import { VisitLifecycle, isNpcAvailable, type NpcDef, type NpcsData } from '../game/npc';
+import { VisitLifecycle, isNpcAvailable, mapSpawnTransform, type NpcDef, type NpcsData } from '../game/npc';
 import type { SocialData } from '../game/social';
 
 let checks = 0;
@@ -31,6 +31,16 @@ const reachable = { modelReadiness: () => 'ready' as const, beginArrival: () => 
 // scale 60 means one sdt second advances one authored game minute.
 const tickMinutes = (visits: VisitLifecycle, minutes: number, hour: number, hooks = reachable) =>
   visits.tick(minutes, 60, hour, hooks);
+
+console.log('npc.test — active-map spawn arrival transform');
+{
+  const map = { spawn: { pos: [7, 3] as [number, number], facingDeg: 225 } };
+  const spawn = mapSpawnTransform(map);
+  check('arrival resolves the authored map position and facing',
+    spawn.pos[0] === 7 && spawn.pos[1] === 3 && spawn.facingDeg === 225);
+  spawn.pos[0] = 99;
+  check('arrival transform cannot mutate authored map data', map.spawn.pos[0] === 7);
+}
 
 console.log('npc.test — pending arrival and one-visitor gating');
 {

@@ -18,10 +18,10 @@ import { Hud } from './ui';
 import { Autonomy } from './autonomy';
 import { QuestRunner, isActionAvailable, type EvalContext } from './quests';
 import { VisaMachine } from './visas';
-import { PhoneJobSearch, applyForJob, applyForVisa, jobListingViews, jobSwitchPrompt, pendingDaysRemaining, rentalCardViews, visaApplicationViews } from './phone';
+import { PhoneJobSearch, applyForJob, applyForVisa, jobListingViews, jobSwitchPrompt, pendingDaysRemaining, rentalCardViews, requirementViews, visaApplicationViews } from './phone';
 import { listRentals, PendingMoveTracker } from './rental';
 import { FinanceState, decideRepoSeizure } from './bills';
-import { WorkTracker, applyNeedsCost, decideAutoDepart, isLeaveForWorkAvailable, isScheduledWorkWindow, isWithinDepartureWindow, jobLevelPay, jobLevelTitle, promotionRequirementsFor, shouldStartVisaGrace, weekdayName, type WorkReturnPoint, type WorkTickEvent } from './work';
+import { WorkTracker, applyNeedsCost, decideAutoDepart, isLeaveForWorkAvailable, isScheduledWorkWindow, isWithinDepartureWindow, jobLevelNumber, jobLevelPay, jobLevelTitle, promotionRequirementsFor, shouldStartVisaGrace, weekdayName, type WorkReturnPoint, type WorkTickEvent } from './work';
 import { computeHappiness, happinessSkillFactor, isRefusedByMood } from './happiness';
 import { EventFiringRegistry, MAX_EVENT_DEPTH, canFireAtDepth, findEvent, resolveEvent } from './events';
 import { AccidentsController, resolveTapAssetId, shouldDespawnOnCleanup, shouldRemovePlacedOnCleanup } from './accidents';
@@ -43,9 +43,9 @@ import { applyTheme } from './theme';
 import { compatibility, happinessSocialFactor, visitOutcome, type InteractionDef } from './social';
 import { SocialRuntime } from './socialruntime';
 import { availableSocialInteractions, matchesSocialTarget, pairedAssetPositions, SocialInteractionSession, socialActionDef, socialAnimationFor, socialAutonomyCandidates, socialNpcActionDef, socialRoutingDecision, socialScoringTarget, socialTargetList } from './social-interactions';
-import { isNpcAvailable, NpcVisitorController, type NpcDef } from './npc';
+import { isNpcAvailable, mapSpawnTransform, NpcVisitorController, type NpcDef } from './npc';
 import { mutualFacingDeg, usePoseFor } from './facing';
-import { contactViews, PhoneContactSession, phoneAutonomyCandidates } from './contacts';
+import { contactViews, discoverWorkContact, PhoneContactSession, phoneAutonomyCandidates } from './contacts';
 import { visitGate, VisitAwayTracker, type VisitReturnEvent } from './visit';
 import { crossedNightWindowBoundary, inspectAmbience, nightEnvironmentContribution, sleepBlockDecision, type AmbienceAssetInstance } from './ambience';
 import { applyEnvelope, assembleEnvelope, SaveRegistry } from './save';
@@ -723,7 +723,7 @@ async function start(initialLoadSlotId?: string) {
           }));
         }
         const evalContext = buildEvalContext();
-        return phoneAutonomyCandidates(data.npcs?.npcs ?? [], {
+        return phoneAutonomyCandidates((data.npcs?.npcs ?? []).filter((npc) => socialRuntime.contacts.has(npc.id)), {
           phone: socialRuntime.phone,
           data: data.social,
           behavior: data.behavior,
@@ -803,6 +803,13 @@ async function start(initialLoadSlotId?: string) {
   // transition via onStatusChanged below.
   quests.vars.visaStatus = visaMachine.statusId;
   quests.onGrantVisa = (statusId) => visaMachine.grantVisa(statusId, gameDay);
+  quests.onGrantContact = (npcId) => {
+    const npc = data.npcs?.npcs.find((entry) => entry.id === npcId);
+    if (npc && socialRuntime.contacts.add(npc.id)) {
+      postNotification('contactLearned', `New contact: ${npc.name}`);
+      refreshPhone();
+    }
+  };
   visaMachine.onStatusChanged = (def) => {
     quests.vars.visaStatus = def.id;
     refreshVisaChip();
@@ -838,12 +845,14 @@ async function start(initialLoadSlotId?: string) {
     }
     if (event.type === 'returned') {
       let applied = false;
-      returnTransitPending = true;
       const completeReturn = () => {
         if (applied) return;
         applied = true;
         returnTransitPending = false;
-        agent.teleportTo(event.returnPoint.pos[0], event.returnPoint.pos[1], event.returnPoint.facingDeg);
+        // Newnew.txt: the authored active-map spawn is the arrival contract. WorkTracker keeps the
+        // legacy departure returnPoint in its save envelope, but runtime no longer enters via it.
+        const spawn = mapSpawnTransform(data.map);
+        agent.teleportTo(spawn.pos[0], spawn.pos[1], spawn.facingDeg);
         sim.visible = true;
         if (marker) marker.pivot.visible = true;
         hud.setAtWork(false);
@@ -855,6 +864,12 @@ async function start(initialLoadSlotId?: string) {
         hud.setFunds(quests.funds, data.tuning.economy.currencyName);
         postNotification('workReturned', `Back from work · +${data.tuning.economy.currencyName}${event.pay.toLocaleString()}`);
         const job = data.jobs.jobs.find((entry) => entry.id === event.jobId);
+        const discovered = job ? discoverWorkContact(
+          data.npcs?.npcs ?? [], socialRuntime.contacts, job.contactChancePercent ?? 0,
+        ) : null;
+        if (discovered && socialRuntime.contacts.add(discovered.id)) {
+          postNotification('contactLearned', `Met ${discovered.name} at work`, 'Their contact was added to your phone');
+        }
         // H4 (ROADMAP_HAPPY): completed-shift mood check — warnings, then firing (handled below
         // through the same handler so the job-loss tail stays in ONE place).
         if (job) for (const moodEvent of work.recordShiftMood(job, happiness)) handleWorkEvent(moodEvent);
@@ -872,12 +887,7 @@ async function start(initialLoadSlotId?: string) {
         }
         refreshPhone();
       };
-      const transit = requestExteriorTransit({
-        passThrough: completeReturn,
-        passComplete: () => true,
-        onClosed: completeReturn,
-      });
-      if (!transit) completeReturn();
+      completeReturn();
       return;
     }
 
@@ -1003,10 +1013,13 @@ async function start(initialLoadSlotId?: string) {
       currentJob: currentJob() ? (() => {
         const job = currentJob()!;
         const levelIndex = work.getJobLevel(job.id);
+        const nextLevel = job.levels?.[levelIndex + 1];
         return {
           job: { ...job, name: jobLevelTitle(job, levelIndex), payPerShift: jobLevelPay(job, levelIndex), levels: undefined },
           skips: work.skips,
           levelIndex,
+          level: jobLevelNumber(job, levelIndex),
+          nextPromotionRequirements: nextLevel ? requirementViews(nextLevel.requirements, ctx) : undefined,
         };
       })() : null,
       visas: visaApplicationViews(data.visas, ctx),
@@ -1026,7 +1039,7 @@ async function start(initialLoadSlotId?: string) {
         mapNames: Object.fromEntries([data.map, ...allMaps].map((map) => [map.id, map.name || map.id])),
       }),
       rentals,
-      contacts: contactViews(data.npcs?.npcs ?? [], {
+      contacts: contactViews((data.npcs?.npcs ?? []).filter((npc) => socialRuntime.contacts.has(npc.id)), {
         relationships: socialRuntime.relationships,
         phone: socialRuntime.phone,
         data: data.social!,
@@ -2221,6 +2234,7 @@ async function start(initialLoadSlotId?: string) {
         Object.fromEntries(stats.needs),
         Object.fromEntries(stats.skills),
         { hour: Math.floor(gameSeconds / 3600), day: gameDay },
+        { job: buildEvalContext().job, happiness, personality: Object.fromEntries(stats.personality), creditScore: bills.creditScore },
       );
     }
 
@@ -2486,6 +2500,7 @@ async function start(initialLoadSlotId?: string) {
       creditScore: bills.creditScore,
       time: { hour: Math.floor(gameSeconds / 3600), day: gameDay },
       happiness,
+      job: currentJob() ? { level: jobLevelNumber(currentJob()!, work.getJobLevel(currentJob()!.id)) } : undefined,
       vars: quests.vars,
       quests: quests.quests,
     };

@@ -40,6 +40,7 @@ const tuning = {
     clipMap: { idle: 'Idle', sit: 'Sitting', lie: 'Sleeping', sit_idle: 'SittingIdle', stand_use: 'Using' },
   },
 };
+const events = { events: [{ id: 'sink_leak', effects: [] }] };
 
 const puts = {};
 const rawPuts = {};
@@ -50,7 +51,7 @@ const fetchMock = async (url, opts = {}) => {
     puts[path] = JSON.parse(opts.body);
     return { ok: true, status: 200, json: async () => ({}) };
   }
-  const body = { 'assets.json': assets, 'interactions.json': interactions, 'maps/condo.json': condo, 'stats.json': stats, 'tuning.json': tuning }[path];
+  const body = { 'assets.json': assets, 'interactions.json': interactions, 'maps/condo.json': condo, 'stats.json': stats, 'tuning.json': tuning, 'events.json': events }[path];
   return { ok: !!body, status: body ? 200 : 404, json: async () => structuredClone(body) };
 };
 
@@ -82,6 +83,9 @@ assert(JSON.stringify(window.AssetEditor.availablePreviewPoses(assets.assets[0])
 assert(window.AssetEditor.previewPoseSource('use', assets.assets[2]) === 'computed default', 'sparse use pose previews the computed default standing spot');
 assert(window.AssetEditor.previewPoseSource('use', { ...assets.assets[2], usePose: { use: {} } }) === 'computed default', 'empty use pose object is still treated as computed default');
 assert(window.AssetEditor.previewPoseSource('use', { ...assets.assets[2], usePose: { use: { y: 0 } } }) === 'authored', 'any authored usePose.use field switches the preview to authored');
+assert(doc.getElementById('preview-wrap'), '3D preview renders in its dedicated sticky column');
+assert(html.includes('position: sticky') && html.includes('grid-column: 2'), 'Asset Editor layout keeps the right-side preview visible while parameters scroll');
+assert(html.includes('seatLocationEntries(def, pose)') && html.includes('use-facing-target'), '3D preview draws every sit/lie location plus the facing-target ghost cube');
 const sitAnim = window.AssetEditor.resolvePoseAnimation(
   'sit', { ...assets.assets[0], interactions: ['custom_sit'] },
   [{ id: 'custom_sit', animation: 'sit_unmapped' }], tuning.character.clipMap,
@@ -275,10 +279,24 @@ assert(window.AssetEditor.state.assets.assets[0].states[0].mesh === 'models/murp
 doc.querySelector('button[data-action="remove-state"][data-state-index="0"]').click();
 assert(doc.querySelectorAll('[data-state-row]').length === 1 && window.AssetEditor.state.assets.assets[0].states[0].id === 'open_bed', 'remove state deletes the targeted row');
 
+let onEnterSel = doc.querySelector('select[data-path="states.0.onEnter"]');
+assert(onEnterSel && onEnterSel.value === '', 'state on-enter event dropdown renders blank when absent');
+onEnterSel.value = 'sink_leak'; onEnterSel.dispatchEvent(new window.Event('change', { bubbles: true }));
+assert(window.AssetEditor.state.assets.assets[0].states[0].onEnter === 'sink_leak', 'selecting a state on-enter event writes the sparse key');
+onEnterSel.value = ''; onEnterSel.dispatchEvent(new window.Event('change', { bubbles: true }));
+assert(!('onEnter' in window.AssetEditor.state.assets.assets[0].states[0]), 'blank state on-enter selection deletes the sparse key');
+window.AssetEditor.state.assets.assets[0].states[0].onEnter = 'legacy_event';
+doc.querySelector('[data-asset-id="couch"]').click();
+onEnterSel = doc.querySelector('select[data-path="states.0.onEnter"]');
+assert(onEnterSel.value === 'legacy_event' && [...onEnterSel.options].some((o) => o.value === 'legacy_event' && o.textContent === 'legacy_event (unknown)'), 'state on-enter preserves an authored unknown event id');
+onEnterSel.value = 'sink_leak'; onEnterSel.dispatchEvent(new window.Event('change', { bubbles: true }));
+
 // Assert the literal whole-file body, not just selected state fields.
 doc.getElementById('save').click();
 await new Promise((r) => setTimeout(r, 50));
 assert(rawPuts['assets.json'] === JSON.stringify(window.AssetEditor.state.assets, null, 2), 'save writes the exact whole assets.json body');
+assert(puts['assets.json'].assets[0].states[0].onEnter === 'sink_leak', 'exact whole-file PUT payload carries state onEnter');
+assert(!puts['events.json'], 'Asset Editor never PUTs read-only events.json');
 doc.querySelector('button[data-action="remove-state"][data-state-index="0"]').click();
 assert(!('states' in window.AssetEditor.state.assets.assets[0]), 'removing the last state deletes the whole states key');
 
@@ -382,6 +400,18 @@ sitFacing.dispatchEvent(new window.Event('input', { bubbles: true }));
 // here on the couch — should stay absent through save (verified below).
 assert(doc.querySelector('input[data-path="usePose.use.offsetX"]'), 'usePose.use offset fields rendered too (three pose cards: sit/lie/use)');
 assert(doc.querySelector('input[data-path="usePose.use.y"]').value === '', 'usePose.use.y blank when absent');
+
+// --- Newnew.txt: one general use-facing target, visualized by the module as a ghost cube.
+let faceTargetEnabled = doc.querySelector('input[data-path="useFacingTarget.enabled"]');
+assert(faceTargetEnabled && !faceTargetEnabled.checked, 'custom use-facing target starts sparse/off');
+faceTargetEnabled.checked = true;
+faceTargetEnabled.dispatchEvent(new window.Event('change', { bubbles: true }));
+let faceTargetX = doc.querySelector('input[data-path="useFacingTarget.x"]');
+let faceTargetZ = doc.querySelector('input[data-path="useFacingTarget.z"]');
+assert(faceTargetX && faceTargetZ && !faceTargetX.disabled, 'enabling the facing target exposes editable x/z coordinates');
+faceTargetX.value = '1.25'; faceTargetX.dispatchEvent(new window.Event('input', { bubbles: true }));
+faceTargetZ.value = '-0.5'; faceTargetZ.dispatchEvent(new window.Event('input', { bubbles: true }));
+assert(JSON.stringify(window.AssetEditor.state.assets.assets[0].useFacingTarget) === JSON.stringify([1.25, -0.5]), 'facing target writes model-local x/z data');
 
 // --- New.txt #5: multiple sit/lie seat locations (couch cushions, a two-person bed's sides).
 // Renders under the same 'comfort' feature category as the single usePose card above.
@@ -656,6 +686,19 @@ const baseChanceInput = doc.querySelector('input[data-path="accidents.0.baseChan
 baseChanceInput.value = '2';
 baseChanceInput.dispatchEvent(new window.Event('input', { bubbles: true }));
 
+let emitsEventSel = doc.querySelector('select[data-path="accidents.0.emitsEvent"]');
+assert(emitsEventSel && emitsEventSel.value === '', 'risk emits-event dropdown renders blank when absent');
+emitsEventSel.value = 'sink_leak'; emitsEventSel.dispatchEvent(new window.Event('change', { bubbles: true }));
+assert(window.AssetEditor.state.assets.assets.find((a) => a.id === 'stove').accidents[0].emitsEvent === 'sink_leak', 'selecting a risk event writes emitsEvent');
+emitsEventSel.value = ''; emitsEventSel.dispatchEvent(new window.Event('change', { bubbles: true }));
+assert(!('emitsEvent' in window.AssetEditor.state.assets.assets.find((a) => a.id === 'stove').accidents[0]), 'blank risk event selection deletes emitsEvent');
+window.AssetEditor.state.assets.assets.find((a) => a.id === 'stove').accidents[0].emitsEvent = 'legacy_event';
+doc.querySelector('[data-asset-id="stove"]').click();
+emitsEventSel = doc.querySelector('select[data-path="accidents.0.emitsEvent"]');
+assert(emitsEventSel.value === 'legacy_event' && [...emitsEventSel.options].some((o) => o.value === 'legacy_event' && o.textContent === 'legacy_event (unknown)'), 'risk emits-event preserves an authored unknown event id');
+emitsEventSel.value = 'sink_leak'; emitsEventSel.dispatchEvent(new window.Event('change', { bubbles: true }));
+assert(doc.querySelector('[data-feature-category="plumbing"]')?.textContent.includes('A plumbing leak = an onUse accident that spawns water_puddle AND emits a  event.'), 'Accidents card renders the plumbing leak hint');
+
 // placement starts "on" — no adjacentRange fields until switched to "adjacent"
 assert(doc.querySelector('input[data-path="accidents.0.adjacentRange.0"]') === null, 'adjacentRange hidden while placement is "on"');
 const placementSel = doc.querySelector('select[data-path="accidents.0.placement"]');
@@ -759,6 +802,7 @@ assert(!('hunger' in savedCouch.needMultipliers), 'removed need multiplier key i
 assert(savedCouch.usePose.sit.offset[0] === 0.3 && savedCouch.usePose.sit.offset[1] === 0, 'PUT carries usePose.sit.offset');
 assert(savedCouch.usePose.sit.y === 0.42, 'PUT carries usePose.sit.y');
 assert(savedCouch.usePose.sit.facingDeg === 180, 'PUT carries usePose.sit.facingDeg');
+assert(savedCouch.useFacingTarget[0] === 1.25 && savedCouch.useFacingTarget[1] === -0.5, 'PUT carries the custom character use-facing target');
 assert(!('lie' in savedCouch.usePose), 'untouched usePose.lie stays absent (sparse, per-pose)');
 assert(!('use' in savedCouch.usePose), 'untouched usePose.use stays absent (sparse, per-pose, B2-3)');
 assert(
@@ -818,6 +862,7 @@ const savedRisk = savedStove.accidents[0];
 assert(savedRisk.accidentId === 'fire', 'PUT carries risk.accidentId');
 assert(savedRisk.trigger === 'onUse', 'PUT carries risk.trigger');
 assert(savedRisk.baseChancePercent === 2, 'PUT carries risk.baseChancePercent');
+assert(savedRisk.emitsEvent === 'sink_leak', 'PUT carries sparse risk.emitsEvent');
 assert(savedRisk.placement === 'adjacent', 'PUT carries risk.placement after the switch');
 assert(savedRisk.adjacentRange[0] === 1 && savedRisk.adjacentRange[1] === 2, 'PUT carries risk.adjacentRange');
 assert(savedRisk.modifiers.length === 1, 'PUT carries the added modifier');

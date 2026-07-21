@@ -350,6 +350,9 @@ export interface AssetDef {
    *  asset then has one implicit location (its usePose entry, or the computed default). See
    *  game/facing.ts usePoseForEntry and the occupancy wiring in main.ts. */
   useLocations?: { sit?: UsePoseEntry[]; lie?: UsePoseEntry[] };
+  /** Newnew.txt: model-local [x,z] point every direct use pose faces toward. The Asset Editor
+   * renders it as a ghost cube; no runtime object is spawned. */
+  useFacingTarget?: [number, number];
   /** ROADMAP_NEXT item 6 (fire spreading): sparse, normal assets only. `chancePercent` is rolled
    *  ONCE per (fire instance, this object) pair, `delaySeconds` after the fire's own spawn time,
    *  provided this object is within `tuning.fire.spreadRadius` of it — see game/accidents.ts's
@@ -493,10 +496,12 @@ export interface RewardUnlockAsset { type: 'unlockAsset'; asset: string; }
  *  existing `setVar visaStatus` reward still works (per §7.20: "KEEPS working but bypasses expiry
  *  bookkeeping") for quick/legacy authoring; this is the one that should be used going forward. */
 export interface RewardGrantVisa { type: 'grantVisa'; statusId: string; }
+/** Newnew.txt: add one authored NPC to the persisted Contacts phone book. */
+export interface RewardGrantContact { type: 'grantContact'; npc: string; }
 /** New.txt #6 E4: a quest completion fires an event — the general "quest triggers X" seam without
  *  bloating the Reward union with one-off effect types (the event owns the effects). */
 export interface RewardEvent { type: 'event'; event: string; }
-export type Reward = RewardFunds | RewardSetVar | RewardUnlockAsset | RewardGrantVisa | RewardEvent;
+export type Reward = RewardFunds | RewardSetVar | RewardUnlockAsset | RewardGrantVisa | RewardGrantContact | RewardEvent;
 
 export interface QuestDef {
   id: string; name: string; description: string;
@@ -551,11 +556,13 @@ export interface JobDef {
   needsCost?: Record<string, number>;
   /** B13-11 sparse weekly schedule. Absent means every day; entries may be day indices or names. */
   workDays?: Array<number | string>;
+  /** Chance after each completed shift to discover one random still-unknown NPC contact. */
+  contactChancePercent?: number;
 }
 /** B13-19: `requirements` (sparse) gate promotion INTO this level — the same quest-namespace
  *  Condition jobs/visas use (skills, happiness, vars…), evaluated when the shift-end roll fires;
  *  unmet requirements skip the roll entirely. Chance/happiness scaling unchanged. */
-export interface JobLevelDef { suffix: string; payPerShift: number; promoteChancePercent: number; requirements?: Condition; }
+export interface JobLevelDef { level?: number; suffix: string; payPerShift: number; promoteChancePercent: number; requirements?: Condition; }
 export interface JobsData { jobs: JobDef[]; }
 
 /** B6-5 happiness formula. Every component resolves through quests.ts's namespace, is normalized

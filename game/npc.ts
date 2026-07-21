@@ -3,7 +3,7 @@
 // transitions into the existing character loader, AnimController, SimAgent and Autonomy classes.
 
 import * as THREE from 'three';
-import type { ActionDef, AssetDef, CharacterTuning, GameData } from './data';
+import type { ActionDef, AssetDef, CharacterTuning, GameData, MapData } from './data';
 import type { NavGrid } from './nav';
 import { cellCenter, isWalkable, worldToCell } from './nav';
 import { SimAgent, type ActiveAction } from './sim';
@@ -31,6 +31,12 @@ export interface NpcDef {
 }
 
 export interface NpcsData { npcs: NpcDef[]; }
+
+/** Newnew.txt: arrivals use the active map's authored transform. Return a copy so callers cannot
+ * accidentally mutate live map data; old work/visit saves may still retain their returnPoint. */
+export function mapSpawnTransform(map: Pick<MapData, 'spawn'>): { pos: [number, number]; facingDeg: number } {
+  return { pos: [map.spawn.pos[0], map.spawn.pos[1]], facingDeg: map.spawn.facingDeg };
+}
 
 export type VisitPhase = 'idle' | 'pending' | 'entering' | 'visiting' | 'leaving';
 export type VisitLeaveReason = 'duration' | 'asked' | 'availability' | null;
@@ -352,7 +358,7 @@ export class NpcVisitorController {
     if (!data.social || !data.npcs) return;
     this.lifecycle.tick(sdtSeconds, gameSecondsPerSimSecond, this.options.getHour(), {
       modelReadiness: (npc) => this.rigReadiness(npc),
-      beginArrival: (npc) => this.spawn(npc, true),
+      beginArrival: (npc) => this.spawn(npc),
       relationshipLevel: (npc) => this.options.getRelationshipLevel?.(npc.id) ?? null,
       onCallFallback: (npc, outcome) => {
         this.clearPreload();
@@ -412,42 +418,29 @@ export class NpcVisitorController {
     this.preloadRig(npc);
   }
 
-  private spawn(npc: NpcDef, routeIn: boolean): boolean {
+  private spawn(npc: NpcDef): boolean {
     this.despawn();
     const data = this.options.getData();
     const prepared = this.takePreparedRig(npc);
     if (!prepared) return false;
-    const door = exteriorDoor(data);
-    if (!door) { disposeObject(prepared.model); return false; }
-    const points = doorPoints(this.options.getGrid(), door.entry);
-    if (!points) { disposeObject(prepared.model); return false; }
-    if (this.options.exteriorDoorUsable && !this.options.exteriorDoorUsable(door.object, door.def)) {
-      disposeObject(prepared.model);
-      return false;
-    }
+    const spawn = mapSpawnTransform(data.map);
 
     const root = new THREE.Group();
     root.add(prepared.model);
     root.name = `npc:${npc.id}`;
     root.userData.npcId = npc.id;
-    root.position.set(routeIn ? points.outside[0] : points.inside[0], 0, routeIn ? points.outside[1] : points.inside[1]);
+    root.position.set(spawn.pos[0], 0, spawn.pos[1]);
+    root.rotation.y = THREE.MathUtils.degToRad(spawn.facingDeg);
     const agent = new SimAgent(root, this.options.getGrid(), data.tuning, assetMap(data));
     agent.hasRig = true;
     this.options.wireSeatOccupancy?.(agent, npc.id); // New.txt #5: NPC shares the occupancy registry
-    // Validate the same route before making the rig visible/state entering. Movement itself is
-    // restarted only by the exterior-transit pass seam after the pane is fully open.
-    if (routeIn && !agent.goTo(points.inside[0], points.inside[1])) {
-      disposeObject(root);
-      return false;
-    }
-    if (routeIn) agent.halt();
 
     const stats = visitorStats(npc, () => this.lifecycle.state.socialMeter);
     const live: LiveVisitor = {
       npc, root, agent, anim: prepared.anim, autonomyPaused: false, leaveOrdered: false,
       decisionAcc: 0, gainAcc: 0, loadToken: {},
       rigSignature: prepared.signature, transit: null,
-      entryStarted: !routeIn, entryClosed: !routeIn, exitTransitStarted: false,
+      entryStarted: true, entryClosed: true, exitTransitStarted: false,
       autonomy: null as unknown as Autonomy,
     };
     live.autonomy = new Autonomy(
@@ -474,31 +467,6 @@ export class NpcVisitorController {
     };
     this.live = live;
     this.options.scene.add(root);
-    if (routeIn) {
-      let passedDoor = false;
-      const beginEntry = () => {
-        if (this.live !== live) return;
-        live.entryStarted = live.agent.goTo(points.inside[0], points.inside[1]);
-        passedDoor = live.entryStarted;
-        if (!live.entryStarted) live.transit?.cancel();
-      };
-      if (this.options.requestExteriorTransit) {
-        live.transit = this.options.requestExteriorTransit({
-          passThrough: beginEntry,
-          passComplete: () => this.live !== live || (live.entryStarted && !live.agent.isMoving),
-          onClosed: () => {
-            if (this.live !== live) return;
-            live.transit = null;
-            if (passedDoor) live.entryClosed = true;
-            else { this.lifecycle.restore(idleState()); this.despawn(); }
-          },
-        });
-        if (!live.transit) { this.despawn(); return false; }
-      } else {
-        beginEntry();
-        if (!live.entryStarted) { this.despawn(); return false; }
-      }
-    }
     return true;
   }
 

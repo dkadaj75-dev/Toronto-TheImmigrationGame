@@ -15,6 +15,7 @@
 //     to satisfy) — both are what Array.prototype.every/some already return, called out here as intent.
 
 import type { Condition, QuestDef, QuestsData, QuestState, Reward, SimStateData, VarDef } from './data';
+import { actionCost, canAffordActionCost } from './actioncost';
 
 export type VarValue = string | number | boolean | null;
 
@@ -31,6 +32,8 @@ export interface EvalContext {
   /** H1 (ROADMAP_HAPPY): live 0-100 happiness — lets interaction conditions, behavior.json
    *  autonomy rules, and quest conditions gate on mood. Optional for older fixtures. */
   happiness?: number;
+  /** Current designer-authored career level. Optional while jobless and for older callers. */
+  job?: { level: number };
   vars: Record<string, VarValue>;
   quests: Record<string, QuestState>;
 }
@@ -43,6 +46,7 @@ export function resolveVar(path: string, ctx: EvalContext): number | VarValue | 
   if (path === 'funds') return ctx.funds;
   if (path === 'creditScore') return ctx.creditScore;
   if (path === 'happiness') return ctx.happiness;
+  if (path === 'job.level') return ctx.job?.level;
   if (path === 'time.hour') return ctx.time.hour;
   if (path === 'time.day') return ctx.time.day;
   if (path.startsWith('needs.')) return ctx.needs[path.slice('needs.'.length)];
@@ -139,6 +143,8 @@ export class QuestRunner {
    *  the seam. If left unset, a grantVisa reward silently no-ops (same "never throw" precedent as
    *  every other reward/condition path in this file). */
   onGrantVisa: ((statusId: string) => void) | null = null;
+  /** Newnew.txt: runtime-owned ContactBook seam, parallel to onGrantVisa. */
+  onGrantContact: ((npcId: string) => void) | null = null;
 
   constructor(quests: QuestsData, simState: SimStateData, startingFunds: number) {
     this.questDefs = quests.quests;
@@ -160,8 +166,10 @@ export class QuestRunner {
 
   /** B4-2 economy seam for action costs. Returns false without mutation when unaffordable. */
   spend(amount: number): boolean {
-    const cost = Number.isFinite(amount) ? Math.max(0, amount) : 0;
-    if (this.funds < cost) return false;
+    const cost = actionCost(amount);
+    // A free action remains free even while the household is in debt. Only an actual charge
+    // needs an available positive balance; otherwise a negative funds balance would reject $0.
+    if (!canAffordActionCost(this.funds, cost)) return false;
     this.funds -= cost;
     return true;
   }
@@ -174,8 +182,11 @@ export class QuestRunner {
    * hold (ctx.quests is a live reference to `this.quests`, so the just-updated state is visible) —
    * documented rather than special-cased, since nothing in §3.2 requires a one-tick delay.
    */
-  tick(needs: Record<string, number>, skills: Record<string, number>, time: { hour: number; day: number }) {
-    const ctx: EvalContext = { needs, skills, funds: this.funds, time, vars: this.vars, quests: this.quests };
+  tick(
+    needs: Record<string, number>, skills: Record<string, number>, time: { hour: number; day: number },
+    live: Partial<Pick<EvalContext, 'personality' | 'creditScore' | 'happiness' | 'job'>> = {},
+  ) {
+    const ctx: EvalContext = { needs, skills, funds: this.funds, time, vars: this.vars, quests: this.quests, ...live };
 
     for (const q of this.questDefs) {
       if (this.quests[q.id] === 'locked' && evaluate(q.trigger, ctx)) {
@@ -206,6 +217,7 @@ export class QuestRunner {
     else if (r.type === 'setVar') this.vars[r.var] = r.value;
     else if (r.type === 'unlockAsset') this.unlockedAssets.add(r.asset);
     else if (r.type === 'grantVisa') this.onGrantVisa?.(r.statusId);
+    else if (r.type === 'grantContact') this.onGrantContact?.(r.npc);
   }
 
   /** True once any quest reward has unlocked this catalog asset id (see unlockAsset doc below). */

@@ -114,6 +114,23 @@ check('chance writes through', editor.state.events.events[0].chancePercent === 5
 chance.value = ''; fire(chance, 'input');
 check('blank chance deletes the key', !('chancePercent' in editor.state.events.events[0]));
 
+// --- cooldown + once-only are sparse
+const cooldown = q('[data-path="event.cooldownSeconds"]');
+check('cooldown control renders', cooldown?.type === 'number');
+cooldown.value = '30'; fire(cooldown, 'input');
+check('cooldown writes through', editor.state.events.events[0].cooldownSeconds === 30);
+cooldown.value = ''; fire(cooldown, 'input');
+check('blank cooldown deletes the key', !('cooldownSeconds' in editor.state.events.events[0]));
+cooldown.value = '45'; fire(cooldown, 'input');
+
+const onceOnly = q('[data-path="event.onceOnly"]');
+check('once-only control renders unchecked', onceOnly?.type === 'checkbox' && !onceOnly.checked);
+onceOnly.checked = true; fire(onceOnly, 'change');
+check('checking once-only writes true', editor.state.events.events[0].onceOnly === true);
+onceOnly.checked = false; fire(onceOnly, 'change');
+check('unchecking once-only deletes the key', !('onceOnly' in editor.state.events.events[0]));
+onceOnly.checked = true; fire(onceOnly, 'change');
+
 // --- conditions use the SHARED builder
 doc.getElementById('addConditions').click();
 check('conditions use the shared condition builder', !!q('[data-cond-root]') && !!editor.state.events.events[0].conditions);
@@ -144,6 +161,8 @@ check('delete removes it', !editor.state.events.events.some((e) => e.id === 'eve
 await editor.save();
 check('events.json PUT carries the edits',
   puts['events.json'].events.some((e) => e.id === 'sink_burst') && puts['events.json'].events.length === 3);
+const savedSinkBurst = puts['events.json'].events.find((e) => e.id === 'sink_burst');
+check('events.json PUT carries cooldownSeconds and onceOnly', savedSinkBurst.cooldownSeconds === 45 && savedSinkBurst.onceOnly === true);
 check('interactions.json PUT carries the followed rename',
   puts['interactions.json'].actions.find((a) => a.id === 'fix_sink').emitsEvent === 'sink_burst');
 

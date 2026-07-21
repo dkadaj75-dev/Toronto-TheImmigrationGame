@@ -116,10 +116,11 @@
 // nested condition trees + rewards). Mirrors tools/interactions.html's sidebar+editor
 // architecture for the Quests section (PROJECT_CONTEXT.md §5 "Tool architecture") and
 // tools/tuning.html's toolbar+list pattern for the Variables section (§2c precedent).
-// stats.json (needs/skills), assets.json (unlockAsset targets), and visas.json (grantVisa targets)
+// stats.json (needs/skills), assets.json (unlockAsset targets), visas.json (grantVisa targets),
+// and events.json (event reward targets)
 // are read-only reference data here — fed into dropdowns, never PUT by this tool.
 const API = '/api/data/';
-const state = { simstate: null, quests: null, stats: null, assets: null, visas: null, selectedQuest: null, dirty: new Set() };
+const state = { simstate: null, quests: null, stats: null, assets: null, visas: null, npcs: null, events: null, selectedQuest: null, dirty: new Set() };
 
 async function fetchJson(name) {
   const res = await fetch(API + name);
@@ -130,10 +131,10 @@ async function fetchJson(name) {
 async function load() {
   setStatus('loading…');
   try {
-    const [simstate, quests, stats, assets, visas] = await Promise.all([
-      fetchJson('simstate.json'), fetchJson('quests.json'), fetchJson('stats.json'), fetchJson('assets.json'), fetchJson('visas.json'),
+    const [simstate, quests, stats, assets, visas, npcs, events] = await Promise.all([
+      fetchJson('simstate.json'), fetchJson('quests.json'), fetchJson('stats.json'), fetchJson('assets.json'), fetchJson('visas.json'), fetchJson('npcs.json'), fetchJson('events.json'),
     ]);
-    state.simstate = simstate; state.quests = quests; state.stats = stats; state.assets = assets; state.visas = visas;
+    state.simstate = simstate; state.quests = quests; state.stats = stats; state.assets = assets; state.visas = visas; state.npcs = npcs; state.events = events;
     state.dirty.clear();
     if (!state.selectedQuest && quests.quests.length) state.selectedQuest = quests.quests[0].id;
     renderAll();
@@ -223,6 +224,11 @@ function defaultReward(type) {
     const a = state.assets.assets[0];
     return { type: 'unlockAsset', asset: a ? a.id : '' };
   }
+  if (type === 'grantContact') {
+    const npc = state.npcs.npcs[0];
+    return { type: 'grantContact', npc: npc ? npc.id : '' };
+  }
+  if (type === 'event') return { type: 'event' };
   const v = state.visas.visas[0];
   return { type: 'grantVisa', statusId: v ? v.id : '' };
 }
@@ -255,7 +261,7 @@ function renderRewards(container, quest) {
 
     const typeSel = document.createElement('select');
     typeSel.dataset.role = 'reward-type'; typeSel.dataset.rewardIndex = i;
-    for (const t of ['funds', 'setVar', 'unlockAsset', 'grantVisa']) { const o = document.createElement('option'); o.value = t; o.textContent = t; typeSel.appendChild(o); }
+    for (const t of ['funds', 'setVar', 'unlockAsset', 'grantVisa', 'grantContact', 'event']) { const o = document.createElement('option'); o.value = t; o.textContent = t; typeSel.appendChild(o); }
     typeSel.value = r.type;
     typeSel.addEventListener('change', () => {
       quest.rewards[i] = defaultReward(typeSel.value);
@@ -299,6 +305,25 @@ function renderRewards(container, quest) {
       visaSel.value = r.statusId ?? '';
       visaSel.addEventListener('change', () => { r.statusId = visaSel.value; markDirty('quests.json'); renderValidation(); });
       fieldsWrap.appendChild(visaSel);
+    } else if (r.type === 'grantContact') {
+      const npcSel = document.createElement('select'); npcSel.dataset.role = 'reward-contact'; npcSel.dataset.rewardIndex = i;
+      for (const npc of state.npcs.npcs) { const o = document.createElement('option'); o.value = npc.id; o.textContent = npc.name; npcSel.appendChild(o); }
+      if (r.npc && !state.npcs.npcs.some((npc) => npc.id === r.npc)) {
+        const o = document.createElement('option'); o.value = r.npc; o.textContent = r.npc + ' (unknown)'; npcSel.appendChild(o);
+      }
+      npcSel.value = r.npc ?? '';
+      npcSel.addEventListener('change', () => { r.npc = npcSel.value; markDirty('quests.json'); renderValidation(); });
+      fieldsWrap.appendChild(npcSel);
+    } else if (r.type === 'event') {
+      const eventSel = document.createElement('select'); eventSel.dataset.role = 'reward-event'; eventSel.dataset.rewardIndex = i;
+      const blank = document.createElement('option'); blank.value = ''; blank.textContent = '(none)'; eventSel.appendChild(blank);
+      for (const event of state.events.events) { const o = document.createElement('option'); o.value = event.id; o.textContent = event.id; eventSel.appendChild(o); }
+      if (r.event && !state.events.events.some((event) => event.id === r.event)) {
+        const o = document.createElement('option'); o.value = r.event; o.textContent = r.event + ' (unknown)'; eventSel.appendChild(o);
+      }
+      eventSel.value = r.event ?? '';
+      eventSel.addEventListener('change', () => { if (eventSel.value) r.event = eventSel.value; else delete r.event; markDirty('quests.json'); renderValidation(); });
+      fieldsWrap.appendChild(eventSel);
     }
     row.appendChild(fieldsWrap);
 
@@ -564,6 +589,7 @@ function collectValidationIssues() {
   const questIds = new Set(state.quests.quests.map((q) => q.id));
   const assetIds = new Set(state.assets.assets.map((a) => a.id));
   const visaIds = new Set(state.visas.visas.map((v) => v.id));
+  const npcIds = new Set(state.npcs.npcs.map((npc) => npc.id));
 
   function checkLeaf(leaf, questName, field) {
     if (!leaf.var) { issues.push(`${questName} — ${field}: a condition is missing its var path.`); return; }
@@ -580,7 +606,7 @@ function collectValidationIssues() {
       if (!varIds.has(leaf.var.slice(5))) issues.push(`${questName} — ${field}: unknown variable "${leaf.var.slice(5)}".`);
       return;
     }
-    if (leaf.var === 'funds' || leaf.var === 'time.hour' || leaf.var === 'time.day') return;
+    if (leaf.var === 'funds' || leaf.var === 'job.level' || leaf.var === 'time.hour' || leaf.var === 'time.day') return;
     const m = /^quests\.(.+)\.state$/.exec(leaf.var);
     if (m) {
       if (!questIds.has(m[1])) issues.push(`${questName} — ${field}: unknown quest id "${leaf.var}".`);
@@ -603,6 +629,7 @@ function collectValidationIssues() {
     checkCondition(q.trigger, q.name || q.id, 'trigger');
     checkCondition(q.completion, q.name || q.id, 'completion');
     q.rewards.forEach((r, i) => {
+      if (r.type === 'grantContact' && !npcIds.has(r.npc)) issues.push(`Quest reward #${i + 1}: grantContact references unknown NPC "${r.npc}".`);
       if (r.type === 'setVar' && !varIds.has(r.var)) issues.push(`${q.name} — reward #${i + 1}: setVar references unknown variable "${r.var}".`);
       if (r.type === 'unlockAsset' && !assetIds.has(r.asset)) issues.push(`${q.name} — reward #${i + 1}: unlockAsset references unknown asset "${r.asset}".`);
       if (r.type === 'grantVisa' && !visaIds.has(r.statusId)) issues.push(`${q.name} — reward #${i + 1}: grantVisa references unknown visa "${r.statusId}".`);

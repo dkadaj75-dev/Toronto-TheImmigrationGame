@@ -21,7 +21,27 @@
       "durationDays": 30,
       "losable": true,
       "graceDays": 3,
-      "obtainedVia": "quest"
+      "obtainedVia": "quest",
+      "requirements": {
+        "all": [
+          {
+            "var": "vars.job",
+            "eq": true
+          },
+          {
+            "var": "funds",
+            "gte": 2000
+          },
+          {
+            "var": "skills.english",
+            "gte": 15
+          },
+          {
+            "var": "vars.income",
+            "gte": 150
+          }
+        ]
+      }
     },
     {
       "id": "permanent_resident",
@@ -34,11 +54,11 @@
         "all": [
           {
             "var": "skills.english",
-            "gte": 8
+            "gte": 50
           },
           {
             "var": "funds",
-            "gte": 50000
+            "gte": 20000
           },
           {
             "var": "vars.income",
@@ -53,6 +73,35 @@
       "durationDays": null,
       "losable": false,
       "obtainedVia": "quest"
+    },
+    {
+      "id": "bridging_work_permit",
+      "name": "Bridging Work Permit",
+      "durationDays": 25,
+      "losable": false,
+      "graceDays": 3,
+      "obtainedVia": "application",
+      "applicationDays": 0,
+      "requirements": {
+        "all": [
+          {
+            "var": "vars.job",
+            "eq": true
+          },
+          {
+            "var": "skills.english",
+            "gte": 15
+          },
+          {
+            "var": "skills.french",
+            "gte": 10
+          },
+          {
+            "var": "funds",
+            "gte": 500
+          }
+        ]
+      }
     }
   ]
 }

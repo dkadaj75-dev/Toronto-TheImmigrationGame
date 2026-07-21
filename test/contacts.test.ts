@@ -6,7 +6,9 @@ import type { EvalContext } from '../game/quests';
 import { pickBest } from '../game/behavior';
 import { PhoneState, RelationshipState, type SocialData } from '../game/social';
 import {
+  ContactBook,
   contactViews,
+  discoverWorkContact,
   PhoneContactSession,
   phoneAutonomyCandidates,
 } from '../game/contacts';
@@ -159,6 +161,22 @@ console.log('contacts.test — autonomy eligibility and shared behavior scorer')
     asset: candidate.target, action: candidate.action, distance: 0, value: candidate,
   })), { behavior, eval: evalContext(10) });
   check('phone candidates are selected by the existing behavior scorer', ranked?.candidate.value?.kind === 'text');
+}
+
+console.log('contacts.test — earned phone book');
+{
+  const contacts = new ContactBook();
+  check('new phone book starts empty', contacts.all().length === 0);
+  check('adding a contact reports a new discovery once', contacts.add(amara.id) && !contacts.add(amara.id));
+  const restored = new ContactBook();
+  restored.restore(contacts.serialize());
+  check('contacts persist through serialize/restore', restored.has(amara.id));
+  restored.restore(undefined);
+  check('old social saves without contacts restore empty', restored.all().length === 0);
+  const rolls = [0, 0];
+  const discovered = discoverWorkContact(npcs.npcs, restored, 100, () => rolls.shift() ?? 0);
+  check('completed-shift discovery selects one unknown NPC at 100%', discovered?.id === npcs.npcs[0]?.id);
+  check('zero chance discovers nobody', discoverWorkContact(npcs.npcs, restored, 0, () => 0) === null);
 }
 
 console.log(`contacts.test — ${assertions} assertions passed`);

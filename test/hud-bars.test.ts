@@ -5,7 +5,7 @@
 // read "value/max" using each skill's real max from stats.json; and the text re-renders on refresh().
 
 import { JSDOM } from 'jsdom';
-import type { StatsData } from '../game/data';
+import type { ActionDef, StatsData } from '../game/data';
 
 const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>', {
   url: 'http://localhost:5173/',
@@ -20,6 +20,7 @@ g.HTMLButtonElement = window.HTMLButtonElement;
 g.Node = window.Node;
 g.Event = window.Event;
 g.location = window.location;
+g.getComputedStyle = window.getComputedStyle.bind(window);
 
 const { Hud, NEED_MAX } = await import('../game/ui');
 const { SimStats } = await import('../game/stats');
@@ -113,6 +114,14 @@ stats.skills.set('charisma', 6.7);
 hud.refresh();
 check('need text updates after refresh() → "27/100"', needValue(0) === '27/100', needValue(0) ?? '');
 check('skill text rounds + updates after refresh() → "7/10"', skillValue(0) === '7/10', skillValue(0) ?? '');
+
+// Debt must disable only paid interactions. This exercises the real contextual-menu button state.
+const freeAction: ActionDef = { id: 'free', name: 'Free action', animation: 'idle', needGains: {}, skillGains: {}, autonomyEligible: false, primaryNeed: null };
+const paidAction: ActionDef = { ...freeAction, id: 'paid', name: 'Paid action', cost: 5 };
+hud.showActionMenu({ name: 'Test object' }, [freeAction, paidAction], () => {}, -10);
+const menuButtons = [...doc.querySelectorAll<HTMLButtonElement>('#action-menu button')];
+check('debt leaves the zero-cost action enabled in the action menu', menuButtons[0]?.disabled === false);
+check('debt disables a paid action in the action menu', menuButtons[1]?.disabled === true);
 
 if (failures > 0) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }
 console.log('\nAll hud-bars.test checks passed.');

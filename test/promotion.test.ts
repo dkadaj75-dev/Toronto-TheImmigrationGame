@@ -1,6 +1,6 @@
 // promotion.test.ts — headless B6-5 job-level/promotion coverage. Run: npx tsx test/promotion.test.ts
 import type { JobDef } from '../game/data';
-import { WorkTracker, jobLevelPay, jobLevelTitle, promotionChancePercent, rollForPromotion } from '../game/work';
+import { WorkTracker, jobLevelNumber, jobLevelPay, jobLevelTitle, promotionChancePercent, rollForPromotion } from '../game/work';
 
 let failures = 0;
 function check(name: string, condition: boolean) {
@@ -10,15 +10,17 @@ function check(name: string, condition: boolean) {
 const job: JobDef = {
   id: 'dishwasher', name: 'Dishwasher', hours: { startHour: 9, endHour: 17 }, payPerShift: 100, maxSkips: 2,
   levels: [
-    { suffix: 'I', payPerShift: 100, promoteChancePercent: 40 },
-    { suffix: 'II', payPerShift: 140, promoteChancePercent: 20 },
-    { suffix: 'III', payPerShift: 200, promoteChancePercent: 0 },
+    { level: 10, suffix: 'I', payPerShift: 100, promoteChancePercent: 40 },
+    { level: 20, suffix: 'II', payPerShift: 140, promoteChancePercent: 20 },
+    { level: 35, suffix: 'III', payPerShift: 200, promoteChancePercent: 0 },
   ],
 };
 
 console.log('promotion.test — pure formula, pay and persistence');
 check('level zero is the authored base title', jobLevelTitle(job, 0) === 'Dishwasher I');
 check('current level selects authored pay', jobLevelPay(job, 1) === 140);
+check('current level resolves the designer-authored number', jobLevelNumber(job, 1) === 20);
+check('legacy ladders retain a 1-based level fallback', jobLevelNumber({ ...job, levels: job.levels?.map(({ level: _level, ...row }) => row) }, 2) === 3);
 check('chance scales by happiness and tuning factor', promotionChancePercent(job, 0, 50, 1.5) === 30);
 check('zero happiness prevents promotion', !rollForPromotion(job, 0, 0, 1, () => 0).promoted);
 const promoted = rollForPromotion(job, 0, 100, 1, () => 0.39);

@@ -9,15 +9,19 @@ import {
   type RelationshipSaveState,
   type SocialData,
 } from './social';
+import { ContactBook, type ContactBookSaveState } from './contacts';
 
 export interface SocialRuntimeSaveState {
   relationships: RelationshipSaveState;
   phone: PhoneSaveState;
+  /** Newnew.txt: absent in old saves, which restore with an empty phone book. */
+  contacts?: ContactBookSaveState;
 }
 
 export class SocialRuntime {
   readonly relationships: RelationshipState;
   readonly phone: PhoneState;
+  readonly contacts = new ContactBook();
 
   constructor(data: SocialData) {
     this.relationships = new RelationshipState(data);
@@ -32,11 +36,12 @@ export class SocialRuntime {
   decay(simDays: number): void { this.relationships.decay(simDays); }
 
   serialize(): SocialRuntimeSaveState {
-    return { relationships: this.relationships.serialize(), phone: this.phone.serialize() };
+    return { relationships: this.relationships.serialize(), phone: this.phone.serialize(), contacts: this.contacts.serialize() };
   }
 
   restore(saved: SocialRuntimeSaveState): void {
     this.relationships.restore(saved.relationships);
     this.phone.restore(saved.phone);
+    this.contacts.restore(saved.contacts);
   }
 }

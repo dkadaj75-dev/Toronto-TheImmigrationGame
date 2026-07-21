@@ -4,7 +4,7 @@
   "jobs": [
     {
       "id": "dishwasher",
-      "name": "Dishwasher",
+      "name": "Restauration",
       "grantsVisa": "lmia",
       "hours": {
         "startHour": 9,
@@ -20,19 +20,65 @@
       ],
       "levels": [
         {
-          "suffix": "I",
+          "suffix": "Dishwasher I",
           "payPerShift": 120,
-          "promoteChancePercent": 22
+          "promoteChancePercent": 80
         },
         {
-          "suffix": "II",
+          "suffix": "Dishwasher II",
           "payPerShift": 150,
-          "promoteChancePercent": 14
+          "promoteChancePercent": 50,
+          "requirements": {
+            "all": [
+              {
+                "var": "skills.charisma",
+                "gte": 10
+              }
+            ]
+          }
         },
         {
-          "suffix": "III",
-          "payPerShift": 190,
-          "promoteChancePercent": 0
+          "suffix": "Waiter I",
+          "payPerShift": 220,
+          "promoteChancePercent": 20,
+          "requirements": {
+            "all": [
+              {
+                "var": "skills.charisma",
+                "gte": 20
+              }
+            ]
+          },
+          "level": 3
+        },
+        {
+          "suffix": "Staff Manager",
+          "payPerShift": 300,
+          "promoteChancePercent": 0,
+          "requirements": {
+            "all": [
+              {
+                "var": "skills.charisma",
+                "gte": 25
+              },
+              {
+                "all": [
+                  {
+                    "var": "vars.visaStatus",
+                    "neq": "0"
+                  },
+                  {
+                    "var": "vars.visaStatus",
+                    "neq": "1"
+                  }
+                ]
+              },
+              {
+                "var": "skills.english",
+                "gte": 30
+              }
+            ]
+          }
         }
       ],
       "maxSkips": 3,
@@ -44,13 +90,14 @@
         "all": []
       },
       "firing": {
-        "minHappiness": 30,
+        "minHappiness": 33,
         "maxUnhappyShifts": 2
-      }
+      },
+      "contactChancePercent": 100
     },
     {
       "id": "cook",
-      "name": "Line Cook",
+      "name": "Cooking",
       "requirements": {
         "var": "skills.cooking",
         "gte": 3
@@ -63,19 +110,35 @@
       "payPerShift": 190,
       "levels": [
         {
-          "suffix": "I",
+          "suffix": "Line Cook I",
           "payPerShift": 190,
-          "promoteChancePercent": 18
+          "promoteChancePercent": 80
         },
         {
-          "suffix": "II",
+          "suffix": "Line Cook II",
           "payPerShift": 235,
-          "promoteChancePercent": 10
+          "promoteChancePercent": 10,
+          "requirements": {
+            "all": [
+              {
+                "var": "skills.cooking",
+                "gte": 17
+              }
+            ]
+          }
         },
         {
-          "suffix": "III",
-          "payPerShift": 290,
-          "promoteChancePercent": 0
+          "suffix": "Chef I",
+          "payPerShift": 350,
+          "promoteChancePercent": 0,
+          "requirements": {
+            "all": [
+              {
+                "var": "skills.cooking",
+                "gte": 35
+              }
+            ]
+          }
         }
       ],
       "maxSkips": 2,
@@ -87,7 +150,13 @@
       "firing": {
         "minHappiness": 30,
         "maxUnhappyShifts": 3
-      }
+      },
+      "workDays": [
+        0,
+        2,
+        4,
+        5
+      ]
     },
     {
       "id": "barista",
@@ -106,12 +175,24 @@
         {
           "suffix": "I",
           "payPerShift": 150,
-          "promoteChancePercent": 20
+          "promoteChancePercent": 50
         },
         {
           "suffix": "II",
           "payPerShift": 180,
-          "promoteChancePercent": 12
+          "promoteChancePercent": 12,
+          "requirements": {
+            "all": [
+              {
+                "var": "skills.english",
+                "gte": 12
+              },
+              {
+                "var": "skills.charisma",
+                "gte": 8
+              }
+            ]
+          }
         },
         {
           "suffix": "III",
@@ -167,12 +248,20 @@
         {
           "suffix": "I",
           "payPerShift": 260,
-          "promoteChancePercent": 15
+          "promoteChancePercent": 20
         },
         {
           "suffix": "II",
           "payPerShift": 320,
-          "promoteChancePercent": 8
+          "promoteChancePercent": 8,
+          "requirements": {
+            "all": [
+              {
+                "var": "skills.english",
+                "gte": 30
+              }
+            ]
+          }
         },
         {
           "suffix": "III",
@@ -193,16 +282,16 @@
     },
     {
       "id": "finance_advisor",
-      "name": "Finance advisor",
+      "name": "Finance",
       "requirements": {
         "all": [
           {
             "var": "quests.pass_the_english_test.state",
-            "gte": "done"
+            "eq": "done"
           },
           {
             "var": "vars.visaStatus",
-            "gte": "2"
+            "eq": "2"
           },
           {
             "var": "skills.finance",
@@ -217,12 +306,12 @@
       "payPerShift": 500,
       "levels": [
         {
-          "suffix": "I",
+          "suffix": "Finance Advisor I",
           "payPerShift": 500,
           "promoteChancePercent": 10
         },
         {
-          "suffix": "II",
+          "suffix": "Finance Advisor II",
           "payPerShift": 625,
           "promoteChancePercent": 5
         },

@@ -9,9 +9,10 @@ import type { RentalCardView, RequirementView } from './phone';
 import type { ContactView } from './contacts';
 import { deleteDecision, loadDecision, overwriteDecision, renameDecision, type SlotCardView } from './saveslots';
 import type { SimStats } from './stats';
-import { jobLevelPay, jobLevelTitle } from './work';
+import { jobLevelNumber, jobLevelPay, jobLevelTitle } from './work';
 import { relativeAge, type ResolvedNotification } from './notifications';
 import { happinessStateDisplay, happinessStateFor } from './happiness';
+import { actionCost, canAffordActionCost } from './actioncost';
 
 /** Phone overlay tabs. ROADMAP_APT R3 adds 'rentals' (the Kijiji tab; its visible label comes
  *  from tuning.phone.rentalTabName, never hardcoded). */
@@ -1019,10 +1020,11 @@ export class Hud {
     this.menu.innerHTML = `<div class="am-title">${asset.name}</div>`;
     for (const action of actions) {
       const b = document.createElement('button');
-      const cost = Math.max(0, action.cost ?? 0);
+      const cost = actionCost(action.cost);
       b.textContent = cost > 0 ? `${action.name} (${currencyName}${cost})` : action.name;
       const reason = disabledReason?.(action) ?? null;
-      b.disabled = funds < cost || !!reason;
+      // A free action is available in debt; only a positive price can be unaffordable.
+      b.disabled = !canAffordActionCost(funds, cost) || !!reason;
       if (reason) {
         b.title = reason;
         b.setAttribute('aria-label', `${action.name}. ${reason}`);
@@ -1329,7 +1331,13 @@ export class Hud {
     currentStatusName: string;
     searchedJobs: boolean;
     jobs: { job: JobDef; requirementsMet: boolean; requirements: RequirementView[] }[];
-    currentJob: { job: JobDef; skips: number; levelIndex: number } | null;
+    currentJob: {
+      job: JobDef; skips: number; levelIndex: number;
+      /** Callers with the full ladder can pass the resolved designer-facing number. */
+      level?: number;
+      /** Promotion gate into the next row, already evaluated for player-facing display. */
+      nextPromotionRequirements?: RequirementView[];
+    } | null;
     visas: { visa: VisaDef; requirementsMet: boolean; requirements: RequirementView[] }[];
     pending: { statusId: string; daysRemaining: number } | null;
     currencyName: string;
@@ -1547,18 +1555,23 @@ export class Hud {
         current.head.appendChild(badge);
         const details = document.createElement('div');
         details.className = 'phone-meta';
-        const level = args.currentJob.job.level === undefined ? '' : ` · Level ${args.currentJob.job.level}`;
-        details.textContent = `${formatHour(args.currentJob.job.hours.startHour)}–${formatHour(args.currentJob.job.hours.endHour)} · ${args.currencyName}${args.currentJob.job.payPerShift}/shift${level} · ${args.currentJob.skips} skip${args.currentJob.skips === 1 ? '' : 's'} so far`;
+        const level = args.currentJob.level ?? jobLevelNumber(args.currentJob.job, args.currentJob.levelIndex);
+        details.textContent = `${formatHour(args.currentJob.job.hours.startHour)}–${formatHour(args.currentJob.job.hours.endHour)} · ${args.currencyName}${args.currentJob.job.payPerShift}/shift · Level ${level} · ${args.currentJob.skips} skip${args.currentJob.skips === 1 ? '' : 's'} so far`;
         current.el.appendChild(details);
+        if (args.currentJob.nextPromotionRequirements?.length) {
+          const heading = document.createElement('div'); heading.className = 'phone-meta'; heading.textContent = 'Next promotion requirements';
+          current.el.appendChild(heading);
+          appendRequirements(current.el, args.currentJob.nextPromotionRequirements);
+        }
         this.phoneBody.appendChild(current.el);
       }
       const search = document.createElement('button');
       search.className = 'phone-search';
-      search.textContent = 'Search a job';
+      search.textContent = 'Refresh jobs';
       search.addEventListener('click', () => this.onPhoneSearchJobs?.());
       this.phoneBody.appendChild(search);
       if (!args.searchedJobs) {
-        this.phoneBody.appendChild(phoneEmpty('Search to see jobs available this hour.'));
+        this.phoneBody.appendChild(phoneEmpty('Refresh to see jobs available this hour.'));
       } else if (args.jobs.length === 0) {
         this.phoneBody.appendChild(phoneEmpty('No jobs are available.'));
       } else {

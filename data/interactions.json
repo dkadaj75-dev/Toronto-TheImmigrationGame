@@ -133,9 +133,7 @@
       "needGains": {
         "fun": 1
       },
-      "skillGains": {
-        "english": 0.04
-      },
+      "skillGains": {},
       "animation": "sit_idle",
       "autonomyEligible": true,
       "primaryNeed": "fun",
@@ -470,6 +468,23 @@
       "fetchBeforeSeat": true,
       "faceTarget": false,
       "seatAware": true
+    },
+    {
+      "id": "fake_speech",
+      "name": "Fake speech",
+      "needGains": {},
+      "skillGains": {
+        "charisma": 0.25
+      },
+      "animation": "Talking",
+      "autonomyEligible": false,
+      "primaryNeed": null,
+      "happinessMod": {
+        "skillEffAtMin": 0,
+        "skillEffAtMax": 3,
+        "refuseBelow": 30
+      },
+      "faceTarget": false
     }
   ]
 }

@@ -3,6 +3,7 @@
 
 import { evaluate, QuestRunner, type EvalContext } from '../game/quests';
 import { applyForJob } from '../game/phone';
+import { actionCost, canAffordActionCost } from '../game/actioncost';
 import type { Condition, JobsData, QuestDef, QuestsData, SimStateData } from '../game/data';
 
 let failures = 0;
@@ -74,6 +75,8 @@ console.log('quests.test — namespaces');
   check('skills.<id>', evaluate({ var: 'skills.english', gte: 5 }, c));
   check('funds', evaluate({ var: 'funds', gte: 300 }, c));
   check('creditScore', evaluate({ var: 'creditScore', gte: 650 }, c));
+  check('job.level resolves the current authored career level', evaluate({ var: 'job.level', gte: 7 }, ctx({ job: { level: 7 } })));
+  check('job.level is false while jobless/absent', evaluate({ var: 'job.level', gte: 1 }, c) === false);
   check('time.hour', evaluate({ var: 'time.hour', eq: 14 }, c));
   check('time.day', evaluate({ var: 'time.day', eq: 3 }, c));
   check('vars.<name>', evaluate({ var: 'vars.income', eq: 0 }, c));
@@ -316,6 +319,24 @@ console.log('quests.test — BUG 1: job acquisition completes a boolean job ques
   check('conditions can gate on happiness', evaluate({ all: [{ var: 'happiness', gte: 40 }] }, ctx) === true
     && evaluate({ all: [{ var: 'happiness', gte: 50 }] }, ctx) === false);
   check('absent happiness stays safe-false', evaluate({ all: [{ var: 'happiness', gte: 0 }] }, { ...ctx, happiness: undefined }) === false);
+}
+
+console.log('quests.test — grantContact reward seam');
+{
+  const runner = new QuestRunner({ quests: [] }, { variables: [] }, 0);
+  const granted: string[] = [];
+  runner.onGrantContact = (npcId) => granted.push(npcId);
+  runner.applyReward({ type: 'grantContact', npc: 'amara' });
+  check('grantContact delegates to the runtime phone book owner', granted[0] === 'amara');
+}
+
+console.log('quests.test — action-cost affordability');
+{
+  const runner = new QuestRunner({ quests: [] }, { variables: [] }, -10);
+  check('shared affordability rule treats invalid and negative costs as free', actionCost(-1) === 0 && actionCost(Number.NaN) === 0);
+  check('shared affordability rule permits free actions in debt but rejects paid actions', canAffordActionCost(-10, 0) && !canAffordActionCost(-10, 1));
+  check('a zero-cost action can start while funds are negative', runner.spend(0) && runner.funds === -10);
+  check('a paid action cannot start while funds are negative', !runner.spend(1) && runner.funds === -10);
 }
 
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }

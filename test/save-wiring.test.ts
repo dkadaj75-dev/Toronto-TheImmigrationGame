@@ -108,6 +108,7 @@ source.food.interruptActive([3, 4], 28);
 source.accidents.spawn({ accidentId: 'fire', pos: [1, 1], rotDeg: 0, footprint: [1, 1], placement: 'on', baseKey: 'designer:0', bornAt: 10 });
 source.social.relationships.set(data.npcs.npcs[0].id, 44);
 source.social.phone.markUsed(data.npcs.npcs[0].id, 'call', 180);
+source.social.contacts.add(data.npcs.npcs[0].id);
 source.npcVisit.invite(data.npcs.npcs[0].id, 1.2);
 source.visitAway.begin(data.npcs.npcs[0].id, { day: 2, hour: 10 }, 3, { pos: [4, 5], facingDeg: 180 });
 source.pendingMove.start('apartment', 2, 24);
@@ -128,7 +129,7 @@ check('finance + hydro round-trip', target.finance.outstanding[0]?.amount === 22
 check('buy/asset/garbage round-trip', target.buyMode.allAdditions.length === 1 && target.assetStates.isOn('designer:1') && target.garbage.fillOf('designer:can') === 1);
 check('dropped food and accident round-trip', target.food.all[0]?.phase === 'dropped' && target.accidents.all.length === 1);
 check('SocialRuntime owns real relationship and phone states', target.social.relationships instanceof RelationshipState && target.social.phone instanceof PhoneState);
-check('social values round-trip', target.social.relationships.get(data.npcs.npcs[0].id) === 44 && target.social.phone.remainingCooldown(data.npcs.npcs[0].id, 'call', 181) > 0);
+check('social values round-trip', target.social.relationships.get(data.npcs.npcs[0].id) === 44 && target.social.phone.remainingCooldown(data.npcs.npcs[0].id, 'call', 181) > 0 && target.social.contacts.has(data.npcs.npcs[0].id));
 check('NPC/away/pending trackers round-trip', target.npcVisit.state.phase === 'pending' && target.visitAway.isAway && target.pendingMove.pending?.mapId === 'apartment');
 check('clock system round-trips', target.getClock() === 987.5);
 check('E4 event-firing throttle round-trips (onceOnly stays spent, cooldown timing survives)',

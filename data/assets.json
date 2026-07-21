@@ -55,6 +55,27 @@
       "icon": "icons/sofa.png",
       "needMultipliers": {
         "comfort": 1.25
+      },
+      "featureCategories": [
+        "comfort"
+      ],
+      "useLocations": {
+        "sit": [
+          {
+            "y": 0.5,
+            "offset": [
+              -0.45,
+              0
+            ]
+          },
+          {
+            "y": 0.5,
+            "offset": [
+              0.45,
+              0
+            ]
+          }
+        ]
       }
     },
     {
@@ -240,7 +261,11 @@
       },
       "needMultipliers": {
         "hunger": 1
-      }
+      },
+      "useFacingTarget": [
+        0,
+        0
+      ]
     },
     {
       "id": "counter",
@@ -389,7 +414,11 @@
         ],
         "xOffset": 0,
         "zOffset": 0
-      }
+      },
+      "useFacingTarget": [
+        0,
+        0
+      ]
     },
     {
       "id": "tv",
@@ -416,13 +445,6 @@
         "scale": 1.5
       },
       "sound": "sounds/actions/TV.mp3",
-      "light": {
-        "color": "#b7d8ff",
-        "intensity": 1.5,
-        "distance": 3.5,
-        "yOffset": 1.1,
-        "defaultOn": false
-      },
       "_powerNote": "B6-12: sound and screen-glow light persist while this placed TV is ON. Watch TV auto-turns it on and leaves it on.",
       "icon": "icons/tv.png",
       "combustibility": {
@@ -602,8 +624,8 @@
       "buyable": false,
       "door": {
         "hingeOffset": [
-          0.5,
-          0
+          0,
+          0.5
         ],
         "openSeconds": 0.1,
         "closeSeconds": 0.1,
@@ -618,13 +640,14 @@
         ],
         "yOffset": 0,
         "xOffset": 0
-      }
+      },
+      "screenOverlay": {}
     },
     {
       "id": "door_exterior",
       "name": "Exterior door",
       "category": "door",
-      "mesh": "models/door.glb",
+      "mesh": "models/doorframe.glb",
       "buyPrice": 200,
       "sellPrice": 150,
       "environmentScore": 0,
@@ -640,10 +663,14 @@
       "buyable": false,
       "door": {
         "hingeOffset": [
-          -0.5,
-          0
+          0,
+          0.5
         ],
-        "exterior": true
+        "exterior": true,
+        "openAngleDeg": 90,
+        "openSeconds": 0.1,
+        "closeSeconds": 0.1,
+        "paneMesh": "models/doorpane1.glb"
       },
       "meshFit": {
         "scale": [
@@ -771,7 +798,11 @@
         "yawOffsetDeg": 90,
         "scale": 0.8
       },
-      "icon": "icons/trash.png"
+      "icon": "icons/trash.png",
+      "useFacingTarget": [
+        0,
+        0
+      ]
     },
     {
       "id": "dirty_dishes",
@@ -882,7 +913,11 @@
           1
         ]
       },
-      "icon": "icons/stinkyfridge.png"
+      "icon": "icons/stinkyfridge.png",
+      "useFacingTarget": [
+        0,
+        0
+      ]
     },
     {
       "id": "kitchen_sink",
@@ -920,13 +955,17 @@
             2
           ]
         }
+      ],
+      "useFacingTarget": [
+        0,
+        0
       ]
     },
     {
       "id": "rustic_bed",
       "name": "Rustic Bed",
       "category": "beds",
-      "mesh": "/models/prisonbed.glb",
+      "mesh": "models/oldbed.glb",
       "buyPrice": 0,
       "sellPrice": 0,
       "environmentScore": 0,
@@ -943,7 +982,7 @@
           1,
           1
         ],
-        "yawOffsetDeg": 180
+        "yawOffsetDeg": 0
       },
       "usePose": {
         "lie": {
@@ -1047,7 +1086,11 @@
       },
       "needMultipliers": {
         "hunger": 1
-      }
+      },
+      "useFacingTarget": [
+        0,
+        0
+      ]
     },
     {
       "id": "oldarmchair",
@@ -1068,17 +1111,61 @@
       "seatTarget": true,
       "usePose": {
         "sit": {
-          "y": 0.15,
-          "facingDeg": 0
+          "facingDeg": 0,
+          "y": -0.08
         }
       },
       "combustibility": {
-        "chancePercent": 50,
-        "delaySeconds": 10
+        "chancePercent": 75,
+        "delaySeconds": 3
       },
       "needMultipliers": {
-        "comfort": 1.1
+        "comfort": 1
+      },
+      "useLocations": {
+        "sit": [
+          {
+            "y": 0
+          }
+        ]
       }
+    },
+    {
+      "id": "mirror",
+      "name": "Old Mirror",
+      "category": "decor",
+      "mesh": "models/oldmirror.glb",
+      "buyPrice": 100,
+      "sellPrice": 25,
+      "environmentScore": 3,
+      "footprint": [
+        0.5,
+        0.125
+      ],
+      "interactions": [
+        "fake_speech"
+      ],
+      "survivalImportance": -10,
+      "requiresQuestUnlock": true,
+      "featureCategories": [
+        "comfort"
+      ],
+      "blocksNav": false,
+      "wallMounted": {},
+      "meshFit": {
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "xOffset": 0,
+        "yOffset": 1,
+        "zOffset": -0.05
+      },
+      "useFacingTarget": [
+        0,
+        0
+      ]
     }
   ]
 }

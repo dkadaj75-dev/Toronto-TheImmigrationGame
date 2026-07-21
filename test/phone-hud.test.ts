@@ -187,5 +187,22 @@ check('resuming the system menu leaves the phone pause active', pauses.pausedBy(
 check('closing the phone releases its hook exactly once', !pauses.isPaused() && !doc.querySelector('#phone-overlay.open'));
 check('final phone close restores the selected 2x speed', pauses.speedToRestore() === 2);
 
+// Newnew career surface: authored level + next gate are explicit current-job payload fields, and
+// the search action is consistently framed as a refresh.
+hud.renderPhone({
+  tab: 'jobs', currentStatusName: 'Visitor', searchedJobs: false, jobs: [],
+  currentJob: {
+    job: { id: 'dishwasher', name: 'Dishwasher VII', hours: { startHour: 9, endHour: 17 }, payPerShift: 180, maxSkips: 3 },
+    skips: 1, levelIndex: 1, level: 7,
+    nextPromotionRequirements: [{ text: 'Cooking ≥ 5', met: false }],
+  },
+  visas: [], pending: null, currencyName: '§', bills: [], billsTotal: 0, creditScore: 700,
+  creditHistory: [], rentalTabName: 'Kijiji', contactsTabName: 'Contacts', rentals: [], contacts: [],
+});
+const jobsText = doc.querySelector('#phone-body')?.textContent || '';
+check('current job card displays the authored numeric level', jobsText.includes('Level 7'));
+check('current job card displays next promotion requirements', jobsText.includes('Next promotion requirements') && jobsText.includes('Cooking ≥ 5'));
+check('job action and initial hint say Refresh jobs', jobsText.includes('Refresh jobs') && jobsText.includes('Refresh to see jobs'));
+
 if (failures > 0) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }
 console.log('\nAll phone-hud.test checks passed.');

@@ -24,7 +24,7 @@ const jobs = {
   _comment: 'fixture jobs',
   jobs: [
     { id: 'dishwasher', name: 'Dishwasher', grantsVisa: 'lmia', hours: { startHour: 9, endHour: 17 }, payPerShift: 120, maxSkips: 3, workDays: [0, 'Wed'],
-      levels: [{ suffix: 'I', payPerShift: 120, promoteChancePercent: 20 }, { suffix: 'II', payPerShift: 150, promoteChancePercent: 0 }],
+      levels: [{ level: 3, suffix: 'I', payPerShift: 120, promoteChancePercent: 20 }, { level: 7, suffix: 'II', payPerShift: 150, promoteChancePercent: 0 }],
       needsCost: { energy: 35, hunger: 20 } },
     { id: 'cook', name: 'Line Cook', requirements: { var: 'skills.cooking', gte: 3 }, grantsVisa: 'lmia', hours: { startHour: 15, endHour: 23 }, payPerShift: 190, maxSkips: 2, minCreditScore: 520 },
     { id: 'broken_job', name: 'Broken Job', requirements: { any: [{ var: 'vars.missing_var', eq: 'x' }] }, grantsVisa: 'ghost_visa',
@@ -84,7 +84,11 @@ assert(doc.querySelector('input[data-path="job.id"]').value === 'dishwasher', 'f
 assert(doc.querySelector('input[data-path="job.id"]').readOnly, 'job id is fixed/read-only');
 assert(doc.querySelectorAll('.need-cost-row').length === 2 && doc.querySelector('input[data-path="job.needsCost.energy.amount"]').value === '35', 'job needsCost rows render from sparse data');
 assert(doc.querySelectorAll('.level-row').length === 2 && doc.querySelector('input[data-path="job.levels.1.payPerShift"]').value === '150', 'job level rows render ordered pay and promotion data');
+assert(doc.querySelector('input[data-path="job.levels.0.level"]').value === '3' && doc.querySelector('input[data-path="job.levels.1.level"]').value === '7', 'job level rows render designer-authored numeric levels');
+const dishwasherPromotion = doc.querySelector('input[data-promotes-into-level-index="1"]');
+assert(dishwasherPromotion?.dataset.path === 'job.levels.0.promoteChancePercent' && dishwasherPromotion.value === '20', 'promotion chance is shown with its destination level requirements but writes the source-row runtime field');
 assert(doc.querySelector('input[data-path="job.minCreditScore"]').value === '', 'sparse minCreditScore renders blank');
+assert(doc.querySelector('input[data-path="job.contactChancePercent"]').value === '', 'sparse contact discovery chance renders blank');
 assert(doc.querySelectorAll('.weekday-check input:checked').length === 2 && doc.querySelector('input[data-day-index="2"]').checked, 'numeric and named workDays render as weekday checkboxes');
 assert(doc.querySelector('[data-visa-id="broken_visa"] .badge')?.textContent === 'permanent', 'permanent visa badge renders');
 
@@ -99,6 +103,9 @@ assert(doc.getElementById('save').disabled, 'validation warnings do not make cle
 window.CareerEditor.state.tuning.visa.startStatus = 'missing_start';
 assert(window.CareerEditor.collectValidationIssues().some((issue) => issue.includes('startStatus references missing visa "missing_start"')), 'validation flags missing tuning.visa.startStatus visa');
 window.CareerEditor.state.tuning.visa.startStatus = 'visitor';
+window.CareerEditor.state.jobs.jobs[0].contactChancePercent = 101;
+assert(window.CareerEditor.collectValidationIssues().some((issue) => issue.includes('contactChancePercent must be 0..100')), 'validation flags out-of-range contact discovery chance');
+delete window.CareerEditor.state.jobs.jobs[0].contactChancePercent;
 
 // ================================================================= visa CRUD + uniquify + fields
 window.prompt = () => 'Study Permit';
@@ -163,11 +170,13 @@ const end = doc.querySelector('input[data-path="job.endHour"]'); end.value = '15
 const pay = doc.querySelector('input[data-path="job.payPerShift"]'); pay.value = '210'; fire(pay, 'input');
 const skips = doc.querySelector('input[data-path="job.maxSkips"]'); skips.value = '4'; fire(skips, 'input');
 const credit = doc.querySelector('input[data-path="job.minCreditScore"]'); credit.value = '575'; fire(credit, 'input');
+const contactChance = doc.querySelector('input[data-path="job.contactChancePercent"]'); contactChance.value = '18'; fire(contactChance, 'input');
 let levelPay = doc.querySelector('input[data-path="job.levels.0.payPerShift"]'); levelPay.value = '215'; fire(levelPay, 'input');
 doc.getElementById('addJobLevel').click();
+let authoredLevel = doc.querySelector('input[data-path="job.levels.1.level"]'); authoredLevel.value = '12'; fire(authoredLevel, 'input');
 let levelSuffix = doc.querySelector('input[data-path="job.levels.1.suffix"]'); levelSuffix.value = 'II'; fire(levelSuffix, 'input');
 let levelChance = doc.querySelector('input[data-path="job.levels.0.promoteChancePercent"]'); levelChance.value = '25'; fire(levelChance, 'input');
-assert(cashier.levels.length === 2 && cashier.levels[0].payPerShift === 215 && cashier.levels[0].promoteChancePercent === 25 && cashier.levels[1].suffix === 'II', 'Career Editor adds and edits ordered job levels');
+assert(levelChance.dataset.promotesIntoLevelIndex === '1' && cashier.levels.length === 2 && cashier.levels[0].payPerShift === 215 && cashier.levels[0].promoteChancePercent === 25 && cashier.levels[1].level === 12 && cashier.levels[1].suffix === 'II', 'Career Editor edits promotion chance from the destination-level controls without changing source-row runtime semantics');
 doc.getElementById('addNeedsCost').click();
 let costAmount = doc.querySelector('input[data-path="job.needsCost.hunger.amount"]'); costAmount.value = '18'; fire(costAmount, 'input');
 let costNeed = doc.querySelector('select[data-path="job.needsCost.hunger.need"]'); costNeed.value = 'energy'; fire(costNeed, 'change');
@@ -178,7 +187,10 @@ variable = doc.querySelector('[data-owner="job"] [data-role="var"][data-cond-pat
 operator = doc.querySelector('[data-owner="job"] [data-role="op"][data-cond-path="requirements.0"]'); operator.value = 'gte'; fire(operator, 'change');
 value = doc.querySelector('[data-owner="job"] [data-role="value"][data-cond-path="requirements.0"]'); value.value = '100'; fire(value, 'input');
 assert(JSON.stringify(cashier.requirements) === JSON.stringify({ all: [{ var: 'vars.income', gte: 100 }] }), 'job condition builder produces exact JSON');
-assert(cashier.grantsVisa === 'study_permit' && cashier.hours.startHour === 7 && cashier.hours.endHour === 15 && cashier.payPerShift === 215 && cashier.maxSkips === 4 && cashier.minCreditScore === 575, 'job fields update their schema values');
+variable = doc.querySelector('[data-owner="job"] [data-role="var"][data-cond-path="requirements.0"]'); variable.value = 'job.level'; fire(variable, 'change');
+assert(cashier.requirements.all[0].var === 'job.level' && doc.querySelector('[data-owner="job"] [data-role="value"]').type === 'number', 'shared condition builder offers numeric job.level conditions');
+variable = doc.querySelector('[data-owner="job"] [data-role="var"][data-cond-path="requirements.0"]'); variable.value = 'vars.income'; fire(variable, 'change');
+assert(cashier.grantsVisa === 'study_permit' && cashier.hours.startHour === 7 && cashier.hours.endHour === 15 && cashier.payPerShift === 215 && cashier.maxSkips === 4 && cashier.minCreditScore === 575 && cashier.contactChancePercent === 18, 'job fields update their schema values');
 
 // ================================================================= referential integrity branches
 doc.querySelector('[data-visa-id="visitor"]').click();

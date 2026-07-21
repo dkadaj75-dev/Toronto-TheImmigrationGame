@@ -14,7 +14,7 @@
         ]
       },
       "completion": {
-        "all": [
+        "any": [
           {
             "var": "vars.job",
             "eq": true
@@ -32,7 +32,7 @@
         "all": [
           {
             "var": "skills.english",
-            "gte": 12
+            "gte": 99
           }
         ]
       },
@@ -101,6 +101,92 @@
       },
       "completion": {
         "all": []
+      },
+      "rewards": [],
+      "onceOnly": true
+    },
+    {
+      "id": "get_a_promotion",
+      "name": "Get a promotion",
+      "description": "Get a promoted! This will give you a new Visa and may allow you to apply to a longer Visa!\nSee your job requirements on your smartphone!",
+      "trigger": {
+        "all": [
+          {
+            "var": "quests.find_a_job.state",
+            "eq": "done"
+          }
+        ]
+      },
+      "completion": {
+        "all": [
+          {
+            "var": "job.level",
+            "gte": 2
+          }
+        ]
+      },
+      "rewards": [
+        {
+          "type": "funds",
+          "amount": 200
+        }
+      ],
+      "onceOnly": true
+    },
+    {
+      "id": "get_a_better_visa",
+      "name": "Get a better visa",
+      "description": "LMIA is fun and games until you get fired. Let's find another visa!",
+      "trigger": {
+        "all": [
+          {
+            "var": "quests.get_a_promotion.state",
+            "eq": "done"
+          }
+        ]
+      },
+      "completion": {
+        "any": [
+          {
+            "var": "vars.visaStatus",
+            "eq": "bridging_work_permit"
+          },
+          {
+            "var": "vars.visaStatus",
+            "eq": "temp_worker"
+          },
+          {
+            "var": "vars.visaStatus",
+            "eq": "citizen"
+          },
+          {
+            "var": "vars.visaStatus",
+            "eq": "permanent_resident"
+          }
+        ]
+      },
+      "rewards": [],
+      "onceOnly": true
+    },
+    {
+      "id": "move_out",
+      "name": "Move out!",
+      "description": "Let's move out! Enough of giving money to this slumlord!",
+      "trigger": {
+        "all": [
+          {
+            "var": "quests.get_a_better_visa.state",
+            "eq": "done"
+          }
+        ]
+      },
+      "completion": {
+        "all": [
+          {
+            "var": "vars.homeMap",
+            "neq": "condo"
+          }
+        ]
       },
       "rewards": [],
       "onceOnly": true

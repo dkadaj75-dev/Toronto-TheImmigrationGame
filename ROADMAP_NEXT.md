@@ -435,6 +435,59 @@ Promotions gated on designer-set skill requirements per level + happiness, with 
 ## AUDIT_TOOLS second pass — ✅ DONE 2026-07-19 (quick wins)
 UX 40 (tuning string arrays edit as comma lists), 44 (Behavior action dropdown offers phone_text/call/invite), 45 (Finance happiness picker gains personality/time/quests namespaces), 46 (Animation Mapper lists the code-driven `select` state); NO-TOOL 59 (Social Editor per-NPC "Visitor actions" field). REMAINING (bigger surfaces, need designer priorities): OVERLAP 29-36 (shared condition-builder consolidation, NpcDef type unification, bills duplication), UX 47-50 (rename ids, computed needs, category CRUD, finance bill CRUD), NO-TOOL 54-58/60-61 (save/title/notifications editors, computed needs, category list).
 
+## Newnew.txt batch (2026-07-20)
+
+Designer intent (verbatim):
+
+> Jobs: I should be able to assign a level. For example Dishwasher is level 1. When it gets promoted it is level 2 etc. Exact numbers will depend on carreer and job, tunable.
+>
+> The asset editor is a mess: a lot of parameters that influence the 3D viewer are far away from it, the characters does not show anymore when we click on show etc. Idea: Put the 3D viewer next to the list of parameters (on the right) and not affected by me scrolling through parameters, see uiassetsexample.JPG.
+>
+> The sitting and lying locations do not show in 3D either.
+>
+> Still in the asset, I need an option that allows me to direct how the character will face the asset when using it (not just only the sitting one that already exists), it means that I should be able to spawn a point (like a small ghost cube) in the viewer (not ingame) that says basically: the characters will face towards this point.
+>
+> Contacts: we do not have the contacts of all NPCs right away, we earn them either by quests, or randomly during the game, for example a certain % of chances during a work shift.
+>
+> In the quests: We should be able to have the job levels as a condition / requirement to allow me to have a quest where we need to get promoted. For example.
+>
+> The requirements to be promoted should be clearly shown in the smartphone.
+>
+> The button to search a job should instead say "refresh jobs".
+>
+> When our character comes back from work, or a NPC comes, they spawn in the map's spawn point.
+
+Design reading:
+
+1. Career levels become designer-authored numeric values per ladder row (not implicit array indices); progression still advances to the next authored row, and old jobs/saves without numbers retain 1-based index defaults.
+2. `job.level` joins the shared condition namespace so quests and every existing condition surface can gate on the current authored career level.
+3. The phone's current-job card shows the authored level and the next promotion requirements; the job search button/copy becomes **Refresh jobs**.
+4. Contacts become an explicit persisted set. Quest rewards may grant a chosen NPC contact; completed work shifts may discover one unknown NPC via a designer-authored chance.
+5. Work return and NPC arrival use the active map's authored spawn point/facing.
+6. Asset Editor becomes a two-column workspace with a sticky preview. Character and every sit/lie location render in that preview. A sparse general-use facing target is authored visually with a preview-only ghost cube and resolved into character facing without adding an in-game object.
+
+**DONE (2026-07-20):** Newnew.txt shipped as PROJECT_CONTEXT §7.59. Career ladder rows have designer-authored numeric levels with `job.level` quest conditions and next-promotion requirements on the phone; Search is now Refresh jobs. Contacts are a persisted earned set, grantable by quests or a per-job completed-shift chance. Work returns and NPC arrivals use the active map spawn. Asset Editor now has a sticky right-side 3D preview, visible sit/lie point+direction helpers, a preview ghost-cube `useFacingTarget`, and a capsule fallback so Show character never renders blank.
+
+## Promotion 100% bug (2026-07-20)
+
+Designer intent (verbatim):
+
+> Weirdly I meet all promotion requirements, and put the promotion % at 100% and don't get promoted
+
+Design reading: reproduce the completed-shift promotion path with authored requirements and a 100% setting, identify whether the failure is requirement evaluation, chance semantics, or runtime advancement, then make 100% deterministic once its documented gates are met.
+
+**DONE (2026-07-20):** root cause was Career Editor row ownership, not the happiness formula. Runtime correctly stores/reads the chance on the current/source row, while the editor visually placed a generic `Promotion %` beside that row and placed the matching requirements under the destination row. The editor now groups a clearly labelled `Chance to promote into <level> (%)` with the destination requirements while writing the existing source-row field. Existing jobs/saves and happiness scaling are unchanged.
+
+## Debt-safe action affordability fix (2026-07-20)
+
+Designer intent (verbatim):
+
+> when we are in debt, no action can be performed, even the ones that cost nothing. Also, if an action requires money and the player does not have enough, the character should NOT choose it autonomously.
+
+Design reading: debt must not disable free actions. A strictly positive action cost is affordable only when current funds cover that cost, and the same rule must gate the tap menu, action start, and autonomy candidate selection.
+
+**DONE (2026-07-20):** one pure `game/actioncost.ts` rule now feeds the action menu, authoritative `QuestRunner.spend()`, and every autonomy candidate path. Debt no longer blocks free actions; unaffordable positive-cost actions are never selected manually or autonomously.
+
 ## New.txt batch (2026-07-20)
 1. **DONE** — radial action menu: adaptive-width buttons no longer overlap. `minRadialRadius` solves the smallest non-overlapping ring in closed form (all pairs, not just neighbours — opposite bubbles collide first), the ring grows past the authored radius when needed, and when even the largest ring cannot hold them the menu falls back to the list layout, which now keeps the adaptive width so long names still fit. test/contextmenu.test.ts 519 assertions.
 2. **DONE** (Sonnet) — Social Editor target assets: explicit add/remove rows replace the "-- remove --" dropdown trick; legacy `targetAsset` migrates into `targetAssets` on first edit; duplicates blocked; unknown ids preserved.

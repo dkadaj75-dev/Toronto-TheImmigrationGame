@@ -12,6 +12,7 @@ import { firstLegSeatAware } from './food';
 import type { AccidentsController } from './accidents';
 import { isActionAvailable, type EvalContext } from './quests';
 import { pickBest, type BehaviorCandidate } from './behavior';
+import { canAffordActionCost } from './actioncost';
 
 /** The small state surface autonomy actually reads. SimStats implements it, and visitors can
  * provide a single-meter adapter without constructing the player's full needs/skills stack. */
@@ -134,7 +135,9 @@ export class Autonomy {
         // it being hidden from the tap menu — evaluated from one fresh snapshot per autonomy scan
         // (this loop already runs once per needs-decay tick, not per frame).
         if (action.conditions && (!evalCtx || !isActionAvailable(action.conditions, evalCtx))) continue;
-        if ((action.cost ?? 0) > (evalCtx?.funds ?? 0)) continue;
+        // Debt only rules out actions that actually cost money. A zero-cost need action must
+        // remain an autonomy candidate even when funds are negative.
+        if (!canAffordActionCost(evalCtx?.funds ?? 0, action.cost)) continue;
         const dx = obj.position.x - simPos.x, dz = obj.position.z - simPos.z;
         candidates.push({ obj, action, def, dist: Math.hypot(dx, dz) });
       }
@@ -144,6 +147,7 @@ export class Autonomy {
     // then pass the same authored autonomy flag and the same behavior score/pick loop as assets.
     for (const extra of this.options.extraCandidates?.() ?? []) {
       if (!extra.action.autonomyEligible) continue;
+      if (!canAffordActionCost(evalCtx?.funds ?? 0, extra.action.cost)) continue;
       const dx = extra.object.position.x - simPos.x, dz = extra.object.position.z - simPos.z;
       candidates.push({
         obj: extra.object, action: extra.action, def: extra.scoringAsset,

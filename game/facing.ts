@@ -90,6 +90,20 @@ function rotateLocalOffset(offset: [number, number], rotDeg: number): [number, n
   return [lx * Math.cos(rad) + lz * Math.sin(rad), -lx * Math.sin(rad) + lz * Math.cos(rad)];
 }
 
+/** World-space point represented by AssetDef.useFacingTarget's model-local x/z coordinates. */
+export function useFacingTargetFor(instance: FacingInstance, def: AssetDef): [number, number] | null {
+  if (!def.useFacingTarget) return null;
+  const [ox, oz] = rotateLocalOffset(def.useFacingTarget, instance.rotDeg);
+  return [instance.pos[0] + ox, instance.pos[1] + oz];
+}
+
+export function useFacingDegFor(from: [number, number], instance: FacingInstance, def: AssetDef): number | null {
+  const target = useFacingTargetFor(instance, def);
+  return target && Math.hypot(target[0] - from[0], target[1] - from[1]) > 1e-6
+    ? facingDegToward(from, target)
+    : null;
+}
+
 /**
  * Sit/lie/use perch transform for `pose` on an asset instance (PROJECT_CONTEXT.md §7.8, roadmap
  * item 1 fix; `use` added for ROADMAP_NEXT B2-3). Designer override via `def.usePose?.[pose]`
@@ -130,10 +144,12 @@ export function usePoseForEntry(
       : pose === 'lie' ? tuning.character?.lieHeight ?? 0.55
       : 0 // 'use': standing ground level, no tuning constant exists (or is needed) for it
   );
-  const facingDeg = entry?.facingDeg !== undefined
+  const pos: [number, number] = [instance.pos[0] + ox, instance.pos[1] + oz];
+  const targetFacing = useFacingDegFor(pos, instance, def);
+  const facingDeg = targetFacing ?? (entry?.facingDeg !== undefined
     ? (((instance.rotDeg + entry.facingDeg) % 360) + 360) % 360
-    : worldFacingDeg(instance, def);
-  return { pos: [instance.pos[0] + ox, instance.pos[1] + oz], y, facingDeg };
+    : worldFacingDeg(instance, def));
+  return { pos, y, facingDeg };
 }
 
 export function usePoseFor(

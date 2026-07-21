@@ -43,7 +43,7 @@ const quests = {
       id: 'broken_quest', name: 'Broken Quest', description: 'Intentionally bad data for validation coverage.',
       trigger: { all: [{ var: 'needs.nonexistent_need', gte: 5 }] },
       completion: { all: [{ var: 'vars.missing_var' }] },
-      rewards: [{ type: 'setVar', var: 'missing_var', value: 'x' }, { type: 'grantVisa', statusId: 'missing_visa' }],
+      rewards: [{ type: 'setVar', var: 'missing_var', value: 'x' }, { type: 'grantVisa', statusId: 'missing_visa' }, { type: 'event', event: 'legacy_event' }],
       onceOnly: true,
     },
   ],
@@ -62,6 +62,8 @@ const visas = {
     { id: 'citizen', name: 'Citizen', durationDays: null, obtainedVia: 'quest' },
   ],
 };
+const events = { events: [{ id: 'sink_leak', effects: [] }] };
+const npcs = { npcs: [{ id: 'amara', name: 'Amara' }] };
 
 const puts = {};
 const fetchMock = async (url, opts = {}) => {
@@ -70,7 +72,7 @@ const fetchMock = async (url, opts = {}) => {
     puts[path] = JSON.parse(opts.body);
     return { ok: true, status: 200, json: async () => ({}) };
   }
-  const body = { 'simstate.json': simstate, 'quests.json': quests, 'stats.json': stats, 'assets.json': assets, 'visas.json': visas }[path];
+  const body = { 'simstate.json': simstate, 'quests.json': quests, 'stats.json': stats, 'assets.json': assets, 'visas.json': visas, 'npcs.json': npcs, 'events.json': events }[path];
   return { ok: !!body, status: body ? 200 : 404, json: async () => structuredClone(body) };
 };
 
@@ -273,6 +275,28 @@ assert(rewardVisaSel.value === 'visitor', 'grantVisa reward defaults to the firs
 rewardVisaSel.value = 'citizen';
 fire(rewardVisaSel, 'change');
 
+doc.getElementById('addReward').click();
+let typeSelContact = doc.querySelector('select[data-role="reward-type"][data-reward-index="4"]');
+typeSelContact.value = 'grantContact';
+fire(typeSelContact, 'change');
+let rewardContactSel = doc.querySelector('select[data-role="reward-contact"][data-reward-index="4"]');
+assert(rewardContactSel?.value === 'amara', 'grantContact reward defaults to the first NPC');
+
+doc.getElementById('addReward').click();
+let typeSel4 = doc.querySelector('select[data-role="reward-type"][data-reward-index="5"]');
+assert([...typeSel4.options].some((o) => o.value === 'event'), 'event reward type renders in the type dropdown');
+typeSel4.value = 'event';
+fire(typeSel4, 'change');
+let rewardEventSel = doc.querySelector('select[data-role="reward-event"][data-reward-index="5"]');
+assert(rewardEventSel && rewardEventSel.value === '', 'event reward renders one blank event-id dropdown');
+rewardEventSel.value = 'sink_leak'; fire(rewardEventSel, 'change');
+assert(rewardEventSel.value === 'sink_leak', 'selecting an event reward writes the event id');
+rewardEventSel.value = ''; fire(rewardEventSel, 'change');
+doc.getElementById('save').click();
+await new Promise((r) => setTimeout(r, 50));
+assert(!('event' in puts['quests.json'].quests.find((q) => q.id === 'new_quest').rewards[5]), 'blank event reward selection deletes the sparse event key');
+rewardEventSel.value = 'sink_leak'; fire(rewardEventSel, 'change');
+
 // remove the middle (setVar) reward
 doc.querySelector('[data-action="remove-reward"][data-reward-index="1"]').click();
 
@@ -293,6 +317,8 @@ assert(doc.querySelector('[data-quest-id="new_quest_2"]') === null, 'new_quest_2
 
 // cancel path: confirm cancel leaves everything untouched
 doc.querySelector('[data-quest-id="broken_quest"]').click();
+const unknownEventSel = doc.querySelector('select[data-role="reward-event"][data-reward-index="2"]');
+assert(unknownEventSel.value === 'legacy_event' && [...unknownEventSel.options].some((o) => o.value === 'legacy_event' && o.textContent === 'legacy_event (unknown)'), 'event reward preserves an authored unknown event id');
 window.confirm = () => false;
 doc.getElementById('deleteQuest').click();
 assert(doc.querySelector('[data-quest-id="broken_quest"]') !== null, 'cancelled delete leaves the quest in place');
@@ -312,10 +338,13 @@ const expectedTrigger = { all: [{ var: 'funds', eq: 500 }, { any: [{ var: 'skill
 assert(JSON.stringify(savedNewQuest.trigger) === JSON.stringify(expectedTrigger), `PUT quests.json new_quest trigger matches exact nested JSON (got ${JSON.stringify(savedNewQuest.trigger)})`);
 const expectedCompletion = { all: [{ var: 'time.day', gte: 0 }] };
 assert(JSON.stringify(savedNewQuest.completion) === JSON.stringify(expectedCompletion), `PUT quests.json new_quest completion matches exact JSON after leaf removal (got ${JSON.stringify(savedNewQuest.completion)})`);
-assert(savedNewQuest.rewards.length === 3, 'PUT quests.json new_quest has 3 rewards after removing the middle one');
+assert(savedNewQuest.rewards.length === 5, 'PUT quests.json new_quest has 5 rewards after removing the middle one');
 assert(savedNewQuest.rewards[0].type === 'funds' && savedNewQuest.rewards[0].amount === 150, 'PUT quests.json new_quest funds reward amount = 150');
 assert(savedNewQuest.rewards[1].type === 'unlockAsset' && savedNewQuest.rewards[1].asset === 'tv', 'PUT quests.json new_quest unlockAsset reward = tv');
 assert(savedNewQuest.rewards[2].type === 'grantVisa' && savedNewQuest.rewards[2].statusId === 'citizen', 'PUT quests.json new_quest grantVisa reward = citizen');
+assert(savedNewQuest.rewards[3].type === 'grantContact' && savedNewQuest.rewards[3].npc === 'amara', 'exact PUT quests.json payload carries the contact reward');
+assert(savedNewQuest.rewards[4].type === 'event' && savedNewQuest.rewards[4].event === 'sink_leak', 'exact PUT quests.json payload carries the event reward');
+assert(!puts['events.json'], 'Quest Editor never PUTs read-only events.json');
 
 assert(savedSim.variables.some((v) => v.id === 'job' && v.type === 'number' && v.default === 0), 'PUT simstate.json job variable reflects type/default edits');
 assert(savedSim.variables.some((v) => v.id === 'language') && savedSim.variables.some((v) => v.id === 'language_2'), 'PUT simstate.json includes both added variables');

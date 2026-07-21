@@ -111,8 +111,16 @@ function autonomyData(withBehavior: boolean): GameData {
   } as GameData;
 }
 
-function runAutonomy(withBehavior: boolean, allowedActionIds?: string[], blockSleep = false): string | undefined {
+function runAutonomy(
+  withBehavior: boolean, allowedActionIds?: string[], blockSleep = false, funds = evalCtx.funds,
+  costs: Partial<Record<'nap' | 'sleep', number>> = {},
+): string | undefined {
   const data = autonomyData(withBehavior);
+  data.interactions.actions = data.interactions.actions.map((action) => (
+    action.id === 'nap' && costs.nap !== undefined ? { ...action, cost: costs.nap }
+      : action.id === 'sleep' && costs.sleep !== undefined ? { ...action, cost: costs.sleep }
+        : action
+  ));
   const world = new THREE.Group();
   const sofaObj = new THREE.Group(); sofaObj.userData.assetId = 'sofa'; sofaObj.position.set(1, 0, 0);
   const bedObj = new THREE.Group(); bedObj.userData.assetId = 'bed'; bedObj.position.set(8, 0, 0);
@@ -125,7 +133,7 @@ function runAutonomy(withBehavior: boolean, allowedActionIds?: string[], blockSl
   };
   const stats = new SimStats(data.stats);
   const autonomy = new Autonomy(
-    () => data, () => world, agent as never, stats, undefined, () => evalCtx,
+    () => data, () => world, agent as never, stats, undefined, () => ({ ...evalCtx, funds }),
     {
       ...(allowedActionIds ? { allowedActionIds: () => allowedActionIds } : {}),
       candidateAvailable: (action) => !blockSleep || (action.id !== 'sleep' && action.id !== 'nap'),
@@ -139,6 +147,9 @@ check('Autonomy utility mode chooses the farther bed with the stronger gain rate
 check('optional visitor allow-list excludes a higher-scoring disallowed action', runAutonomy(true, ['nap']) === 'nap');
 check('runtime candidate veto makes autonomy skip blocked bed sleep/nap', runAutonomy(true, undefined, true) === undefined);
 check('absent behavior.json preserves legacy lowest-need nearest-candidate fallback', runAutonomy(false) === 'nap');
+check('debt still permits zero-cost autonomous actions', runAutonomy(true, undefined, false, -10) === 'sleep');
+check('autonomy skips an unaffordable costly action and chooses a free alternative', runAutonomy(true, undefined, false, -10, { sleep: 20 }) === 'nap');
+check('autonomy chooses nothing when every candidate costs more than available funds', runAutonomy(true, undefined, false, -10, { nap: 20, sleep: 20 }) === undefined);
 
 console.log('behavior.test — extra social candidates share the utility scorer');
 {

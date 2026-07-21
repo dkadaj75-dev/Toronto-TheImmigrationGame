@@ -285,6 +285,10 @@ function renderJobEditor() {
     if (v === null) delete job.minCreditScore; else job.minCreditScore = v;
     markDirty('jobs.json'); renderValidation();
   }, 'job.minCreditScore', { min: 0, emptyValue: null })));
+  details.appendChild(frow('contact discovery chance %', numberInput(job.contactChancePercent, (v) => {
+    if (v === null) delete job.contactChancePercent; else job.contactChancePercent = v;
+    markDirty('jobs.json'); renderValidation();
+  }, 'job.contactChancePercent', { min: 0, max: 100, emptyValue: null })));
   details.appendChild(frow('max skips', numberInput(job.maxSkips, (v) => { job.maxSkips = v; markDirty('jobs.json'); }, 'job.maxSkips', { min: 0 })));
   root.appendChild(details);
   // H4 (ROADMAP_HAPPY): sparse unhappy-streak firing. Blank fields = this job never mood-fires.
@@ -321,12 +325,12 @@ function renderJobEditor() {
   (job.levels || []).forEach((level, index) => {
     const row = document.createElement('div'); row.className = 'level-row'; row.dataset.levelIndex = String(index);
     const field = (label, input) => { const wrap = document.createElement('div'); wrap.className = 'level-field'; const lab = document.createElement('label'); lab.textContent = label; wrap.append(lab, input); return wrap; };
+    const authoredLevel = numberInput(level.level ?? index + 1, (v) => { level.level = v; markDirty('jobs.json'); renderValidation(); }, `job.levels.${index}.level`);
     const suffix = textInput(level.suffix, (v) => { level.suffix = v; markDirty('jobs.json'); renderValidation(); }, `job.levels.${index}.suffix`);
     const pay = numberInput(level.payPerShift, (v) => { level.payPerShift = v; if (index === 0) job.payPerShift = v; markDirty('jobs.json'); renderValidation(); }, `job.levels.${index}.payPerShift`, { min: 0 });
-    const chance = numberInput(level.promoteChancePercent, (v) => { level.promoteChancePercent = v; markDirty('jobs.json'); renderValidation(); }, `job.levels.${index}.promoteChancePercent`, { min: 0, max: 100 });
     const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove'; remove.dataset.action = 'remove-level';
     remove.addEventListener('click', () => { job.levels.splice(index, 1); if (!job.levels.length) delete job.levels; if (job.levels?.length) job.payPerShift = job.levels[0].payPerShift; markDirty('jobs.json'); renderJobEditor(); renderValidation(); });
-    row.append(field('Suffix', suffix), field('Pay / shift', pay), field('Promotion %', chance), remove); levels.appendChild(row);
+    row.append(field('Level', authoredLevel), field('Suffix', suffix), field('Pay / shift', pay), remove); levels.appendChild(row);
     // B13-19 (Bugstofix.txt): sparse per-level promotion requirements — the same condition tree
     // jobs/visas use (skills, happiness, vars…), gating promotion INTO this level. Level 0 is the
     // hiring level; its gate is the job's own Requirements card above.
@@ -334,14 +338,20 @@ function renderJobEditor() {
       const reqWrap = document.createElement('div'); reqWrap.className = 'level-requirements'; reqWrap.dataset.levelIndex = String(index);
       const reqLabel = document.createElement('div'); reqLabel.className = 'hint-line';
       reqLabel.textContent = `Promotion requirements into "${level.suffix || index + 1}" (blank = chance/happiness only):`;
-      reqWrap.append(reqLabel, conditionEditor(level, `job-level-${index}`, 'jobs.json'));
+      // The engine stores the chance on the source row (the level being left). Show it beside
+      // the destination's requirements so both controls unambiguously describe the same promotion.
+      const source = job.levels[index - 1];
+      const chance = numberInput(source.promoteChancePercent, (v) => { source.promoteChancePercent = v; markDirty('jobs.json'); renderValidation(); }, `job.levels.${index - 1}.promoteChancePercent`, { min: 0, max: 100 });
+      chance.dataset.promotesIntoLevelIndex = String(index);
+      reqWrap.append(reqLabel, field(`Chance to promote into "${level.suffix || index + 1}" (%)`, chance), conditionEditor(level, `job-level-${index}`, 'jobs.json'));
       levels.appendChild(reqWrap);
     }
   });
   const addLevel = document.createElement('button'); addLevel.type = 'button'; addLevel.id = 'addJobLevel'; addLevel.textContent = '+ Add level';
   addLevel.addEventListener('click', () => {
     const rows = (job.levels ||= []), previous = rows[rows.length - 1];
-    rows.push({ suffix: String(rows.length + 1), payPerShift: previous?.payPerShift ?? job.payPerShift, promoteChancePercent: 0 });
+    const previousLevel = typeof previous?.level === 'number' && Number.isFinite(previous.level) ? previous.level : rows.length;
+    rows.push({ level: previousLevel + 1, suffix: String(rows.length + 1), payPerShift: previous?.payPerShift ?? job.payPerShift, promoteChancePercent: 0 });
     markDirty('jobs.json'); renderJobEditor(); renderValidation();
   });
   levels.appendChild(addLevel); root.appendChild(levels);
@@ -440,7 +450,7 @@ function collectValidationIssues() {
     else if (node.var.startsWith('vars.') && !variableIds.has(node.var.slice(5))) issues.push(`${owner} — requirements: unknown variable "${node.var.slice(5)}".`);
     else if (/^quests\.(.+)\.state$/.test(node.var)) {
       const id = /^quests\.(.+)\.state$/.exec(node.var)[1]; if (!questIds.has(id)) issues.push(`${owner} — requirements: unknown quest id "${node.var}".`);
-    } else if (!(node.var.startsWith('needs.') || node.var.startsWith('skills.') || node.var.startsWith('personality.') || node.var.startsWith('vars.') || node.var === 'funds' || node.var === 'creditScore' || node.var === 'happiness' || node.var === 'time.hour' || node.var === 'time.day')) {
+    } else if (!(node.var.startsWith('needs.') || node.var.startsWith('skills.') || node.var.startsWith('personality.') || node.var.startsWith('vars.') || node.var === 'funds' || node.var === 'creditScore' || node.var === 'happiness' || node.var === 'job.level' || node.var === 'time.hour' || node.var === 'time.day')) {
       issues.push(`${owner} — requirements: unrecognized condition id "${node.var}".`);
     }
   }
@@ -451,11 +461,17 @@ function collectValidationIssues() {
     if (job.hours && job.hours.startHour === job.hours.endHour) issues.push(`Job "${job.name || job.id}" — endHour equals startHour (${job.hours.startHour}).`);
     if (typeof job.payPerShift === 'number' && job.payPerShift < 0) issues.push(`Job "${job.name || job.id}" — payPerShift is negative (${job.payPerShift}).`);
     if (typeof job.minCreditScore === 'number' && job.minCreditScore < 0) issues.push(`Job "${job.name || job.id}" — minCreditScore is negative (${job.minCreditScore}).`);
+    if (job.contactChancePercent !== undefined && (typeof job.contactChancePercent !== 'number' || job.contactChancePercent < 0 || job.contactChancePercent > 100)) issues.push(`Job "${job.name || job.id}" — contactChancePercent must be 0..100.`);
     for (const [index, level] of (job.levels || []).entries()) {
       checkCondition(level.requirements, `Job "${job.name || job.id}" level ${index + 1}`);
       if (!String(level.suffix || '').trim()) issues.push(`Job "${job.name || job.id}" - level ${index + 1} has an empty suffix.`);
+      if (level.level !== undefined && (typeof level.level !== 'number' || !Number.isFinite(level.level))) issues.push(`Job "${job.name || job.id}" - row ${index + 1} authored level must be numeric.`);
+      const previous = job.levels?.[index - 1];
+      const currentNumber = typeof level.level === 'number' && Number.isFinite(level.level) ? level.level : index + 1;
+      const previousNumber = index > 0 ? (typeof previous?.level === 'number' && Number.isFinite(previous.level) ? previous.level : index) : null;
+      if (previousNumber !== null && currentNumber <= previousNumber) issues.push(`Job "${job.name || job.id}" - authored level ${currentNumber} must be greater than the previous level ${previousNumber}.`);
       if (typeof level.payPerShift !== 'number' || level.payPerShift < 0) issues.push(`Job "${job.name || job.id}" - level ${index + 1} pay is invalid.`);
-      if (typeof level.promoteChancePercent !== 'number' || level.promoteChancePercent < 0 || level.promoteChancePercent > 100) issues.push(`Job "${job.name || job.id}" - level ${index + 1} promotion chance must be 0..100.`);
+      if (typeof level.promoteChancePercent !== 'number' || level.promoteChancePercent < 0 || level.promoteChancePercent > 100) issues.push(`Job "${job.name || job.id}" - level ${index + 1} promotion chance to the next level must be 0..100.`);
     }
     for (const [needId, amount] of Object.entries(job.needsCost || {})) {
       if (!needIds.has(needId)) issues.push(`Job "${job.name || job.id}" — needsCost references unknown need id "${needId}".`);

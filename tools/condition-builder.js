@@ -71,7 +71,7 @@
 
     // ------------------------------------------------------------ var-path namespace helpers
     function describeVarPath(path) {
-      if (path === 'funds' || path === 'creditScore' || path === 'happiness' || path === 'time.hour' || path === 'time.day') return { kind: 'number' };
+      if (path === 'funds' || path === 'creditScore' || path === 'happiness' || path === 'job.level' || path === 'time.hour' || path === 'time.day') return { kind: 'number' };
       if (path.startsWith('needs.') || path.startsWith('skills.') || path.startsWith('personality.')) return { kind: 'number' };
       if (path.startsWith('vars.')) {
         const v = variables().find((x) => x.id === path.slice(5));
@@ -111,6 +111,7 @@
         ['Personality', personality().map((p) => ({ value: 'personality.' + p.id, label: p.name }))],
         ['Economy', [{ value: 'funds', label: 'Funds' }, { value: 'creditScore', label: 'Credit score' }]],
         ['Mood', [{ value: 'happiness', label: 'Happiness' }]],
+        ['Career', [{ value: 'job.level', label: 'Current job level' }]],
         ['Time', [{ value: 'time.hour', label: 'Hour of day' }, { value: 'time.day', label: 'Day' }]],
         ['Variables', variables().map((v) => ({ value: 'vars.' + v.id, label: v.name }))],
         ['Quests', quests().map((q) => ({ value: 'quests.' + q.id + '.state', label: q.name + ' (state)' }))],

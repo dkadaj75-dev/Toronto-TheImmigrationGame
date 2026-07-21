@@ -1,6 +1,6 @@
 // usepose.test.ts — game/facing.ts's usePoseFor (AssetDef.usePose, PROJECT_CONTEXT.md §7.8,
 // roadmap item 1 fix). Run: npx tsx test/usepose.test.ts
-import { usePoseFor, type FacingInstance } from '../game/facing';
+import { useFacingTargetFor, usePoseFor, type FacingInstance } from '../game/facing';
 import type { AssetDef, TuningData } from '../game/data';
 
 let failures = 0;
@@ -133,6 +133,15 @@ console.log('usepose.test — B2-3: use pose (standing, e.g. the shower)');
   const stove = asset({ footprint: [1, 1] });
   const rNone = usePoseFor('use', inst, stove, tuning);
   check('use with no usePose.use entry still resolves to footprint-center/0/worldFacingDeg (caller decides whether to invoke this)', approx(rNone.pos[0], 4) && approx(rNone.pos[1], 6) && approx(rNone.y, 0));
+}
+
+console.log('usepose.test — Newnew facing target');
+{
+  const def = asset({ usePose: { sit: { offset: [-1, 0], facingDeg: 180 } }, useFacingTarget: [1, 0] });
+  const result = usePoseFor('sit', { pos: [5, 5], rotDeg: 0 }, def, tuning);
+  check('authored point overrides angle and faces from final pose toward the target', approx(result.facingDeg, 90), `${result.facingDeg}`);
+  const rotated = useFacingTargetFor({ pos: [5, 5], rotDeg: 90 }, def);
+  check('facing target is model-local and rotates with the asset', !!rotated && approx(rotated[0], 5) && approx(rotated[1], 4), JSON.stringify(rotated));
 }
 
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }

@@ -110,6 +110,14 @@ export function jobLevelIndex(job: JobDef, rawLevel: number): number {
   return Math.min(max, Math.max(0, Math.floor(Number.isFinite(rawLevel) ? rawLevel : 0)));
 }
 
+/** Designer-authored numeric level for a ladder row. Old jobs without `levels[].level` retain the
+ *  1-based display contract (row 0 = level 1) while saves keep storing row indices. */
+export function jobLevelNumber(job: JobDef, rawLevel = 0): number {
+  const index = jobLevelIndex(job, rawLevel);
+  const authored = job.levels?.[index]?.level;
+  return typeof authored === 'number' && Number.isFinite(authored) ? authored : index + 1;
+}
+
 export function jobLevelTitle(job: JobDef, rawLevel = 0): string {
   const suffix = job.levels?.[jobLevelIndex(job, rawLevel)]?.suffix?.trim();
   return suffix ? `${job.name} ${suffix}` : job.name;

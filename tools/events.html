@@ -172,6 +172,16 @@ function renderEditor() {
   card.appendChild(frow('chance % (blank = always)', numInput(event.chancePercent, (v) => {
     if (v === undefined) delete event.chancePercent; else event.chancePercent = v;
   }, 'event.chancePercent')));
+  card.appendChild(frow('cooldown seconds (blank = none)', numInput(event.cooldownSeconds, (v) => {
+    if (v === undefined) delete event.cooldownSeconds; else event.cooldownSeconds = v;
+  }, 'event.cooldownSeconds')));
+  const onceOnly = document.createElement('input');
+  onceOnly.type = 'checkbox'; onceOnly.checked = event.onceOnly === true; onceOnly.dataset.path = 'event.onceOnly';
+  onceOnly.addEventListener('change', () => {
+    if (onceOnly.checked) event.onceOnly = true; else delete event.onceOnly;
+    markDirty();
+  });
+  card.appendChild(frow('fire once per game', onceOnly));
   root.appendChild(card);
 
   // Which actions currently fire this event — so the designer sees how it is reachable.

@@ -324,6 +324,14 @@
   "rental": {
     "listed": true,
     "adTitle": "Scarborough 1 Bedroom",
-    "moveInHours": 1
+    "moveInHours": 1,
+    "availability": {
+      "all": [
+        {
+          "var": "quests.move_out.state",
+          "eq": "active"
+        }
+      ]
+    }
   }
 }

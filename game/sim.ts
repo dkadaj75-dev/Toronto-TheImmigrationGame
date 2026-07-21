@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import type { TuningData, ActionDef, GameData, AssetDef, UsePoseEntry } from './data';
 import { findPath, nearestWalkable, worldToCell, cellCenter, isWalkable, type NavGrid } from './nav';
-import { useSpotFor, isInFrontHalfSpace, viewingPointFor, usePoseFor, usePoseForEntry, type FacingInstance } from './facing';
+import { useSpotFor, isInFrontHalfSpace, viewingPointFor, useFacingDegFor, usePoseFor, usePoseForEntry, type FacingInstance } from './facing';
 
 /** THREE.Object3D → the {pos, rotDeg} shape facing.ts's pure math works with. Objects are
  *  placed with `obj.rotation.y = degToRad(placed.rotDeg)` and nothing else touches that outer
@@ -320,7 +320,13 @@ export class SimAgent {
       // Standing action: only snap onto the asset's own explicit `use` perch (B2-3) — no
       // AssetDef, or an AssetDef with no `usePose.use`, means "keep the approach spot" (return,
       // nothing to do — the sim is already standing where it walked to).
-      if (!def?.usePose?.use) return;
+      if (!def?.usePose?.use) {
+        if (def?.useFacingTarget) {
+          const facing = useFacingDegFor([this.object.position.x, this.object.position.z], facingInstanceOf(perch), def);
+          if (facing !== null) this.object.rotation.y = THREE.MathUtils.degToRad(facing);
+        }
+        return;
+      }
       this.savedPose = saveGroundPose();
       const { pos, y, facingDeg } = usePoseFor('use', facingInstanceOf(perch), def, this.tuning);
       this.object.position.x = pos[0];
