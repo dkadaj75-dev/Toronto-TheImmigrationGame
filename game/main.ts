@@ -11,6 +11,8 @@ import { AnimController } from './anim';
 import { bakeNavGrid } from './nav';
 import { TapInput, type TapResult } from './input';
 import { SimAgent, ClickCue, findSeatFor, type ActiveAction } from './sim';
+import { OccupancyRegistry, pickClosestFreeLocation } from './occupancy';
+import { seatLocationCandidates } from './facing';
 import { computeEnvironmentScore, SimStats, skillPointProgress, primarySkillGain } from './stats';
 import { Hud } from './ui';
 import { Autonomy } from './autonomy';
@@ -137,6 +139,29 @@ async function start(initialLoadSlotId?: string) {
   scene.background = new THREE.Color(0x2a3346);
 
   const assetStates = new AssetStateRegistry();
+  // New.txt #5: shared seat/lie location occupancy. Player and every NPC claim through this ONE
+  // registry so two characters never take the same couch cushion / bed side. Occupancy engages
+  // ONLY for assets that authored >=2 useLocations for the pose — a single-location asset keeps
+  // today's behaviour untouched (buildSeatClaimer returns undefined -> the default usePose path).
+  const occupancy = new OccupancyRegistry();
+  const buildSeatClaimer = (occupantId: string) =>
+    (action: ActionDef, seat: THREE.Object3D, fromPos: [number, number]): import('./data').UsePoseEntry | undefined => {
+      const anim = action.animation;
+      const pose: 'sit' | 'lie' | null = anim.startsWith('lie') ? 'lie' : anim.startsWith('sit') ? 'sit' : null;
+      if (!pose) return undefined;
+      const key = seat.userData?.assetStateKey as string | undefined;
+      const assetId = seat.userData?.assetId as string | undefined;
+      const def = assetId ? data.assets.assets.find((x) => x.id === assetId) : undefined;
+      if (!key || !def) return undefined;
+      const instance = { pos: [seat.position.x, seat.position.z] as [number, number], rotDeg: THREE.MathUtils.radToDeg(seat.rotation.y) };
+      const candidates = seatLocationCandidates(def, pose, instance, def, data.tuning);
+      if (candidates.length < 2) return undefined; // single location — nothing to arbitrate
+      const idx = pickClosestFreeLocation(candidates, fromPos, occupancy.claimedIndices(key));
+      if (idx === null) return undefined; // every location taken — fall back to default (rare)
+      occupancy.claim(key, idx, occupantId);
+      return candidates[idx].entry;
+    };
+  const buildSeatReleaser = (occupantId: string) => () => occupancy.releaseOccupant(occupantId);
   // Hydro usage meter (2026-07-17): accumulates ON-hours x per-asset power rate across a billing
   // period; folded onto the Hydro bill each cycle (see the day-boundary bill tick). syncAssetStates
   // recomputes the combined rate of ON metered assets each frame into currentHydroRate.
@@ -569,6 +594,12 @@ async function start(initialLoadSlotId?: string) {
       }
     },
     feedback: (message) => postNotification('callFallback', message),
+    // New.txt #5: let the NPC controller give each visitor's SimAgent the SAME occupancy hooks,
+    // keyed by the npc id, so an NPC and the player (or two NPCs) never share a location.
+    wireSeatOccupancy: (npcAgent, npcId) => {
+      npcAgent.onClaimSeat = buildSeatClaimer(npcId);
+      npcAgent.onReleaseSeat = buildSeatReleaser(npcId);
+    },
   });
   let announcedVisitorId: string | null = null;
 
@@ -1491,6 +1522,9 @@ async function start(initialLoadSlotId?: string) {
     peeState = { elapsed: 0, totalSeconds: durationSeconds };
   };
 
+  // New.txt #5: the player's own occupancy hooks (occupant id 'player').
+  agent.onClaimSeat = buildSeatClaimer('player');
+  agent.onReleaseSeat = buildSeatReleaser('player');
   agent.onActionStart = (a) => {
     // B10-6: generic source-first seated action. This callback fires only after the first route
     // reaches the source's use spot. Replace that just-started action with a flag-cleared second

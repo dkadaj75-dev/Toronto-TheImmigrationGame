@@ -18,7 +18,7 @@
 //     (rotDeg 0) and the TV (rotDeg 180) already face each other under this rule — see
 //     PROJECT_CONTEXT.md §7.2 as-built for the full walkthrough.
 
-import type { AssetDef, TuningData } from './data';
+import type { AssetDef, TuningData, UsePoseEntry } from './data';
 
 export interface FacingInstance { pos: [number, number]; rotDeg: number; }
 
@@ -112,13 +112,18 @@ function rotateLocalOffset(offset: [number, number], rotDeg: number): [number, n
  * the TV) override the returned facingDeg — this function only supplies the PERCH's own
  * default/overridden facing, not the final in-scene rotation.
  */
-export function usePoseFor(
+/** New.txt #5: resolve a pose from an EXPLICIT location entry (offset/y/facingDeg) rather than the
+ *  asset's single `usePose[pose]`. This is the seam multi-location seating uses — the caller picks
+ *  which of an asset's authored sit/lie locations a character claimed and passes its entry here.
+ *  `entry` undefined reproduces the pre-usePose computed default exactly (footprint-center offset,
+ *  tuning perch height, asset-facing), so a single-location or unauthored asset is unchanged. */
+export function usePoseForEntry(
   pose: 'sit' | 'lie' | 'use',
+  entry: { offset?: [number, number]; y?: number; facingDeg?: number } | undefined,
   instance: FacingInstance,
   def: AssetDef,
   tuning: TuningData,
 ): { pos: [number, number]; y: number; facingDeg: number } {
-  const entry = def.usePose?.[pose];
   const [ox, oz] = rotateLocalOffset(entry?.offset ?? [0, 0], instance.rotDeg);
   const y = entry?.y ?? (
     pose === 'sit' ? tuning.character?.sitHeight ?? 0.25
@@ -129,6 +134,44 @@ export function usePoseFor(
     ? (((instance.rotDeg + entry.facingDeg) % 360) + 360) % 360
     : worldFacingDeg(instance, def);
   return { pos: [instance.pos[0] + ox, instance.pos[1] + oz], y, facingDeg };
+}
+
+export function usePoseFor(
+  pose: 'sit' | 'lie' | 'use',
+  instance: FacingInstance,
+  def: AssetDef,
+  tuning: TuningData,
+): { pos: [number, number]; y: number; facingDeg: number } {
+  return usePoseForEntry(pose, def.usePose?.[pose], instance, def, tuning);
+}
+
+/** New.txt #5: the ordered list of authored sit/lie location entries for a pose. Always ≥1 so the
+ *  occupancy picker has something to claim: the `useLocations` list if authored, else the single
+ *  `usePose[pose]` entry, else a lone `undefined` (the computed-default location). Index in this
+ *  list is the stable location id an occupant holds. `use` has no multi-location concept — it is a
+ *  standing spot — so it always yields its single usePose entry. */
+export function seatLocationEntries(
+  def: Pick<AssetDef, 'useLocations' | 'usePose'>,
+  pose: 'sit' | 'lie',
+): (UsePoseEntry | undefined)[] {
+  const authored = def.useLocations?.[pose]?.filter((entry) => !!entry);
+  if (authored && authored.length) return authored;
+  return [def.usePose?.[pose]];
+}
+
+/** World-space candidates (for occupancy ranking) of each authored location, in list order. */
+export function seatLocationCandidates(
+  def: Pick<AssetDef, 'useLocations' | 'usePose'>,
+  pose: 'sit' | 'lie',
+  instance: FacingInstance,
+  fullDef: AssetDef,
+  tuning: TuningData,
+): { index: number; pos: [number, number]; entry: UsePoseEntry | undefined }[] {
+  return seatLocationEntries(def, pose).map((entry, index) => ({
+    index,
+    pos: usePoseForEntry(pose, entry, instance, fullDef, tuning).pos,
+    entry,
+  }));
 }
 
 /** The point a seat-aware target (e.g. a TV) is "viewed from" — its position projected

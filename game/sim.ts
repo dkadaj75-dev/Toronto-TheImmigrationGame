@@ -3,9 +3,9 @@
 // Needs/autonomy/actions plug into this same class in the next slices.
 
 import * as THREE from 'three';
-import type { TuningData, ActionDef, GameData, AssetDef } from './data';
+import type { TuningData, ActionDef, GameData, AssetDef, UsePoseEntry } from './data';
 import { findPath, nearestWalkable, worldToCell, cellCenter, isWalkable, type NavGrid } from './nav';
-import { useSpotFor, isInFrontHalfSpace, viewingPointFor, usePoseFor, type FacingInstance } from './facing';
+import { useSpotFor, isInFrontHalfSpace, viewingPointFor, usePoseFor, usePoseForEntry, type FacingInstance } from './facing';
 
 /** THREE.Object3D → the {pos, rotDeg} shape facing.ts's pure math works with. Objects are
  *  placed with `obj.rotation.y = degToRad(placed.rotDeg)` and nothing else touches that outer
@@ -27,6 +27,11 @@ export interface ActiveAction {
   /** Runtime choreography override; social bed pairs use the existing lie machinery even when
    * their authored role clip does not use the conventional `lie_` prefix. */
   poseOverride?: 'sit' | 'lie' | 'use';
+  /** New.txt #5: the specific authored sit/lie location this character claimed on a multi-location
+   * asset (couch cushion, bed side). Absent = the asset's single usePose entry, i.e. today's
+   * behaviour. Consumed by applyPose via usePoseForEntry; the occupancy claim/release lives in
+   * main.ts around order/stop. */
+  poseLocation?: UsePoseEntry;
 }
 
 /**
@@ -95,6 +100,13 @@ export class SimAgent {
   onActionStop: ((a: ActiveAction, completed: boolean) => void) | null = null;
   /** fired when walking starts/stops — drives idle↔walk animation without per-frame polling */
   onLocomotionChange: ((moving: boolean) => void) | null = null;
+  /** New.txt #5 occupancy hooks (set by main.ts / the NPC controller, which own the shared
+   *  OccupancyRegistry and the occupant id). onClaimSeat is asked, as a sit/lie action is queued
+   *  onto a seat, which authored location this character should take — it returns that location's
+   *  pose entry (and registers the claim) or undefined for the single-location/default path.
+   *  onReleaseSeat frees whatever this character held; it fires on every stopAction. */
+  onClaimSeat: ((action: ActionDef, seat: THREE.Object3D, fromPos: [number, number]) => UsePoseEntry | undefined) | null = null;
+  onReleaseSeat: (() => void) | null = null;
   /** true once the rigged GLB is attached: real clips replace the transform-pose hacks */
   hasRig = false;
   private wasMoving = false;
@@ -150,7 +162,7 @@ export class SimAgent {
    * Actions that aren't seat-aware at all (seatAware omitted/false) never set groundSit; they
    * keep whatever pose their own `action.animation` implies, unchanged.
    */
-  orderAction(action: ActionDef, target: THREE.Object3D, seat: THREE.Object3D | null = null, targetDef?: AssetDef, seatAware = false, poseOverride?: 'sit' | 'lie' | 'use'): boolean {
+  orderAction(action: ActionDef, target: THREE.Object3D, seat: THREE.Object3D | null = null, targetDef?: AssetDef, seatAware = false, poseOverride?: 'sit' | 'lie' | 'use', poseLocation?: UsePoseEntry): boolean {
     this.stopAction();
     const routeToPivot = (obj: THREE.Object3D): boolean => {
       const stand = nearestWalkable(this.grid, worldToCell(this.grid, obj.position.x, obj.position.z));
@@ -189,7 +201,8 @@ export class SimAgent {
       const seatDef = this.assetsById.get(seat.userData?.assetId as string);
       const reachedSeat = seatDef ? routeToTargetFront(seat, seatDef) : routeToPivot(seat);
       if (reachedSeat) {
-        this.queued = { action, target, seat, poseOverride };
+        const claimed = poseLocation ?? this.onClaimSeat?.(action, seat, [this.object.position.x, this.object.position.z]) ?? undefined;
+        this.queued = { action, target, seat, poseOverride, poseLocation: claimed };
         return true;
       }
     }
@@ -197,7 +210,7 @@ export class SimAgent {
       ? routeBesideSim(target)
       : targetDef ? routeToTargetFront(target, targetDef) : routeToPivot(target);
     if (reachedTarget) {
-      this.queued = { action, target, seat: null, groundSit: seatAware, poseOverride };
+      this.queued = { action, target, seat: null, groundSit: seatAware, poseOverride, poseLocation };
       return true;
     }
     return false;
@@ -210,6 +223,7 @@ export class SimAgent {
    *  caller (goTo, orderAction's own override-stop, teleportTo, hud.onCancelAction, the bladder-
    *  failure/panic interrupts) leaves it at the default `false` — a cancel, not a completion. */
   stopAction(completed = false) {
+    if (this.current || this.queued) this.onReleaseSeat?.(); // New.txt #5: free any claimed seat location
     if (this.current) {
       const a = this.current;
       this.current = null;
@@ -319,7 +333,10 @@ export class SimAgent {
     this.savedPose = saveGroundPose();
 
     if (def) {
-      const { pos, y, facingDeg } = usePoseFor(pose, facingInstanceOf(perch), def, this.tuning);
+      // New.txt #5: a claimed multi-location entry overrides the asset's single usePose[pose].
+      const { pos, y, facingDeg } = a.poseLocation
+        ? usePoseForEntry(pose, a.poseLocation, facingInstanceOf(perch), def, this.tuning)
+        : usePoseFor(pose, facingInstanceOf(perch), def, this.tuning);
       this.object.position.x = pos[0];
       this.object.position.z = pos[1];
       this.object.position.y = y;

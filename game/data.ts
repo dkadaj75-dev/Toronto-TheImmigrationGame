@@ -211,6 +211,8 @@ export interface InteractionsData { actions: ActionDef[]; }
 
 export interface AssetDef {
   id: string; name: string; category: string; mesh: string;
+  /** Asset Editor decluttering metadata only; the runtime IGNORES this field. */
+  featureCategories?: string[];
   buyPrice: number; sellPrice: number; environmentScore: number;
   footprint: [number, number]; seats?: number;
   /** Whether this asset's placed footprint bakes as UNWALKABLE into the nav grid (game/nav.ts
@@ -339,6 +341,13 @@ export interface AssetDef {
    *  sim stands INSIDE its footprint instead of in front of it) opt into the snap — see
    *  game/sim.ts's applyPose and game/facing.ts's usePoseFor. */
   usePose?: { sit?: UsePoseEntry; lie?: UsePoseEntry; use?: UsePoseEntry };
+  /** New.txt #5: MULTIPLE authored sit/lie locations (a couch's cushions, a two-person bed's
+   *  sides). Each entry is the same UsePoseEntry shape as `usePose`. Any character (player or NPC)
+   *  claims the CLOSEST AVAILABLE location via game/occupancy.ts; a claimed location is unavailable
+   *  to others. ABSENT (or an empty list) keeps today's single-`usePose` behaviour exactly — the
+   *  asset then has one implicit location (its usePose entry, or the computed default). See
+   *  game/facing.ts usePoseForEntry and the occupancy wiring in main.ts. */
+  useLocations?: { sit?: UsePoseEntry[]; lie?: UsePoseEntry[] };
   /** ROADMAP_NEXT item 6 (fire spreading): sparse, normal assets only. `chancePercent` is rolled
    *  ONCE per (fire instance, this object) pair, `delaySeconds` after the fire's own spawn time,
    *  provided this object is within `tuning.fire.spreadRadius` of it — see game/accidents.ts's

@@ -66,11 +66,18 @@
 <script>
 // ------------------------------------------------------------------ state
 const API = '/api/data/';
+const FEATURE_CATEGORY_CARDS = Object.freeze({
+  electronics: ['Light', 'Sound', 'Power (Hydro)', 'State visuals'],
+  comfort: ['Sit / lie / use pose', 'Seat locations (multiple)', 'Need multipliers'],
+  plumbing: ['Accidents', 'Cleanup'],
+  garbage: ['Garbage'],
+  kitchen: ['Food', 'Combustibility'],
+});
 const state = {
   assets: null, interactions: null, map: null, stats: null, tuning: null,
   selected: null, dirty: false,
   // Preview-only state: never written to assets.json. Character starts hidden on every load.
-  showCharacter: false, previewPose: null, previewOn: false,
+  showCharacter: false, previewPose: null, previewOn: false, previewSeatLocation: null,
 };
 const previewGridSize = () => {
   const size = Number(state.map?.gridSize);
@@ -227,6 +234,41 @@ function checkInput(get, set, path) {
   i.dataset.path = path;
   i.addEventListener('change', () => { set(i.checked); markDirty(); });
   return i;
+}
+function renderFeatureCategoriesCard(a) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.dataset.card = 'feature-categories';
+  card.innerHTML = '<h2>Feature categories</h2><div class="hint">Choose the setting groups relevant to this asset. These are editor-only and distinct from the in-game category above. With none selected, every setting card remains visible.</div>';
+  const checks = document.createElement('div');
+  checks.className = 'checks';
+  const selected = new Set(Array.isArray(a.featureCategories) ? a.featureCategories : []);
+  for (const category of Object.keys(FEATURE_CATEGORY_CARDS)) {
+    const label = document.createElement('label');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.dataset.path = `featureCategories:${category}`;
+    checkbox.checked = selected.has(category);
+    checkbox.addEventListener('change', () => {
+      const next = new Set(Array.isArray(a.featureCategories) ? a.featureCategories : []);
+      if (checkbox.checked) next.add(category); else next.delete(category);
+      const ordered = Object.keys(FEATURE_CATEGORY_CARDS).filter((name) => next.has(name));
+      if (ordered.length) a.featureCategories = ordered; else delete a.featureCategories;
+      markDirty();
+      renderAll();
+    });
+    label.append(checkbox, document.createTextNode(category));
+    checks.appendChild(label);
+  }
+  card.appendChild(checks);
+  return card;
+}
+function appendFeatureCard(root, card, a, category, authoredKeys) {
+  card.dataset.featureCategory = category;
+  const selected = Array.isArray(a.featureCategories) ? a.featureCategories : [];
+  const showAll = selected.length === 0;
+  const hasAuthoredData = authoredKeys.some((key) => Object.prototype.hasOwnProperty.call(a, key));
+  if (showAll || selected.includes(category) || hasAuthoredData) root.appendChild(card);
 }
 function selectInput(options, get, set, path) {
   const sel = document.createElement('select');
@@ -450,7 +492,7 @@ function accidentAssetOptions() {
 function renderAccidentsCard(a) {
   const card = document.createElement('div');
   card.className = 'card';
-  card.innerHTML = '<h2>Accidents</h2><div class="hint">What can go wrong while this asset is used, and how likely — accidentId options are transient-category assets only.</div>';
+  card.innerHTML = '<h2>Accidents</h2><div class="hint">What can go wrong while this asset is used, and how likely — accidentId options are transient-category assets only. A plumbing leak is an onUse accident spawning water_puddle.</div>';
   const accOpts = accidentAssetOptions();
   const risks = a.accidents ?? [];
 
@@ -604,6 +646,7 @@ function renderEditor() {
   questGateCb.addEventListener('change', () => { if (questGateCb.checked) a.requiresQuestUnlock = true; else delete a.requiresQuestUnlock; markDirty(); });
   card1.appendChild(frow('requires quest unlock (only purchasable once a quest unlocks it)', questGateCb));
   root.appendChild(card1);
+  root.appendChild(renderFeatureCategoriesCard(a));
 
   // --- Buy/Sell catalog icon (§7.6): image path under public/ + thumbnail preview. Absent → the
   // in-game catalog falls back to a category-colored initials tile (game/buymode.ts's
@@ -698,7 +741,109 @@ function renderEditor() {
     )));
     cardPose.appendChild(box);
   }
-  root.appendChild(cardPose);
+  appendFeatureCard(root, cardPose, a, 'comfort', ['usePose']);
+
+  // --- New.txt #5: multiple sit/lie locations on one asset (couch cushions, a two-person bed's
+  // sides). Sparse: absent/empty useLocations keeps today's single-usePose behaviour exactly (see
+  // game/facing.ts's seatLocationEntries). Unlike usePose above, an array ENTRY is never auto-
+  // pruned back to {} just because its fields are blank/zero — a location at the footprint center
+  // (offset [0,0]) is a valid, distinct seat — only the explicit Remove button deletes an entry.
+  const cardSeatLoc = document.createElement('div');
+  cardSeatLoc.className = 'card';
+  cardSeatLoc.innerHTML = '<h2>Seat locations (multiple)</h2><div class="hint">Author more than one sit/lie spot on this single asset (couch cushions, a two-person bed\'s sides). Each character takes the closest AVAILABLE location; a location in use is unavailable to others. Leave this empty to use the single pose above. Same fields/meaning as the card above: offset is model-local meters from the footprint center (<strong>+z = toward the asset\'s facing</strong>); facing° is model-local (world = instance rot° + this).</div>';
+  const ensureLocList = (pose) => ((a.useLocations ??= {}), (a.useLocations[pose] ??= []));
+  const pruneLocations = () => {
+    if (!a.useLocations) return;
+    if (a.useLocations.sit && !a.useLocations.sit.length) delete a.useLocations.sit;
+    if (a.useLocations.lie && !a.useLocations.lie.length) delete a.useLocations.lie;
+    if (!a.useLocations.sit && !a.useLocations.lie) delete a.useLocations;
+  };
+  for (const pose of ['sit', 'lie']) {
+    const poseWrap = document.createElement('div');
+    poseWrap.insertAdjacentHTML('beforeend', `<div class="hint" style="margin:10px 0 4px;text-transform:uppercase;letter-spacing:.06em;">${pose} locations</div>`);
+    const locs = a.useLocations?.[pose] ?? [];
+    locs.forEach((entry, index) => {
+      const box = document.createElement('div');
+      box.className = 'card';
+      box.style.background = '#141c2e';
+      box.style.margin = '6px 0 0';
+      box.dataset.seatLocRow = `${pose}.${index}`;
+      box.insertAdjacentHTML('afterbegin', `<div class="hint" style="margin:0 0 6px;text-transform:uppercase;letter-spacing:.06em;">${pose} #${index}</div>`);
+      const offPair = document.createElement('div');
+      offPair.className = 'pair';
+      const offAt = (i) => a.useLocations?.[pose]?.[index]?.offset?.[i];
+      const setOff = (i) => (v) => {
+        const loc = a.useLocations[pose][index];
+        const cur = Array.isArray(loc.offset) ? [...loc.offset] : [0, 0];
+        cur[i] = v ?? 0;
+        loc.offset = cur;
+      };
+      offPair.append(
+        numInput(() => offAt(0), setOff(0), `useLocations.${pose}.${index}.offsetX`),
+        numInput(() => offAt(1), setOff(1), `useLocations.${pose}.${index}.offsetZ`),
+      );
+      box.appendChild(frow('offset x / z (model-local meters, blank = footprint center)', offPair));
+      box.appendChild(frow(pose === 'sit' ? 'height y (meters, blank = tuning sitHeight)' : 'height y (meters, blank = tuning lieHeight)', numInput(
+        () => a.useLocations?.[pose]?.[index]?.y,
+        (v) => { const loc = a.useLocations[pose][index]; if (v === undefined) delete loc.y; else loc.y = v; },
+        `useLocations.${pose}.${index}.y`,
+      )));
+      box.appendChild(frow('facing ° (blank = this asset\'s own facing°)', numInput(
+        () => a.useLocations?.[pose]?.[index]?.facingDeg,
+        (v) => { const loc = a.useLocations[pose][index]; if (v === undefined) delete loc.facingDeg; else loc.facingDeg = v; },
+        `useLocations.${pose}.${index}.facingDeg`,
+      )));
+      const rm = document.createElement('button');
+      rm.className = 'danger mini';
+      rm.textContent = 'Remove';
+      rm.dataset.action = 'remove-seat-loc';
+      rm.dataset.pose = pose;
+      rm.dataset.index = String(index);
+      rm.addEventListener('click', () => {
+        a.useLocations[pose].splice(index, 1);
+        pruneLocations();
+        markDirty(); renderAll();
+      });
+      box.appendChild(rm);
+      poseWrap.appendChild(box);
+    });
+    const addLoc = document.createElement('button');
+    addLoc.textContent = `+ Add ${pose} location`;
+    addLoc.dataset.action = 'add-seat-loc';
+    addLoc.dataset.pose = pose;
+    addLoc.addEventListener('click', () => {
+      ensureLocList(pose).push({});
+      markDirty(); renderAll();
+    });
+    poseWrap.appendChild(addLoc);
+    cardSeatLoc.appendChild(poseWrap);
+  }
+  // --- view-only: pick which authored location the character preview (module script below) poses
+  // at. Never written to assets.json (same convention as showCharacter/previewPose above).
+  const seatPreviewSel = document.createElement('select');
+  seatPreviewSel.dataset.path = 'preview.seatLocation';
+  const seatPreviewNone = document.createElement('option');
+  seatPreviewNone.value = ''; seatPreviewNone.textContent = '(use single pose above)';
+  seatPreviewSel.appendChild(seatPreviewNone);
+  for (const pose of ['sit', 'lie']) {
+    (a.useLocations?.[pose] ?? []).forEach((_, index) => {
+      const opt = document.createElement('option');
+      opt.value = `${pose}:${index}`;
+      opt.textContent = `${pose} #${index}`;
+      seatPreviewSel.appendChild(opt);
+    });
+  }
+  const currentSeatPreview = state.previewSeatLocation;
+  seatPreviewSel.value = currentSeatPreview ? `${currentSeatPreview.pose}:${currentSeatPreview.index}` : '';
+  seatPreviewSel.addEventListener('change', () => {
+    if (!seatPreviewSel.value) { state.previewSeatLocation = null; } else {
+      const [pose, idxStr] = seatPreviewSel.value.split(':');
+      state.previewSeatLocation = { pose, index: Number(idxStr) };
+    }
+    schedulePreview();
+  });
+  cardSeatLoc.appendChild(frow('Preview location', seatPreviewSel));
+  appendFeatureCard(root, cardSeatLoc, a, 'comfort', ['useLocations']);
 
   // --- interactions
   const card3 = document.createElement('div');
@@ -753,7 +898,7 @@ function renderEditor() {
     }
     if (!a.interactions.length) clearedChecks.innerHTML = '<span class="hint">Add an interaction above first (e.g. "extinguish", "mop") — clearedBy can only reference this asset\'s own actions.</span>';
     cardCleared.appendChild(clearedChecks);
-    root.appendChild(cardCleared);
+    appendFeatureCard(root, cardCleared, a, 'plumbing', ['clearedBy']);
 
     // B4-2: only transient assets can be carried food. Sparse as usual: clearing both fields
     // removes the whole block, so ordinary fire/puddle/ash fixtures stay unchanged.
@@ -771,9 +916,9 @@ function renderEditor() {
       (v) => { if (v === undefined) { if (a.food) delete a.food.perishHours; } else (a.food ??= {}).perishHours = Math.max(0, v); pruneFood(); },
       'food.perishHours',
     )));
-    root.appendChild(cardFood);
+    appendFeatureCard(root, cardFood, a, 'kitchen', ['food']);
   } else {
-    root.appendChild(renderAccidentsCard(a));
+    appendFeatureCard(root, renderAccidentsCard(a), a, 'plumbing', ['accidents']);
 
     // --- combustibility (ROADMAP_NEXT item 6): sparse, same ensure/prune convention as
     // usePose/meshFit above — leave both fields blank to mean "never catches fire".
@@ -791,7 +936,7 @@ function renderEditor() {
       (v) => { if (v === undefined) { if (a.combustibility) delete a.combustibility.delaySeconds; } else (a.combustibility ??= {}).delaySeconds = v; pruneCombust(); },
       'combustibility.delaySeconds',
     )));
-    root.appendChild(cardCombust);
+    appendFeatureCard(root, cardCombust, a, 'kitchen', ['combustibility']);
 
     // --- garbage (ROADMAP_NEXT item 10): sparse, same ensure/prune convention as Combustibility
     // above — a real can (e.g. "garbage_can") sets a capacity; every other asset leaves it blank.
@@ -803,7 +948,7 @@ function renderEditor() {
       (v) => { if (v === undefined) delete a.garbage; else a.garbage = { capacity: v }; },
       'garbage.capacity',
     )));
-    root.appendChild(cardGarbage);
+    appendFeatureCard(root, cardGarbage, a, 'garbage', ['garbage']);
   }
 
   // --- sound: stateful B6-12 assets loop while ON; legacy assets retain action-target lifetime.
@@ -813,7 +958,7 @@ function renderEditor() {
   const soundInput = textInput(() => a.sound, (v) => { const t = normPublicPath(v); if (t) a.sound = t; else delete a.sound; }, 'sound');
   soundInput.placeholder = '/sounds/tv_hum.wav';
   cardSound.appendChild(frow('loop sound path', soundInput));
-  root.appendChild(cardSound);
+  appendFeatureCard(root, cardSound, a, 'electronics', ['sound']);
 
   // --- B6-12 light: block presence emits a PointLight; every setting is sparse.
   const cardLight = document.createElement('div');
@@ -847,7 +992,7 @@ function renderEditor() {
     (v) => { if (v) ensureLight().defaultOn = true; else if (a.light) delete a.light.defaultOn; },
     'light.defaultOn',
   )));
-  root.appendChild(cardLight);
+  appendFeatureCard(root, cardLight, a, 'electronics', ['light']);
 
   // --- Power (2026-07-17 hydro): sparse per-hour draw charged onto the Hydro bill while the
   // instance is ON (its Turn On/Off / light state, above). Absent = draws no metered power.
@@ -859,7 +1004,7 @@ function renderEditor() {
     (v) => { if (v === undefined || !(v > 0)) delete a.power; else (a.power ??= {}).ratePerHour = v; },
     'power.ratePerHour',
   )));
-  root.appendChild(cardPower);
+  appendFeatureCard(root, cardPower, a, 'electronics', ['power']);
 
   // --- State visuals (2026-07-19, game/stateviz.ts): screen overlay + per-state mesh variants,
   // both keyed off the SAME Turn On/Off instance state as light/sound/power above. Sparse: the
@@ -941,7 +1086,7 @@ function renderEditor() {
   const previewOnLabel = document.createElement('label');
   previewOnLabel.append(previewOn, document.createTextNode(' preview the ON state (overlay + ON mesh) in the 3D preview above'));
   cardState.appendChild(frow('Preview power state', previewOnLabel));
-  root.appendChild(cardState);
+  appendFeatureCard(root, cardState, a, 'electronics', ['screenOverlay', 'stateMeshes']);
 
   // --- B6-13 wall mount: an empty block is meaningful (enabled, default height 1.5m).
   const cardWall = document.createElement('div');
@@ -1094,7 +1239,7 @@ function renderEditor() {
     markDirty(); renderAll();
   });
   card4c.appendChild(addMult);
-  root.appendChild(card4c);
+  appendFeatureCard(root, card4c, a, 'comfort', ['needMultipliers']);
 
   // --- sprite (§7.5: only rendered when the mesh path is an image — png/jpg/webp/gif — rather
   // than a GLB; sparse writes, same ensure/prune pattern as meshFit above).
@@ -1274,7 +1419,7 @@ load();
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { AnimController } from '/game/anim.ts';
-import { usePoseFor, useSpotFor } from '/game/facing.ts';
+import { usePoseFor, usePoseForEntry, useSpotFor } from '/game/facing.ts';
 import { classifyMeshPath, createSpriteInstance, createOverlayInstance } from '/game/sprites.ts';
 import { normalizeModelToFootprint, applyMeshFit, loadMeshTemplate, loadRiggedCharacter, applyOverlayTransform } from '/game/world.ts';
 import { resolvePaneConfig } from '/game/doors.ts';
@@ -1388,7 +1533,14 @@ function updateCharacter(seq, assetDef) {
     if (seq !== previewSeq) return;
     const instance = { pos: [0, 0], rotDeg: 0 };
     const source = editor.previewPoseSource(pose, assetDef);
-    const poseTransform = usePoseFor(pose, instance, assetDef, editor.state.tuning);
+    // New.txt #5: an authored multi-location pick (Seat locations card) overrides the single
+    // usePose[pose] transform, but only while it's valid for THIS asset/pose (switching assets or
+    // poses without a matching entry silently falls back to the normal single-pose preview).
+    const seatLoc = editor.state.previewSeatLocation;
+    const seatEntry = seatLoc && seatLoc.pose === pose ? assetDef?.useLocations?.[seatLoc.pose]?.[seatLoc.index] : undefined;
+    const poseTransform = seatEntry !== undefined
+      ? usePoseForEntry(pose, seatEntry, instance, assetDef, editor.state.tuning)
+      : usePoseFor(pose, instance, assetDef, editor.state.tuning);
     const transform = pose === 'use' && source === 'computed default'
       ? { ...poseTransform, pos: useSpotFor(instance, assetDef, editor.state.tuning) }
       : poseTransform;

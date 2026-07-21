@@ -122,6 +122,63 @@ assert(items.length === 5, `sidebar shows 5 assets (${items.length})`);
 assert(doc.querySelector('[data-asset-id="couch"] .badge')?.textContent === '×2 placed', 'couch shows ×2 placed badge');
 assert(doc.querySelector('[data-asset-id="tv"] .badge') === null, 'tv has no badge');
 
+// --- New.txt #4: editor-only feature categories declutter cards without touching asset data.
+const renderedCardTitles = () => [...doc.querySelectorAll('#editor > .card > h2')].map((heading) => heading.textContent);
+const allDefaultFeatureCards = [
+  'Light', 'Sound', 'Power (Hydro)', 'State visuals', 'Sit / lie / use pose',
+  'Need multipliers', 'Accidents', 'Garbage', 'Combustibility',
+];
+assert(allDefaultFeatureCards.every((title) => renderedCardTitles().includes(title)), 'absent featureCategories renders every applicable feature card (legacy behaviour)');
+const topCardTitles = renderedCardTitles();
+assert(topCardTitles.indexOf('Feature categories') === topCardTitles.indexOf('Asset') + 1, 'Feature categories control renders immediately after the Asset card');
+assert(doc.querySelectorAll('[data-card="feature-categories"] input[type="checkbox"]').length === 5, 'Feature categories control renders the five fixed categories');
+
+const couchBeforeFeatureToggle = JSON.stringify(window.AssetEditor.state.assets.assets.find((asset) => asset.id === 'couch'));
+let electronicsFeature = doc.querySelector('input[data-path="featureCategories:electronics"]');
+electronicsFeature.checked = true;
+electronicsFeature.dispatchEvent(new window.Event('change', { bubbles: true }));
+const couchWithElectronics = window.AssetEditor.state.assets.assets.find((asset) => asset.id === 'couch');
+assert(JSON.stringify(couchWithElectronics.featureCategories) === '["electronics"]', 'checking electronics writes the sparse featureCategories array');
+const couchIgnoringFeatureCategories = structuredClone(couchWithElectronics);
+delete couchIgnoringFeatureCategories.featureCategories;
+assert(JSON.stringify(couchIgnoringFeatureCategories) === couchBeforeFeatureToggle, 'checking a feature category mutates no other asset data');
+assert(['Light', 'Sound', 'Power (Hydro)', 'State visuals'].every((title) => renderedCardTitles().includes(title)), 'electronics shows Light, Sound, Power, and State visuals');
+assert(!renderedCardTitles().includes('Garbage'), 'electronics hides an unconfigured Garbage card');
+
+electronicsFeature = doc.querySelector('input[data-path="featureCategories:electronics"]');
+electronicsFeature.checked = false;
+electronicsFeature.dispatchEvent(new window.Event('change', { bubbles: true }));
+const couchAfterFeaturePrune = window.AssetEditor.state.assets.assets.find((asset) => asset.id === 'couch');
+assert(!('featureCategories' in couchAfterFeaturePrune), 'unchecking the last category prunes the empty featureCategories array');
+assert(JSON.stringify(couchAfterFeaturePrune) === couchBeforeFeatureToggle, 'unchecking a feature category mutates no other asset data');
+
+const garbageCapacityForVisibility = doc.querySelector('input[data-path="garbage.capacity"]');
+garbageCapacityForVisibility.value = '9';
+garbageCapacityForVisibility.dispatchEvent(new window.Event('input', { bubbles: true }));
+const couchWithAuthoredGarbage = JSON.stringify(window.AssetEditor.state.assets.assets.find((asset) => asset.id === 'couch'));
+electronicsFeature = doc.querySelector('input[data-path="featureCategories:electronics"]');
+electronicsFeature.checked = true;
+electronicsFeature.dispatchEvent(new window.Event('change', { bubbles: true }));
+assert(!doc.querySelector('input[data-path="featureCategories:garbage"]').checked, 'garbage category remains unchecked');
+assert(renderedCardTitles().includes('Garbage'), 'a configured card stays visible while its feature category is unchecked');
+const authoredCouchIgnoringFeatures = structuredClone(window.AssetEditor.state.assets.assets.find((asset) => asset.id === 'couch'));
+delete authoredCouchIgnoringFeatures.featureCategories;
+assert(JSON.stringify(authoredCouchIgnoringFeatures) === couchWithAuthoredGarbage, 'category filtering never mutates authored card data');
+
+doc.getElementById('save').click();
+await new Promise((r) => setTimeout(r, 50));
+const featurePayload = JSON.parse(rawPuts['assets.json']);
+assert(JSON.stringify(featurePayload.assets.find((asset) => asset.id === 'couch').featureCategories) === '["electronics"]', 'exact whole-file PUT payload carries featureCategories');
+assert(rawPuts['assets.json'] === JSON.stringify(window.AssetEditor.state.assets, null, 2), 'feature-category save sends the exact whole assets.json body');
+
+electronicsFeature = doc.querySelector('input[data-path="featureCategories:electronics"]');
+electronicsFeature.checked = false;
+electronicsFeature.dispatchEvent(new window.Event('change', { bubbles: true }));
+const cleanupGarbageCapacity = doc.querySelector('input[data-path="garbage.capacity"]');
+cleanupGarbageCapacity.value = '';
+cleanupGarbageCapacity.dispatchEvent(new window.Event('input', { bubbles: true }));
+assert(JSON.stringify(window.AssetEditor.state.assets.assets.find((asset) => asset.id === 'couch')) === couchBeforeFeatureToggle, 'feature-category test cleanup restores the couch fixture exactly');
+
 // --- categories card: counts, unique add, reference-following rename, guarded delete, stale option
 const categoryRows = [...doc.querySelectorAll('[data-category-row]')];
 assert(categoryRows.length === assets.categories.length, 'categories card renders every category row');
@@ -325,6 +382,101 @@ sitFacing.dispatchEvent(new window.Event('input', { bubbles: true }));
 // here on the couch — should stay absent through save (verified below).
 assert(doc.querySelector('input[data-path="usePose.use.offsetX"]'), 'usePose.use offset fields rendered too (three pose cards: sit/lie/use)');
 assert(doc.querySelector('input[data-path="usePose.use.y"]').value === '', 'usePose.use.y blank when absent');
+
+// --- New.txt #5: multiple sit/lie seat locations (couch cushions, a two-person bed's sides).
+// Renders under the same 'comfort' feature category as the single usePose card above.
+assert(renderedCardTitles().includes('Seat locations (multiple)'), 'Seat locations card renders under comfort');
+assert(!doc.querySelector('[data-seat-loc-row]'), 'no seat location rows on a fresh asset');
+assert(doc.querySelector('select[data-path="preview.seatLocation"]')?.value === '', 'preview location select defaults to "(use single pose above)"');
+
+let addSitBtn = [...doc.querySelectorAll('button')].find((b) => b.textContent === '+ Add sit location');
+assert(addSitBtn, '"+ Add sit location" button present');
+addSitBtn.click();
+assert(doc.querySelectorAll('[data-seat-loc-row="sit.0"]').length === 1, 'add sit location creates a sit #0 row');
+assert(window.AssetEditor.state.assets.assets[0].useLocations.sit.length === 1, 'useLocations.sit created with one entry');
+assert(!('lie' in window.AssetEditor.state.assets.assets[0].useLocations), 'useLocations.lie not created by adding a sit location');
+
+let sitLocOffX = doc.querySelector('input[data-path="useLocations.sit.0.offsetX"]');
+assert(sitLocOffX && sitLocOffX.value === '', 'fresh seat location offsetX blank');
+sitLocOffX.value = '0.4';
+sitLocOffX.dispatchEvent(new window.Event('input', { bubbles: true }));
+assert(
+  window.AssetEditor.state.assets.assets[0].useLocations.sit[0].offset[0] === 0.4 &&
+  window.AssetEditor.state.assets.assets[0].useLocations.sit[0].offset[1] === 0,
+  'editing seat location offsetX writes through; offsetZ defaults to 0',
+);
+
+// y / facingDeg round-trip, then blank PRUNES only that key — never the whole array entry
+let sitLocY = doc.querySelector('input[data-path="useLocations.sit.0.y"]');
+sitLocY.value = '0.3';
+sitLocY.dispatchEvent(new window.Event('input', { bubbles: true }));
+assert(window.AssetEditor.state.assets.assets[0].useLocations.sit[0].y === 0.3, 'seat location y writes through');
+sitLocY = doc.querySelector('input[data-path="useLocations.sit.0.y"]');
+sitLocY.value = '';
+sitLocY.dispatchEvent(new window.Event('input', { bubbles: true }));
+assert(!('y' in window.AssetEditor.state.assets.assets[0].useLocations.sit[0]), 'blanking seat location y prunes only that key');
+assert(window.AssetEditor.state.assets.assets[0].useLocations.sit.length === 1, 'blanking y does not remove the entry itself');
+
+let sitLocFacing = doc.querySelector('input[data-path="useLocations.sit.0.facingDeg"]');
+sitLocFacing.value = '90';
+sitLocFacing.dispatchEvent(new window.Event('input', { bubbles: true }));
+assert(window.AssetEditor.state.assets.assets[0].useLocations.sit[0].facingDeg === 90, 'seat location facingDeg writes through');
+sitLocFacing = doc.querySelector('input[data-path="useLocations.sit.0.facingDeg"]');
+sitLocFacing.value = '';
+sitLocFacing.dispatchEvent(new window.Event('input', { bubbles: true }));
+assert(!('facingDeg' in window.AssetEditor.state.assets.assets[0].useLocations.sit[0]), 'blanking seat location facingDeg prunes only that key');
+
+// second sit location + a lie location coexist
+addSitBtn = [...doc.querySelectorAll('button')].find((b) => b.textContent === '+ Add sit location');
+addSitBtn.click();
+assert(doc.querySelectorAll('[data-seat-loc-row^="sit."]').length === 2, 'a second sit location can be added');
+assert(window.AssetEditor.state.assets.assets[0].useLocations.sit.length === 2, 'useLocations.sit now has two entries');
+const addLieBtn = [...doc.querySelectorAll('button')].find((b) => b.textContent === '+ Add lie location');
+assert(addLieBtn, '"+ Add lie location" button present');
+addLieBtn.click();
+assert(doc.querySelectorAll('[data-seat-loc-row^="lie."]').length === 1, 'a lie location can be added alongside sit locations');
+assert(window.AssetEditor.state.assets.assets[0].useLocations.lie.length === 1, 'useLocations.lie created with one entry');
+
+// preview location select offers one option per authored location, in pose/index order
+const seatPreviewOptionValues = [...doc.querySelector('select[data-path="preview.seatLocation"]').options].map((o) => o.value);
+assert(
+  JSON.stringify(seatPreviewOptionValues) === JSON.stringify(['', 'sit:0', 'sit:1', 'lie:0']),
+  `preview location select lists sit #0, sit #1, lie #0 (${seatPreviewOptionValues})`,
+);
+const seatPreviewSelect = doc.querySelector('select[data-path="preview.seatLocation"]');
+seatPreviewSelect.value = 'lie:0';
+seatPreviewSelect.dispatchEvent(new window.Event('change', { bubbles: true }));
+assert(
+  JSON.stringify(window.AssetEditor.state.previewSeatLocation) === JSON.stringify({ pose: 'lie', index: 0 }),
+  'selecting a preview location stores { pose, index } on state.previewSeatLocation',
+);
+doc.querySelector('select[data-path="preview.seatLocation"]').value = '';
+doc.querySelector('select[data-path="preview.seatLocation"]').dispatchEvent(new window.Event('change', { bubbles: true }));
+assert(window.AssetEditor.state.previewSeatLocation === null, 'selecting the blank option clears state.previewSeatLocation');
+
+// removing the LAST sit location deletes useLocations.sit but leaves useLocations.lie intact
+doc.querySelector('button[data-action="remove-seat-loc"][data-pose="sit"][data-index="1"]').click();
+assert(window.AssetEditor.state.assets.assets[0].useLocations.sit.length === 1, 'removing one of two sit rows leaves the other');
+doc.querySelector('button[data-action="remove-seat-loc"][data-pose="sit"][data-index="0"]').click();
+assert(!('sit' in window.AssetEditor.state.assets.assets[0].useLocations), 'removing the last sit row deletes useLocations.sit');
+assert('lie' in window.AssetEditor.state.assets.assets[0].useLocations, 'useLocations.lie survives sit being fully removed');
+
+// removing the last remaining location (lie) deletes useLocations entirely
+doc.querySelector('button[data-action="remove-seat-loc"][data-pose="lie"][data-index="0"]').click();
+assert(!('useLocations' in window.AssetEditor.state.assets.assets[0]), 'removing the last remaining location deletes useLocations entirely');
+
+// rebuild a final authored state so the exact whole-file PUT can be verified below
+[...doc.querySelectorAll('button')].find((b) => b.textContent === '+ Add sit location').click();
+let sitFinalOffX = doc.querySelector('input[data-path="useLocations.sit.0.offsetX"]');
+sitFinalOffX.value = '0.35';
+sitFinalOffX.dispatchEvent(new window.Event('input', { bubbles: true }));
+const sitFinalOffZ = doc.querySelector('input[data-path="useLocations.sit.0.offsetZ"]');
+sitFinalOffZ.value = '-0.2';
+sitFinalOffZ.dispatchEvent(new window.Event('input', { bubbles: true }));
+[...doc.querySelectorAll('button')].find((b) => b.textContent === '+ Add lie location').click();
+const lieFinalY = doc.querySelector('input[data-path="useLocations.lie.0.y"]');
+lieFinalY.value = '0.6';
+lieFinalY.dispatchEvent(new window.Event('input', { bubbles: true }));
 
 // --- meshFit: sparse uniform scale, yawOffsetDeg, yOffset
 const scaleInput = doc.querySelector('input[data-path="meshFit.scale"]');
@@ -609,6 +761,15 @@ assert(savedCouch.usePose.sit.y === 0.42, 'PUT carries usePose.sit.y');
 assert(savedCouch.usePose.sit.facingDeg === 180, 'PUT carries usePose.sit.facingDeg');
 assert(!('lie' in savedCouch.usePose), 'untouched usePose.lie stays absent (sparse, per-pose)');
 assert(!('use' in savedCouch.usePose), 'untouched usePose.use stays absent (sparse, per-pose, B2-3)');
+assert(
+  savedCouch.useLocations.sit.length === 1 &&
+  savedCouch.useLocations.sit[0].offset[0] === 0.35 && savedCouch.useLocations.sit[0].offset[1] === -0.2,
+  'PUT carries the authored useLocations.sit entry (New.txt #5)',
+);
+assert(
+  savedCouch.useLocations.lie.length === 1 && savedCouch.useLocations.lie[0].y === 0.6,
+  'PUT carries the authored useLocations.lie entry',
+);
 const savedStoveUsePose = saved.assets.find((a) => a.id === 'stove');
 assert(savedStoveUsePose.usePose.use.offset[0] === 0 && savedStoveUsePose.usePose.use.offset[1] === 0, 'PUT carries usePose.use.offset (B2-3)');
 assert(savedStoveUsePose.usePose.use.y === 0.05, 'PUT carries usePose.use.y (B2-3)');
@@ -631,6 +792,7 @@ assert(!('facingDeg' in savedLamp), 'new asset has no facingDeg key (defaults 0)
 assert(!('meshFit' in savedLamp), 'new asset has no meshFit key (nothing set)');
 assert(!('needMultipliers' in savedLamp), 'new asset has no needMultipliers key (empty map pruned)');
 assert(!('usePose' in savedLamp), 'new asset has no usePose key (nothing set)');
+assert(!('useLocations' in savedLamp), 'new asset has no useLocations key (nothing set, New.txt #5)');
 assert(!('requiresQuestUnlock' in savedLamp), 'new asset has no requiresQuestUnlock key (defaults unlocked)');
 assert(!('icon' in savedLamp), 'new asset has no icon key (falls back to initials tile)');
 assert(!('sound' in savedLamp), 'new asset has no sound key (no loop by default)');

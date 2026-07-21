@@ -223,6 +223,9 @@ export interface NpcVisitorControllerOptions {
   }) => ExteriorDoorTransitHandle | null;
   onCallFallback?: (npc: NpcDef, outcome: PhoneGainResult) => void;
   feedback?: (message: string) => void;
+  /** New.txt #5: install shared seat/lie occupancy hooks on this visitor's agent, keyed by npc id,
+   *  so NPCs and the player never take the same authored location. */
+  wireSeatOccupancy?: (agent: SimAgent, npcId: string) => void;
 }
 
 interface LiveVisitor {
@@ -430,6 +433,7 @@ export class NpcVisitorController {
     root.position.set(routeIn ? points.outside[0] : points.inside[0], 0, routeIn ? points.outside[1] : points.inside[1]);
     const agent = new SimAgent(root, this.options.getGrid(), data.tuning, assetMap(data));
     agent.hasRig = true;
+    this.options.wireSeatOccupancy?.(agent, npc.id); // New.txt #5: NPC shares the occupancy registry
     // Validate the same route before making the rig visible/state entering. Movement itself is
     // restarted only by the exterior-transit pass seam after the pane is fully open.
     if (routeIn && !agent.goTo(points.inside[0], points.inside[1])) {
