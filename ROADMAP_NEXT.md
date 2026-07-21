@@ -434,3 +434,11 @@ Promotions gated on designer-set skill requirements per level + happiness, with 
 
 ## AUDIT_TOOLS second pass — ✅ DONE 2026-07-19 (quick wins)
 UX 40 (tuning string arrays edit as comma lists), 44 (Behavior action dropdown offers phone_text/call/invite), 45 (Finance happiness picker gains personality/time/quests namespaces), 46 (Animation Mapper lists the code-driven `select` state); NO-TOOL 59 (Social Editor per-NPC "Visitor actions" field). REMAINING (bigger surfaces, need designer priorities): OVERLAP 29-36 (shared condition-builder consolidation, NpcDef type unification, bills duplication), UX 47-50 (rename ids, computed needs, category CRUD, finance bill CRUD), NO-TOOL 54-58/60-61 (save/title/notifications editors, computed needs, category list).
+
+## New.txt batch (2026-07-20)
+1. **DONE** — radial action menu: adaptive-width buttons no longer overlap. `minRadialRadius` solves the smallest non-overlapping ring in closed form (all pairs, not just neighbours — opposite bubbles collide first), the ring grows past the authored radius when needed, and when even the largest ring cannot hold them the menu falls back to the list layout, which now keeps the adaptive width so long names still fit. test/contextmenu.test.ts 519 assertions.
+2. **DONE** (Sonnet) — Social Editor target assets: explicit add/remove rows replace the "-- remove --" dropdown trick; legacy `targetAsset` migrates into `targetAssets` on first edit; duplicates blocked; unknown ids preserved.
+3. **RUNTIME DONE** — generalized asset states (PROJECT_CONTEXT §7.55). Tool UI (Asset Editor states card + Interaction Editor `setsState`) in progress.
+4. TODO — designer-facing asset categories that show/hide feature sections in the Asset Editor (+ plumbing leak risk).
+5. TODO — exact use location box w/ facing vector + multiple sit/lie locations with per-location occupancy.
+6. **PLAN ONLY, delivered** — event manager: see ROADMAP_EVENTS.md (verdict: worth building as a thin dispatcher over existing subsystems; 5-phase build order; risk table; 4 open questions).

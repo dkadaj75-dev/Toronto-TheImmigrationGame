@@ -829,3 +829,34 @@ Ledger from AUDIT_TOOLS.md is now fully triaged (0 open). Shipped in this batch:
 - **Asset Editor** (Codex): Categories card — per-row asset counts, add, reference-following rename (every asset carrying the old category is updated; blank/duplicate ids rejected), delete guarded by a usage-count confirm, unknown/stale categories preserved as an option so an asset is never silently reassigned, RefScan warning for leftovers elsewhere.
 - **Social Editor**: per-NPC `visitorActions` checkbox picker (the allow-list game/npc.ts feeds to the autonomy scorer). Only autonomy-eligible actions are offered; an authored id that no longer resolves is kept and flagged (⚠ unknown action / not autonomy-eligible) instead of being dropped. interactions.json joins as read-only reference data (never PUT by this tool).
 - **Three items closed as already-satisfied after verification, not by patching**: Behavior's action dropdown already lists phone_text/call/invite; Finance's happiness var picker already offers personality/time/quest-state (and correctly omits `happiness` itself — it would be a circular input to its own formula); Animations already lists `select`, and no `angry` state exists anywhere in game code (`lie_sleep` reaches the mapper through the action scan).
+
+## 7.55 Generalized asset states (New.txt #3) — as-built (2026-07-20)
+
+The hardcoded ON/OFF pair became the built-in special case of designer-authored states. **Backward
+compatibility is absolute**: an asset with no `states` behaves exactly as before (verified — legacy
+TV still offers turn_on only while off, turn_off only while on, and light/sound/hydro are untouched).
+
+- **Schema**: `AssetDef.states?: AssetStateDef[]` — `{ id, name?, mesh?, interactions?, default?, blocksNav?, footprint? }`; `ActionDef.setsState?: string`. Absent `interactions` on a state offers the asset's whole list; absent `mesh`/`blocksNav`/`footprint` inherit the asset's.
+- **Pure core** (`game/assetstate.ts`): `defaultStateId`, `actionsForState`, `isActionAvailableInState`, `stateAfterAction`, `resolveStateOverrides`, and `planToReachAction` — a breadth-first walk of the transition graph formed by per-state interaction lists + `setsState`. Legacy on/off is modelled as the implicit `on`/`off` pair so ONE code path serves both.
+- **Read-through autonomy** (the headline behaviour): a goal blocked by the current state stays eligible only if a transition sequence reaches it; the GOAL keeps driving scoring while `Autonomy.resolveOrderAction` substitutes the first transition step. A sim wanting to sleep on a closed murphy bed orders `open_bed`, and the next scan finds `sleep` directly available.
+- **Transitions fire on COMPLETION** (side_effect_rule — an interrupted open leaves the bed shut). Legacy `turn_on`/`powersOnTarget` keep firing at action START, so the TV still lights up the moment watching begins.
+- **World/nav**: mesh variants resolve per state id (`meshForStateId`, `setAssetObjectState`); `bakeNavGrid` takes an optional state resolver so per-state `footprint`/`blocksNav` bake correctly (an open murphy bed blocks floor a closed one leaves walkable), and a transition rebakes nav only when some state actually overrides them.
+- **Saves**: `AssetStateSaveState` gains `states` (id map) while still writing the legacy `on` booleans, so new saves load in older builds and pre-generalization saves restore unchanged.
+- Tests: `test/assetstate-generalized.test.ts` (30+ checks incl. multi-step chains, cycles, unreachable goals, both save directions); every pure suite green.
+
+### Also fixed while here (pre-existing failures from designer data drift)
+Two suites hardcoded live data and broke when the designer retuned it — the exact mistake AGENTS.md warns about. Both now derive from the data: `test/nav.test.ts` asserted `gridSize === 0.5` (condo is now 0.25m tiles) and `test/duration.test.ts` asserted intelligence `max === 10` (retuned to 100).
+
+## 7.56 Event manager (New.txt #6, phases E1-E3) — as-built (2026-07-20)
+
+Built to the plan in ROADMAP_EVENTS.md: a **thin dispatcher over existing subsystems**, never a second implementation of them.
+
+- **Pure core** (`game/events.ts`): `resolveEvent` evaluates the optional gate through the SHARED quest evaluator and a once-per-fire `chancePercent` roll, then returns a typed, ORDERED effect list — it performs nothing itself. Plus `reachableEvents`/`eventCycles` (authoring-time cycle detection) and `canFireAtDepth`/`MAX_EVENT_DEPTH` (composition guard). Malformed/unknown data degrades to "did not fire" with a reason, never throws.
+- **Effects** (`EventEffect` union in data.ts): notification, funds, setVar, grantVisa, unlockAsset, needDelta, skillDelta, relationshipDelta, spawnTransient, assetState, sound, fireEvent. Each maps 1:1 onto the system that already implements it — `QuestRunner.applyReward` was made public specifically so events reuse the same economy/var/unlock bookkeeping instead of forking it.
+- **Applier** (main.ts `fireEvent`): the ONE place an event touches the world. Recurses for `fireEvent` under the depth cap (warns and stops instead of hanging), and batches derived recomputes (funds HUD, state sync + environment + conditional nav rebake) once per fire.
+- **Trigger** (E2): sparse `ActionDef.emitsEvent` fires on action COMPLETION (side_effect_rule — a cancelled action fires nothing), before the `setsState` transition so an event can still read the pre-transition state.
+- **Tools** (E3): new `tools/events.html` (nav tab "Events") — event CRUD, effect list with reorder/add/remove, every field a dropdown fed from live data (needs, skills, variables, NPCs, transient-only assets for spawns, asset state ids, notification event ids, visas) so ids are never free-typed; unknown authored ids preserved and labelled; the shared condition builder for the gate; a "Fired by" panel listing the interactions/events that reach it; and a cycle warning. The Interaction Editor gained an "emits event" dropdown fed from events.json.
+- `data/events.json` ships EMPTY, so the game behaves exactly as before until the designer authors an event (verified: boot clean, every pure and editor suite green).
+- Tests: `test/events.test.ts` (core: gating, roll boundaries incl. strictly-below and non-finite rolls, ordering, scope defaulting, degradation, depth cap, cycles) and `test/event-editor.test.mjs` (23 checks incl. rename-follows-references and exact PUT bodies).
+
+Remaining phases from the plan: **E4** (asset-state / quest-reward / accident / social triggers) and **E5** (opt-in migration of hardcoded notification call sites). The four open questions in ROADMAP_EVENTS §6 are still open for the designer.
