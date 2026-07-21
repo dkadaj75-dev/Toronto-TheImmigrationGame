@@ -107,6 +107,8 @@ export interface AssetStateDef {
   blocksNav?: boolean;
   /** Per-state footprint override [w, d] in meters. */
   footprint?: [number, number];
+  /** New.txt #6 E4: fire this event when a placed instance ENTERS this state. Absent = none. */
+  onEnter?: string;
 }
 
 export interface ActionDef {
@@ -399,6 +401,10 @@ export interface AccidentRisk {
   /** grid-cell distance range for "adjacent" placement, e.g. [1,2] = 1–2 squares away. */
   adjacentRange?: [number, number];
   modifiers?: AccidentRiskModifier[];
+  /** New.txt #6 E4: fire this event when an accident instance actually SPAWNS from this risk — the
+   *  recommended pattern for a plumbing leak (an onUse accident that spawns water_puddle AND emits
+   *  a `leak` event driving the notification / needs). Absent = spawn only, no event. */
+  emitsEvent?: string;
 }
 
 /** Designer-defined sim-state variable (PROJECT_CONTEXT.md §3.1). `funds` is a separate built-in
@@ -469,6 +475,12 @@ export interface EventDef {
   conditions?: Condition;
   /** Sparse roll: absent or >= 100 always fires, <= 0 never does. Rolled once per fire. */
   chancePercent?: number;
+  /** New.txt #6 E4: minimum sim-time seconds between fires of THIS event (per game, not per
+   *  instance) — a leak should not re-fire every second. Absent = no throttle. */
+  cooldownSeconds?: number;
+  /** New.txt #6 E4: fire at most once per game (survives save/load via the event-firing registry).
+   *  Absent = may fire repeatedly (subject to cooldown). */
+  onceOnly?: boolean;
   effects: EventEffect[];
 }
 export interface EventsData { events: EventDef[]; }
@@ -481,7 +493,10 @@ export interface RewardUnlockAsset { type: 'unlockAsset'; asset: string; }
  *  existing `setVar visaStatus` reward still works (per §7.20: "KEEPS working but bypasses expiry
  *  bookkeeping") for quick/legacy authoring; this is the one that should be used going forward. */
 export interface RewardGrantVisa { type: 'grantVisa'; statusId: string; }
-export type Reward = RewardFunds | RewardSetVar | RewardUnlockAsset | RewardGrantVisa;
+/** New.txt #6 E4: a quest completion fires an event — the general "quest triggers X" seam without
+ *  bloating the Reward union with one-off effect types (the event owns the effects). */
+export interface RewardEvent { type: 'event'; event: string; }
+export type Reward = RewardFunds | RewardSetVar | RewardUnlockAsset | RewardGrantVisa | RewardEvent;
 
 export interface QuestDef {
   id: string; name: string; description: string;

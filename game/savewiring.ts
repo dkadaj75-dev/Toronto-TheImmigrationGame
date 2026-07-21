@@ -20,6 +20,7 @@ export const SAVE_SYSTEM_IDS = {
   npcVisit: 'npcVisit',
   visitAway: 'visitAway',
   pendingMove: 'pendingMove',
+  eventFiring: 'eventFiring',
   homeMap: 'homeMap',
 } as const;
 
@@ -52,6 +53,7 @@ export interface RuntimeSaveSystems {
   npcVisit: Saveable;
   visitAway: Saveable;
   pendingMove: Saveable;
+  eventFiring: Saveable;
   homeMap: HomeMapAccess;
 }
 
@@ -156,6 +158,7 @@ export function registerRuntimeSaveSystems(registry: SaveRegistry, systems: Runt
     [SAVE_SYSTEM_IDS.npcVisit, systems.npcVisit, true],
     [SAVE_SYSTEM_IDS.visitAway, systems.visitAway, true],
     [SAVE_SYSTEM_IDS.pendingMove, systems.pendingMove, true],
+    [SAVE_SYSTEM_IDS.eventFiring, systems.eventFiring, true], // E4: persist onceOnly/cooldown state
     // The envelope map remains the fallback if this payload is missing/corrupt.
     [SAVE_SYSTEM_IDS.homeMap, homeMap, false],
   ];

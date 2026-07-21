@@ -114,3 +114,52 @@ export function reachableEvents(data: EventsData | undefined, id: string): strin
 export function eventCycles(data: EventsData | undefined, id: string): boolean {
   return reachableEvents(data, id).includes(id);
 }
+
+export interface EventFiringSaveState {
+  /** event id -> sim-time seconds it last fired (drives cooldownSeconds). */
+  lastFired: Record<string, number>;
+  /** event ids that have fired and carry onceOnly (must never fire again). */
+  firedOnce: string[];
+}
+
+/**
+ * New.txt #6 E4 throttle: tracks WHEN each event last fired and which onceOnly events are spent, so
+ * a leak cannot re-fire every second and a one-time event stays spent across save/load. Unlike
+ * occupancy (which is action-derived and correctly transient), this IS persisted — a once-only
+ * event that already fired must stay fired after a reload. Pure/headless; the applier consults
+ * `canFire` before applying and calls `markFired` after.
+ */
+export class EventFiringRegistry {
+  private readonly lastFired = new Map<string, number>();
+  private readonly firedOnce = new Set<string>();
+
+  /** May `def` fire now (sim-time `nowSeconds`)? False if onceOnly-spent or still in cooldown. */
+  canFire(def: Pick<EventDef, 'id' | 'cooldownSeconds' | 'onceOnly'>, nowSeconds: number): boolean {
+    if (def.onceOnly && this.firedOnce.has(def.id)) return false;
+    const cooldown = def.cooldownSeconds;
+    if (typeof cooldown === 'number' && Number.isFinite(cooldown) && cooldown > 0) {
+      const last = this.lastFired.get(def.id);
+      if (last !== undefined && Number.isFinite(nowSeconds) && nowSeconds - last < cooldown) return false;
+    }
+    return true;
+  }
+
+  /** Record a fire. Call ONLY after the event actually fired (resolveEvent.fired && canFire). */
+  markFired(def: Pick<EventDef, 'id' | 'onceOnly'>, nowSeconds: number): void {
+    if (Number.isFinite(nowSeconds)) this.lastFired.set(def.id, nowSeconds);
+    if (def.onceOnly) this.firedOnce.add(def.id);
+  }
+
+  serialize(): EventFiringSaveState {
+    return { lastFired: Object.fromEntries(this.lastFired), firedOnce: [...this.firedOnce] };
+  }
+
+  restore(state: EventFiringSaveState | undefined): void {
+    this.lastFired.clear();
+    this.firedOnce.clear();
+    for (const [id, when] of Object.entries(state?.lastFired ?? {})) {
+      if (typeof when === 'number' && Number.isFinite(when)) this.lastFired.set(id, when);
+    }
+    for (const id of state?.firedOnce ?? []) if (typeof id === 'string') this.firedOnce.add(id);
+  }
+}

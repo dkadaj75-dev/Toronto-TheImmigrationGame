@@ -3,7 +3,7 @@
 // ordering/scope defaulting, never-throw degradation, the composition depth guard, and cycle
 // detection. Run: npx tsx test/events.test.ts
 
-import { MAX_EVENT_DEPTH, canFireAtDepth, eventCycles, findEvent, reachableEvents, resolveEvent } from '../game/events';
+import { EventFiringRegistry, MAX_EVENT_DEPTH, canFireAtDepth, eventCycles, findEvent, reachableEvents, resolveEvent } from '../game/events';
 import type { EventsData } from '../game/data';
 import type { EvalContext } from '../game/quests';
 
@@ -85,6 +85,32 @@ check('a straight chain is not a cycle', !eventCycles(data, 'chain_a'));
 check('a mutual pair is detected as a cycle', eventCycles(data, 'loop_a') && eventCycles(data, 'loop_b'));
 check('cycle detection terminates and does not hang', reachableEvents(data, 'loop_a').length === 2);
 check('an event that fires nothing reaches nothing', reachableEvents(data, 'chain_c').length === 0);
+
+// --- E4 firing registry: cooldown + onceOnly (persisted throttle)
+{
+  const reg = new EventFiringRegistry();
+  const cooldownDef = { id: 'leak', cooldownSeconds: 60 };
+  check('a fresh event may fire', reg.canFire(cooldownDef, 100));
+  reg.markFired(cooldownDef, 100);
+  check('within cooldown it may not fire', !reg.canFire(cooldownDef, 130));
+  check('at the cooldown boundary it may not fire (strictly-less)', !reg.canFire(cooldownDef, 159.9));
+  check('past the cooldown it may fire again', reg.canFire(cooldownDef, 161));
+  const onceDef = { id: 'intro', onceOnly: true };
+  check('a once-only event may fire the first time', reg.canFire(onceDef, 0));
+  reg.markFired(onceDef, 0);
+  check('a spent once-only event never fires again', !reg.canFire(onceDef, 1e9));
+  check('an unthrottled event always may fire', reg.canFire({ id: 'plain' }, 0) && reg.canFire({ id: 'plain' }, 0));
+
+  // persistence: a once-only event stays spent, and cooldown timing survives, across save/load
+  const saved = reg.serialize();
+  check('serialize captures firedOnce + lastFired', saved.firedOnce.includes('intro') && saved.lastFired['leak'] === 100);
+  const reg2 = new EventFiringRegistry();
+  reg2.restore(saved);
+  check('a restored once-only event is still spent', !reg2.canFire(onceDef, 1e9));
+  check('a restored cooldown still throttles', !reg2.canFire(cooldownDef, 130) && reg2.canFire(cooldownDef, 200));
+  reg2.restore(undefined);
+  check('restoring undefined clears the throttle', reg2.canFire(onceDef, 0) && reg2.canFire(cooldownDef, 130));
+}
 
 if (failures > 0) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }
 console.log('\nall event-manager core checks passed');

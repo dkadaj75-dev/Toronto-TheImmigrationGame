@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { BillsData, FinanceData, GameData, JobDef, SimStateData, StatsData } from '../game/data';
+import { EventFiringRegistry } from '../game/events';
 import { SimStats } from '../game/stats';
 import { QuestRunner } from '../game/quests';
 import { VisaMachine } from '../game/visas';
@@ -59,6 +60,7 @@ function makeRuntime() {
   const npcVisit = new VisitLifecycle(() => data.npcs, () => data.social);
   const visitAway = new VisitAwayTracker();
   const pendingMove = new PendingMoveTracker();
+  const eventFiring = new EventFiringRegistry();
   let simClockSeconds = 0;
   let homeMap = 'condo';
   registerRuntimeSaveSystems(registry, {
@@ -68,7 +70,7 @@ function makeRuntime() {
       setSimClockSeconds: (value) => { simClockSeconds = value; },
     },
     quests, visa, work, finance, hydro, buyMode, assetStates, garbage, food, accidents,
-    social, npcVisit, visitAway, pendingMove,
+    social, npcVisit, visitAway, pendingMove, eventFiring,
     homeMap: {
       getMapId: () => homeMap,
       setMapId: (mapId) => { homeMap = mapId; },
@@ -76,7 +78,7 @@ function makeRuntime() {
   });
   return {
     registry, stats, quests, visa, work, finance, hydro, buyMode, assetStates, garbage,
-    food, accidents, social, npcVisit, visitAway, pendingMove,
+    food, accidents, social, npcVisit, visitAway, pendingMove, eventFiring,
     getClock: () => simClockSeconds,
     setClock: (value: number) => { simClockSeconds = value; },
     getHome: () => homeMap,
@@ -109,6 +111,8 @@ source.social.phone.markUsed(data.npcs.npcs[0].id, 'call', 180);
 source.npcVisit.invite(data.npcs.npcs[0].id, 1.2);
 source.visitAway.begin(data.npcs.npcs[0].id, { day: 2, hour: 10 }, 3, { pos: [4, 5], facingDeg: 180 });
 source.pendingMove.start('apartment', 2, 24);
+source.eventFiring.markFired({ id: 'intro', onceOnly: true }, 500);
+source.eventFiring.markFired({ id: 'leak', cooldownSeconds: 60 }, 900);
 source.setClock(987.5);
 source.setHome('apartment');
 
@@ -127,6 +131,10 @@ check('SocialRuntime owns real relationship and phone states', target.social.rel
 check('social values round-trip', target.social.relationships.get(data.npcs.npcs[0].id) === 44 && target.social.phone.remainingCooldown(data.npcs.npcs[0].id, 'call', 181) > 0);
 check('NPC/away/pending trackers round-trip', target.npcVisit.state.phase === 'pending' && target.visitAway.isAway && target.pendingMove.pending?.mapId === 'apartment');
 check('clock system round-trips', target.getClock() === 987.5);
+check('E4 event-firing throttle round-trips (onceOnly stays spent, cooldown timing survives)',
+  !target.eventFiring.canFire({ id: 'intro', onceOnly: true }, 1e9)
+  && !target.eventFiring.canFire({ id: 'leak', cooldownSeconds: 60 }, 930)
+  && target.eventFiring.canFire({ id: 'leak', cooldownSeconds: 60 }, 1000));
 check('envelope mapId and homeMap payload agree', envelope.mapId === 'apartment' && homeMapIdFromEnvelope(envelope) === 'apartment' && target.getHome() === 'apartment');
 
 console.log('save-wiring.test — corrupt payload isolation');

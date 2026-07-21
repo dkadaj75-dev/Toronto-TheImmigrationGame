@@ -447,17 +447,23 @@ export class AccidentsController {
    * snapshot (needs/skills/funds/time/vars/quests) built by the caller, reused as-is against
    * quests.ts's resolveVar (§7.3: "reuse game/quests.ts's path resolution, don't reinvent").
    */
-  rollFor(targetObj: THREE.Object3D, def: AssetDef, ctx: EvalContext, now: number, rng: () => number = Math.random) {
-    if (def.category === 'transient' || !def.accidents?.length) return;
+  /** Returns the risks that actually SPAWNED this call (New.txt #6 E4: main.ts fires each spawned
+   *  risk's `emitsEvent` — the plumbing-leak-emits-an-event pattern). Empty when nothing spawned;
+   *  callers that don't need it simply ignore the return. */
+  rollFor(targetObj: THREE.Object3D, def: AssetDef, ctx: EvalContext, now: number, rng: () => number = Math.random): AccidentRisk[] {
+    if (def.category === 'transient' || !def.accidents?.length) return [];
     const baseKey = targetObj.uuid;
     const stats = this.getData().stats;
+    const spawned: AccidentRisk[] = [];
     for (const risk of def.accidents) {
       if (risk.trigger !== 'onUse') continue; // only trigger implemented today (§7.3)
       if (!this.registry.canSpawn(risk.accidentId, baseKey)) continue;
       const chance = computeAccidentChance(risk, ctx, stats);
       if (!rollAccident(chance, rng)) continue;
       this.spawn(risk, targetObj, baseKey, now, rng);
+      spawned.push(risk);
     }
+    return spawned;
   }
 
   /** ROADMAP_NEXT item 10 (garbage/tidying): spawn a transient instance directly, with no risk roll

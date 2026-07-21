@@ -23,7 +23,7 @@ import { listRentals, PendingMoveTracker } from './rental';
 import { FinanceState, decideRepoSeizure } from './bills';
 import { WorkTracker, applyNeedsCost, decideAutoDepart, isLeaveForWorkAvailable, isScheduledWorkWindow, isWithinDepartureWindow, jobLevelPay, jobLevelTitle, promotionRequirementsFor, shouldStartVisaGrace, weekdayName, type WorkReturnPoint, type WorkTickEvent } from './work';
 import { computeHappiness, happinessSkillFactor, isRefusedByMood } from './happiness';
-import { MAX_EVENT_DEPTH, canFireAtDepth, resolveEvent } from './events';
+import { EventFiringRegistry, MAX_EVENT_DEPTH, canFireAtDepth, findEvent, resolveEvent } from './events';
 import { AccidentsController, resolveTapAssetId, shouldDespawnOnCleanup, shouldRemovePlacedOnCleanup } from './accidents';
 import { GarbageController, wasteItemCount } from './garbage';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials, isSelectableForSell } from './buymode';
@@ -36,7 +36,7 @@ import { initBladderFailureState, checkBladderFailure, rearmBladderFailure } fro
 import { FoodRegistry, foodAssetForActionEvent, firstLegSeatAware, actionAfterSourceFetch, cookedMealHungerGain, resolveFoodConfig, wasteAssetForDroppedFood } from './food';
 import { initEnergyCollapseState, StarvationTracker, tickEnergyCollapse } from './survival';
 import { formatMoneyChange, formatSkillUp, skillLevelUps } from './feedback';
-import { AssetStateRegistry, LEGACY_ON, hasCustomStates, isActionAvailableInState, isStatefulAsset, planToReachAction, powerStateForAction, stateAfterAction } from './assetstate';
+import { AssetStateRegistry, LEGACY_ON, hasCustomStates, isActionAvailableInState, isStatefulAsset, planToReachAction, powerStateForAction, stateAfterAction, stateDef } from './assetstate';
 import { HydroMeter, resolveAssetPower, HYDRO_BILL_ID } from './hydro';
 import { InitialLoadTracker, phraseAt } from './loading';
 import { applyTheme } from './theme';
@@ -144,6 +144,9 @@ async function start(initialLoadSlotId?: string) {
   // ONLY for assets that authored >=2 useLocations for the pose — a single-location asset keeps
   // today's behaviour untouched (buildSeatClaimer returns undefined -> the default usePose path).
   const occupancy = new OccupancyRegistry();
+  // New.txt #6 E4: per-event fire throttle (cooldownSeconds / onceOnly). Persisted, unlike
+  // occupancy — a once-only event that already fired must stay spent across save/load.
+  const eventFiring = new EventFiringRegistry();
   const buildSeatClaimer = (occupantId: string) =>
     (action: ActionDef, seat: THREE.Object3D, fromPos: [number, number]): import('./data').UsePoseEntry | undefined => {
       const anim = action.animation;
@@ -220,13 +223,25 @@ async function start(initialLoadSlotId?: string) {
    * already implements it, so events add wiring rather than a second implementation. Composition
    * is allowed but depth-capped, and every unknown id degrades with a warn instead of throwing.
    */
+  // E4: fire the `emitsEvent` of any accident risk that just spawned (plumbing leak -> `leak` event).
+  const fireSpawnedAccidentEvents = (risks: import('./data').AccidentRisk[], target: THREE.Object3D, def: AssetDef) => {
+    for (const risk of risks) {
+      const ev = risk.emitsEvent?.trim();
+      if (ev) fireEvent(ev, { object: target, assetDef: def });
+    }
+  };
   const fireEvent = (eventId: string, source?: { object?: THREE.Object3D; assetDef?: AssetDef }, depth = 0): boolean => {
     if (!canFireAtDepth(depth)) {
       console.warn(`[events] "${eventId}" exceeded the ${MAX_EVENT_DEPTH}-deep composition cap — check for an event firing itself.`);
       return false;
     }
+    // E4 throttle: an unknown-def event still resolves (fired=false) below; a known def is gated by
+    // its cooldown / onceOnly before any effect runs, so no partial fire slips past the throttle.
+    const def = findEvent(data.events, eventId);
+    if (def && !eventFiring.canFire(def, simClockSeconds)) return false;
     const resolution = resolveEvent(data.events, eventId, { eval: buildEvalContext() });
     if (!resolution.fired) return false;
+    if (def) eventFiring.markFired(def, simClockSeconds);
     const targetObject = source?.object;
     const targetDef = source?.assetDef;
     let fundsTouched = false;
@@ -765,6 +780,12 @@ async function start(initialLoadSlotId?: string) {
   quests.onQuestCompleted = (q) => {
     postNotification('questCompleted', `Quest completed: ${q.name}`);
     completedQuestLog.push({ name: q.name });
+    // E4: a quest's `event` rewards fire on completion — the "completing a quest triggers X" seam.
+    // The other reward types are applied inside QuestRunner (funds/vars/unlock/visa); `event` needs
+    // main.ts's applier, so it is dispatched here (no asset source — effects scope to the sim).
+    for (const reward of q.rewards ?? []) {
+      if (reward.type === 'event' && reward.event.trim()) fireEvent(reward.event.trim());
+    }
     refreshQuestLog();
   };
   refreshQuestLog();
@@ -1602,7 +1623,7 @@ async function start(initialLoadSlotId?: string) {
     // that exists at all. onActionStop's own roll call is skipped for duration actions so this
     // never double-rolls the same attempt.
     if (a.action.duration && startAssetDef) {
-      accidents.rollFor(a.target, startAssetDef, buildEvalContext(), simClockSeconds);
+      fireSpawnedAccidentEvents(accidents.rollFor(a.target, startAssetDef, buildEvalContext(), simClockSeconds), a.target, startAssetDef);
     }
     if (a.action.id === 'use_phone') {
       openPhoneAt('jobs');
@@ -1724,6 +1745,10 @@ async function start(initialLoadSlotId?: string) {
           applyEnvironment();
           // A state may change footprint/nav blocking (an opened murphy bed occupies floor).
           if (stateChangesNav(def)) rebakeNav();
+          // E4: entering a state fires its authored onEnter event (the "using an asset triggers X"
+          // seam — e.g. a fridge entering `open` emits a cold-air event).
+          const onEnter = stateDef(def, next)?.onEnter?.trim();
+          if (onEnter) fireEvent(onEnter, { object: a.target, assetDef: def });
         }
       }
     }
@@ -1852,7 +1877,7 @@ async function start(initialLoadSlotId?: string) {
         if (removed > 0) { rebakeNav(); applyEnvironment(); garbage.syncFillBars(); }
       }
     } else if (def && !a.action.duration) {
-      accidents.rollFor(a.target, def, buildEvalContext(), simClockSeconds);
+      fireSpawnedAccidentEvents(accidents.rollFor(a.target, def, buildEvalContext(), simClockSeconds), a.target, def);
     }
     // ROADMAP_NEXT item 10: waste production lives on the ACTION (not the asset) — independent of
     // the def.category branch above so it applies no matter what the action's target turned out to
@@ -2494,6 +2519,7 @@ async function start(initialLoadSlotId?: string) {
     npcVisit: visitors,
     visitAway,
     pendingMove,
+    eventFiring,
     homeMap: {
       getMapId: () => data.map.id,
       setMapId: (mapId) => {
