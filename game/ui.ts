@@ -40,6 +40,46 @@ const MENU_BUTTON_HEIGHT = 48;
  *  in-bar readout denominator for every need is 100 (e.g. "54/100"). */
 export const NEED_MAX = 100;
 
+/** Evenly spaced radial angles, starting straight up and going clockwise. */
+function radialAngles(itemCount: number): number[] {
+  const angles: number[] = [];
+  for (let i = 0; i < itemCount; i++) angles.push(-Math.PI / 2 + (i * Math.PI * 2) / Math.max(1, itemCount));
+  return angles;
+}
+
+/**
+ * New.txt (2026-07-20): with adaptive button widths, a fixed radius let neighbouring bubbles
+ * overlap. Two axis-aligned rects only clear each other when their centre delta exceeds the
+ * combined half-size on AT LEAST ONE axis, and every delta here scales linearly with the radius —
+ * so the smallest non-overlapping radius is solvable in closed form instead of guessed.
+ *
+ * For each adjacent pair (and for each button against the centre title bubble) the needed radius is
+ * `min(widthNeed / |Δcos|, heightNeed / |Δsin|)` — the cheaper of "separate horizontally" or
+ * "separate vertically" — and the answer is the largest such need across all pairs. Returns 0 when
+ * a single item makes the question moot.
+ */
+export function minRadialRadius(itemCount: number, buttonWidth: number, buttonHeight: number, gap = MENU_EDGE_GAP): number {
+  if (itemCount <= 1) return 0; // nothing to collide with
+  const angles = radialAngles(itemCount);
+  const need = { x: buttonWidth + gap, y: buttonHeight + gap };
+  let required = 0;
+  // EVERY pair, not just neighbours: with four items the two OPPOSITE bubbles sit at the same y,
+  // so wide buttons collide across the ring even though their neighbours clear fine.
+  for (let i = 0; i < itemCount; i++) {
+    for (let j = i + 1; j < itemCount; j++) {
+      const a = angles[i], b = angles[j];
+      const ux = Math.abs(Math.cos(b) - Math.cos(a));
+      const uy = Math.abs(Math.sin(b) - Math.sin(a));
+      // Radius at which this pair clears on at least one axis (the cheaper option wins).
+      const byX = ux > 1e-6 ? need.x / ux : Infinity;
+      const byY = uy > 1e-6 ? need.y / uy : Infinity;
+      const best = Math.min(byX, byY);
+      if (Number.isFinite(best)) required = Math.max(required, best);
+    }
+  }
+  return required;
+}
+
 /** Pure screen-space layout for B6-11's contextual action bubbles. */
 export function layoutContextMenu(
   point: ScreenPoint,
@@ -58,17 +98,28 @@ export function layoutContextMenu(
   const maxY = Math.max(minY, viewport.height - safe.bottom - MENU_EDGE_GAP);
   const usableWidth = Math.max(1, maxX - minX);
   const usableHeight = Math.max(1, maxY - minY);
-  const mode: 'radial' | 'list' = itemCount <= 5 ? 'radial' : 'list';
   const margin = Math.max(0, Number.isFinite(style.marginPx) ? style.marginPx! : 0);
-  const buttonWidth = Math.min(mode === 'radial' ? Math.max(1, style.buttonWidthPx ?? 116) : 160, Math.max(1, usableWidth - margin * 2));
   const buttonHeight = Math.min(Math.max(1, style.buttonHeightPx ?? MENU_BUTTON_HEIGHT), Math.max(1, usableHeight - margin * 2));
+  // New.txt (2026-07-20): decide the mode from whether the ring can actually hold these buttons
+  // without them overlapping each other, not from the item count alone — an adaptive-width button
+  // (long action name) can need more ring than the screen has, and stacking is better than overlap.
+  const radialButtonWidth = Math.min(Math.max(1, style.buttonWidthPx ?? 116), Math.max(1, usableWidth - margin * 2));
+  const maxRadius = Math.max(52, Math.min(usableWidth - radialButtonWidth - margin * 2, usableHeight - buttonHeight - margin * 2) / 2);
+  const neededRadius = minRadialRadius(itemCount, radialButtonWidth + margin * 2, buttonHeight + margin * 2);
+  const mode: 'radial' | 'list' = itemCount <= 5 && neededRadius <= maxRadius ? 'radial' : 'list';
+  // The list fallback keeps its tidy 160px minimum but must still honour a wider adaptive button,
+  // otherwise a long action name overflows again the moment the ring gives up.
+  const buttonWidth = mode === 'radial'
+    ? radialButtonWidth
+    : Math.min(Math.max(160, radialButtonWidth), Math.max(1, usableWidth - margin * 2));
   const titleWidth = Math.min(120, usableWidth);
   const titleHeight = Math.min(34, usableHeight);
   const desired: ScreenPoint[] = [];
 
   if (mode === 'radial') {
     const requestedRadius = Math.max(0, style.centerRadiusPx ?? 106);
-    const radius = Math.min(requestedRadius, Math.max(52, Math.min(usableWidth - buttonWidth - margin * 2, usableHeight - buttonHeight - margin * 2) / 2));
+    // Grow past the authored radius when the buttons demand it; never exceed what fits on screen.
+    const radius = Math.min(Math.max(requestedRadius, neededRadius), maxRadius);
     for (let i = 0; i < itemCount; i++) {
       const angle = -Math.PI / 2 + (i * Math.PI * 2) / Math.max(1, itemCount);
       desired.push({ x: point.x + Math.cos(angle) * radius, y: point.y + Math.sin(angle) * radius });
