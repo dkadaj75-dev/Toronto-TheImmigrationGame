@@ -8,11 +8,11 @@ import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import type { GameData, AssetDef, CharacterTuning, MapData } from './data';
 import { resolveExterior, DEFAULT_BACKDROP_DISTANCE, type ResolvedBackdrop } from './exterior';
 import { classifyMeshPath, createSpriteInstance, createOverlayInstance, preloadGif } from './sprites';
-import { resolveScreenOverlay, overlayVisibleWhenOn, meshForState, allStateMeshes, type ResolvedScreenOverlay } from './stateviz';
+import { resolveScreenOverlay, overlayVisibleWhenOn, meshForStateId, allStateMeshes, type ResolvedScreenOverlay } from './stateviz';
 import { retargetTrackName, stripPositionTracks, resolveClipName, fileStem } from './fbxclips';
 import { resolveWindowConfig, windowFacePositions, windowPaneRect } from './windows';
 import { wallCutShownHeight } from './wallview';
-import { resolveAssetLight, defaultAssetOn } from './assetstate';
+import { resolveAssetLight, defaultAssetOn, defaultStateId, LEGACY_ON, LEGACY_OFF } from './assetstate';
 import { resolveMetersPerTile, effectiveMetersPerTile, textureRepeat, polygonBounds } from './textures';
 import { publicUrl } from './urls';
 import { aperturesForWall, wallSegments, gapDoorLintel, lintelVisibleUnderCut, isCurtainWall, resolveMullionSpacing, mullionPositions } from './wallaperture';
@@ -231,11 +231,14 @@ export function attachMesh(group: THREE.Group, def: AssetDef, opts: { allowSprit
         return model;
       });
       if (paths.length > 1) {
-        const on = (group.userData.assetOn as boolean | undefined) ?? defaultAssetOn(def);
+        // New.txt (2026-07-20): visibility keys off the instance's STATE ID, so the same mechanism
+        // serves legacy on/off assets and designer-authored state lists (murphy bed closed/open).
+        const current = (group.userData.assetStateId as string | undefined)
+          ?? ((group.userData.assetOn as boolean | undefined) ?? defaultAssetOn(def) ? LEGACY_ON : LEGACY_OFF);
         models.forEach((model, i) => {
           const path = paths[i];
-          model.userData.stateMeshVisibleWhenOn = (isOn: boolean) => meshForState(def, isOn) === path;
-          model.visible = meshForState(def, on) === path;
+          model.userData.stateMeshVisibleFor = (stateId: string) => meshForStateId(def, stateId) === path;
+          model.visible = meshForStateId(def, current) === path;
         });
       }
       const persistent = group.children.filter((child) => child.userData.assetPersistent);
@@ -262,7 +265,10 @@ export function attachAssetLight(group: THREE.Group, def: AssetDef): THREE.Point
   return light;
 }
 
-export function setAssetObjectOn(group: THREE.Object3D, on: boolean): void {
+/** New.txt (2026-07-20): apply a generalized STATE id to a placed group. The light/overlay layers
+ *  still think in ON/OFF (only the legacy pair emits light), while mesh variants resolve by id. */
+export function setAssetObjectState(group: THREE.Object3D, stateId: string): void {
+  const on = stateId === LEGACY_ON;
   const light = group.getObjectByName('asset-point-light') as THREE.PointLight | undefined;
   if (light) {
     light.visible = on;
@@ -273,10 +279,16 @@ export function setAssetObjectOn(group: THREE.Object3D, on: boolean): void {
   for (const child of group.children) {
     const overlayFn = child.userData.overlayVisibleWhenOn as ((isOn: boolean) => boolean) | undefined;
     if (overlayFn) child.visible = overlayFn(on);
-    const meshFn = child.userData.stateMeshVisibleWhenOn as ((isOn: boolean) => boolean) | undefined;
-    if (meshFn) child.visible = meshFn(on);
+    const meshFn = child.userData.stateMeshVisibleFor as ((id: string) => boolean) | undefined;
+    if (meshFn) child.visible = meshFn(stateId);
   }
   group.userData.assetOn = on;
+  group.userData.assetStateId = stateId;
+}
+
+/** Legacy façade kept so existing call sites and tests read unchanged. */
+export function setAssetObjectOn(group: THREE.Object3D, on: boolean): void {
+  setAssetObjectState(group, on ? LEGACY_ON : LEGACY_OFF);
 }
 
 /** Position/orient a screen-overlay plane per its authored config: asset-local offset from the
@@ -603,7 +615,7 @@ export function buildWorld(data: GameData, trackInitialLoad?: TrackInitialLoad):
     if (!def) { console.warn(`Unknown asset in map: ${placed.asset}`); return; }
     const obj = makeStandIn(def);
     applyAssetPlacement(obj, def, placed.pos, placed.rotDeg);
-    obj.userData = { assetId: def.id, interactions: def.interactions, placedIndex, assetStateKey: `designer:${placedIndex}` };
+    obj.userData = { assetId: def.id, interactions: def.interactions, placedIndex, assetStateKey: `designer:${placedIndex}`, assetStateId: defaultStateId(def) };
     attachAssetLight(obj, def);
     attachScreenOverlay(obj, def, trackInitialLoad);
     attachMesh(obj, def, { trackInitialLoad });

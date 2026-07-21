@@ -5,6 +5,7 @@
 // No gameplay numbers live here — cell size comes from map.gridSize.
 
 import type { MapData, AssetsData } from './data';
+import { resolveStateOverrides } from './assetstate';
 
 export interface NavGrid {
   cols: number;
@@ -18,7 +19,14 @@ export interface Cell { col: number; row: number; }
 
 // ---------------------------------------------------------------- baking
 
-export function bakeNavGrid(map: MapData, assets?: AssetsData): NavGrid {
+/** `stateFor` (New.txt 2026-07-20 generalized states) reports a placed object's CURRENT state id
+ *  so per-state footprint/nav overrides bake correctly — an open murphy bed blocks floor a closed
+ *  one leaves walkable. Omitting it keeps the pre-state behaviour exactly. */
+export function bakeNavGrid(
+  map: MapData,
+  assets?: AssetsData,
+  stateFor?: (placedIndex: number, asset: string) => string | undefined,
+): NavGrid {
   const cellSize = map.gridSize;
   const cols = Math.ceil(map.bounds.w / cellSize);
   const rows = Math.ceil(map.bounds.h / cellSize);
@@ -62,11 +70,15 @@ export function bakeNavGrid(map: MapData, assets?: AssetsData): NavGrid {
   //    Footprint sizes come from assets.json; rotation handled in 90° steps.
   if (assets) {
     const byId = new Map(assets.assets.map((a) => [a.id, a]));
-    for (const p of map.placedObjects) {
+    map.placedObjects.forEach((p, placedIndex) => {
       const def = byId.get(p.asset);
-      if (!def) continue;
-      if (def.blocksNav === false) continue; // walkable flat sprites (puddles, scorch) — absent still blocks
-      let [w, d] = def.footprint;
+      if (!def) return;
+      const stateId = stateFor?.(placedIndex, p.asset);
+      const view = stateId === undefined
+        ? { blocksNav: def.blocksNav !== false, footprint: def.footprint }
+        : resolveStateOverrides(def, stateId);
+      if (!view.blocksNav) return; // walkable flat sprites (puddles, scorch) — absent still blocks
+      let [w, d] = view.footprint;
       if ((((Math.round(p.rotDeg) % 180) + 180) % 180) === 90) [w, d] = [d, w];
       const x0 = p.pos[0] - w / 2, x1 = p.pos[0] + w / 2;
       const z0 = p.pos[1] - d / 2, z1 = p.pos[1] + d / 2;
@@ -76,7 +88,7 @@ export function bakeNavGrid(map: MapData, assets?: AssetsData): NavGrid {
           if (cx >= x0 && cx <= x1 && cz >= z0 && cz <= z1) walkable[r * cols + c] = 0;
         }
       }
-    }
+    });
   }
 
   // 4) doors carve their opening walkable — LAST, so a doorway is sacred.

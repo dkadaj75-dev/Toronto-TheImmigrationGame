@@ -199,7 +199,9 @@ export class QuestRunner {
     for (const r of q.rewards) this.applyReward(r);
   }
 
-  private applyReward(r: Reward) {
+  /** Public so the event applier (New.txt #6) reuses the SAME economy/var/unlock bookkeeping
+   *  instead of a second implementation — events are wiring over existing systems, never a fork. */
+  applyReward(r: Reward) {
     if (r.type === 'funds') this.funds += r.amount;
     else if (r.type === 'setVar') this.vars[r.var] = r.value;
     else if (r.type === 'unlockAsset') this.unlockedAssets.add(r.asset);

@@ -306,6 +306,134 @@ function renderCategoriesCard() {
   return card;
 }
 
+function nextStateId(a) {
+  let n = 1;
+  const used = new Set((a.states ?? []).map((s) => s.id));
+  while (used.has(`state_${n}`)) n++;
+  return `state_${n}`;
+}
+
+function renderStatesCard(a) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.dataset.card = 'states';
+  card.innerHTML = '<h2>States</h2><div class="hint">Optional generalized asset states. A state\'s checked actions are the only ones offered there; all checked or none checked means all asset interactions (the sparse default). <b>setsState</b> on an action creates transitions between states. If no state is marked default, the first state is used.</div>';
+  const states = a.states ?? [];
+  const assetActions = state.interactions.actions.filter((action) => a.interactions.includes(action.id));
+
+  states.forEach((assetState, index) => {
+    const box = document.createElement('div');
+    box.className = 'card'; box.style.background = '#141c2e'; box.style.margin = '10px 0 0';
+    box.dataset.stateRow = String(index);
+
+    const idInput = document.createElement('input');
+    idInput.type = 'text'; idInput.value = assetState.id ?? ''; idInput.dataset.path = `states.${index}.id`;
+    idInput.addEventListener('change', () => {
+      const previous = assetState.id;
+      const next = idInput.value.trim();
+      if (!next || states.some((entry, otherIndex) => otherIndex !== index && entry.id === next)) {
+        window.alert(next ? `state id "${next}" already exists` : 'state id cannot be blank');
+        idInput.value = previous;
+        return;
+      }
+      assetState.id = next;
+      markDirty(); renderAll();
+    });
+    box.appendChild(frow('id (unique)', idInput));
+    box.appendChild(frow('display name', textInput(
+      () => assetState.name,
+      (v) => { const t = v.trim(); if (t) assetState.name = t; else delete assetState.name; },
+      `states.${index}.name`,
+    )));
+    const stateMesh = textInput(
+      () => assetState.mesh,
+      (v) => { const t = normPublicPath(v); if (t) assetState.mesh = t; else delete assetState.mesh; },
+      `states.${index}.mesh`,
+    );
+    stateMesh.placeholder = 'blank = base mesh';
+    box.appendChild(frow('mesh path', stateMesh));
+
+    const defaultCb = document.createElement('input');
+    defaultCb.type = 'checkbox'; defaultCb.checked = assetState.default === true;
+    defaultCb.dataset.path = `states.${index}.default`;
+    defaultCb.addEventListener('change', () => {
+      for (const entry of states) delete entry.default;
+      if (defaultCb.checked) assetState.default = true;
+      markDirty(); renderAll();
+    });
+    box.appendChild(frow('default (exclusive)', defaultCb));
+
+    box.appendChild(frow('blocks navigation', selectInput(
+      [
+        { value: '', label: '(inherit from asset)' },
+        { value: 'true', label: 'blocks navigation' },
+        { value: 'false', label: 'does not block navigation' },
+      ],
+      () => assetState.blocksNav === undefined ? '' : String(assetState.blocksNav),
+      (v) => { if (v === '') delete assetState.blocksNav; else assetState.blocksNav = v === 'true'; },
+      `states.${index}.blocksNav`,
+    )));
+
+    const footprint = document.createElement('div'); footprint.className = 'pair';
+    const setFootprint = (axis) => (v) => {
+      if (v === undefined) { delete assetState.footprint; return; }
+      const next = assetState.footprint ? [...assetState.footprint] : [...a.footprint];
+      next[axis] = v; assetState.footprint = next;
+    };
+    footprint.append(
+      numInput(() => assetState.footprint?.[0], setFootprint(0), `states.${index}.footprint.w`),
+      numInput(() => assetState.footprint?.[1], setFootprint(1), `states.${index}.footprint.d`),
+    );
+    box.appendChild(frow('footprint W / D (blank = inherit)', footprint));
+
+    const actionChecks = document.createElement('div'); actionChecks.className = 'checks';
+    for (const action of assetActions) {
+      const label = document.createElement('label');
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.actionId = action.id;
+      cb.dataset.path = `states.${index}.interaction:${action.id}`;
+      cb.checked = assetState.interactions === undefined || assetState.interactions.includes(action.id);
+      cb.addEventListener('change', () => {
+        const checked = [...actionChecks.querySelectorAll('input[type="checkbox"]')]
+          .filter((input) => input.checked).map((input) => input.dataset.actionId);
+        if (checked.length === 0 || checked.length === assetActions.length) delete assetState.interactions;
+        else assetState.interactions = checked;
+        markDirty();
+      });
+      label.append(cb, document.createTextNode(action.name)); actionChecks.appendChild(label);
+    }
+    if (!assetActions.length) actionChecks.innerHTML = '<span class="hint">Add interactions to this asset first.</span>';
+    box.appendChild(frow('actions offered in this state', actionChecks));
+
+    const incoming = assetActions.filter((action) => action.setsState === assetState.id);
+    const isDefault = assetState.default === true || (!states.some((entry) => entry.default === true) && index === 0);
+    const entered = document.createElement('div'); entered.className = 'hint'; entered.dataset.stateIncoming = assetState.id;
+    entered.textContent = incoming.length ? `Entered by: ${incoming.map((action) => action.name).join(', ')}` : 'Entered by: no action';
+    box.appendChild(entered);
+    if (!incoming.length && !isDefault) {
+      const warning = document.createElement('div'); warning.className = 'hint'; warning.dataset.stateWarning = assetState.id;
+      warning.style.color = '#e5a06f'; warning.textContent = '⚠ Unreachable: no asset action sets this state.';
+      box.appendChild(warning);
+    }
+
+    const remove = document.createElement('button'); remove.className = 'danger'; remove.textContent = 'Remove state';
+    remove.dataset.action = 'remove-state'; remove.dataset.stateIndex = String(index);
+    remove.addEventListener('click', () => {
+      a.states.splice(index, 1);
+      if (!a.states.length) delete a.states;
+      markDirty(); renderAll();
+    });
+    box.appendChild(remove); card.appendChild(box);
+  });
+
+  const add = document.createElement('button'); add.textContent = '+ Add state'; add.dataset.action = 'add-state';
+  add.addEventListener('click', () => {
+    (a.states ??= []).push({ id: nextStateId(a) });
+    markDirty(); renderAll();
+  });
+  card.appendChild(add);
+  return card;
+}
+
 // needs.<id> / skills.<id> namespace, matching game/quests.ts's resolveVar / accidents.ts's
 // statMaxFor — the ONLY var paths accident risk modifiers meaningfully interpolate against.
 function accidentVarOptions() {
@@ -594,6 +722,7 @@ function renderEditor() {
   }
   card3.appendChild(checks);
   root.appendChild(card3);
+  root.appendChild(renderStatesCard(a));
 
   // --- accidents (§7.3): transient-category assets get ONLY the clearedBy multi-select
   // ("nothing special... beyond the clearedBy action multi-select" — spec verbatim); every

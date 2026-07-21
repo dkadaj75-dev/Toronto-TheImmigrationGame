@@ -82,19 +82,21 @@ const API = '/api/data/';
 // assets.json/stats.json already play) — they only feed the Conditions card's var-path dropdowns
 // (vars.<id> / quests.<id>.state), mirroring the Quest Editor's own condition builder exactly.
 // Neither file is ever PUT by this tool.
-const state = { interactions: null, assets: null, stats: null, simstate: null, quests: null, selected: null, dirty: new Set() };
+const state = { interactions: null, assets: null, stats: null, simstate: null, quests: null, events: null, selected: null, dirty: new Set() };
 
 async function load() {
   setStatus('loading…');
   try {
-    const [i, a, s, simstate, quests] = await Promise.all([
+    const [i, a, s, simstate, quests, events] = await Promise.all([
       fetch(API + 'interactions.json').then((r) => { if (!r.ok) throw new Error('interactions.json HTTP ' + r.status); return r.json(); }),
       fetch(API + 'assets.json').then((r) => { if (!r.ok) throw new Error('assets.json HTTP ' + r.status); return r.json(); }),
       fetch(API + 'stats.json').then((r) => { if (!r.ok) throw new Error('stats.json HTTP ' + r.status); return r.json(); }),
       fetch(API + 'simstate.json').then((r) => { if (!r.ok) throw new Error('simstate.json HTTP ' + r.status); return r.json(); }),
       fetch(API + 'quests.json').then((r) => { if (!r.ok) throw new Error('quests.json HTTP ' + r.status); return r.json(); }),
+      // events.json is READ-ONLY reference data here (feeds the "emits event" picker); never PUT.
+      fetch(API + 'events.json').then((r) => (r.ok ? r.json() : { events: [] })).catch(() => ({ events: [] })),
     ]);
-    state.interactions = i; state.assets = a; state.stats = s; state.simstate = simstate; state.quests = quests;
+    state.interactions = i; state.assets = a; state.stats = s; state.simstate = simstate; state.quests = quests; state.events = events;
     state.dirty.clear();
     if (!state.selected && i.actions.length) state.selected = i.actions[0].id;
     renderAll();
@@ -296,6 +298,61 @@ function renderEditor() {
 
   // --- H4/H2 (ROADMAP_HAPPY): sparse per-action happiness coupling — only for actions the
   // designer opts in; blank fields keep the whole block absent (no effect anywhere).
+  // Generalized asset-state transition. Only states on assets that actually offer this action
+  // are valid targets; on/off remain available for legacy implicit-state assets.
+  const stateIds = new Set(['on', 'off']);
+  for (const asset of state.assets.assets) {
+    if (!asset.interactions?.includes(a.id)) continue;
+    for (const assetState of asset.states ?? []) if (assetState.id) stateIds.add(assetState.id);
+  }
+  const setsStateSel = document.createElement('select');
+  setsStateSel.dataset.path = 'setsState';
+  const noState = document.createElement('option'); noState.value = ''; noState.textContent = '(no state change)';
+  setsStateSel.appendChild(noState);
+  for (const id of [...stateIds].sort()) {
+    const option = document.createElement('option'); option.value = id; option.textContent = id;
+    setsStateSel.appendChild(option);
+  }
+  if (a.setsState && !stateIds.has(a.setsState)) {
+    const unknown = document.createElement('option'); unknown.value = a.setsState; unknown.textContent = `${a.setsState} (unknown)`;
+    setsStateSel.appendChild(unknown);
+  }
+  setsStateSel.value = a.setsState ?? '';
+  setsStateSel.addEventListener('change', () => {
+    if (setsStateSel.value) a.setsState = setsStateSel.value; else delete a.setsState;
+    markDirty('interactions.json');
+  });
+  card2.appendChild(frow('sets state (on completion)', setsStateSel));
+
+  // New.txt #6 event manager: fire a designer-authored event when this action COMPLETES. Fed from
+  // events.json so an id is never free-typed; an authored-but-missing id is preserved and flagged.
+  const emitsSel = document.createElement('select');
+  emitsSel.dataset.path = 'emitsEvent';
+  const noEvent = document.createElement('option'); noEvent.value = ''; noEvent.textContent = '(no event)';
+  emitsSel.appendChild(noEvent);
+  const knownEvents = new Set();
+  for (const event of state.events?.events ?? []) {
+    if (!event?.id) continue;
+    knownEvents.add(event.id);
+    const option = document.createElement('option'); option.value = event.id; option.textContent = event.name || event.id;
+    emitsSel.appendChild(option);
+  }
+  if (a.emitsEvent && !knownEvents.has(a.emitsEvent)) {
+    const unknown = document.createElement('option'); unknown.value = a.emitsEvent; unknown.textContent = `${a.emitsEvent} (unknown)`;
+    emitsSel.appendChild(unknown);
+  }
+  emitsSel.value = a.emitsEvent ?? '';
+  emitsSel.addEventListener('change', () => {
+    if (emitsSel.value) a.emitsEvent = emitsSel.value; else delete a.emitsEvent;
+    markDirty('interactions.json');
+  });
+  card2.appendChild(frow('emits event (on completion)', emitsSel));
+  if (!(state.events?.events ?? []).length) {
+    const hint = document.createElement('div'); hint.className = 'hint-line';
+    hint.textContent = 'No events authored yet — create them in the Event Editor.';
+    card2.appendChild(hint);
+  }
+
   const cardMood = document.createElement('div');
   cardMood.className = 'card';
   cardMood.innerHTML = '<h2>Happiness coupling</h2><div class="hint">Sparse, per-action. Skill efficiency: skill gains multiply by the value lerped from "at 0 happiness" to "at 100 happiness" (blank ends = ×1, no effect). Refuse below: happiness under this hides the action from the menu, the sim refuses with a notification if ordered, and autonomy skips it.</div>';
@@ -659,6 +716,9 @@ window.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveAll(); }
 });
 window.addEventListener('beforeunload', (e) => { if (state.dirty.size > 0) e.preventDefault(); });
+// Exposed for the jsdom suite (PROJECT_CONTEXT §5: editor logic lives in a plain inline script
+// reachable as window.<Tool>), so tests can assert edits reach the data, not just the DOM.
+window.InteractionEditor = { state, load, saveAll, renderAll };
 load();
 </script>
 <script src="/tools/refscan.js"></script>

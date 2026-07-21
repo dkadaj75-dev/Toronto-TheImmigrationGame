@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Condo Life — Event Editor</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #141a28; color: #dfe6f2; }
+  header { position: sticky; top: 0; z-index: 5; display: flex; gap: 10px; align-items: center;
+    padding: 10px 14px; background: #0f1420ee; backdrop-filter: blur(6px); border-bottom: 1px solid #26304a; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header .grow { flex: 1; }
+  button { border: 0; border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; background: #2c3a58; color: #dfe6f2; }
+  button.primary { background: #3d6fd2; color: #fff; }
+  button.danger { background: #7a3040; }
+  button.mini { padding: 4px 9px; font-size: 11px; }
+  button:disabled { opacity: .45; cursor: default; }
+  #status { font-size: 12px; color: #8fa3c8; min-width: 160px; text-align: right; }
+  #status.ok { color: #7fd98a; } #status.err { color: #e58a8a; }
+  #layout { display: grid; grid-template-columns: 250px 1fr; height: calc(100vh - 53px); }
+  #sidebar { border-right: 1px solid #26304a; overflow-y: auto; padding: 8px; }
+  .event-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+    background: transparent; padding: 7px 8px; border-radius: 8px; font-size: 13px; }
+  .event-item:hover { background: #1c2436; }
+  .event-item.active { background: rgba(90,120,190,.28); }
+  .event-item .badge { margin-left: auto; font-size: 10px; color: #8fa3c8; background: #1c2436; border-radius: 999px; padding: 2px 7px; }
+  #editor { overflow-y: auto; padding: 16px; }
+  #editor .empty { color: #5f6f93; padding: 40px; text-align: center; }
+  .card { background: #1a2133; border: 1px solid #26304a; border-radius: 12px; padding: 14px; margin-bottom: 14px; max-width: 760px; }
+  .card h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: #93a3c0; }
+  .hint { color: #8fa3c8; font-size: 12px; margin: 0 0 12px; }
+  .frow { display: grid; grid-template-columns: 190px 1fr; gap: 10px; align-items: center; padding: 5px 0; }
+  .frow label { font-size: 13px; }
+  input, select { width: 100%; background: #10182a; border: 1px solid #2c3a58; color: #dfe6f2; border-radius: 6px; padding: 6px 8px; font-size: 13px; }
+  .effect { border: 1px solid #2c3a58; border-radius: 10px; padding: 10px; margin: 8px 0; background: #10182a; }
+  .effect-head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .effect-head select { max-width: 220px; }
+  .effect-head .order { margin-left: auto; display: flex; gap: 6px; }
+  .effect-fields { display: grid; grid-template-columns: 150px 1fr; gap: 8px 10px; align-items: center; }
+  .warn { color: #e0a44a; font-size: 12px; margin-top: 8px; }
+  .trigger-list { font-size: 12px; color: #8fa3c8; }
+  .trigger-list code { color: #b9d2ff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>⚡ Event Editor</h1>
+  <span class="grow"></span>
+  <button id="new">+ New event</button>
+  <button id="save" class="primary" disabled>Save changes</button>
+  <span id="status">loading…</span>
+</header>
+<div id="layout">
+  <nav id="sidebar"></nav>
+  <div id="editor"><div class="empty">Select an event</div></div>
+</div>
+
+<script src="/tools/condition-builder.js"></script>
+<script>
+// Event Editor (New.txt #6, ROADMAP_EVENTS.md). Plain inline script exposed as window.EventEditor
+// for jsdom, whole-file PUT of events.json, sparse fields, shared condition builder for the gate.
+// It only ever WRITES events.json; interactions/assets/stats/simstate/quests are read-only
+// reference data feeding the dropdowns (so an id is never free-typed).
+window.EventEditor = (() => {
+'use strict';
+const API = '/api/data/';
+const FILE = 'events.json';
+const state = { events: null, interactions: null, assets: null, stats: null, simstate: null, quests: null, npcs: null, notifications: null, selected: null, dirty: false };
+const $ = (id) => document.getElementById(id);
+
+function setStatus(msg, cls = '') { const s = $('status'); s.textContent = msg; s.className = cls; }
+function markDirty() { state.dirty = true; $('save').disabled = false; setStatus('unsaved changes'); }
+const selectedEvent = () => (state.events?.events ?? []).find((e) => e.id === state.selected) ?? null;
+
+// Every effect type, its label, and the extra fields it needs. Mirrors the EventEffect union in
+// game/data.ts — adding a type here without adding it there would author data the runtime ignores.
+const EFFECT_TYPES = [
+  { type: 'notification', label: 'Notification', fields: ['event', 'title', 'body'] },
+  { type: 'funds', label: 'Funds', fields: ['amount'] },
+  { type: 'setVar', label: 'Set variable', fields: ['var', 'value'] },
+  { type: 'grantVisa', label: 'Grant visa', fields: ['statusId'] },
+  { type: 'unlockAsset', label: 'Unlock catalog asset', fields: ['asset'] },
+  { type: 'needDelta', label: 'Need change', fields: ['need', 'amount'] },
+  { type: 'skillDelta', label: 'Skill change', fields: ['skill', 'amount'] },
+  { type: 'relationshipDelta', label: 'Relationship change', fields: ['npc', 'amount'] },
+  { type: 'spawnTransient', label: 'Spawn transient (fire, puddle…)', fields: ['asset'] },
+  { type: 'assetState', label: 'Set asset state', fields: ['state'] },
+  { type: 'sound', label: 'Play sound', fields: ['sound'] },
+  { type: 'fireEvent', label: 'Fire another event', fields: ['event'] },
+];
+const effectSpec = (type) => EFFECT_TYPES.find((e) => e.type === type) ?? EFFECT_TYPES[0];
+
+// ---- option sources (never free-typed) -------------------------------------------------------
+const notificationIds = () => Object.keys(state.notifications?.events ?? {});
+const needIds = () => (state.stats?.needs ?? []).map((n) => [n.id, n.name]);
+const skillIds = () => (state.stats?.skills ?? []).map((s) => [s.id, s.name]);
+const varIds = () => (state.simstate?.variables ?? []).map((v) => [v.id, v.name]);
+const npcIds = () => (state.npcs?.npcs ?? []).map((n) => [n.id, n.name]);
+const assetIds = () => (state.assets?.assets ?? []).map((a) => [a.id, `${a.name} (${a.id})`]);
+const transientIds = () => (state.assets?.assets ?? []).filter((a) => a.category === 'transient').map((a) => [a.id, a.name]);
+const stateIds = () => {
+  const ids = new Set(['on', 'off']);
+  for (const asset of state.assets?.assets ?? []) for (const s of asset.states ?? []) if (s?.id) ids.add(s.id);
+  return [...ids].map((id) => [id, id]);
+};
+const eventIds = (excludeId) => (state.events?.events ?? []).filter((e) => e.id !== excludeId).map((e) => [e.id, e.name || e.id]);
+
+function selectInput(options, value, onChange, path, blankLabel) {
+  const sel = document.createElement('select');
+  sel.dataset.path = path;
+  if (blankLabel !== undefined) { const o = document.createElement('option'); o.value = ''; o.textContent = blankLabel; sel.appendChild(o); }
+  const known = new Set();
+  for (const [v, label] of options) { const o = document.createElement('option'); o.value = v; o.textContent = label; sel.appendChild(o); known.add(v); }
+  if (value && !known.has(value)) { // preserve an authored id that no longer resolves
+    const o = document.createElement('option'); o.value = value; o.textContent = `${value} (unknown)`; sel.appendChild(o);
+  }
+  sel.value = value ?? '';
+  sel.addEventListener('change', () => { onChange(sel.value); markDirty(); });
+  return sel;
+}
+function textInput(value, onChange, path, placeholder = '') {
+  const i = document.createElement('input'); i.type = 'text'; i.value = value ?? ''; i.placeholder = placeholder;
+  i.dataset.path = path;
+  i.addEventListener('input', () => { onChange(i.value); markDirty(); });
+  return i;
+}
+function numInput(value, onChange, path) {
+  const i = document.createElement('input'); i.type = 'number'; i.step = 'any'; i.value = value ?? '';
+  i.dataset.path = path;
+  i.addEventListener('input', () => { onChange(i.value === '' ? undefined : Number(i.value)); markDirty(); });
+  return i;
+}
+function frow(label, input) {
+  const r = document.createElement('div'); r.className = 'frow';
+  const l = document.createElement('label'); l.textContent = label;
+  r.append(l, input); return r;
+}
+
+// ---- sidebar ---------------------------------------------------------------------------------
+function renderSidebar() {
+  const nav = $('sidebar'); nav.innerHTML = '';
+  for (const event of state.events?.events ?? []) {
+    const b = document.createElement('button');
+    b.className = `event-item${event.id === state.selected ? ' active' : ''}`;
+    b.dataset.eventId = event.id;
+    b.innerHTML = `<span>${event.name || event.id}</span><span class="badge">${(event.effects ?? []).length}</span>`;
+    b.addEventListener('click', () => { state.selected = event.id; renderAll(); });
+    nav.appendChild(b);
+  }
+}
+
+// ---- editor ----------------------------------------------------------------------------------
+function renderEditor() {
+  const root = $('editor'); root.innerHTML = '';
+  const event = selectedEvent();
+  if (!event) { root.innerHTML = '<div class="empty">Select an event</div>'; return; }
+
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = '<h2>Event</h2><div class="hint">A named bundle of effects. Fire it from an interaction (Interaction Editor → "emits event"), and later from asset states, quests and accidents. Effects apply in the order listed.</div>';
+  card.appendChild(frow('id', textInput(event.id, (v) => {
+    const next = v.trim();
+    if (!next || (next !== event.id && (state.events.events).some((e) => e.id === next))) return;
+    // Follow references so a rename never orphans a trigger.
+    for (const other of state.events.events) for (const eff of other.effects ?? []) if (eff.type === 'fireEvent' && eff.event === event.id) eff.event = next;
+    for (const action of state.interactions?.actions ?? []) if (action.emitsEvent === event.id) action.emitsEvent = next;
+    state.selected = next; event.id = next;
+  }, 'event.id')));
+  card.appendChild(frow('display name', textInput(event.name, (v) => { if (v) event.name = v; else delete event.name; }, 'event.name')));
+  card.appendChild(frow('chance % (blank = always)', numInput(event.chancePercent, (v) => {
+    if (v === undefined) delete event.chancePercent; else event.chancePercent = v;
+  }, 'event.chancePercent')));
+  root.appendChild(card);
+
+  // Which actions currently fire this event — so the designer sees how it is reachable.
+  const triggers = document.createElement('div');
+  triggers.className = 'card';
+  const firing = (state.interactions?.actions ?? []).filter((a) => a.emitsEvent === event.id).map((a) => a.name || a.id);
+  const firedBy = (state.events?.events ?? []).filter((e) => (e.effects ?? []).some((eff) => eff.type === 'fireEvent' && eff.event === event.id)).map((e) => e.name || e.id);
+  triggers.innerHTML = '<h2>Fired by</h2>';
+  const list = document.createElement('div');
+  list.className = 'trigger-list';
+  list.dataset.role = 'triggers';
+  list.innerHTML = firing.length || firedBy.length
+    ? `${firing.length ? `<div>Interactions: <code>${firing.join('</code>, <code>')}</code></div>` : ''}${firedBy.length ? `<div>Events: <code>${firedBy.join('</code>, <code>')}</code></div>` : ''}`
+    : '<div>Nothing fires this event yet — set “emits event” on an interaction in the Interaction Editor.</div>';
+  triggers.appendChild(list);
+  root.appendChild(triggers);
+
+  // Optional gate, through the SHARED condition builder (never a private copy).
+  const condCard = document.createElement('div');
+  condCard.className = 'card';
+  condCard.innerHTML = '<h2>Conditions (optional — the event does nothing when unmet)</h2>';
+  if (event.conditions) {
+    const condRoot = document.createElement('div');
+    condRoot.dataset.condRoot = 'conditions'; // same wrapper convention as the Quest Editor
+    condRoot.appendChild(condBuilder.render(event.conditions, 'conditions'));
+    condCard.appendChild(condRoot);
+    const clear = document.createElement('button');
+    clear.className = 'danger mini'; clear.id = 'clearConditions'; clear.textContent = 'Remove conditions';
+    clear.addEventListener('click', () => { delete event.conditions; markDirty(); renderEditor(); });
+    condCard.appendChild(clear);
+  } else {
+    const add = document.createElement('button');
+    add.className = 'mini'; add.id = 'addConditions'; add.textContent = '+ Add condition';
+    add.addEventListener('click', () => { event.conditions = { all: [] }; markDirty(); renderEditor(); });
+    condCard.appendChild(add);
+    const hint = document.createElement('div'); hint.className = 'hint'; hint.textContent = 'No conditions — always fires (subject to chance %).';
+    condCard.appendChild(hint);
+  }
+  root.appendChild(condCard);
+
+  // Effects
+  const fx = document.createElement('div');
+  fx.className = 'card';
+  fx.innerHTML = '<h2>Effects</h2><div class="hint">Each effect calls the system that already implements it (funds → economy, needs → sim stats, visa → visa machine, transient → accidents). “Where” picks the asset that fired the event or the sim.</div>';
+  (event.effects ?? []).forEach((effect, index) => {
+    const box = document.createElement('div');
+    box.className = 'effect'; box.dataset.effectIndex = String(index);
+    const head = document.createElement('div');
+    head.className = 'effect-head';
+    head.appendChild(selectInput(EFFECT_TYPES.map((e) => [e.type, e.label]), effect.type, (v) => {
+      for (const key of Object.keys(effect)) if (key !== 'at') delete effect[key];
+      effect.type = v;
+      renderEditor();
+    }, `effects.${index}.type`));
+    head.appendChild(selectInput([['target', 'the asset that fired it'], ['sim', 'the sim']], effect.at ?? 'target', (v) => {
+      if (v === 'target') delete effect.at; else effect.at = v;
+    }, `effects.${index}.at`));
+    const order = document.createElement('div');
+    order.className = 'order';
+    const up = document.createElement('button'); up.className = 'mini'; up.textContent = '↑'; up.dataset.action = 'move-up'; up.disabled = index === 0;
+    up.addEventListener('click', () => { const a = event.effects; [a[index - 1], a[index]] = [a[index], a[index - 1]]; markDirty(); renderEditor(); });
+    const down = document.createElement('button'); down.className = 'mini'; down.textContent = '↓'; down.dataset.action = 'move-down'; down.disabled = index === event.effects.length - 1;
+    down.addEventListener('click', () => { const a = event.effects; [a[index + 1], a[index]] = [a[index], a[index + 1]]; markDirty(); renderEditor(); });
+    const del = document.createElement('button'); del.className = 'danger mini'; del.textContent = '✕'; del.dataset.action = 'remove-effect';
+    del.addEventListener('click', () => { event.effects.splice(index, 1); markDirty(); renderEditor(); });
+    order.append(up, down, del);
+    head.appendChild(order);
+    box.appendChild(head);
+
+    const fields = document.createElement('div');
+    fields.className = 'effect-fields';
+    const add = (label, input) => { const l = document.createElement('label'); l.textContent = label; fields.append(l, input); };
+    for (const field of effectSpec(effect.type).fields) {
+      const path = `effects.${index}.${field}`;
+      const set = (v) => { if (v === undefined || v === '') delete effect[field]; else effect[field] = v; };
+      if (field === 'amount') add('amount', numInput(effect.amount, (v) => { effect.amount = v ?? 0; }, path));
+      else if (field === 'need') add('need', selectInput(needIds(), effect.need, set, path, '— pick a need —'));
+      else if (field === 'skill') add('skill', selectInput(skillIds(), effect.skill, set, path, '— pick a skill —'));
+      else if (field === 'var') add('variable', selectInput(varIds(), effect.var, set, path, '— pick a variable —'));
+      else if (field === 'npc') add('npc (blank = current visitor)', selectInput(npcIds(), effect.npc, set, path, '— current visitor —'));
+      else if (field === 'asset' && effect.type === 'spawnTransient') add('transient asset', selectInput(transientIds(), effect.asset, set, path, '— pick a transient —'));
+      else if (field === 'asset') add('asset', selectInput(assetIds(), effect.asset, set, path, '— pick an asset —'));
+      else if (field === 'state') add('state', selectInput(stateIds(), effect.state, set, path, '— pick a state —'));
+      else if (field === 'statusId') add('visa status', selectInput((state.visas?.visas ?? []).map((v) => [v.id, v.name]), effect.statusId, set, path, '— pick a visa —'));
+      else if (field === 'event' && effect.type === 'notification') add('notification event', selectInput(notificationIds().map((id) => [id, id]), effect.event, set, path, '— pick an event id —'));
+      else if (field === 'event') add('event', selectInput(eventIds(event.id), effect.event, set, path, '— pick an event —'));
+      else if (field === 'value') add('value', textInput(effect.value, (v) => { effect.value = v; }, path));
+      else add(field, textInput(effect[field], set, path));
+    }
+    box.appendChild(fields);
+    fx.appendChild(box);
+  });
+  const addEffect = document.createElement('button');
+  addEffect.className = 'mini'; addEffect.id = 'addEffect'; addEffect.textContent = '+ Add effect';
+  addEffect.addEventListener('click', () => {
+    (event.effects ??= []).push({ type: 'notification', event: notificationIds()[0] ?? '', title: '' });
+    markDirty(); renderEditor();
+  });
+  fx.appendChild(addEffect);
+
+  // Cycle warning BEFORE it ships (game/events.ts caps depth at runtime, but say so here).
+  if (window.EventEditor?.cycles?.(event.id)) {
+    const warn = document.createElement('div');
+    warn.className = 'warn'; warn.dataset.role = 'cycle-warning';
+    warn.textContent = '⚠ This event can fire itself through a chain of “fire another event” effects. The game caps the depth so it cannot hang, but the chain will stop partway — break the loop.';
+    fx.appendChild(warn);
+  }
+  root.appendChild(fx);
+
+  const actions = document.createElement('div');
+  actions.className = 'card';
+  const del = document.createElement('button');
+  del.className = 'danger'; del.id = 'deleteEvent'; del.textContent = 'Delete event';
+  del.addEventListener('click', () => {
+    const used = (state.interactions?.actions ?? []).filter((a) => a.emitsEvent === event.id).map((a) => a.name || a.id);
+    if (used.length && !window.confirm(`"${event.id}" is fired by: ${used.join(', ')}.\n\nDeleting it leaves those interactions firing nothing. Continue?`)) return;
+    state.events.events = state.events.events.filter((e) => e.id !== event.id);
+    state.selected = state.events.events[0]?.id ?? null;
+    markDirty(); renderAll();
+  });
+  actions.appendChild(del);
+  root.appendChild(actions);
+}
+
+// Pure cycle check mirroring game/events.ts reachableEvents (the module cannot be imported into
+// this classic script, so the walk is duplicated in the ONE place a tool may: a preview warning).
+function cycles(id) {
+  const seen = new Set();
+  const queue = [id];
+  while (queue.length) {
+    const current = queue.shift();
+    const def = (state.events?.events ?? []).find((e) => e.id === current);
+    for (const eff of def?.effects ?? []) {
+      if (eff.type !== 'fireEvent' || !eff.event) continue;
+      if (eff.event === id) return true;
+      if (seen.has(eff.event)) continue;
+      seen.add(eff.event);
+      queue.push(eff.event);
+    }
+  }
+  return false;
+}
+
+const condBuilder = window.ConditionBuilder.create({
+  data: () => ({ stats: state.stats, simstate: state.simstate, quests: state.quests }),
+  onStructuralChange: () => { markDirty(); renderEditor(); },
+  onValueChange: () => { markDirty(); },
+});
+
+function renderAll() { renderSidebar(); renderEditor(); }
+
+async function load() {
+  setStatus('loading…');
+  try {
+    const get = async (path, optional = false) => {
+      const res = await fetch(API + path);
+      if (!res.ok) { if (optional) return null; throw new Error(`${path}: HTTP ${res.status}`); }
+      return res.json();
+    };
+    const [events, interactions, assets, stats, simstate, quests, npcs, notifications, visas] = await Promise.all([
+      get('events.json', true), get('interactions.json'), get('assets.json'), get('stats.json'),
+      get('simstate.json'), get('quests.json'), get('npcs.json', true), get('notifications.json', true), get('visas.json', true),
+    ]);
+    Object.assign(state, {
+      events: events ?? { events: [] }, interactions, assets, stats, simstate, quests,
+      npcs, notifications, visas,
+    });
+    state.events.events ??= [];
+    if (!state.selected && state.events.events.length) state.selected = state.events.events[0].id;
+    state.dirty = false;
+    renderAll();
+    $('save').disabled = true;
+    setStatus('loaded', 'ok');
+  } catch (e) { setStatus(String(e.message || e), 'err'); }
+}
+
+async function save() {
+  setStatus('saving…');
+  try {
+    // events.json is the only file this tool owns; a rename may also touch interactions.json.
+    const res = await fetch(API + FILE, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state.events, null, 2) });
+    if (!res.ok) throw new Error(`${FILE}: HTTP ${res.status}`);
+    const touchedInteractions = (state.interactions?.actions ?? []).some((a) => a.emitsEvent);
+    if (touchedInteractions) {
+      const res2 = await fetch(API + 'interactions.json', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state.interactions, null, 2) });
+      if (!res2.ok) throw new Error(`interactions.json: HTTP ${res2.status}`);
+    }
+    state.dirty = false; $('save').disabled = true;
+    setStatus('saved — game hot-reloads', 'ok');
+  } catch (e) { setStatus(String(e.message || e), 'err'); }
+}
+
+$('save').addEventListener('click', save);
+$('new').addEventListener('click', () => {
+  let n = 1;
+  const ids = new Set((state.events?.events ?? []).map((e) => e.id));
+  while (ids.has(`event_${n}`)) n++;
+  state.events.events.push({ id: `event_${n}`, name: `Event ${n}`, effects: [] });
+  state.selected = `event_${n}`;
+  markDirty(); renderAll();
+});
+
+load();
+return { state, load, save, renderAll, renderEditor, cycles, EFFECT_TYPES };
+})();
+</script>
+<script src="/tools/pathnorm.js"></script>
+<script src="/tools/refscan.js"></script>
+<script src="/tools/nav.js"></script>
+</body>
+</html>

@@ -91,6 +91,24 @@ export interface PersonalityDef { id: string; name: string; color?: string; defa
  *  etc. Absent = no personality traits defined; game code treats it as `[]`. */
 export interface StatsData { needs: NeedDef[]; skills: SkillDef[]; personality?: PersonalityDef[]; }
 
+/** One designer-authored asset state (New.txt 2026-07-20, game/assetstate.ts). Every field except
+ *  `id` is sparse: an absent `mesh` keeps the asset's base mesh, an absent `interactions` list
+ *  offers the asset's whole interaction list, and absent nav/footprint overrides keep the base. */
+export interface AssetStateDef {
+  id: string;
+  name?: string;
+  /** Mesh shown while in this state (path under public/, same convention as AssetDef.mesh). */
+  mesh?: string;
+  /** Actions offered ONLY in this state. Absent = every interaction the asset lists. */
+  interactions?: string[];
+  /** Marks the state a freshly placed instance starts in. Absent on all = the first state. */
+  default?: boolean;
+  /** Per-state nav blocking (an open murphy bed blocks floor a closed one does not). */
+  blocksNav?: boolean;
+  /** Per-state footprint override [w, d] in meters. */
+  footprint?: [number, number];
+}
+
 export interface ActionDef {
   id: string; name: string;
   needGains: Record<string, number>;
@@ -101,6 +119,14 @@ export interface ActionDef {
    *  (with the reason) and posts the actionRefusedUnhappy notification if ordered anyway; autonomy
    *  skips it. See game/happiness.ts happinessSkillFactor/isRefusedByMood. */
   happinessMod?: { skillEffAtMin?: number; skillEffAtMax?: number; refuseBelow?: number };
+  /** New.txt (2026-07-20): completing this action leaves the target asset in this state — the
+   *  generalized form of turn_on/turn_off (which still work untouched when absent). Together with
+   *  AssetStateDef.interactions this forms the transition graph autonomy plans through, so a sim
+   *  that wants to sleep on a closed murphy bed opens it first. See game/assetstate.ts. */
+  setsState?: string;
+  /** New.txt #6: fire this event when the action COMPLETES (side_effect_rule — a cancelled action
+   *  fires nothing). Absent = no event, so existing actions are unchanged. See game/events.ts. */
+  emitsEvent?: string;
   animation: string;
   autonomyEligible: boolean;
   primaryNeed: string | null;
@@ -282,6 +308,11 @@ export interface AssetDef {
    *  the asset's local +Z, upright), `fps` overrides GIF frame delays, `doubleSided` renders the
    *  back face too (default false). Editable on the Asset Editor's State visuals card. */
   screenOverlay?: { image?: string; widthMeters?: number; heightMeters?: number; offset?: [number, number, number]; yawDeg?: number; pitchDeg?: number; fps?: number; doubleSided?: boolean; when?: 'on' | 'off' };
+  /** New.txt (2026-07-20) generalized states: designer-defined states replacing the hardcoded
+   *  ON/OFF pair (a murphy bed is `closed`/`open`, a door `shut`/`ajar`, …). ABSENT keeps the
+   *  legacy behaviour exactly: the asset has the implicit `on`/`off` pair driven by turn_on/
+   *  turn_off. See game/assetstate.ts. */
+  states?: AssetStateDef[];
   /** State-visuals: per-power-state mesh variants (game/stateviz.ts). Sparse map from state to a
    *  mesh path under public/ (same drop-in convention as `mesh`): when the instance's state has a
    *  variant, that model is shown INSTEAD of the base `mesh`; states without a variant keep the
@@ -396,6 +427,42 @@ export interface BehaviorData {
 }
 
 export type QuestState = 'locked' | 'active' | 'done';
+
+// --- New.txt #6 event manager (ROADMAP_EVENTS.md) ------------------------------------------------
+// An event is a named bundle of effects callable from an interaction, an asset state, a quest, or
+// an accident. Every effect below maps 1:1 onto a subsystem that ALREADY implements it — the event
+// runtime performs nothing itself (game/events.ts resolves, main.ts applies).
+export interface EventEffectBase {
+  /** Where it applies: 'target' (the asset that fired it, default), 'sim', or an explicit asset id. */
+  at?: string;
+}
+export interface EventEffectNotification extends EventEffectBase { type: 'notification'; event: string; title: string; body?: string; }
+export interface EventEffectFunds extends EventEffectBase { type: 'funds'; amount: number; }
+export interface EventEffectSetVar extends EventEffectBase { type: 'setVar'; var: string; value: string | number | boolean; }
+export interface EventEffectGrantVisa extends EventEffectBase { type: 'grantVisa'; statusId: string; }
+export interface EventEffectUnlockAsset extends EventEffectBase { type: 'unlockAsset'; asset: string; }
+export interface EventEffectNeedDelta extends EventEffectBase { type: 'needDelta'; need: string; amount: number; }
+export interface EventEffectSkillDelta extends EventEffectBase { type: 'skillDelta'; skill: string; amount: number; }
+export interface EventEffectRelationshipDelta extends EventEffectBase { type: 'relationshipDelta'; npc?: string; amount: number; }
+export interface EventEffectSpawnTransient extends EventEffectBase { type: 'spawnTransient'; asset: string; }
+export interface EventEffectAssetState extends EventEffectBase { type: 'assetState'; state: string; }
+export interface EventEffectSound extends EventEffectBase { type: 'sound'; sound: string; }
+export interface EventEffectFireEvent extends EventEffectBase { type: 'fireEvent'; event: string; }
+export type EventEffect =
+  | EventEffectNotification | EventEffectFunds | EventEffectSetVar | EventEffectGrantVisa
+  | EventEffectUnlockAsset | EventEffectNeedDelta | EventEffectSkillDelta | EventEffectRelationshipDelta
+  | EventEffectSpawnTransient | EventEffectAssetState | EventEffectSound | EventEffectFireEvent;
+
+export interface EventDef {
+  id: string;
+  name?: string;
+  /** Optional gate, evaluated through the SAME shared evaluator as quests/interactions/behavior. */
+  conditions?: Condition;
+  /** Sparse roll: absent or >= 100 always fires, <= 0 never does. Rolled once per fire. */
+  chancePercent?: number;
+  effects: EventEffect[];
+}
+export interface EventsData { events: EventDef[]; }
 
 export interface RewardFunds { type: 'funds'; amount: number; }
 export interface RewardSetVar { type: 'setVar'; var: string; value: string | number | boolean; }
@@ -895,6 +962,8 @@ export interface GameData {
   theme?: ThemeData;
   /** SOCIAL S3: optional for old fixtures; loadAll supplies both files in the real game. */
   npcs?: import('./npc').NpcsData;
+  /** New.txt #6: optional so a deployment without events.json simply has no events. */
+  events?: EventsData;
   social?: import('./social').SocialData;
   /** Save settings are optional so older test fixtures and deployments remain compatible. */
   save?: SaveConfig;
@@ -937,6 +1006,7 @@ const FILES = {
   behavior: '/data/behavior.json',
   theme: '/data/theme.json',
   npcs: '/data/npcs.json',
+  events: '/data/events.json',
   social: '/data/social.json',
   save: '/data/save.json',
   title: '/data/title.json',
@@ -1001,7 +1071,7 @@ export async function loadAll(): Promise<GameData> {
     if (fallbackId === homeId) throw err;
     map = await fetchJson<MapData>(`/data/maps/${fallbackId}.json`);
   }
-  const [stats, interactions, assets, quests, visas, jobs, bills, finance, happiness, loading, notifications, behavior, theme, npcs, social, save, title] = await Promise.all([
+  const [stats, interactions, assets, quests, visas, jobs, bills, finance, happiness, loading, notifications, behavior, theme, npcs, social, save, title, events] = await Promise.all([
     fetchJson<StatsData>(FILES.stats),
     fetchJson<InteractionsData>(FILES.interactions),
     fetchJson<AssetsData>(FILES.assets),
@@ -1019,8 +1089,9 @@ export async function loadAll(): Promise<GameData> {
     fetchOptionalJson<import('./social').SocialData>(FILES.social),
     fetchOptionalJson<SaveConfig>(FILES.save),
     fetchOptionalJson<TitleConfig>(FILES.title),
+    fetchOptionalJson<EventsData>(FILES.events),
   ]);
-  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills, finance, happiness, loading, notifications, behavior, theme, npcs, social, save, title };
+  return { stats, interactions, assets, map, tuning, simstate, quests, visas, jobs, bills, finance, happiness, loading, notifications, behavior, theme, npcs, social, save, title, events };
 }
 
 async function fetchOptionalJson<T>(url: string): Promise<T | undefined> {

@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { loadAll, loadAllMaps, loadTitleBootstrap, setRuntimeHomeMap, watchData, type ActionDef, type AssetDef, type GameData, type MapData, type SaveConfig } from './data';
 import { TouchCamera } from './camera';
-import { applyWallCutView, buildWorld, makeSimStandIn, makeLights, applyDayNight, applyExteriorScene, loadRiggedCharacter, normalizeMeshUrl, setAssetObjectOn } from './world';
+import { applyWallCutView, buildWorld, makeSimStandIn, makeLights, applyDayNight, applyExteriorScene, loadRiggedCharacter, normalizeMeshUrl, setAssetObjectState } from './world';
 import { buildDoors, ExteriorDoorTransit, type ExteriorDoorTransitRequest } from './doors';
 import { AnimController } from './anim';
 import { bakeNavGrid } from './nav';
@@ -21,6 +21,7 @@ import { listRentals, PendingMoveTracker } from './rental';
 import { FinanceState, decideRepoSeizure } from './bills';
 import { WorkTracker, applyNeedsCost, decideAutoDepart, isLeaveForWorkAvailable, isScheduledWorkWindow, isWithinDepartureWindow, jobLevelPay, jobLevelTitle, promotionRequirementsFor, shouldStartVisaGrace, weekdayName, type WorkReturnPoint, type WorkTickEvent } from './work';
 import { computeHappiness, happinessSkillFactor, isRefusedByMood } from './happiness';
+import { MAX_EVENT_DEPTH, canFireAtDepth, resolveEvent } from './events';
 import { AccidentsController, resolveTapAssetId, shouldDespawnOnCleanup, shouldRemovePlacedOnCleanup } from './accidents';
 import { GarbageController, wasteItemCount } from './garbage';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials, isSelectableForSell } from './buymode';
@@ -33,7 +34,7 @@ import { initBladderFailureState, checkBladderFailure, rearmBladderFailure } fro
 import { FoodRegistry, foodAssetForActionEvent, firstLegSeatAware, actionAfterSourceFetch, cookedMealHungerGain, resolveFoodConfig, wasteAssetForDroppedFood } from './food';
 import { initEnergyCollapseState, StarvationTracker, tickEnergyCollapse } from './survival';
 import { formatMoneyChange, formatSkillUp, skillLevelUps } from './feedback';
-import { AssetStateRegistry, isAssetStateActionAvailable, isStatefulAsset, powerStateForAction } from './assetstate';
+import { AssetStateRegistry, LEGACY_ON, hasCustomStates, isActionAvailableInState, isStatefulAsset, planToReachAction, powerStateForAction, stateAfterAction } from './assetstate';
 import { HydroMeter, resolveAssetPower, HYDRO_BILL_ID } from './hydro';
 import { InitialLoadTracker, phraseAt } from './loading';
 import { applyTheme } from './theme';
@@ -175,8 +176,113 @@ async function start(initialLoadSlotId?: string) {
   // bakeNavGrid — used by both buy-mode actions and the ordinary hot-reload rebake below, so
   // overlay changes always survive a tuning/map/asset edit landing mid-session.
   const buyMode = new BuyModeController(() => data, () => world);
+  /**
+   * New.txt (2026-07-20) "read through the states": [] when the action is already available on this
+   * instance, the ordered transition steps when it can be unlocked, or null when it is unreachable.
+   * Legacy assets (no authored states) always answer [] so nothing about them changes.
+   */
+  const statePlanFor = (action: ActionDef, object: THREE.Object3D, asset: AssetDef): string[] | null => {
+    if (!hasCustomStates(asset)) return [];
+    const key = object.userData?.assetStateKey as string | undefined;
+    if (!key) return [];
+    const actionsById = new Map(data.interactions.actions.map((entry) => [entry.id, entry]));
+    return planToReachAction(asset, assetStates.stateOf(key, asset), action.id, actionsById);
+  };
+
+  /**
+   * New.txt #6 event manager — the ONE place an event touches the world (ROADMAP_EVENTS §3.3).
+   * game/events.ts decides IF and WHAT; this maps each resolved effect onto the subsystem that
+   * already implements it, so events add wiring rather than a second implementation. Composition
+   * is allowed but depth-capped, and every unknown id degrades with a warn instead of throwing.
+   */
+  const fireEvent = (eventId: string, source?: { object?: THREE.Object3D; assetDef?: AssetDef }, depth = 0): boolean => {
+    if (!canFireAtDepth(depth)) {
+      console.warn(`[events] "${eventId}" exceeded the ${MAX_EVENT_DEPTH}-deep composition cap — check for an event firing itself.`);
+      return false;
+    }
+    const resolution = resolveEvent(data.events, eventId, { eval: buildEvalContext() });
+    if (!resolution.fired) return false;
+    const targetObject = source?.object;
+    const targetDef = source?.assetDef;
+    let fundsTouched = false;
+    let statesTouched = false;
+    for (const { effect, scope } of resolution.effects) {
+      switch (effect.type) {
+        case 'notification':
+          postNotification(effect.event, effect.title, effect.body);
+          break;
+        case 'funds': // QuestRunner stays the single runtime economy owner (§3)
+        case 'setVar':
+        case 'unlockAsset':
+        case 'grantVisa':
+          quests.applyReward(effect);
+          fundsTouched = fundsTouched || effect.type === 'funds';
+          break;
+        case 'needDelta': {
+          const current = stats.needs.get(effect.need);
+          if (current === undefined) { console.warn(`[events] "${eventId}" targets unknown need "${effect.need}"`); break; }
+          stats.refillNeed(effect.need, current + effect.amount);
+          break;
+        }
+        case 'skillDelta': {
+          const current = stats.skills.get(effect.skill);
+          if (current === undefined) { console.warn(`[events] "${eventId}" targets unknown skill "${effect.skill}"`); break; }
+          const max = data.stats.skills.find((entry) => entry.id === effect.skill)?.max ?? 100;
+          stats.skills.set(effect.skill, Math.min(max, Math.max(0, current + effect.amount)));
+          hud.refresh();
+          break;
+        }
+        case 'relationshipDelta': {
+          const npcId = effect.npc?.trim() || currentVisitor()?.id;
+          if (!npcId) break; // nobody to apply it to — silently skip, same as a visit with no NPC
+          socialRuntime.relationships.set(npcId, socialRuntime.relationships.get(npcId) + effect.amount);
+          break;
+        }
+        case 'spawnTransient': {
+          const at: [number, number] = scope === 'sim' || !targetObject
+            ? [sim.position.x, sim.position.z]
+            : [targetObject.position.x, targetObject.position.z];
+          accidents.spawnTransient(effect.asset, at, THREE.MathUtils.radToDeg(sim.rotation.y), simClockSeconds);
+          break;
+        }
+        case 'assetState': {
+          const key = targetObject?.userData?.assetStateKey as string | undefined;
+          if (!key || !targetDef) break;
+          if (assetStates.setState(key, effect.state)) statesTouched = true;
+          break;
+        }
+        case 'sound':
+          if (effect.sound) audio.playSfx(effect.sound);
+          break;
+        case 'fireEvent':
+          fireEvent(effect.event, source, depth + 1);
+          break;
+      }
+    }
+    if (fundsTouched) hud.setFunds(quests.funds, data.tuning.economy.currencyName);
+    if (statesTouched) {
+      syncAssetStates();
+      applyEnvironment();
+      if (targetDef && stateChangesNav(targetDef)) rebakeNav();
+    }
+    return true;
+  };
+
+  /** True when any authored state overrides nav blocking or footprint, so a transition must rebake. */
+  const stateChangesNav = (def: AssetDef) =>
+    (def.states ?? []).some((state) => state?.blocksNav !== undefined || state?.footprint !== undefined);
   const rebakeNav = () => {
-    grid = bakeNavGrid({ ...data.map, placedObjects: buyMode.effectivePlacedObjectsList() }, data.assets);
+    // New.txt (2026-07-20): bake with each instance's CURRENT state so per-state footprint/nav
+    // overrides land (a closed murphy bed leaves floor walkable, an open one blocks it).
+    const byIdForNav = assetsById(data);
+    grid = bakeNavGrid(
+      { ...data.map, placedObjects: buyMode.effectivePlacedObjectsList() },
+      data.assets,
+      (placedIndex, assetId) => {
+        const def = byIdForNav.get(assetId);
+        return def && hasCustomStates(def) ? assetStates.stateOf(`designer:${placedIndex}`, def) : undefined;
+      },
+    );
     agent.retune(data.tuning, grid, assetsById(data));
   };
 
@@ -545,9 +651,18 @@ async function start(initialLoadSlotId?: string) {
   autonomy = new Autonomy(
     () => data, () => world, agent, stats, accidents, buildEvalContext,
     {
-      candidateAvailable: (action, object) => !isRefusedByMood(action.happinessMod, happiness) // H2: autonomy respects mood refusal
+      candidateAvailable: (action, object, asset) => !isRefusedByMood(action.happinessMod, happiness) // H2: autonomy respects mood refusal
         && (!sleepAction(action)
-          || !sleepDecisionAt([object.position.x, object.position.z]).blocked),
+          || !sleepDecisionAt([object.position.x, object.position.z]).blocked)
+        // New.txt (2026-07-20): a goal blocked by the asset's current state stays eligible ONLY if
+        // some sequence of transitions reaches it — the sim opens the murphy bed, then sleeps.
+        && statePlanFor(action, object, asset) !== null,
+      // The scored goal is kept, but what gets ORDERED is the first transition step (if any).
+      resolveOrderAction: (action, object, asset) => {
+        const plan = statePlanFor(action, object, asset);
+        const first = plan?.[0];
+        return (first && data.interactions.actions.find((entry) => entry.id === first)) || action;
+      },
       extraCandidates: () => {
         if (!data.social || socialSession.active || phoneContactSession.active) return [];
         if (visitors.state.phase === 'visiting') {
@@ -1152,8 +1267,9 @@ async function start(initialLoadSlotId?: string) {
       if (!key || !assetId) return;
       const def = byId.get(assetId);
       if (!def) return;
-      const on = assetStates.isOn(key, def);
-      setAssetObjectOn(obj, on);
+      const stateId = assetStates.stateOf(key, def);
+      const on = stateId === LEGACY_ON;
+      setAssetObjectState(obj, stateId);
       if (on && !meteredSeen.has(key)) {
         const power = resolveAssetPower(def);
         if (power) { hydroRate += power.ratePerHour; meteredSeen.add(key); }
@@ -1550,6 +1666,33 @@ async function start(initialLoadSlotId?: string) {
     // for main.ts's own two natural-finish call sites (primaryNeed threshold below, and the
     // `duration` timer running out in the render loop) — see sim.ts's stopAction doc comment.
     if (!completed) return;
+    // New.txt #6: a COMPLETED action fires its authored event (cancelled actions fire nothing —
+    // side_effect_rule). Runs before the state transition below so an event may still read the
+    // pre-transition state, and so a leak event can spawn its puddle at the asset that broke.
+    if (a.action.emitsEvent) {
+      const emitAssetId = a.target.userData?.assetId as string | undefined;
+      fireEvent(a.action.emitsEvent, {
+        object: a.target,
+        assetDef: emitAssetId ? data.assets.assets.find((x) => x.id === emitAssetId) : undefined,
+      });
+    }
+    // New.txt (2026-07-20) generalized states: a COMPLETED action carrying `setsState` moves its
+    // target into that state (side_effect_rule — an interrupted open leaves the bed shut). Legacy
+    // turn_on/turn_off keep firing at action START above, so the TV still lights up immediately.
+    {
+      const stateKey = a.target.userData?.assetStateKey as string | undefined;
+      const assetId = a.target.userData?.assetId as string | undefined;
+      const def = assetId ? data.assets.assets.find((x) => x.id === assetId) : undefined;
+      if (stateKey && def && hasCustomStates(def)) {
+        const next = stateAfterAction(def, a.action.id, a.action);
+        if (next && assetStates.setState(stateKey, next)) {
+          syncAssetStates();
+          applyEnvironment();
+          // A state may change footprint/nav blocking (an opened murphy bed occupies floor).
+          if (stateChangesNav(def)) rebakeNav();
+        }
+      }
+    }
     // Next.txt (2026-07-18) angry-wake turn-off chain: after each completed turn_off, head to the
     // next still-active blocker until the home is quiet.
     if (angryShutdownActive && a.action.id === 'turn_off') {
@@ -1769,7 +1912,9 @@ async function start(initialLoadSlotId?: string) {
           // this placed instance's live state (Turn On only while OFF; Turn Off only while ON).
           .filter((x) => {
             const key = target.userData.assetStateKey as string | undefined;
-            return !key || isAssetStateActionAvailable(x.id, assetStates.isOn(key, asset));
+            // New.txt (2026-07-20): per-state interaction gating (legacy on/off assets keep the
+            // exact turn_on/turn_off rule through the same helper).
+            return !key || isActionAvailableInState(asset, assetStates.stateOf(key, asset), x.id);
           })
           // leave_for_work keeps its data-side vars.job condition (§7.16) and adds this code-side
           // live departure-window gate, including cross-midnight windows (pure math in work.ts).

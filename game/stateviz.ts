@@ -8,6 +8,7 @@
 // screen overlay exactly when the glow light and sound start.
 
 import type { AssetDef } from './data';
+import { LEGACY_ON, hasCustomStates, resolveStateOverrides } from './assetstate';
 
 export interface ResolvedScreenOverlay {
   image: string;
@@ -63,9 +64,22 @@ export function meshForState(def: Pick<AssetDef, 'mesh' | 'stateMeshes'>, on: bo
   return variant?.trim() || def.mesh;
 }
 
+/** New.txt (2026-07-20) generalized states: the mesh for ANY state id. An asset with authored
+ *  `states` resolves through them; everything else keeps the legacy on/off `stateMeshes` path, so
+ *  existing data behaves identically. */
+export function meshForStateId(def: Pick<AssetDef, 'mesh' | 'stateMeshes' | 'states'>, stateId: string): string {
+  if (hasCustomStates(def)) return resolveStateOverrides({ ...def, blocksNav: undefined, footprint: [1, 1] }, stateId).mesh;
+  return meshForState(def, stateId === LEGACY_ON);
+}
+
 /** Every distinct mesh path this asset can ever show (base first) — what world.ts must load. */
-export function allStateMeshes(def: Pick<AssetDef, 'mesh' | 'stateMeshes'>): string[] {
-  const paths = [def.mesh, def.stateMeshes?.on?.trim(), def.stateMeshes?.off?.trim()];
+export function allStateMeshes(def: Pick<AssetDef, 'mesh' | 'stateMeshes' | 'states'>): string[] {
+  const paths = [
+    def.mesh,
+    def.stateMeshes?.on?.trim(),
+    def.stateMeshes?.off?.trim(),
+    ...(def.states ?? []).map((state) => state?.mesh?.trim()),
+  ];
   const seen = new Set<string>();
   const out: string[] = [];
   for (const p of paths) {

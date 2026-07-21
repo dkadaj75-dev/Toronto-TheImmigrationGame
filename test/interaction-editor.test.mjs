@@ -22,7 +22,7 @@ const interactions = {
 const assets = {
   categories: ['electronics', 'appliances'],
   assets: [
-    { id: 'tv', name: 'TV', category: 'electronics', mesh: 'models/tv.glb', buyPrice: 800, sellPrice: 600, environmentScore: 2, footprint: [2, 1], interactions: ['watch_tv'] },
+    { id: 'tv', name: 'TV', category: 'electronics', mesh: 'models/tv.glb', buyPrice: 800, sellPrice: 600, environmentScore: 2, footprint: [2, 1], interactions: ['watch_tv'], states: [{ id: 'closed', default: true }, { id: 'open_bed' }] },
     { id: 'stove', name: 'Stove', category: 'appliances', mesh: 'models/stove.glb', buyPrice: 400, sellPrice: 300, environmentScore: 1, footprint: [1, 1], interactions: ['cook'] },
   ],
 };
@@ -53,7 +53,7 @@ const fetchMock = async (url, opts = {}) => {
     puts[path] = JSON.parse(opts.body);
     return { ok: true, status: 200, json: async () => ({}) };
   }
-  const body = { 'interactions.json': interactions, 'assets.json': assets, 'stats.json': stats, 'simstate.json': simstate, 'quests.json': quests }[path];
+  const body = { 'interactions.json': interactions, 'assets.json': assets, 'stats.json': stats, 'simstate.json': simstate, 'quests.json': quests , 'events.json': { events: [{ id: 'sink_leak', name: 'Sink leak' }] } }[path];
   return { ok: !!body, status: body ? 200 : 404, json: async () => structuredClone(body) };
 };
 
@@ -87,6 +87,21 @@ assert(doc.querySelector('[data-action-id="cook"] .badge')?.textContent === 'pla
 // --- watch_tv selected by default; id is readonly
 assert(doc.querySelector('input[data-path="id"]').value === 'watch_tv', 'watch_tv selected by default');
 assert(doc.querySelector('input[data-path="id"]').readOnly, 'id field is readonly');
+
+// --- setsState is a constrained dropdown fed by referencing assets, plus legacy on/off.
+const setsStateSel = doc.querySelector('select[data-path="setsState"]');
+const setsStateValues = [...setsStateSel.options].map((option) => option.value);
+assert(['', 'closed', 'open_bed', 'on', 'off'].every((value) => setsStateValues.includes(value)), 'setsState options include referencing asset states plus on/off and blank');
+setsStateSel.value = 'open_bed';
+setsStateSel.dispatchEvent(new window.Event('change', { bubbles: true }));
+assert(window.InteractionEditor?.state?.interactions?.actions?.[0]?.setsState === 'open_bed' || setsStateSel.value === 'open_bed', 'selecting a state writes ActionDef.setsState');
+setsStateSel.value = '';
+setsStateSel.dispatchEvent(new window.Event('change', { bubbles: true }));
+doc.getElementById('save').click();
+await new Promise((r) => setTimeout(r, 50));
+assert(!('setsState' in puts['interactions.json'].actions.find((action) => action.id === 'watch_tv')), 'blank setsState selection deletes the sparse key');
+setsStateSel.value = 'open_bed';
+setsStateSel.dispatchEvent(new window.Event('change', { bubbles: true }));
 
 // --- edit name, animation
 const nameInput = doc.querySelector('input[data-path="name"]');
@@ -223,6 +238,7 @@ assert(savedTv.needGains.hunger === 1.5, 'PUT added new need gain key');
 assert(savedTv.skillGains.english === 0.02, 'untouched skill gain preserved');
 assert(savedTv.duration === undefined, 'PUT: watch_tv still has no duration key (never touched)');
 assert(savedTv.sound === '/sounds/action_beep.wav', 'PUT carries edited sound path');
+assert(savedTv.setsState === 'open_bed', 'PUT carries selected setsState');
 let savedCook = saved.actions.find((a) => a.id === 'cook');
 assert(savedCook.cost === 14, 'PUT carries edited sparse action cost');
 assert(savedCook.duration.baseSeconds === 50, 'PUT carries edited cook duration.baseSeconds');
@@ -350,11 +366,12 @@ assert(!('conditions' in savedYoga), 'PUT: conditions key fully removed (sparse)
 // renders correctly — separate DOM instance so it doesn't disturb the shared `doc`'s state above.
 {
   const interactions2 = { actions: [
-    { id: 'leave_for_work', name: 'Leave for work', needGains: {}, skillGains: {}, animation: '', autonomyEligible: false, primaryNeed: null, conditions: { all: [{ var: 'vars.job', neq: null }] } },
+    { id: 'leave_for_work', name: 'Leave for work', needGains: {}, skillGains: {}, animation: '', autonomyEligible: false, primaryNeed: null, setsState: 'archived_state', conditions: { all: [{ var: 'vars.job', neq: null }] } },
   ] };
+  let savedUnknown = null;
   const fetchMock2 = async (url, opts = {}) => {
     const path = String(url).replace('/api/data/', '');
-    if (opts.method === 'PUT') return { ok: true, status: 200, json: async () => ({}) };
+    if (opts.method === 'PUT') { if (path === 'interactions.json') savedUnknown = JSON.parse(opts.body); return { ok: true, status: 200, json: async () => ({}) }; }
     const body = { 'interactions.json': interactions2, 'assets.json': assets, 'stats.json': stats, 'simstate.json': simstate, 'quests.json': quests }[path];
     return { ok: !!body, status: body ? 200 : 404, json: async () => structuredClone(body) };
   };
@@ -365,6 +382,13 @@ assert(!('conditions' in savedYoga), 'PUT: conditions key fully removed (sparse)
   });
   await new Promise((r) => setTimeout(r, 50));
   const doc2 = dom2.window.document;
+  const unknownState = doc2.querySelector('select[data-path="setsState"]');
+  assert(unknownState.value === 'archived_state' && [...unknownState.options].some((option) => option.value === 'archived_state' && option.textContent.includes('(unknown)')), 'unknown pre-existing setsState is preserved as an (unknown) option');
+  const unknownName = doc2.querySelector('input[data-path="name"]');
+  unknownName.value = 'Leave for paid work'; unknownName.dispatchEvent(new dom2.window.Event('input', { bubbles: true }));
+  doc2.getElementById('save').click();
+  await new Promise((r) => setTimeout(r, 50));
+  assert(savedUnknown.actions[0].setsState === 'archived_state', 'saving an unrelated edit does not clobber unknown pre-existing setsState');
   assert(doc2.getElementById('removeConditions'), 'pre-existing conditions render the builder (not the empty-state button)');
   const leafRow = doc2.querySelector('.cond-leaf');
   assert(leafRow.querySelector('.cond-var-select').value === 'vars.job', 'shipped leaf var (vars.job) renders selected');
@@ -378,6 +402,22 @@ search.value = 'yoga';
 search.dispatchEvent(new window.Event('input', { bubbles: true }));
 const visible = doc.querySelectorAll('.action-item');
 assert(visible.length === 1 && visible[0].dataset.actionId === 'do_yoga', 'search narrows sidebar to do_yoga');
+
+
+// --- New.txt #6: emits-event dropdown (fed from events.json, never free-typed)
+{
+  const sel = doc.querySelector('select[data-path="emitsEvent"]');
+  assert(!!sel && sel.tagName === 'SELECT', 'emits-event renders as a dropdown');
+  assert([...sel.options].some((o) => o.value === 'sink_leak'), 'authored events populate the picker');
+  const selectedId = doc.querySelector('input[data-path="id"]').value;
+  const action = window.InteractionEditor.state.interactions.actions.find((x) => x.id === selectedId);
+  sel.value = 'sink_leak';
+  sel.dispatchEvent(new window.Event('change', { bubbles: true }));
+  assert(!!action && action.emitsEvent === 'sink_leak', 'selecting an event writes emitsEvent');
+  sel.value = '';
+  sel.dispatchEvent(new window.Event('change', { bubbles: true }));
+  assert(!('emitsEvent' in action), 'blank deletes emitsEvent (sparse)');
+}
 
 if (failures > 0) { console.error(`\n${failures} FAILURE(S)`); process.exit(1); }
 console.log('\nALL INTERACTION-EDITOR TESTS PASSED');

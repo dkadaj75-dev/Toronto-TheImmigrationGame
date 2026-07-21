@@ -42,9 +42,11 @@ const tuning = {
 };
 
 const puts = {};
+const rawPuts = {};
 const fetchMock = async (url, opts = {}) => {
   const path = String(url).replace('/api/data/', '');
   if (opts.method === 'PUT') {
+    rawPuts[path] = opts.body;
     puts[path] = JSON.parse(opts.body);
     return { ok: true, status: 200, json: async () => ({}) };
   }
@@ -161,6 +163,67 @@ survivalImportance.dispatchEvent(new window.Event('input', { bubbles: true }));
 const napCb = doc.querySelector('input[data-path="interaction:nap"]');
 napCb.checked = true;
 napCb.dispatchEvent(new window.Event('change', { bubbles: true }));
+
+// --- generalized states: CRUD, validation, exclusive default, sparse action lists, path normalization
+assert(doc.querySelector('[data-card="states"] h2')?.textContent === 'States', 'States card renders');
+doc.querySelector('[data-action="add-state"]').click();
+assert(doc.querySelectorAll('[data-state-row]').length === 1, 'add state appends a row');
+let stateId0 = doc.querySelector('input[data-path="states.0.id"]');
+stateId0.value = 'closed';
+stateId0.dispatchEvent(new window.Event('change', { bubbles: true }));
+doc.querySelector('[data-action="add-state"]').click();
+assert(doc.querySelectorAll('[data-state-row]').length === 2, 'a second state can be added');
+let stateId1 = doc.querySelector('input[data-path="states.1.id"]');
+let stateAlert = '';
+window.alert = (message) => { stateAlert = message; };
+stateId1.value = '';
+stateId1.dispatchEvent(new window.Event('change', { bubbles: true }));
+assert(stateAlert.includes('cannot be blank') && stateId1.value === 'state_1', 'blank state id is rejected and reverted');
+stateId1.value = 'closed';
+stateId1.dispatchEvent(new window.Event('change', { bubbles: true }));
+assert(stateAlert.includes('already exists') && stateId1.value === 'state_1', 'duplicate state id is rejected and reverted');
+stateId1.value = 'open_bed';
+stateId1.dispatchEvent(new window.Event('change', { bubbles: true }));
+window.alert = () => {};
+
+let default0 = doc.querySelector('input[data-path="states.0.default"]');
+let default1 = doc.querySelector('input[data-path="states.1.default"]');
+default0.checked = true; default0.dispatchEvent(new window.Event('change', { bubbles: true }));
+default1 = doc.querySelector('input[data-path="states.1.default"]');
+default1.checked = true; default1.dispatchEvent(new window.Event('change', { bubbles: true }));
+default0 = doc.querySelector('input[data-path="states.0.default"]');
+assert(!default0.checked && doc.querySelector('input[data-path="states.1.default"]').checked, 'default flag is mutually exclusive across state rows');
+
+// Give this asset two actions so state filtering can exercise subset, none, and all.
+const watchCb = doc.querySelector('input[data-path="interaction:watch_tv"]');
+watchCb.checked = true; watchCb.dispatchEvent(new window.Event('change', { bubbles: true }));
+// The state card reflects the asset interaction list after a normal reselect/render.
+doc.querySelector('[data-asset-id="couch"]').click();
+let stateNap = doc.querySelector('input[data-path="states.0.interaction:nap"]');
+let stateWatch = doc.querySelector('input[data-path="states.0.interaction:watch_tv"]');
+assert(stateNap.checked && stateWatch.checked, 'absent per-state interactions renders all asset actions checked');
+stateWatch.checked = false; stateWatch.dispatchEvent(new window.Event('change', { bubbles: true }));
+assert(JSON.stringify(window.AssetEditor.state.assets.assets[0].states[0].interactions) === '["nap"]', 'a proper subset writes the sparse interactions list');
+stateNap.checked = false; stateNap.dispatchEvent(new window.Event('change', { bubbles: true }));
+assert(!('interactions' in window.AssetEditor.state.assets.assets[0].states[0]), 'none selected omits the interactions key');
+stateNap.checked = true; stateNap.dispatchEvent(new window.Event('change', { bubbles: true }));
+stateWatch.checked = true; stateWatch.dispatchEvent(new window.Event('change', { bubbles: true }));
+assert(!('interactions' in window.AssetEditor.state.assets.assets[0].states[0]), 'all selected omits the interactions key');
+stateWatch.checked = false; stateWatch.dispatchEvent(new window.Event('change', { bubbles: true }));
+
+const stateMesh = doc.querySelector('input[data-path="states.0.mesh"]');
+stateMesh.value = 'C:\\Art\\public\\models\\murphy_closed.glb';
+stateMesh.dispatchEvent(new window.Event('input', { bubbles: true }));
+assert(window.AssetEditor.state.assets.assets[0].states[0].mesh === 'models/murphy_closed.glb', 'state mesh path is normalized through normPublicPath');
+doc.querySelector('button[data-action="remove-state"][data-state-index="0"]').click();
+assert(doc.querySelectorAll('[data-state-row]').length === 1 && window.AssetEditor.state.assets.assets[0].states[0].id === 'open_bed', 'remove state deletes the targeted row');
+
+// Assert the literal whole-file body, not just selected state fields.
+doc.getElementById('save').click();
+await new Promise((r) => setTimeout(r, 50));
+assert(rawPuts['assets.json'] === JSON.stringify(window.AssetEditor.state.assets, null, 2), 'save writes the exact whole assets.json body');
+doc.querySelector('button[data-action="remove-state"][data-state-index="0"]').click();
+assert(!('states' in window.AssetEditor.state.assets.assets[0]), 'removing the last state deletes the whole states key');
 
 // --- buyable defaults to checked (absent = true); unchecking writes buyable:false explicitly
 const buyableCb = doc.querySelector('input[data-path="buyable"]');

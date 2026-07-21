@@ -31,6 +31,11 @@ export interface AutonomyOptions {
   /** Optional live runtime veto for code-side state that is not expressible in quest conditions
    *  (B13-10: a bed sleep/nap candidate while room ambience blocks sleeping). */
   candidateAvailable?: (action: ActionDef, object: THREE.Object3D, asset: AssetDef) => boolean;
+  /** New.txt (2026-07-20) generalized states: substitute the action actually ORDERED while the
+   *  scored GOAL stays the one the sim wants — wanting to sleep on a closed murphy bed orders the
+   *  opening step first, then the next scan finds sleep directly available. Absent = order the
+   *  scored action unchanged. */
+  resolveOrderAction?: (action: ActionDef, object: THREE.Object3D, asset: AssetDef) => ActionDef;
 }
 
 export interface AutonomyExtraCandidate {
@@ -169,10 +174,11 @@ export class Autonomy {
         const best = pickBest(remaining, { behavior, eval: scoringCtx });
         if (!best) return null;
         const c = best.candidate.value!;
-        const legSeatAware = firstLegSeatAware(c.action);
+        const ordered = c.order ? c.action : (this.options.resolveOrderAction?.(c.action, c.obj, c.def) ?? c.action);
+        const legSeatAware = firstLegSeatAware(ordered);
         const seat = legSeatAware ? findSeatFor(this.getWorld(), data, c.obj) : null;
-        if ((c.order ? c.order() : this.agent.orderAction(c.action, c.obj, seat, c.def, legSeatAware))) {
-          return { action: c.action, target: c.obj };
+        if ((c.order ? c.order() : this.agent.orderAction(ordered, c.obj, seat, c.def, legSeatAware))) {
+          return { action: ordered, target: c.obj };
         }
         remaining.splice(remaining.indexOf(best.candidate), 1);
       }
@@ -185,10 +191,11 @@ export class Autonomy {
     for (const c of candidates) {
       // ROADMAP_NEXT B7-4: food-source actions (fridge Eat / stove Cook) defer their seat to the
       // carry/eat second leg — the first leg must reach the source (see game/food.ts firstLegSeatAware).
-      const legSeatAware = firstLegSeatAware(c.action);
+      const ordered = c.order ? c.action : (this.options.resolveOrderAction?.(c.action, c.obj, c.def) ?? c.action);
+      const legSeatAware = firstLegSeatAware(ordered);
       const seat = legSeatAware ? findSeatFor(this.getWorld(), data, c.obj) : null;
-      if ((c.order ? c.order() : this.agent.orderAction(c.action, c.obj, seat, c.def, legSeatAware))) {
-        return { action: c.action, target: c.obj };
+      if ((c.order ? c.order() : this.agent.orderAction(ordered, c.obj, seat, c.def, legSeatAware))) {
+        return { action: ordered, target: c.obj };
       }
     }
     return null;

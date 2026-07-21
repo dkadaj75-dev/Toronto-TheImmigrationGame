@@ -1,0 +1,4 @@
+{
+  "_comment": "New.txt #6 event manager. An event is a named bundle of effects callable from an interaction (ActionDef.emitsEvent), and later from asset states, quests and accidents. Effects map 1:1 onto existing subsystems - see ROADMAP_EVENTS.md and game/events.ts. Edit in tools/events.html.",
+  "events": []
+}
