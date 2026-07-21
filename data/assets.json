@@ -996,6 +996,58 @@
           ]
         }
       ]
+    },
+    {
+      "id": "oldstove",
+      "name": "Old Stove",
+      "category": "appliances",
+      "mesh": "models/oldstove.glb",
+      "buyPrice": 400,
+      "sellPrice": 300,
+      "environmentScore": 1,
+      "survivalImportance": 90,
+      "footprint": [
+        0.75,
+        0.75
+      ],
+      "interactions": [
+        "cook",
+        "cook_a_large_meal"
+      ],
+      "accidents": [
+        {
+          "accidentId": "fire",
+          "trigger": "onUse",
+          "baseChancePercent": 4,
+          "placement": "on",
+          "modifiers": [
+            {
+              "var": "skills.cooking",
+              "pctAt0": 5,
+              "pctAtMax": -2
+            }
+          ],
+          "_note": "PROJECT_CONTEXT.md §7.3 example, verbatim: novice cook (skills.cooking=0) risks 2+15=17%, master (=max) 2-2=0%."
+        }
+      ],
+      "sound": "/sounds/actions/stove.mp3",
+      "combustibility": {
+        "chancePercent": 25,
+        "delaySeconds": 10
+      },
+      "icon": "icons/stove.png",
+      "meshFit": {
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "yOffset": 0,
+        "zOffset": -0.05
+      },
+      "needMultipliers": {
+        "hunger": 1
+      }
     }
   ]
 }

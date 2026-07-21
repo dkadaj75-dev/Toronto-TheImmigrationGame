@@ -272,14 +272,6 @@
       "rotDeg": 180
     },
     {
-      "asset": "stove",
-      "pos": [
-        5.565,
-        2.625
-      ],
-      "rotDeg": 270
-    },
-    {
       "asset": "bookshelf",
       "pos": [
         1.5,
@@ -420,6 +412,14 @@
       "pos": [
         5.5,
         6.44
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "oldstove",
+      "pos": [
+        5.565,
+        2.625
       ],
       "rotDeg": 270
     }
