@@ -111,10 +111,7 @@
     {
       "id": "cook",
       "name": "Cook a light meal",
-      "needGains": {
-        "hunger": 10,
-        "bladder": -5
-      },
+      "needGains": {},
       "skillGains": {
         "cooking": 0.05
       },
@@ -444,10 +441,7 @@
     {
       "id": "cook_a_large_meal",
       "name": "Cook a large meal",
-      "needGains": {
-        "hunger": 40,
-        "bladder": -10
-      },
+      "needGains": {},
       "skillGains": {},
       "animation": "stand_use",
       "autonomyEligible": true,
@@ -458,7 +452,10 @@
         "atMaxSeconds": 10,
         "skillVar": "skills.cooking"
       },
-      "producesWaste": "dirty_dishes"
+      "producesWaste": "dirty_dishes",
+      "food": {
+        "hungerGain": 15
+      }
     },
     {
       "id": "read_the_psychology_of_money",
