@@ -495,3 +495,61 @@ Design reading: debt must not disable free actions. A strictly positive action c
 4. **DONE** — Asset Editor feature-categories show/hide cards (electronics/comfort/plumbing/garbage/kitchen); plumbing leak = existing onUse accident spawning water_puddle. PROJECT_CONTEXT §7.57.
 5. **DONE** — multiple sit/lie locations per asset (useLocations) with shared player+NPC occupancy: each character takes the closest AVAILABLE location. game/occupancy.ts + SimAgent onClaimSeat/onReleaseSeat seam; Asset Editor Seat locations card w/ per-location preview. PROJECT_CONTEXT §7.58. (Occupancy transient in v1 — save-wiring is a future slice.)
 6. **PLAN ONLY, delivered** — event manager: see ROADMAP_EVENTS.md (verdict: worth building as a thin dispatcher over existing subsystems; 5-phase build order; risk table; 4 open questions).
+
+## New.txt elevated-surfaces / action-carry / wall-view batch (2026-07-21)
+
+Designer intent (verbatim):
+
+> I need, in the asset manager tool, an option to set an elevated plane, the same way the seatings, lying and facing locations are done, i.e. with a visual reference in the viewer. We should be able to check / uncheck next to the 3D viewer (i.e. right pane) all the references to not get lost.
+> The elevated pane should work the same way as seatings: we should be able to set a number of "sockets" and a location for each with a propertie when used or available and the character, when wanting to put an asset (generally a transient one like a dirty dish, a meal, a coffee...) should take the nearest available (otherwise putting it on the ground). See elevatedplanexample.jpg.
+> This leads to a new asset parameter: objects that can be placed on top of others: for example a coffee machine on top of a counter would be placed at the socket location of the counter, when in buy mode, it basically snaps to the nearest socket when clicking on the table / counter or other similar asset with an elevated plane. This socket becomes obviously unavailable as long as this asset is located here, i.e. the character cannot put a dish or other on top of it.
+> When doing an action that requests money (e.g. making a meal), the money is not taken until the action is finished.
+> In the case of the character eating a meal (it includes eatin snacks etc, it should be an option in the assets manager tool), if I interrupt the action before it is finished, the character puts the corresponding asset that this action generates (here, a snack or a meal, chosen by designer) on the closest elevated plane in a set radius. If no elevated plane is directly accessible then it is put on the ground. For the example of meals, this is when the "perishable" action plays a role because if the meal is not perished, then we can have different actions set by the designer, typically eat or throw away. The generated asset should have the properties of the generated asset minus what was consumed, for example if the meal was half eaten when the action stopped, then the remaining meal has 50% of the remaining hunger need generation when being eaten. If perished, then we can only throw it away (the meal asset should basically change in another transient asset (rotten food).
+> In the actions tools, each action should have the option to attach an asset to one of the character's bones (e.g. with a dropdown menu), for example putting out the trash puts a garbage bag in the hand of the character when the character reaches the trash can, or the character should have a meal in its hand when transporting the meal from the stove to the table (then the meal will be put on the nearest elevated plane socket OR on the ground, in the case of meals for example, the character can enjoy its meal only if a seat is available next to the socket) but also on the closest sitting socket, even with no table or counter, when these ones are not available, and if none are available, the characters its while standing, see eastingexample1.jpg and eastingexample2.jpg.
+> If the action of throwing the garbage, for example, is interrupted, the garbage bag transient asset will be put on the ground on the nearest available nav mesh gridsquare. Applies to all actions.
+> Also, when a character is doing an action such as watching TV, reading, eating etc, the asset the character chose, if it is one that gives confort, should be taken into account in the way that the comfort need will go up, as if we chose "sit", based on this asset.
+> Finally the "cut" option to cut the walls should have now 3 states instead of 2: the two existing, but also one more, similar to the sims game where only the walls in front of other rooms / assets are cut, see planscutoption3example.jpg. When clicking on the cut button, we basically cycle through these 3 ways of showing walls.
+
+Design reading:
+
+1. `AssetDef.surfaceSockets[]` authors local-space elevated placement sockets with x/y/z, and `AssetDef.placeableOnSurface` marks assets that may occupy them. One shared runtime registry resolves nearest free sockets for transient placement and buy-mode stacking; otherwise placement falls back to the nearest legal floor cell.
+2. The Asset Editor gets socket CRUD plus right-pane visibility toggles for every helper family (character, sit, lie, general-facing target, and elevated sockets), with occupied/available reference styling in the preview.
+3. Action costs stay affordability-gated at menu/order/autonomy time but are deducted only from the completed-only action-stop path.
+4. Food is designer-marked by `AssetDef.food` and may author its non-perished interactions plus `rottenAssetId`. Eating applies gain continuously by progress; interruption preserves the remaining fraction and places the same food on the nearest accessible free surface socket within `tuning.surfacePlacement.radiusMeters`, otherwise on a legal floor cell. Perishing transforms the live food into the authored rotten transient rather than silently deleting it.
+5. `ActionDef.carriedAsset` authors the visible transient plus target character bone and local transform. It attaches only after source arrival, follows the existing action/carry lifecycle, and drops on every incomplete stop at the nearest legal nav cell. Food and garbage flows use the same carrier seam rather than separate hardcoded hand props.
+6. Food routing prefers an accessible surface socket that has an available nearby seat, then an available seat without a surface, then standing. Surface/seat occupancy is released uniformly on completion, interruption, removal, and moves.
+7. Comfort contribution is generalized: while an action is running, the selected target/seat asset's authored comfort multiplier participates even when the action id is Watch/Read/Eat rather than Sit.
+8. Wall view becomes a three-value in-page mode: full, all-walls cut, and camera-front/room-aware cut. The HUD button cycles these modes; nav/map/save data remain unchanged.
+
+**DONE (2026-07-21):** shipped as PROJECT_CONTEXT §7.60. Elevated sockets are authored and previewed in Asset Editor, shared by interrupted-food placement and Buy Mode stacking with occupancy/save support. Action costs charge only on completion; generic bone-attached carry props drop safely when interrupted. Food keeps its uneaten fraction, can be resumed or discarded, and transforms to authored rotten food on expiry. Eating routes surface+seat → seat → standing, full seat sets no longer overlap, existing comfort attribution was verified and retained, and the wall button now cycles full → cut all → camera-front cutaway.
+
+## Elevated-socket interruption and carried-asset handles follow-up (2026-07-21)
+
+Designer intent (verbatim):
+
+> When the characters puts something on the table (with two slots for elevated planes) and I interrupt the action, the item goes on the other slot, which does not make sense.
+> I realized that the assets, when attached to the hand bone, are low on the ground, so let's do 2 options: an option to force the asset to keep its rotation (with checkbox for each axe), which means I can block the rotation so the object always faces up, but I can decide to let it follw the hand rotations).
+> Add a new "socket" on the asset: in 3D I should be able to move it, and this will be the exact location the asset anchors to the bone. Meaning it is a "handle".
+
+Design reading:
+
+1. An interrupted food action retains its already-claimed elevated socket. Socket selection treats that item's own claim as available and only searches for another socket when the original reference is invalid or held by somebody else.
+2. `AssetDef.carryHandle` is a sparse model-local XYZ point. When a carried asset is attached, that point—not the asset origin—is aligned to the selected character bone plus the action's optional local offset.
+3. Asset Editor authors the handle numerically and as a visible/movable 3D helper with its own preview toggle.
+4. `ActionDef.carriedAsset.lockRotationAxes` exposes X/Y/Z checkboxes. Each selected world axis retains the asset's authored attachment orientation while unchecked axes continue to follow the animated bone.
+
+**DONE (2026-07-21):** shipped as PROJECT_CONTEXT §7.61. Interrupted food now retains its own already-claimed elevated socket instead of jumping to another slot. Assets can author a model-local carry handle numerically or by dragging its 3D helper, and carried actions can independently lock world X/Y/Z rotation while unlocked axes continue following the animated hand.
+
+## Throw-away actions fill garbage capacity follow-up (2026-07-21)
+
+Designer intent (verbatim):
+
+> Oh and also: throwing something away goes to the garbage capacity :)
+
+Design reading:
+
+1. A completed `ActionDef.discardsFood` action deposits one waste unit into the nearest non-full garbage can before removing the targeted food/rotten-food transient.
+2. Ordering is refused when every garbage can is full or none exists. Completion rechecks capacity; if the last slot became unavailable during the action, the item remains in the world and the existing garbage-unavailable notification appears.
+3. Cancellation remains side-effect free: no capacity change and no item removal.
+
+**DONE (2026-07-21):** shipped as PROJECT_CONTEXT §7.62. A completed throw-away action now adds exactly one unit to the nearest non-full garbage can before removing the item. Full/no-can states refuse safely at menu, arrival, and completion; cancellations and failed completion rechecks preserve both the item and fill counts.

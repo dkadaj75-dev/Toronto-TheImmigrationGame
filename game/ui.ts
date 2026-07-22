@@ -1002,10 +1002,19 @@ export class Hud {
     });
   }
 
-  setWallCutActive(active: boolean) {
+  setWallCutMode(mode: 'full' | 'cut' | 'cutaway') {
+    const active = mode !== 'full';
     this.wallCutButton.classList.toggle('active', active);
     this.wallCutButton.setAttribute('aria-pressed', String(active));
-    this.wallCutButton.title = active ? 'Show full walls' : 'Cut walls down';
+    this.wallCutButton.dataset.mode = mode;
+    this.wallCutButton.textContent = mode === 'full' ? '⌂ Cut' : mode === 'cut' ? '⌂ Cut all' : '⌂ Cut front';
+    this.wallCutButton.title = mode === 'full'
+      ? 'Cut all walls down'
+      : mode === 'cut' ? 'Cut only camera-side walls' : 'Show full walls';
+  }
+
+  setWallCutActive(active: boolean) {
+    this.setWallCutMode(active ? 'cut' : 'full');
   }
 
   setClock(hours: number, minutes: number, weekday = '') {

@@ -21,6 +21,33 @@
       "seatAware": true
     },
     {
+      "id": "consume_food",
+      "name": "Eat",
+      "needGains": {},
+      "skillGains": {},
+      "animation": "sit_eat",
+      "autonomyEligible": true,
+      "primaryNeed": null,
+      "seatAware": true,
+      "duration": {
+        "baseSeconds": 5
+      },
+      "consumesFood": true
+    },
+    {
+      "id": "throw_away_food",
+      "name": "Throw away",
+      "needGains": {},
+      "skillGains": {},
+      "animation": "stand_use",
+      "autonomyEligible": false,
+      "primaryNeed": null,
+      "duration": {
+        "baseSeconds": 2
+      },
+      "discardsFood": true
+    },
+    {
       "id": "sleep",
       "name": "Sleep",
       "needGains": {
@@ -99,7 +126,7 @@
         "fun": 1
       },
       "skillGains": {
-        "english": 0.03
+        "english": 0.06
       },
       "animation": "sit_idle",
       "autonomyEligible": true,
@@ -125,7 +152,9 @@
         "baseSeconds": 12,
         "atMaxSeconds": 6
       },
-      "producesWaste": "dirty_dishes"
+      "producesWaste": "dirty_dishes",
+      "seatAware": true,
+      "faceTarget": false
     },
     {
       "id": "read_book",
@@ -342,6 +371,16 @@
       "duration": {
         "baseSeconds": 3
       },
+      "carriedAsset": {
+        "assetId": "garbage_bag",
+        "bone": "mixamorigRightHand",
+        "offset": [
+          0,
+          0.08,
+          0
+        ],
+        "scale": 0.55
+      },
       "_note": "ROADMAP_NEXT item 10 (item 4: emptying) — shipped on 'door_exterior'. Resets EVERY garbage can's fill to 0 (game/main.ts's onActionStop, action.id === 'empty_garbage' -> garbage.emptyAll()). Ships a short fixed `duration` purely so it auto-completes via the existing §7.11 timer instead of needing new instant-action plumbing — documented simplification, no carrying-garbage-out animation (same precedent as §7.14's exterior door itself)."
     },
     {
@@ -406,7 +445,8 @@
         "baseSeconds": 5
       },
       "producesWaste": "dirty_dishes",
-      "cost": 8
+      "cost": 8,
+      "faceTarget": false
     },
     {
       "id": "watch_tv_radio_canada",
@@ -415,7 +455,7 @@
         "fun": 1
       },
       "skillGains": {
-        "french": 0.03
+        "french": 0.09
       },
       "animation": "sit_idle",
       "autonomyEligible": true,
@@ -453,7 +493,9 @@
       "producesWaste": "dirty_dishes",
       "food": {
         "hungerGain": 15
-      }
+      },
+      "faceTarget": false,
+      "seatAware": true
     },
     {
       "id": "read_the_psychology_of_money",
@@ -485,6 +527,26 @@
         "refuseBelow": 30
       },
       "faceTarget": false
+    },
+    {
+      "id": "drink_coffee",
+      "name": "Drink coffee",
+      "needGains": {
+        "energy": 5
+      },
+      "skillGains": {},
+      "animation": "",
+      "autonomyEligible": true,
+      "primaryNeed": null
+    },
+    {
+      "id": "make_coffee",
+      "name": "Make coffee",
+      "needGains": {},
+      "skillGains": {},
+      "animation": "",
+      "autonomyEligible": true,
+      "primaryNeed": null
     }
   ]
 }

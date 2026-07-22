@@ -5,7 +5,9 @@
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 
-const html = readFileSync(new URL('../tools/interactions.html', import.meta.url), 'utf8');
+const conditionBuilder = readFileSync(new URL('../tools/condition-builder.js', import.meta.url), 'utf8');
+const html = readFileSync(new URL('../tools/interactions.html', import.meta.url), 'utf8')
+  .replace('<script src="/tools/condition-builder.js"></script>', `<script>${conditionBuilder}</script>`);
 
 const interactions = { actions: [
   {
@@ -18,9 +20,10 @@ const interactions = { actions: [
     animation: 'sit_idle', autonomyEligible: true, primaryNeed: 'fun', seatAware: true,
   },
 ] };
-const assets = { categories: ['seating', 'electronics'], assets: [
+const assets = { categories: ['seating', 'electronics', 'transient'], assets: [
   { id: 'sofa', name: 'Sofa', category: 'seating', mesh: '', buyPrice: 0, sellPrice: 0, environmentScore: 0, footprint: [1, 1], seats: 2, seatTarget: true, interactions: ['read_book'] },
   { id: 'tv', name: 'TV', category: 'electronics', mesh: '', buyPrice: 0, sellPrice: 0, environmentScore: 0, footprint: [1, 1], interactions: ['watch_tv'] },
+  { id: 'book_prop', name: 'Book prop', category: 'transient', mesh: '', buyPrice: 0, sellPrice: 0, environmentScore: 0, footprint: [0.2, 0.2], interactions: [], buyable: false },
 ] };
 const stats = {
   needs: [{ id: 'fun', name: 'Fun', color: '#3498db', default: 70, decayPerTick: 0.1, autonomy: true }],
@@ -88,6 +91,19 @@ powerCb.dispatchEvent(new window.Event('change', { bubbles: true }));
 fetchCb2.checked = true;
 fetchCb2.dispatchEvent(new window.Event('change', { bubbles: true }));
 
+const carriedAsset = doc.querySelector('select[data-path="carriedAsset.assetId"]');
+assert(carriedAsset && [...carriedAsset.options].some((o) => o.value === 'book_prop'), 'carried-asset picker is fed by transient assets');
+carriedAsset.value = 'book_prop'; carriedAsset.dispatchEvent(new window.Event('change', { bubbles: true }));
+const carryBone = doc.querySelector('select[data-path="carriedAsset.bone"]');
+assert(carryBone?.value === 'mixamorigRightHand', 'new carried prop defaults to the right-hand bone');
+const lockX = doc.querySelector('input[data-path="carriedAsset.lockRotationAxes.x"]');
+const lockZ = doc.querySelector('input[data-path="carriedAsset.lockRotationAxes.z"]');
+assert(lockX && lockZ && !lockX.checked && !lockZ.checked, 'carried prop exposes sparse X/Y/Z world-rotation locks');
+lockX.checked = true; lockX.dispatchEvent(new window.Event('change', { bubbles: true }));
+lockZ.checked = true; lockZ.dispatchEvent(new window.Event('change', { bubbles: true }));
+const consumesFood = doc.querySelector('input[data-path="consumesFood"]');
+consumesFood.checked = true; consumesFood.dispatchEvent(new window.Event('change', { bubbles: true }));
+
 // --- food override (ROADMAP item 2, meal tiers): sparse numeric override of the spawned food
 // transient's own food block. Blank when absent; setting a field creates a.food; clearing a field
 // prunes just that field (the object survives while any other field is set).
@@ -116,6 +132,9 @@ const savedWatchTv = saved.actions.find((a) => a.id === 'watch_tv');
 assert(savedWatchTv.faceTarget === false, 'unchecking faceTarget on watch_tv writes faceTarget:false');
 assert(savedWatchTv.fetchBeforeSeat === true, 'checking fetchBeforeSeat writes sparse true');
 assert(savedWatchTv.powersOnTarget === true, 'ticking powersOnTarget writes sparse true (B13-2)');
+assert(savedWatchTv.carriedAsset?.assetId === 'book_prop' && savedWatchTv.carriedAsset.bone === 'mixamorigRightHand', 'carried asset and bone save');
+assert(savedWatchTv.carriedAsset.lockRotationAxes?.x === true && savedWatchTv.carriedAsset.lockRotationAxes?.z === true, 'carried world-axis rotation locks save sparsely');
+assert(savedWatchTv.consumesFood === true, 'food-consumption semantic saves sparsely');
 assert(!('powersOnTarget' in savedReadBook), 'untouched action carries no powersOnTarget key');
 assert(savedWatchTv.food && savedWatchTv.food.hungerGain === 30, 'food.hungerGain override written sparsely');
 assert(!('perishHours' in savedWatchTv.food), 'cleared perishHours pruned from the sparse food override');

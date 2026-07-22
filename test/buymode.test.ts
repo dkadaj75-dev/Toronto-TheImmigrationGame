@@ -274,6 +274,21 @@ console.log('buymode.test — BuyOverlay / effectiveInstances / effectivePlacedO
   check('restore deep-copies — mutating overlay2 leaves the original snapshot untouched', snap.additions.length === beforeLen);
 }
 
+console.log('buymode.test — elevated-surface purchases');
+{
+  const overlay = new BuyOverlay();
+  const def = asset({ id: 'coffee_machine', category: 'appliances', buyPrice: 75, footprint: [0.4, 0.4], placeableOnSurface: true });
+  const result = attemptBuy(overlay, def, [2, 3], 90, 9999, true, { hostKey: 'designer#4', index: 1, y: 0.9 });
+  check('surface purchase records host/socket/height', result.addition?.surface?.hostKey === 'designer#4'
+    && result.addition.surface.index === 1 && result.addition.surface.y === 0.9);
+  const resolved = effectiveInstances([], overlay, new Map([[def.id, def]]));
+  check('effective instance preserves surface reference', resolved[0]?.surface?.index === 1);
+  check('ordinary effective list includes stacked assets for value/environment', effectivePlacedObjects(resolved).length === 1);
+  check('nav effective list excludes stacked assets from the host floor footprint', effectivePlacedObjects(resolved, false).length === 0);
+  const saved = overlay.serialize(); const restored = new BuyOverlay(); restored.restore(saved);
+  check('surface reference survives save round-trip', restored.allAdditions[0]?.surface?.hostKey === 'designer#4');
+}
+
 console.log('buymode.test — attemptBuy / attemptSell / attemptMove (funds + overlay mutation)');
 {
   const lamp = asset({ id: 'lamp', name: 'Lamp', buyPrice: 100, sellPrice: 70, footprint: [1, 1] });

@@ -129,6 +129,10 @@
         {
           "type": "funds",
           "amount": 200
+        },
+        {
+          "type": "grantVisa",
+          "statusId": "lmia_extension"
         }
       ],
       "onceOnly": true

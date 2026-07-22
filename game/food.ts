@@ -6,7 +6,7 @@
 export type FoodSpawnEvent = 'arrival' | 'completion';
 export type FoodPhase = 'carried' | 'eating' | 'dropped';
 
-export interface FoodConfig { hungerGain: number; perishHours: number; }
+export interface FoodConfig { hungerGain: number; perishHours: number; rottenAssetId?: string; }
 export interface FoodItem extends FoodConfig {
   key: string;
   assetId: string;
@@ -21,6 +21,8 @@ export interface FoodItem extends FoodConfig {
 }
 
 export interface FoodSaveState { items: FoodItem[]; }
+export interface FoodInterruption { item: FoodItem; consumedGain: number; }
+export interface PerishedFood { key: string; assetId: string; rottenAssetId?: string; pos: [number, number]; }
 
 /** ROADMAP item 2: an action id belongs to a carried-food FAMILY when it is the base id or a
  *  `base_` variant. This lets the designer author meal-tier variants (`cook_light_meal`,
@@ -50,12 +52,14 @@ export function resolveFoodConfig(base: FoodConfig, override?: FoodOverride | nu
   return {
     hungerGain: override?.hungerGain ?? base.hungerGain,
     perishHours: override?.perishHours ?? base.perishHours,
+    rottenAssetId: base.rottenAssetId,
   };
 }
 
 /** ROADMAP item 1 fix: the clearable waste an abandoned carried-food item turns into (or null if
  *  none was recorded). Pulled out as its own pure function so main.ts's drop-to-waste conversion is
  *  independently unit-tested. */
+/** @deprecated Current interruptions preserve edible food; retained for old callers/save fixtures. */
 export function wasteAssetForDroppedFood(item: { wasteAssetId?: string }): string | null {
   return item.wasteAssetId ?? null;
 }
@@ -115,7 +119,7 @@ export class FoodRegistry {
   get active(): FoodItem | null { return this.activeKey ? this.items.get(this.activeKey) ?? null : null; }
 
   startCarrying(key: string, assetId: string, config: FoodConfig, pos: [number, number], wasteAssetId?: string): FoodItem {
-    const item: FoodItem = { key, assetId, hungerGain: config.hungerGain, perishHours: config.perishHours, phase: 'carried', pos: [...pos], wasteAssetId };
+    const item: FoodItem = { key, assetId, hungerGain: config.hungerGain, perishHours: config.perishHours, rottenAssetId: config.rottenAssetId, phase: 'carried', pos: [...pos], wasteAssetId };
     this.items.set(key, item);
     this.activeKey = key;
     return item;
@@ -124,6 +128,7 @@ export class FoodRegistry {
   /** ROADMAP item 1 fix: remove an item outright (once main.ts has converted a dropped item into
    *  clearable waste), clearing the active pointer if it was the one. Unlike `tick`'s perish path,
    *  this leaves nothing behind to silently self-despawn. */
+  /** Removes an item outright; current interruption handling does not use this to make waste. */
   discard(key: string): boolean {
     const existed = this.items.delete(key);
     if (this.activeKey === key) this.activeKey = null;
@@ -132,20 +137,32 @@ export class FoodRegistry {
 
   beginEating(key: string): boolean {
     const item = this.items.get(key);
-    if (!item || item.phase !== 'carried' || this.activeKey !== key) return false;
+    if (!item || (item.phase !== 'carried' && item.phase !== 'dropped')) return false;
+    if (this.activeKey !== null && this.activeKey !== key) return false;
     item.phase = 'eating';
+    delete item.droppedAtHour;
+    this.activeKey = key;
     return true;
   }
 
   /** Interrupting either leg drops the food at the sim, beginning its in-game-hour perish timer. */
   interruptActive(pos: [number, number], nowHour: number): FoodItem | null {
+    return this.interruptActiveWithProgress(pos, nowHour, 0)?.item ?? null;
+  }
+
+  /** Preserve the uneaten fraction and report the already-consumed gain. Progress is clamped and
+   * applied only while eating; interrupting the carry leg consumes nothing. */
+  interruptActiveWithProgress(pos: [number, number], nowHour: number, progress: number): FoodInterruption | null {
     const item = this.active;
     if (!item || item.phase === 'dropped') return null;
+    const fraction = item.phase === 'eating' && Number.isFinite(progress) ? Math.min(1, Math.max(0, progress)) : 0;
+    const consumedGain = item.hungerGain * fraction;
+    item.hungerGain = Math.max(0, item.hungerGain - consumedGain);
     item.phase = 'dropped';
     item.pos = [...pos];
     item.droppedAtHour = nowHour;
     this.activeKey = null;
-    return item;
+    return { item, consumedGain };
   }
 
   /** Only a food item that reached its eating phase grants hunger. The item is consumed atomically. */
@@ -161,14 +178,27 @@ export class FoodRegistry {
 
   /** Despawns dropped food at the inclusive perish boundary. Carried/eating food never perishes. */
   tick(nowHour: number): string[] {
-    const perished: string[] = [];
+    return this.tickDetailed(nowHour).map((item) => item.key);
+  }
+
+  tickDetailed(nowHour: number): PerishedFood[] {
+    const perished: PerishedFood[] = [];
     for (const item of this.items.values()) {
       if (item.phase !== 'dropped' || item.droppedAtHour === undefined) continue;
       if (nowHour - item.droppedAtHour < Math.max(0, item.perishHours)) continue;
-      perished.push(item.key);
+      perished.push({ key: item.key, assetId: item.assetId, rottenAssetId: item.rottenAssetId, pos: [...item.pos] });
       this.items.delete(item.key);
     }
     return perished;
+  }
+
+  /** A dropped food transient selected in-world becomes the active item for a designer-authored
+   * consumesFood action. */
+  activateDropped(key: string): FoodItem | null {
+    const item = this.items.get(key);
+    if (!item || item.phase !== 'dropped' || this.activeKey !== null) return null;
+    this.activeKey = key;
+    return item;
   }
 
   serialize(): FoodSaveState {

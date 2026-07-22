@@ -290,7 +290,16 @@
       "combustibility": {
         "chancePercent": 10,
         "delaySeconds": 20
-      }
+      },
+      "surfaceSockets": [
+        {
+          "offset": [
+            0,
+            0.2
+          ],
+          "y": 1.2
+        }
+      ]
     },
     {
       "id": "dining_table",
@@ -301,10 +310,33 @@
       "sellPrice": 185,
       "environmentScore": 2,
       "footprint": [
-        2,
-        1
+        1.5,
+        0.75
       ],
-      "interactions": []
+      "interactions": [],
+      "surfaceSockets": [
+        {
+          "offset": [
+            -0.55,
+            0
+          ],
+          "y": 0.78
+        },
+        {
+          "offset": [
+            0.55,
+            0
+          ],
+          "y": 0.78
+        }
+      ],
+      "meshFit": {
+        "scale": [
+          1,
+          1.5,
+          1
+        ]
+      }
     },
     {
       "id": "toilet",
@@ -603,7 +635,10 @@
         1.2,
         0.1
       ],
-      "interactions": [],
+      "interactions": [
+        "consume_food",
+        "throw_away_food"
+      ],
       "wallMounted": {
         "heightY": 1.5
       }
@@ -823,7 +858,12 @@
         "clean_up"
       ],
       "buyable": false,
-      "_note": "ROADMAP_NEXT item 10 — spawned by game/garbage.ts (via game/accidents.ts's spawnTransient) when 'eat' finishes and no non-full garbage can is close enough / the sim isn't clean enough to bother auto-tidying. Player taps it -> 'clean_up' -> despawns + deposits into the nearest non-full can. No real mesh yet — flat box stand-in until models/dirty_dishes.glb is imported."
+      "_note": "ROADMAP_NEXT item 10 — spawned by game/garbage.ts (via game/accidents.ts's spawnTransient) when 'eat' finishes and no non-full garbage can is close enough / the sim isn't clean enough to bother auto-tidying. Player taps it -> 'clean_up' -> despawns + deposits into the nearest non-full can. No real mesh yet — flat box stand-in until models/dirty_dishes.glb is imported.",
+      "carryHandle": [
+        0,
+        0,
+        -0.126
+      ]
     },
     {
       "id": "snack",
@@ -834,36 +874,115 @@
       "sellPrice": 0,
       "environmentScore": 0,
       "footprint": [
-        0.35,
-        0.35
+        0.25,
+        0.25
       ],
-      "interactions": [],
+      "interactions": [
+        "consume_food",
+        "throw_away_food"
+      ],
       "buyable": false,
       "food": {
         "hungerGain": 18,
-        "perishHours": 3
+        "perishHours": 3,
+        "rottenAssetId": "rotten_food"
       },
-      "_note": "ROADMAP_NEXT B4-2: spawned when Eat starts, hidden while carried/eaten, dropped at the sim on interruption, then perishes in game hours."
+      "_note": "ROADMAP_NEXT B4-2: spawned when Eat starts, hidden while carried/eaten, dropped at the sim on interruption, then perishes in game hours.",
+      "meshFit": {
+        "scale": 0.75
+      },
+      "clearedBy": [
+        "consume_food",
+        "throw_away_food"
+      ],
+      "carryHandle": [
+        0,
+        0.08,
+        -0.06
+      ]
     },
     {
       "id": "meal",
-      "name": "Meal",
+      "name": "Large Meal",
       "category": "transient",
-      "mesh": "",
+      "mesh": "models/plate.glb",
       "buyPrice": 0,
       "sellPrice": 0,
       "environmentScore": 0,
       "footprint": [
-        0.45,
-        0.45
+        0.25,
+        0.25
       ],
-      "interactions": [],
+      "interactions": [
+        "consume_food",
+        "throw_away_food"
+      ],
       "buyable": false,
       "food": {
         "hungerGain": 45,
-        "perishHours": 6
+        "perishHours": 6,
+        "rottenAssetId": "rotten_food"
       },
-      "_note": "ROADMAP_NEXT B4-2: spawned only when Cook completes, then carried/eaten like snack with a larger hunger gain."
+      "_note": "ROADMAP_NEXT B4-2: spawned only when Cook completes, then carried/eaten like snack with a larger hunger gain.",
+      "clearedBy": [
+        "consume_food",
+        "throw_away_food"
+      ],
+      "carryHandle": [
+        0,
+        0,
+        -0.127
+      ]
+    },
+    {
+      "id": "rotten_food",
+      "name": "Rotten food",
+      "category": "transient",
+      "mesh": "models/plate.glb",
+      "buyPrice": 0,
+      "sellPrice": 0,
+      "environmentScore": -2,
+      "footprint": [
+        0.25,
+        0.25
+      ],
+      "interactions": [
+        "throw_away_food"
+      ],
+      "clearedBy": [
+        "throw_away_food"
+      ],
+      "buyable": false,
+      "carryHandle": [
+        0,
+        0,
+        -0.14
+      ]
+    },
+    {
+      "id": "garbage_bag",
+      "name": "Garbage bag",
+      "category": "transient",
+      "mesh": "models/garbagebag.glb",
+      "buyPrice": 0,
+      "sellPrice": 0,
+      "environmentScore": -1,
+      "footprint": [
+        0.4,
+        0.4
+      ],
+      "interactions": [
+        "clean_up"
+      ],
+      "clearedBy": [
+        "clean_up"
+      ],
+      "buyable": false,
+      "carryHandle": [
+        0,
+        0.254,
+        0
+      ]
     },
     {
       "id": "ash",
@@ -1166,6 +1285,78 @@
         0,
         0
       ]
+    },
+    {
+      "id": "coffee",
+      "name": "Coffee",
+      "category": "transient",
+      "mesh": "/models/cup.glb",
+      "buyPrice": 0,
+      "sellPrice": 0,
+      "environmentScore": 0,
+      "footprint": [
+        0.25,
+        0.25
+      ],
+      "interactions": [
+        "drink_coffee",
+        "throw_away_food"
+      ],
+      "buyable": false,
+      "food": {
+        "hungerGain": 0,
+        "perishHours": 3,
+        "rottenAssetId": "rotten_food"
+      },
+      "_note": "ROADMAP_NEXT B4-2: spawned when Eat starts, hidden while carried/eaten, dropped at the sim on interruption, then perishes in game hours.",
+      "meshFit": {
+        "scale": 0.75
+      },
+      "usePose": {
+        "use": {
+          "offset": [
+            0,
+            0
+          ]
+        }
+      },
+      "clearedBy": [
+        "throw_away_food",
+        "consume_food"
+      ],
+      "carryHandle": [
+        0,
+        0.08,
+        -0.06
+      ]
+    },
+    {
+      "id": "coffee_machine",
+      "name": "Coffee machine",
+      "category": "electronics",
+      "mesh": "models/coffeemachine1.glb",
+      "buyPrice": 0,
+      "sellPrice": 0,
+      "environmentScore": 0,
+      "footprint": [
+        0.25,
+        0.25
+      ],
+      "interactions": [
+        "drink_coffee"
+      ],
+      "placeableOnSurface": true,
+      "featureCategories": [
+        "electronics",
+        "kitchen"
+      ],
+      "combustibility": {
+        "chancePercent": 25,
+        "delaySeconds": 2
+      },
+      "power": {
+        "ratePerHour": 0.01
+      }
     }
   ]
 }

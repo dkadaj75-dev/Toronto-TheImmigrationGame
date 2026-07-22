@@ -141,6 +141,17 @@ export interface ActionDef {
   /** B4-2: sparse action-start charge. The tap menu shows and disables this action against the
    *  live QuestRunner funds balance; QuestRunner.spend performs the authoritative deduction. */
   cost?: number;
+  /** Visible prop carried for this action after source arrival. It attaches to the named character
+   * bone and is removed on completion; every incomplete stop drops it on a legal floor cell. */
+  carriedAsset?: {
+    assetId: string;
+    bone: string;
+    offset?: [number, number, number];
+    rotationDeg?: [number, number, number];
+    scale?: number;
+    /** Locked WORLD axes retain the authored attachment orientation instead of inheriting bone tilt. */
+    lockRotationAxes?: { x?: boolean; y?: boolean; z?: boolean };
+  };
   /** ROADMAP_NEXT item 5: optional completion timer, sim-time seconds (same clock as
    *  needsDecayTickSeconds/activityGainTickSeconds — pause/2x/3x affect it identically, see
    *  game/main.ts's `sdt`). Absent = current behavior (runs until primaryNeed satisfied or
@@ -183,6 +194,11 @@ export interface ActionDef {
    *  cook_large_meal (different hungerGain, same `meal` visual) entirely in the Interaction Editor.
    *  See game/food.ts resolveFoodConfig. */
   food?: { hungerGain?: number; perishHours?: number };
+  /** Action consumes the targeted live food transient; progress is preserved on interruption. */
+  consumesFood?: boolean;
+  /** Action discards the targeted live food transient without granting hunger. A completed discard
+   * deposits one unit into the nearest non-full garbage can before the transient is removed. */
+  discardsFood?: boolean;
   /** ROADMAP_NEXT B2-1: optional availability gate, reusing the EXACT quest condition tree/
    *  namespace/evaluator (game/quests.ts's `Condition`/`evaluate` — needs.<id>, skills.<id>, funds,
    *  time.hour/day, vars.<name>, quests.<id>.state). Absent = always available (sparse, same
@@ -350,6 +366,12 @@ export interface AssetDef {
    *  asset then has one implicit location (its usePose entry, or the computed default). See
    *  game/facing.ts usePoseForEntry and the occupancy wiring in main.ts. */
   useLocations?: { sit?: UsePoseEntry[]; lie?: UsePoseEntry[] };
+  /** Discrete elevated top-surface locations (counter/table sockets), model-local to this asset. */
+  surfaceSockets?: { offset: [number, number]; y: number; rotationDeg?: number }[];
+  /** Buy-mode and runtime placement may snap this asset into another asset's surface socket. */
+  placeableOnSurface?: boolean;
+  /** Model-local XYZ point aligned exactly to a character bone while this asset is carried. */
+  carryHandle?: [number, number, number];
   /** Newnew.txt: model-local [x,z] point every direct use pose faces toward. The Asset Editor
    * renders it as a ghost cube; no runtime object is spawned. */
   useFacingTarget?: [number, number];
@@ -383,7 +405,7 @@ export interface AssetDef {
   garbage?: { capacity: number };
   /** B4-2: transient food payload. hungerGain is applied once, only when eating completes;
    *  perishHours uses the monotonic in-game-hour clock after interrupted food is dropped. */
-  food?: { hungerGain: number; perishHours: number };
+  food?: { hungerGain: number; perishHours: number; rottenAssetId?: string };
 }
 export interface UsePoseEntry { offset?: [number, number]; y?: number; facingDeg?: number; }
 export interface AssetsData { categories: string[]; assets: AssetDef[]; }
@@ -813,6 +835,8 @@ export interface TuningData {
   /** B13-18 radius cleanup: a COMPLETED clean/sweep/mop also clears every other matching mess
    *  within this many meters of the sim (same clearedBy rules). Absent/0 = only the tapped one. */
   cleanup?: { radiusMeters?: number };
+  /** Maximum horizontal search radius for placing interrupted food/props on an elevated socket. */
+  surfacePlacement?: { radiusMeters?: number };
   economy: { startingFunds: number; currencyName: string };
   /** B13-8 Buy Mode actual-asset ghost. Opacity is clamped to 0..1; absent defaults to 0.5. */
   buy?: { ghostOpacity?: number };

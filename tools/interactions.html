@@ -78,6 +78,7 @@
 // animation state, autonomy eligibility, seat-awareness. Mirrors tools/assets.html's
 // sidebar+editor architecture (see PROJECT_CONTEXT.md §5 "Tool architecture").
 const API = '/api/data/';
+const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 // ROADMAP_NEXT B2-1: simstate.json/quests.json are read-only reference data here (same role as
 // assets.json/stats.json already play) — they only feed the Conditions card's var-path dropdowns
 // (vars.<id> / quests.<id>.state), mirroring the Quest Editor's own condition builder exactly.
@@ -295,6 +296,62 @@ function renderEditor() {
     checkInput(() => !!a.censor, (v) => { if (v) a.censor = true; else delete a.censor; }, 'censor')));
   card2.appendChild(frow('cost (optional — charged from funds when the action starts)',
     numInput(() => a.cost, (v) => { if (v === undefined) delete a.cost; else a.cost = Math.max(0, v); }, 'cost')));
+  card2.lastElementChild.querySelector('label').textContent = 'cost (optional — checked before ordering; charged only when the action finishes)';
+
+  const carriedCard = document.createElement('div');
+  carriedCard.className = 'card';
+  carriedCard.innerHTML = '<h2>Carried asset</h2><div class="hint-line">Optional visible prop attached after reaching the target. Completion removes it; interruption drops it on a legal nav square.</div>';
+  const carriedAsset = document.createElement('select'); carriedAsset.dataset.path = 'carriedAsset.assetId';
+  carriedAsset.innerHTML = '<option value="">(none)</option>' + state.assets.assets.filter((x) => x.category === 'transient')
+    .map((x) => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
+  if (a.carriedAsset?.assetId && !state.assets.assets.some((x) => x.id === a.carriedAsset.assetId)) {
+    carriedAsset.insertAdjacentHTML('beforeend', `<option value="${esc(a.carriedAsset.assetId)}">${esc(a.carriedAsset.assetId)} (unknown)</option>`);
+  }
+  carriedAsset.value = a.carriedAsset?.assetId ?? '';
+  carriedAsset.addEventListener('change', () => {
+    if (!carriedAsset.value) delete a.carriedAsset;
+    else a.carriedAsset = { ...(a.carriedAsset ?? {}), assetId: carriedAsset.value, bone: a.carriedAsset?.bone || 'mixamorigRightHand' };
+    markDirty('interactions.json'); renderAll();
+  });
+  carriedCard.appendChild(frow('asset', carriedAsset));
+  if (a.carriedAsset) {
+    const bone = document.createElement('select'); bone.dataset.path = 'carriedAsset.bone';
+    const commonBones = ['mixamorigRightHand', 'RightHand', 'mixamorigLeftHand', 'LeftHand', 'mixamorigSpine2', 'Spine2'];
+    const boneNames = [...new Set([a.carriedAsset.bone, ...commonBones].filter(Boolean))];
+    bone.innerHTML = boneNames.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join(''); bone.value = a.carriedAsset.bone;
+    bone.addEventListener('change', () => { a.carriedAsset.bone = bone.value; markDirty('interactions.json'); });
+    carriedCard.appendChild(frow('character bone', bone));
+    const vec3Row = (label, key, fallback) => {
+      const pair = document.createElement('div'); pair.style.display = 'grid'; pair.style.gridTemplateColumns = 'repeat(3,1fr)'; pair.style.gap = '6px';
+      for (let i = 0; i < 3; i++) pair.appendChild(numInput(() => a.carriedAsset?.[key]?.[i], (v) => {
+        const cur = [...(a.carriedAsset[key] ?? fallback)]; cur[i] = v ?? fallback[i]; a.carriedAsset[key] = cur;
+      }, `carriedAsset.${key}.${i}`));
+      carriedCard.appendChild(frow(label, pair));
+    };
+    vec3Row('local offset x / y / z', 'offset', [0, 0, 0]);
+    vec3Row('rotation x / y / z degrees', 'rotationDeg', [0, 0, 0]);
+    const lockChecks = document.createElement('div'); lockChecks.className = 'checks'; lockChecks.dataset.carryRotationLocks = '';
+    for (const axis of ['x', 'y', 'z']) {
+      const label = document.createElement('label');
+      const checkbox = checkInput(
+        () => a.carriedAsset?.lockRotationAxes?.[axis] === true,
+        (value) => {
+          if (value) (a.carriedAsset.lockRotationAxes ??= {})[axis] = true;
+          else if (a.carriedAsset.lockRotationAxes) {
+            delete a.carriedAsset.lockRotationAxes[axis];
+            if (!Object.keys(a.carriedAsset.lockRotationAxes).length) delete a.carriedAsset.lockRotationAxes;
+          }
+        },
+        `carriedAsset.lockRotationAxes.${axis}`,
+      );
+      label.append(checkbox, document.createTextNode(` lock ${axis.toUpperCase()}`));
+      lockChecks.appendChild(label);
+    }
+    carriedCard.appendChild(frow('keep world rotation axes', lockChecks));
+    carriedCard.insertAdjacentHTML('beforeend', '<div class="hint-line">A locked axis ignores the animated hand tilt and keeps the authored rotation above. Lock X and Z to keep a plate upright while still allowing Y to turn with the hand.</div>');
+    carriedCard.appendChild(frow('scale', numInput(() => a.carriedAsset?.scale, (v) => { if (v === undefined) delete a.carriedAsset.scale; else a.carriedAsset.scale = v; }, 'carriedAsset.scale')));
+  }
+  root.appendChild(carriedCard);
 
   // --- H4/H2 (ROADMAP_HAPPY): sparse per-action happiness coupling — only for actions the
   // designer opts in; blank fields keep the whole block absent (no effect anywhere).
@@ -375,6 +432,10 @@ function renderEditor() {
   needSel.value = a.primaryNeed ?? '';
   needSel.addEventListener('change', () => { a.primaryNeed = needSel.value || null; markDirty('interactions.json'); });
   card2.appendChild(frow('primary need (auto-stop threshold target)', needSel));
+  card2.appendChild(frow('consumes targeted food (partial hunger is applied and the remainder survives interruption)',
+    checkInput(() => !!a.consumesFood, (v) => { if (v) a.consumesFood = true; else delete a.consumesFood; }, 'consumesFood')));
+  card2.appendChild(frow('discards targeted food (fills 1 garbage capacity; no hunger gain)',
+    checkInput(() => !!a.discardsFood, (v) => { if (v) a.discardsFood = true; else delete a.discardsFood; }, 'discardsFood')));
   root.appendChild(card2);
   root.appendChild(cardMood);
 

@@ -105,7 +105,8 @@ export class SimAgent {
    *  onto a seat, which authored location this character should take — it returns that location's
    *  pose entry (and registers the claim) or undefined for the single-location/default path.
    *  onReleaseSeat frees whatever this character held; it fires on every stopAction. */
-  onClaimSeat: ((action: ActionDef, seat: THREE.Object3D, fromPos: [number, number]) => UsePoseEntry | undefined) | null = null;
+  /** undefined = legacy/single location; null = authored multi-location asset is fully occupied. */
+  onClaimSeat: ((action: ActionDef, seat: THREE.Object3D, fromPos: [number, number]) => UsePoseEntry | null | undefined) | null = null;
   onReleaseSeat: (() => void) | null = null;
   /** true once the rigged GLB is attached: real clips replace the transform-pose hacks */
   hasRig = false;
@@ -201,9 +202,11 @@ export class SimAgent {
       const seatDef = this.assetsById.get(seat.userData?.assetId as string);
       const reachedSeat = seatDef ? routeToTargetFront(seat, seatDef) : routeToPivot(seat);
       if (reachedSeat) {
-        const claimed = poseLocation ?? this.onClaimSeat?.(action, seat, [this.object.position.x, this.object.position.z]) ?? undefined;
-        this.queued = { action, target, seat, poseOverride, poseLocation: claimed };
-        return true;
+        const claimed = poseLocation ?? this.onClaimSeat?.(action, seat, [this.object.position.x, this.object.position.z]);
+        if (claimed !== null) {
+          this.queued = { action, target, seat, poseOverride, poseLocation: claimed ?? undefined };
+          return true;
+        }
       }
     }
     const reachedTarget = target.userData?.npcId !== undefined

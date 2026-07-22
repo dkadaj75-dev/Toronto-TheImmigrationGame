@@ -38,6 +38,7 @@ import {
   applyAssetPlacement, attachAssetLight, attachMesh, makeStandIn,
   resolveAssetPlacementTransform, resolveMeshFitTransform,
 } from './world';
+import { nearestFreeSurfaceSocket, type SurfaceHost, type SurfaceSocketCandidate, type SurfaceSocketRef } from './surfaces';
 
 // ==================================================================== catalog (pure)
 
@@ -312,7 +313,7 @@ export function isValidPlacement(input: PlacementCheckInput): boolean {
 
 export interface PlacedLike { asset: string; pos: [number, number]; rotDeg: number; }
 
-export interface OverlayAddition { key: string; asset: string; pos: [number, number]; rotDeg: number; }
+export interface OverlayAddition { key: string; asset: string; pos: [number, number]; rotDeg: number; surface?: SurfaceSocketRef & { y: number }; }
 
 export type DesignerOverride =
   | { type: 'moved'; pos: [number, number]; rotDeg: number }
@@ -354,8 +355,8 @@ export class BuyOverlay {
     return t === 'sold' || t === 'destroyed';
   }
 
-  addPurchase(asset: string, pos: [number, number], rotDeg: number): OverlayAddition {
-    const rec: OverlayAddition = { key: `buy#${this.seq++}`, asset, pos, rotDeg };
+  addPurchase(asset: string, pos: [number, number], rotDeg: number, surface?: SurfaceSocketRef & { y: number }): OverlayAddition {
+    const rec: OverlayAddition = { key: `buy#${this.seq++}`, asset, pos, rotDeg, ...(surface ? { surface: { ...surface } } : {}) };
     this.additions.push(rec);
     return rec;
   }
@@ -369,7 +370,7 @@ export class BuyOverlay {
   moveAddition(key: string, pos: [number, number], rotDeg: number): boolean {
     const a = this.additions.find((x) => x.key === key);
     if (!a) return false;
-    a.pos = pos; a.rotDeg = rotDeg;
+    a.pos = pos; a.rotDeg = rotDeg; delete a.surface;
     return true;
   }
 
@@ -416,6 +417,7 @@ export interface EffectiveInstance {
   source: 'designer' | 'player';
   /** only set for source:'designer' — its index into map.placedObjects */
   designerIndex?: number;
+  surface?: SurfaceSocketRef & { y: number };
 }
 
 /** Designer objects (minus sold, with moved overrides applied) + player additions, resolved
@@ -439,15 +441,15 @@ export function effectiveInstances(
   for (const a of overlay.allAdditions) {
     const def = byId.get(a.asset);
     if (!def) continue;
-    out.push({ key: a.key, asset: a.asset, pos: a.pos, rotDeg: a.rotDeg, footprint: def.footprint, source: 'player' });
+    out.push({ key: a.key, asset: a.asset, pos: a.pos, rotDeg: a.rotDeg, footprint: def.footprint, source: 'player', surface: a.surface });
   }
   return out;
 }
 
 /** The same list, in `MapData.placedObjects`'s own element shape — drops straight into
  *  `bakeNavGrid({ ...data.map, placedObjects: effective }, data.assets)` with zero nav.ts changes. */
-export function effectivePlacedObjects(instances: EffectiveInstance[]): PlacedLike[] {
-  return instances.map((i) => ({ asset: i.asset, pos: i.pos, rotDeg: i.rotDeg }));
+export function effectivePlacedObjects(instances: EffectiveInstance[], includeSurface = true): PlacedLike[] {
+  return instances.filter((i) => includeSurface || !i.surface).map((i) => ({ asset: i.asset, pos: i.pos, rotDeg: i.rotDeg }));
 }
 
 /** §7.6: "Transient-category instances (accidents, etc.) and door-category assets are not
@@ -468,13 +470,13 @@ export interface BuyResult { ok: boolean; reason?: BuyFailReason; addition?: Ove
  *  touch funds itself — funds live in QuestRunner (§7.6: "single source of truth"); the caller
  *  (BuyModeController) deducts `def.buyPrice` from `quests.funds` only after `ok` comes back true,
  *  so a failed attempt never touches the balance. */
-export function attemptBuy(overlay: BuyOverlay, def: AssetDef, pos: [number, number], rotDeg: number, funds: number, valid: boolean): BuyResult {
+export function attemptBuy(overlay: BuyOverlay, def: AssetDef, pos: [number, number], rotDeg: number, funds: number, valid: boolean, surface?: SurfaceSocketRef & { y: number }): BuyResult {
   // defensive: shouldn't be reachable from the catalog UI (which already filters via isPurchasable),
   // but never let a stale reference to an unbuyable/transient-category asset slip a purchase through.
   if (def.buyable === false || def.category === 'transient') return { ok: false, reason: 'invalid_placement' };
   if (funds < def.buyPrice) return { ok: false, reason: 'insufficient_funds' };
   if (!valid) return { ok: false, reason: 'invalid_placement' };
-  const addition = overlay.addPurchase(def.id, pos, rotDeg);
+  const addition = overlay.addPurchase(def.id, pos, rotDeg, surface);
   return { ok: true, addition };
 }
 
@@ -642,7 +644,7 @@ interface GhostCacheEntry {
 }
 
 export type BuyModeSelection =
-  | { kind: 'placing'; def: AssetDef; pos: [number, number]; rotDeg: number; valid: boolean }
+  | { kind: 'placing'; def: AssetDef; pos: [number, number]; rotDeg: number; valid: boolean; surface?: SurfaceSocketCandidate }
   | { kind: 'selected'; inst: EffectiveInstance; def: AssetDef }
   | { kind: 'moving'; inst: EffectiveInstance; def: AssetDef; pos: [number, number]; rotDeg: number; valid: boolean }
   | null;
@@ -668,6 +670,11 @@ export class BuyModeController {
   constructor(
     private getData: () => GameData,
     private getWorld: () => THREE.Group,
+    private surfaceOccupancy?: {
+      isOccupied(hostKey: string, index: number): boolean;
+      claim(hostKey: string, index: number, occupantId: string): boolean;
+      releaseOccupant(occupantId: string): void;
+    },
   ) {}
 
   // -------------------------------------------------------------- mode toggle
@@ -715,8 +722,8 @@ export class BuyModeController {
   }
 
   /** Feed this into bakeNavGrid via `{ ...data.map, placedObjects: effectivePlacedObjectsList() }`. */
-  effectivePlacedObjectsList(): PlacedLike[] {
-    return effectivePlacedObjects(this.instances());
+  effectivePlacedObjectsList(includeSurface = true): PlacedLike[] {
+    return effectivePlacedObjects(this.instances(), includeSurface);
   }
 
   // -------------------------------------------------------------- placement validity helper
@@ -768,14 +775,49 @@ export class BuyModeController {
       pos = snapToNeighborEdges(pos, rotDeg, def.footprint, map.walls, others, { excludeKey });
     }
     const valid = this.checkValidity(pos, rotDeg, def, excludeKey);
-    this.selection = { ...this.selection, pos, rotDeg, valid };
+    this.selection = this.selection.kind === 'placing'
+      ? { ...this.selection, pos, rotDeg, valid, surface: undefined }
+      : { ...this.selection, pos, rotDeg, valid };
     if (this.ghost) { applyAssetPlacement(this.ghost, def, pos, rotDeg); this.updateGhostAppearance(valid); }
+  }
+
+  /** Clicking an authored counter/table while placing a surface-capable asset snaps to its nearest
+   * free socket. Ordinary ground placement remains available by clicking the floor. */
+  moveGhostToSurface(hostObject: THREE.Object3D, worldX: number, worldZ: number): boolean {
+    if (!this.selection || this.selection.kind !== 'placing' || !this.selection.def.placeableOnSurface) return false;
+    const hostInst = this.instanceForObject(hostObject);
+    if (!hostInst) return false;
+    const hostDef = this.byId().get(hostInst.asset);
+    if (!hostDef?.surfaceSockets?.length) return false;
+    const host: SurfaceHost = { key: hostInst.key, pos: hostInst.pos, rotDeg: hostInst.rotDeg, sockets: hostDef.surfaceSockets };
+    const occupiedByAddition = new Set(this.overlay.allAdditions.filter((a) => a.surface?.hostKey === host.key).map((a) => a.surface!.index));
+    const socket = nearestFreeSurfaceSocket([host], [worldX, worldZ], Infinity, (key, index) =>
+      occupiedByAddition.has(index) || this.surfaceOccupancy?.isOccupied(key, index) === true);
+    if (!socket) return false;
+    const pos: [number, number] = [socket.pos[0], socket.pos[2]];
+    this.selection = { ...this.selection, pos, rotDeg: socket.rotDeg, valid: true, surface: socket };
+    if (this.ghost) {
+      applyAssetPlacement(this.ghost, this.selection.def, pos, socket.rotDeg);
+      this.ghost.position.y += socket.pos[1];
+      this.updateGhostAppearance(true);
+    }
+    return true;
   }
 
   rotateGhost() {
     if (!this.selection || this.selection.kind === 'selected') return;
     const rotDeg = rotateStep(this.selection.rotDeg);
     const def = this.selection.def;
+    if (this.selection.kind === 'placing' && this.selection.surface) {
+      const surface = this.selection.surface;
+      this.selection = { ...this.selection, rotDeg, valid: true };
+      if (this.ghost) {
+        applyAssetPlacement(this.ghost, def, this.selection.pos, rotDeg);
+        this.ghost.position.y += surface.pos[1];
+        this.updateGhostAppearance(true);
+      }
+      return;
+    }
     const excludeKey = this.selection.kind === 'moving' ? this.selection.inst.key : undefined;
     const valid = this.checkValidity(this.selection.pos, rotDeg, def, excludeKey);
     this.selection = { ...this.selection, rotDeg, valid };
@@ -788,10 +830,12 @@ export class BuyModeController {
   confirm(funds: number): { kind: 'bought'; def: AssetDef; cost: number } | { kind: 'moved' } | { kind: 'failed'; reason: BuyFailReason } | null {
     if (!this.selection) return null;
     if (this.selection.kind === 'placing') {
-      const { def, pos, rotDeg, valid } = this.selection;
-      const result = attemptBuy(this.overlay, def, pos, rotDeg, funds, valid);
+      const { def, pos, rotDeg, valid, surface } = this.selection;
+      const surfaceRef = surface ? { hostKey: surface.hostKey, index: surface.index, y: surface.pos[1] } : undefined;
+      const result = attemptBuy(this.overlay, def, pos, rotDeg, funds, valid, surfaceRef);
       if (!result.ok) { this.clearGhost(); this.selection = null; return { kind: 'failed', reason: result.reason! }; }
       this.buildAdditionGroup(result.addition!, def);
+      if (surfaceRef) this.surfaceOccupancy?.claim(surfaceRef.hostKey, surfaceRef.index, `buy:${result.addition!.key}`);
       this.clearGhost();
       this.selection = null;
       return { kind: 'bought', def, cost: def.buyPrice };
@@ -799,6 +843,7 @@ export class BuyModeController {
     if (this.selection.kind === 'moving') {
       const { inst, def, pos, rotDeg, valid } = this.selection;
       const ok = attemptMove(this.overlay, inst, pos, rotDeg, valid);
+      if (ok && inst.surface) this.surfaceOccupancy?.releaseOccupant(`buy:${inst.key}`);
       this.clearGhost();
       this.selection = ok ? { kind: 'selected', inst: { ...inst, pos, rotDeg }, def } : { kind: 'selected', inst, def };
       this.applyOverridesToWorld();
@@ -891,6 +936,7 @@ export class BuyModeController {
   sellInstance(inst: EffectiveInstance, def: AssetDef): number {
     const result = attemptSell(this.overlay, inst, def);
     if (!result.ok) return 0;
+    if (inst.surface) this.surfaceOccupancy?.releaseOccupant(`buy:${inst.key}`);
     if (inst.source === 'player') this.removeAdditionGroup(inst.key);
     else this.applyOverridesToWorld();
     return result.refund;
@@ -902,6 +948,7 @@ export class BuyModeController {
    *  afterward, same as every other overlay mutation here (buy/move/sell). */
   destroyInstance(inst: EffectiveInstance) {
     attemptDestroy(this.overlay, inst);
+    if (inst.surface) this.surfaceOccupancy?.releaseOccupant(`buy:${inst.key}`);
     if (inst.source === 'player') this.removeAdditionGroup(inst.key);
     else this.applyOverridesToWorld();
   }
@@ -982,6 +1029,7 @@ export class BuyModeController {
   private buildAdditionGroup(addition: OverlayAddition, def: AssetDef) {
     const group = makeStandIn(def);
     applyAssetPlacement(group, def, addition.pos, addition.rotDeg);
+    if (addition.surface) group.position.y += addition.surface.y;
     group.userData = { assetId: def.id, interactions: def.interactions, buyKey: addition.key, assetStateKey: `player:${addition.key}` };
     attachAssetLight(group, def);
     attachMesh(group, def);
@@ -1068,13 +1116,17 @@ export class BuyModeController {
 
   /** Full restore (future save system): rebuilds both the pure overlay and every live group. */
   restore(s: BuyOverlaySaveState) {
+    for (const key of this.additionGroups.keys()) this.surfaceOccupancy?.releaseOccupant(`buy:${key}`);
     for (const group of this.additionGroups.values()) { group.parent?.remove(group); disposeGroupLocal(group); }
     this.additionGroups.clear();
     this.overlay.restore(s);
     const byId = this.byId();
     for (const a of this.overlay.allAdditions) {
       const def = byId.get(a.asset);
-      if (def) this.buildAdditionGroup(a, def);
+      if (def) {
+        this.buildAdditionGroup(a, def);
+        if (a.surface) this.surfaceOccupancy?.claim(a.surface.hostKey, a.surface.index, `buy:${a.key}`);
+      }
     }
     this.applyOverridesToWorld();
   }

@@ -6,6 +6,8 @@ import * as THREE from 'three';
 import { loadAll, loadAllMaps, loadTitleBootstrap, setRuntimeHomeMap, watchData, type ActionDef, type AssetDef, type GameData, type MapData, type SaveConfig } from './data';
 import { TouchCamera } from './camera';
 import { applyWallCutView, buildWorld, makeSimStandIn, makeLights, applyDayNight, applyExteriorScene, loadRiggedCharacter, normalizeMeshUrl, setAssetObjectState } from './world';
+import { nextWallViewMode, type WallViewMode } from './wallview';
+import { canAffordActionCost } from './actioncost';
 import { buildDoors, ExteriorDoorTransit, type ExteriorDoorTransitRequest } from './doors';
 import { AnimController } from './anim';
 import { bakeNavGrid } from './nav';
@@ -33,7 +35,9 @@ import { createProgressBarInstance, createSkillBarInstance, resolveSkillBarConfi
 import { computeDurationSeconds, isDurationComplete } from './duration';
 import { AudioManager, loopSoundFor } from './audio';
 import { initBladderFailureState, checkBladderFailure, rearmBladderFailure } from './bladder';
-import { FoodRegistry, foodAssetForActionEvent, firstLegSeatAware, actionAfterSourceFetch, cookedMealHungerGain, resolveFoodConfig, wasteAssetForDroppedFood } from './food';
+import { FoodRegistry, foodAssetForActionEvent, firstLegSeatAware, actionAfterSourceFetch, cookedMealHungerGain, resolveFoodConfig } from './food';
+import { nearestFreeSurfaceSocket, retainedSurfaceSocket, surfaceOccupantId, surfaceSocketWorld, type SurfaceHost, type SurfaceSocketCandidate, type SurfaceSocketRef } from './surfaces';
+import { carryAnchorPosition, hasCarryRotationLock, resolveLockedCarryEuler } from './carry';
 import { initEnergyCollapseState, StarvationTracker, tickEnergyCollapse } from './survival';
 import { formatMoneyChange, formatSkillUp, skillLevelUps } from './feedback';
 import { AssetStateRegistry, LEGACY_ON, hasCustomStates, isActionAvailableInState, isStatefulAsset, planToReachAction, powerStateForAction, stateAfterAction, stateDef } from './assetstate';
@@ -144,11 +148,12 @@ async function start(initialLoadSlotId?: string) {
   // ONLY for assets that authored >=2 useLocations for the pose — a single-location asset keeps
   // today's behaviour untouched (buildSeatClaimer returns undefined -> the default usePose path).
   const occupancy = new OccupancyRegistry();
+  const surfaceOccupancy = new OccupancyRegistry();
   // New.txt #6 E4: per-event fire throttle (cooldownSeconds / onceOnly). Persisted, unlike
   // occupancy — a once-only event that already fired must stay spent across save/load.
   const eventFiring = new EventFiringRegistry();
   const buildSeatClaimer = (occupantId: string) =>
-    (action: ActionDef, seat: THREE.Object3D, fromPos: [number, number]): import('./data').UsePoseEntry | undefined => {
+    (action: ActionDef, seat: THREE.Object3D, fromPos: [number, number]): import('./data').UsePoseEntry | null | undefined => {
       const anim = action.animation;
       const pose: 'sit' | 'lie' | null = anim.startsWith('lie') ? 'lie' : anim.startsWith('sit') ? 'sit' : null;
       if (!pose) return undefined;
@@ -160,7 +165,7 @@ async function start(initialLoadSlotId?: string) {
       const candidates = seatLocationCandidates(def, pose, instance, def, data.tuning);
       if (candidates.length < 2) return undefined; // single location — nothing to arbitrate
       const idx = pickClosestFreeLocation(candidates, fromPos, occupancy.claimedIndices(key));
-      if (idx === null) return undefined; // every location taken — fall back to default (rare)
+      if (idx === null) return null; // every authored location is genuinely unavailable
       occupancy.claim(key, idx, occupantId);
       return candidates[idx].entry;
     };
@@ -170,12 +175,12 @@ async function start(initialLoadSlotId?: string) {
   // recomputes the combined rate of ON metered assets each frame into currentHydroRate.
   const hydro = new HydroMeter();
   let currentHydroRate = 0;
-  let wallCutActive = false; // in-page preference only; deliberately not serialized
+  let wallViewMode: WallViewMode = 'full'; // in-page preference only; deliberately not serialized
   let world = buildWorld(data, trackInitialLoad);
   let doors = buildDoors(data, trackInitialLoad);
   const exteriorDoorTransit = new ExteriorDoorTransit();
   world.add(doors.group);
-  applyWallCutView(world, wallCutActive, data.tuning.view?.wallCutHeight ?? 1);
+  applyWallCutView(world, wallViewMode, data.tuning.view?.wallCutHeight ?? 1);
   const lights = makeLights();
   scene.add(world, lights);
   applyExteriorScene(scene, world, data.map); // D4: sky/ground/backdrop/fog for this map (sparse — no-op on a void map)
@@ -187,6 +192,11 @@ async function start(initialLoadSlotId?: string) {
 
   const cam = new TouchCamera(window.innerWidth / window.innerHeight, data.tuning.camera, data.map);
   cam.attach(renderer.domElement);
+  const applyWallView = () => applyWallCutView(
+    world, wallViewMode, data.tuning.view?.wallCutHeight ?? 1,
+    [cam.camera.position.x, cam.camera.position.z],
+    [data.map.bounds.w / 2, data.map.bounds.h / 2],
+  );
 
   // --- Phase 1: tap-to-go + needs/skills simulation + actions ---
   // id → AssetDef lookup for SimAgent's sit/lie perch resolution (usePoseFor, §7.8) — rebuilt
@@ -203,7 +213,11 @@ async function start(initialLoadSlotId?: string) {
   // list (designer objects with overrides applied, minus sold, plus player additions) into
   // bakeNavGrid — used by both buy-mode actions and the ordinary hot-reload rebake below, so
   // overlay changes always survive a tuning/map/asset edit landing mid-session.
-  const buyMode = new BuyModeController(() => data, () => world);
+  const buyMode = new BuyModeController(() => data, () => world, {
+    isOccupied: (hostKey, index) => !surfaceOccupancy.isFree(hostKey, index),
+    claim: (hostKey, index, occupantId) => surfaceOccupancy.claim(hostKey, index, occupantId),
+    releaseOccupant: (occupantId) => surfaceOccupancy.releaseOccupant(occupantId),
+  });
   /**
    * New.txt (2026-07-20) "read through the states": [] when the action is already available on this
    * instance, the ordered transition steps when it can be unlocked, or null when it is unreachable.
@@ -316,7 +330,7 @@ async function start(initialLoadSlotId?: string) {
     // overrides land (a closed murphy bed leaves floor walkable, an open one blocks it).
     const byIdForNav = assetsById(data);
     grid = bakeNavGrid(
-      { ...data.map, placedObjects: buyMode.effectivePlacedObjectsList() },
+      { ...data.map, placedObjects: buyMode.effectivePlacedObjectsList(false) },
       data.assets,
       (placedIndex, assetId) => {
         const def = byIdForNav.get(assetId);
@@ -470,9 +484,9 @@ async function start(initialLoadSlotId?: string) {
   applyTheme(data.theme);
   hud.setPhoneIcon(data.tuning.phone?.icon ?? '/icons/Smartphone.png');
   hud.onWallCutToggle = () => {
-    wallCutActive = !wallCutActive;
-    applyWallCutView(world, wallCutActive, data.tuning.view?.wallCutHeight ?? 1);
-    hud.setWallCutActive(wallCutActive);
+    wallViewMode = nextWallViewMode(wallViewMode);
+    applyWallView();
+    hud.setWallCutMode(wallViewMode);
   };
 
   // Environment need (Sims "Room" score) = Σ environment scores of placed objects + any
@@ -1395,9 +1409,100 @@ async function start(initialLoadSlotId?: string) {
   // main.ts-owned extra-leg pattern as carryState (sim.ts has no multi-leg chaining).
   let trashOutState: { doorTarget: THREE.Object3D; action: ActionDef } | null = null;
   const food = new FoodRegistry();
+  const foodSurface = new Map<string, SurfaceSocketRef>();
+  let carriedProp: { key: string; action: ActiveAction; group: THREE.Object3D; stableWorldEuler: THREE.Euler } | null = null;
+  let carriedPropTransitioning = false;
   const FOOD_EATING_ACTION_ID = '__eat_carried_food';
   let foodTransitioning = false;
   const gameHourNow = () => (gameDay - 1) * 24 + gameSeconds / 3600;
+  const findCarryBone = (name: string): THREE.Object3D => {
+    const exact = sim.getObjectByName(name);
+    if (exact) return exact;
+    const wanted = name.toLowerCase().replace(/^mixamorig:?/, '');
+    let match: THREE.Object3D | null = null;
+    sim.traverse((object) => {
+      const normalized = object.name.toLowerCase().replace(/^mixamorig:?/, '');
+      if (!match && normalized === wanted) match = object;
+    });
+    return match ?? sim;
+  };
+  const anchorCarriedGroup = (group: THREE.Object3D, handle: readonly number[] | undefined, offset: readonly number[]) => {
+    const transformedHandle = new THREE.Vector3(handle?.[0] ?? 0, handle?.[1] ?? 0, handle?.[2] ?? 0)
+      .multiply(group.scale)
+      .applyQuaternion(group.quaternion);
+    group.position.set(offset[0] ?? 0, offset[1] ?? 0, offset[2] ?? 0).sub(transformedHandle);
+  };
+  const startCarriedProp = (active: ActiveAction) => {
+    const cfg = active.action.carriedAsset;
+    if (!cfg) return;
+    if (carriedProp?.action.action.id === active.action.id) { carriedProp.action = active; return; }
+    if (carriedProp) return;
+    const rec = accidents.spawnTransient(cfg.assetId, [sim.position.x, sim.position.z], 0, simClockSeconds);
+    const group = rec ? accidents.groupFor(rec.key) : null;
+    if (!rec || !group) return;
+    const bone = findCarryBone(cfg.bone);
+    bone.add(group);
+    const def = data.assets.assets.find((entry) => entry.id === cfg.assetId);
+    const offset = cfg.offset ?? [0, 0, 0];
+    const rotation = cfg.rotationDeg ?? [0, 0, 0];
+    group.rotation.set(
+      THREE.MathUtils.degToRad(rotation[0]),
+      THREE.MathUtils.degToRad(rotation[1]),
+      THREE.MathUtils.degToRad(rotation[2]),
+    );
+    const scale = cfg.scale ?? 1;
+    group.scale.setScalar(scale);
+    group.position.fromArray(carryAnchorPosition(def?.carryHandle, offset, rotation, scale));
+    group.visible = true;
+    sim.updateWorldMatrix(true, true);
+    const stableWorldQuaternion = sim.getWorldQuaternion(new THREE.Quaternion())
+      .multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(
+        THREE.MathUtils.degToRad(rotation[0]),
+        THREE.MathUtils.degToRad(rotation[1]),
+        THREE.MathUtils.degToRad(rotation[2]),
+      )));
+    carriedProp = { key: rec.key, action: active, group, stableWorldEuler: new THREE.Euler().setFromQuaternion(stableWorldQuaternion, 'XYZ') };
+  };
+  const updateCarriedPropRotationLocks = () => {
+    if (!carriedProp) return;
+    const cfg = carriedProp.action.action.carriedAsset;
+    if (!cfg || !hasCarryRotationLock(cfg.lockRotationAxes)) return;
+    const group = carriedProp.group;
+    const parent = group.parent;
+    if (!parent) return;
+    parent.updateWorldMatrix(true, false);
+    const rotation = cfg.rotationDeg ?? [0, 0, 0];
+    const authoredLocal = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+      THREE.MathUtils.degToRad(rotation[0]),
+      THREE.MathUtils.degToRad(rotation[1]),
+      THREE.MathUtils.degToRad(rotation[2]),
+      'XYZ',
+    ));
+    const parentWorld = parent.getWorldQuaternion(new THREE.Quaternion());
+    // Always reconstruct the ordinary bone-followed orientation from the current bone pose and
+    // the authored attachment rotation. Reading group.worldQuaternion here would feed last
+    // frame's locked result back into this frame and make the unlocked axes drift over time.
+    const followed = new THREE.Euler().setFromQuaternion(parentWorld.clone().multiply(authoredLocal), 'XYZ');
+    const stable = carriedProp.stableWorldEuler;
+    const resolved = resolveLockedCarryEuler(
+      [followed.x, followed.y, followed.z], [stable.x, stable.y, stable.z], cfg.lockRotationAxes,
+    );
+    const desiredWorld = new THREE.Quaternion().setFromEuler(new THREE.Euler(resolved[0], resolved[1], resolved[2], 'XYZ'));
+    const parentWorldInverse = parentWorld.invert();
+    group.quaternion.copy(parentWorldInverse.multiply(desiredWorld));
+    const def = data.assets.assets.find((entry) => entry.id === cfg.assetId);
+    anchorCarriedGroup(group, def?.carryHandle, cfg.offset ?? [0, 0, 0]);
+    group.updateMatrixWorld(true);
+  };
+  const stopCarriedProp = (active: ActiveAction, completed: boolean) => {
+    if (!carriedProp || carriedProp.action !== active) return;
+    if (carriedPropTransitioning) return;
+    const { key } = carriedProp; carriedProp = null;
+    const group = accidents.groupFor(key);
+    if (completed) { accidents.despawnTransient(key); return; }
+    if (group) world.attach(group);
+    accidents.setTransientPlacement(key, [sim.position.x, sim.position.z], true);
+  };
   const handleProducedWaste = (assetId: string) => {
     const count = wasteItemCount(data.tuning.waste, buildEvalContext(), data.stats);
     const cleanliness = stats.personality.get(garbage.cleanlinessVarId());
@@ -1406,23 +1511,65 @@ async function start(initialLoadSlotId?: string) {
     }
   };
 
-  const dropActiveFood = () => {
-    const dropped = food.interruptActive([sim.position.x, sim.position.z], gameHourNow());
-    if (!dropped) return;
-    // ROADMAP item 1 fix: an abandoned carried-food item becomes clearable WASTE at the drop spot
-    // (the Eat action's producesWaste, e.g. dirty_dishes) instead of being left as an uncleanable,
-    // self-perishing food transient. ROOT CAUSE of the designer bug: a dropped snack/meal is a
-    // `snack`/`meal` transient whose AssetDef.interactions is EMPTY, so the tap menu (which reads
-    // the asset's own interactions) offered no cleanup action; and FoodRegistry.tick silently
-    // despawned it at perishHours (snack = 3 in-game hours ≈ 22.5s at secondsPerGameDay=180 — the
-    // "vanishes on its own" symptom). Routing it through handleProducedWaste gives it the ordinary
-    // garbage pipeline: auto-tidy into a nearby non-full can if the sim is clean enough, else a
-    // clearable `dirty_dishes` transient that persists until a COMPLETED clean_up — identical to a
-    // finished Eat's own waste. `discard` removes it from the food registry so tick never touches it.
-    accidents.despawnTransient(dropped.key);
-    food.discard(dropped.key);
-    const wasteId = wasteAssetForDroppedFood(dropped);
-    if (wasteId) handleProducedWaste(wasteId);
+  const surfaceHosts = (): SurfaceHost[] => world.children.flatMap((object) => {
+    if (!object.visible) return [];
+    const def = data.assets.assets.find((entry) => entry.id === object.userData?.assetId);
+    if (!def?.surfaceSockets?.length) return [];
+    const key = (object.userData.assetStateKey as string | undefined)
+      ?? (object.userData.buyKey ? `player:${object.userData.buyKey}` : `object:${object.uuid}`);
+    return [{ key, pos: [object.position.x, object.position.z] as [number, number], rotDeg: THREE.MathUtils.radToDeg(object.rotation.y), sockets: def.surfaceSockets }];
+  });
+  const releaseFoodSurface = (key: string) => {
+    const ref = foodSurface.get(key);
+    const occupantId = surfaceOccupantId('transient', key);
+    if (ref && surfaceOccupancy.occupantAt(ref.hostKey, ref.index) === occupantId) {
+      surfaceOccupancy.release(ref.hostKey, ref.index);
+    }
+    foodSurface.delete(key);
+  };
+  const placeFoodAfterInterrupt = (key: string) => {
+    const carriedGroup = accidents.groupFor(key);
+    if (carriedGroup && carriedGroup.parent !== world) world.attach(carriedGroup);
+    const hosts = surfaceHosts();
+    const occupantId = surfaceOccupantId('transient', key);
+    const retained = retainedSurfaceSocket(
+      hosts, foodSurface.get(key), occupantId,
+      (hostKey, index) => surfaceOccupancy.occupantAt(hostKey, index),
+    );
+    if (retained) {
+      accidents.setTransientElevatedPlacement(key, retained.pos, retained.rotDeg, true);
+      const item = food.all.find((entry) => entry.key === key);
+      if (item) item.pos = [retained.pos[0], retained.pos[2]];
+      return;
+    }
+    releaseFoodSurface(key);
+    const socket = nearestFreeSurfaceSocket(
+      hosts, [sim.position.x, sim.position.z], data.tuning.surfacePlacement?.radiusMeters ?? 3,
+      (hostKey, index) => !surfaceOccupancy.isFree(hostKey, index),
+    );
+    if (socket && surfaceOccupancy.claim(socket.hostKey, socket.index, occupantId)) {
+      foodSurface.set(key, { hostKey: socket.hostKey, index: socket.index });
+      accidents.setTransientElevatedPlacement(key, socket.pos, socket.rotDeg, true);
+      const item = food.all.find((entry) => entry.key === key);
+      if (item) item.pos = [socket.pos[0], socket.pos[2]];
+      return;
+    }
+    accidents.setTransientPlacement(key, [sim.position.x, sim.position.z], true);
+    const group = accidents.groupFor(key);
+    const item = food.all.find((entry) => entry.key === key);
+    if (group && item) item.pos = [group.position.x, group.position.z];
+  };
+
+  const dropActiveFood = (progress = 0) => {
+    const interrupted = food.interruptActiveWithProgress([sim.position.x, sim.position.z], gameHourNow(), progress);
+    if (!interrupted) return;
+    const dropped = interrupted.item;
+    // Current behavior: preserve the uneaten portion as food. It prefers a nearby free elevated
+    // socket and otherwise uses the existing nearest-free-floor resolver; perishing starts now.
+    if (interrupted.consumedGain > 0) {
+      stats.refillNeed('hunger', (stats.needs.get('hunger') ?? 0) + interrupted.consumedGain);
+    }
+    placeFoodAfterInterrupt(dropped.key);
   };
   /** Any order that redirects the sim away from an in-progress "carry to garbage" walk cancels it —
    *  the transient stays exactly where it was (still dirty), the can's fill is untouched. Call this
@@ -1464,18 +1611,45 @@ async function start(initialLoadSlotId?: string) {
     }
   };
 
-  const nearestFoodSeat = (): THREE.Object3D | null => {
+  const foodSeatAvailable = (object: THREE.Object3D, def: AssetDef): boolean => {
+    const locations = [...(def.useLocations?.sit ?? []), ...(def.useLocations?.lie ?? [])];
+    if (locations.length < 2) return true;
+    const key = object.userData?.assetStateKey as string | undefined;
+    return !!key && occupancy.claimedIndices(key).size < locations.length;
+  };
+  const nearestFoodSeat = (from: [number, number] = [sim.position.x, sim.position.z], maxDistance = Infinity): THREE.Object3D | null => {
     const byId = new Map(data.assets.assets.map((a) => [a.id, a]));
     let best: THREE.Object3D | null = null;
     let bestDist = Infinity;
     for (const obj of world.children) {
       if (obj.visible === false) continue;
       const def = byId.get(obj.userData?.assetId as string);
-      if (!def?.seatTarget) continue;
-      const dist = Math.hypot(obj.position.x - sim.position.x, obj.position.z - sim.position.z);
+      if (!def?.seatTarget || !foodSeatAvailable(obj, def)) continue;
+      const dist = Math.hypot(obj.position.x - from[0], obj.position.z - from[1]);
+      if (dist > maxDistance) continue;
       if (dist < bestDist) { best = obj; bestDist = dist; }
     }
     return best;
+  };
+  const foodDestination = (foodKey: string): { seat: THREE.Object3D | null; surface: SurfaceSocketCandidate | null } => {
+    const candidates: SurfaceSocketCandidate[] = [];
+    for (const host of surfaceHosts()) {
+      host.sockets.forEach((socket, index) => {
+        if (!surfaceOccupancy.isFree(host.key, index)) return;
+        const resolved = surfaceSocketWorld(host, socket);
+        const seat = nearestFoodSeat([resolved.pos[0], resolved.pos[2]], data.tuning.interaction?.seatSearchRadius ?? 5);
+        if (!seat) return;
+        candidates.push({ hostKey: host.key, index, pos: resolved.pos, rotDeg: resolved.rotDeg,
+          distance: Math.hypot(resolved.pos[0] - sim.position.x, resolved.pos[2] - sim.position.z) });
+      });
+    }
+    candidates.sort((a, b) => a.distance - b.distance || a.index - b.index);
+    const surface = candidates[0] ?? null;
+    if (surface && surfaceOccupancy.claim(surface.hostKey, surface.index, surfaceOccupantId('transient', foodKey))) {
+      foodSurface.set(foodKey, { hostKey: surface.hostKey, index: surface.index });
+      return { surface, seat: nearestFoodSeat([surface.pos[0], surface.pos[2]], data.tuning.interaction?.seatSearchRadius ?? 5) };
+    }
+    return { surface: null, seat: nearestFoodSeat() };
   };
 
   /** Starts B4-2's second leg using the same bare main.ts orchestration as B3-5 carry-to-garbage.
@@ -1504,26 +1678,36 @@ async function start(initialLoadSlotId?: string) {
       });
       foodConfig = { ...foodConfig, hungerGain: gain };
     }
-    // ROADMAP item 1 fix: record the clearable waste this food becomes if abandoned (dropActiveFood)
-    // — the Eat action's producesWaste, matching a finished Eat's own waste (dirty_dishes).
+    // The legacy waste id remains in the save shape for backward compatibility. Interrupted food
+    // now remains edible and later becomes its authored rottenAssetId instead of converting at once.
     food.startCarrying(rec.key, assetId, foodConfig, pos, eatDef.producesWaste);
-    accidents.setTransientPlacement(rec.key, pos, false);
-    const target = accidents.groupFor(rec.key);
-    if (!target) { dropActiveFood(); return; }
+    const carriedFoodGroup = accidents.groupFor(rec.key);
+    if (!carriedFoodGroup) { dropActiveFood(); return; }
+    const hand = findCarryBone('mixamorigRightHand');
+    hand.add(carriedFoodGroup);
+    carriedFoodGroup.rotation.set(0, 0, 0);
+    carriedFoodGroup.position.fromArray(carryAnchorPosition(def.carryHandle, [0, 0.06, 0], [0, 0, 0], carriedFoodGroup.scale.x));
+    carriedFoodGroup.visible = true;
+    const destination = foodDestination(rec.key);
     const eatingAction = {
       ...eatDef,
       id: FOOD_EATING_ACTION_ID,
       name: `Eating ${def.name.toLowerCase()}`,
       needGains: {}, skillGains: {}, primaryNeed: null, autonomyEligible: false,
-      cost: undefined,
+      cost: cooked ? undefined : sourceAction?.cost,
       duration: eatDef.duration ?? { baseSeconds: 5 },
+      animation: destination.seat ? eatDef.animation : 'stand_use',
     };
-    const seat = nearestFoodSeat();
+    const seat = destination.seat;
     // Keep the hidden target at the eating destination so SimAgent's final face-target step does
     // not turn a seated sim back toward the distant fridge/stove after applying the seat pose.
-    if (seat) accidents.setTransientPlacement(rec.key, [seat.position.x, seat.position.z], false);
+    const target = new THREE.Object3D();
+    target.userData = { assetId: def.id, interactions: [] };
+    if (destination.surface) target.position.set(destination.surface.pos[0], destination.surface.pos[1], destination.surface.pos[2]);
+    else if (seat) target.position.copy(seat.position);
+    else target.position.copy(sim.position);
     foodTransitioning = true;
-    const ordered = agent.orderAction(eatingAction, target, seat, undefined, true);
+    const ordered = agent.orderAction(eatingAction, target, seat, undefined, !!seat);
     foodTransitioning = false;
     if (!ordered) dropActiveFood();
   };
@@ -1569,7 +1753,12 @@ async function start(initialLoadSlotId?: string) {
       const sourceDef = sourceAssetId ? data.assets.assets.find((x) => x.id === sourceAssetId) : undefined;
       const seat = findSeatFor(world, data, a.target);
       const secondLeg = actionAfterSourceFetch(a.action);
-      if (!agent.orderAction(secondLeg, a.target, seat, sourceDef, true)) {
+      startCarriedProp(a);
+      carriedPropTransitioning = true;
+      const ordered = agent.orderAction(secondLeg, a.target, seat, sourceDef, true);
+      carriedPropTransitioning = false;
+      if (!ordered) {
+        stopCarriedProp(a, false);
         console.log('no path from source to seat', sourceAssetId ?? a.action.id);
       }
       return;
@@ -1596,21 +1785,44 @@ async function start(initialLoadSlotId?: string) {
       visitor.rotation.y = THREE.MathUtils.degToRad(visitorDeg);
       visitors.playInteraction(socialAnimationFor(socialOrder.interaction, 'npc'));
     }
-    if (a.action.id !== FOOD_EATING_ACTION_ID && !quests.spend(a.action.cost ?? 0)) {
+    if (a.action.id !== FOOD_EATING_ACTION_ID && !canAffordActionCost(quests.funds, a.action.cost)) {
       postNotification('insufficientFunds', 'Not enough funds for that action');
       agent.stopAction();
       return;
     }
-    if (a.action.id !== FOOD_EATING_ACTION_ID && (a.action.cost ?? 0) > 0) {
-      hud.setFunds(quests.funds, currencyName());
+    // A designer may make a throw-away action autonomous later, so keep the capacity guard on the
+    // shared arrival path as well as the player menu. The item remains untouched when no can can
+    // accept it; completion performs the same check again in case the last slot fills meanwhile.
+    if (a.action.discardsFood && !garbage.hasNonFullCan()) {
+      postNotification('garbageUnavailable', 'No empty garbage can available');
+      agent.stopAction(false);
+      return;
     }
+    startCarriedProp(a);
     hud.showActivity(a.action.name);
     anim?.play(animStateFor(a)); // unmapped states fall back to idle inside AnimController
     const totalSeconds = computeDurationSeconds(a.action.duration, Object.fromEntries(stats.skills), data.stats.skills, Object.fromEntries(stats.needs));
     durationState = totalSeconds !== null ? { action: a, totalSeconds, elapsed: 0 } : null;
-    if (a.action.id === FOOD_EATING_ACTION_ID) {
+    if (a.action.consumesFood) {
+      const key = a.target.userData?.accidentKey as string | undefined;
+      if (!key || !food.activateDropped(key)) { agent.stopAction(false); return; }
+      releaseFoodSurface(key);
+      accidents.setTransientPlacement(key, [sim.position.x, sim.position.z], false);
+      food.beginEating(key);
+    } else if (a.action.id === FOOD_EATING_ACTION_ID) {
       const active = food.active;
-      if (active) food.beginEating(active.key);
+      if (active) {
+        food.beginEating(active.key);
+        const ref = foodSurface.get(active.key);
+        const host = ref ? surfaceHosts().find((entry) => entry.key === ref.hostKey) : undefined;
+        const socket = host && ref ? host.sockets[ref.index] : undefined;
+        if (host && socket) {
+          const resolved = surfaceSocketWorld(host, socket);
+          const group = accidents.groupFor(active.key);
+          if (group && group.parent !== world) world.attach(group);
+          accidents.setTransientElevatedPlacement(active.key, resolved.pos, resolved.rotDeg, true);
+        }
+      }
     }
     // ROADMAP_NEXT item 7: start whichever of the target asset's own `sound` (wins, per-instance
     // key so two placed instances of the same asset loop independently) or the action's `sound`
@@ -1690,8 +1902,12 @@ async function start(initialLoadSlotId?: string) {
   agent.onActionStop = (a, completed) => {
     const socialStop = socialSession.active?.action === a.action;
     const phoneContactStop = phoneContactSession.active?.action === a.action;
+    stopCarriedProp(a, completed);
     hud.hideActivity();
     anim?.play('idle');
+    const stoppedDuration = durationState;
+    const stoppedProgress = stoppedDuration && stoppedDuration.totalSeconds > 0
+      ? Math.min(1, Math.max(0, stoppedDuration.elapsed / stoppedDuration.totalSeconds)) : 0;
     durationState = null;
     // ROADMAP_NEXT item 7: stop whichever loop onActionStart may have started for this activity —
     // both keys are harmless no-ops to stop if they weren't the one actually playing.
@@ -1710,21 +1926,43 @@ async function start(initialLoadSlotId?: string) {
       refreshPhone();
       return;
     }
+    if (completed && (a.action.cost ?? 0) > 0) {
+      if (!quests.spend(a.action.cost ?? 0)) {
+        postNotification('insufficientFunds', 'Not enough funds to finish that action');
+        return;
+      }
+      hud.setFunds(quests.funds, currencyName());
+    }
     if (a.action.id === 'use_phone') hud.closePhone();
-    if (a.action.id === FOOD_EATING_ACTION_ID) {
+    if (a.action.id === FOOD_EATING_ACTION_ID || a.action.consumesFood) {
       const active = food.active;
       if (!completed) {
-        if (!foodTransitioning) dropActiveFood();
+        if (!foodTransitioning) dropActiveFood(stoppedProgress);
         return;
       }
       if (active) {
         const eaten = food.completeEating(active.key, stats.needs.get('hunger') ?? 0);
         if (eaten) stats.refillNeed('hunger', eaten.hunger);
+        releaseFoodSurface(active.key);
         accidents.despawnTransient(active.key);
       }
       if (a.action.producesWaste) {
         handleProducedWaste(a.action.producesWaste);
       }
+      return;
+    }
+    if (a.action.discardsFood) {
+      if (!completed) return;
+      // "Throw away" is real garbage, not a silent despawn: reserve one capacity unit first. If
+      // every can filled during the action, leave the target exactly where it is and report the
+      // same capacity refusal used by ordinary cleanup.
+      if (!garbage.depositAtNearestCan([sim.position.x, sim.position.z])) {
+        postNotification('garbageUnavailable', 'No empty garbage can available');
+        return;
+      }
+      const key = a.target.userData?.accidentKey as string | undefined;
+      if (key && food.discard(key)) { releaseFoodSurface(key); accidents.despawnTransient(key); }
+      else accidents.maybeCleanup(a.target, a.action.id);
       return;
     }
     // ROADMAP_NEXT B3-4: every side effect below represents "the sim actually finished doing
@@ -1734,6 +1972,9 @@ async function start(initialLoadSlotId?: string) {
     // for main.ts's own two natural-finish call sites (primaryNeed threshold below, and the
     // `duration` timer running out in the render loop) — see sim.ts's stopAction doc comment.
     if (!completed) return;
+    // New.txt: affordability is checked before routing/start, but the charge lands only after the
+    // action genuinely finishes. A balance change during the action can still make completion
+    // unaffordable; in that case no completion side effects are applied.
     // New.txt #6: a COMPLETED action fires its authored event (cancelled actions fire nothing —
     // side_effect_rule). Runs before the state transition below so an event may still read the
     // pre-transition state, and so a leak event can spawn its puddle at the asset that broke.
@@ -1916,6 +2157,7 @@ async function start(initialLoadSlotId?: string) {
   // Move/Rotate/Sell chips.
   const handleBuyModeTap = (hit: TapResult) => {
     if (buyMode.selection && buyMode.selection.kind !== 'selected') {
+      if (hit.object && hit.ground && buyMode.moveGhostToSurface(hit.object, hit.ground.x, hit.ground.z)) return;
       if (hit.ground) buyMode.moveGhostTo(hit.ground.x, hit.ground.z);
       return;
     }
@@ -2008,7 +2250,7 @@ async function start(initialLoadSlotId?: string) {
             // toast surface per the brief ("reuse quest toast") rather than a new UI component.
             // (A can can still go full between now and completion — the render-loop carry check
             // re-verifies and shows the same toast then, transient left untouched either way.)
-            if (CARRY_TO_GARBAGE_ACTIONS.has(action.id) && !garbage.hasNonFullCan()) {
+            if ((CARRY_TO_GARBAGE_ACTIONS.has(action.id) || action.discardsFood) && !garbage.hasNonFullCan()) {
               postNotification('garbageUnavailable', 'No empty garbage can available');
               return;
             }
@@ -2308,7 +2550,7 @@ async function start(initialLoadSlotId?: string) {
     world = buildWorld(data);
     doors = buildDoors(data);
     world.add(doors.group);
-    applyWallCutView(world, wallCutActive, data.tuning.view?.wallCutHeight ?? 1);
+    applyWallView();
     scene.add(world);
     // D4: re-apply the scene-level exterior (sky/fog + ground handle) for the freshly-built world —
     // this is also what swaps the exterior on an R4 runtime map switch (the ground/backdrop meshes
@@ -2896,7 +3138,20 @@ async function start(initialLoadSlotId?: string) {
     }
     // B4-2: dropped food ages in monotonic in-game hours; pause freezes it and crossing midnight
     // stays monotonic through gameDay. The pure registry returns keys for the transient layer.
-    for (const key of food.tick(gameHourNow())) accidents.despawnTransient(key);
+    for (const perished of food.tickDetailed(gameHourNow())) {
+      const socketRef = foodSurface.get(perished.key);
+      accidents.despawnTransient(perished.key);
+      releaseFoodSurface(perished.key);
+      if (!perished.rottenAssetId) continue;
+      const rotten = accidents.spawnTransient(perished.rottenAssetId, perished.pos, 0, simClockSeconds);
+      if (!rotten || !socketRef) continue;
+      const host = surfaceHosts().find((entry) => entry.key === socketRef.hostKey);
+      const socket = host?.sockets[socketRef.index];
+      if (!host || !socket) continue;
+      const resolved = nearestFreeSurfaceSocket([host], perished.pos, Infinity, () => false);
+      if (!resolved || !surfaceOccupancy.claim(socketRef.hostKey, socketRef.index, surfaceOccupantId('transient', rotten.key))) continue;
+      accidents.setTransientElevatedPlacement(rotten.key, resolved.pos, resolved.rotDeg, true);
+    }
     // ROADMAP_NEXT item 5 (§7.11): duration-timed actions auto-complete on the same sim time as
     // everything else here — a normal stop (triggers onActionStop → accident roll, animation
     // reset, etc.), just driven by elapsed time instead of a filled primaryNeed.
@@ -2975,6 +3230,7 @@ async function start(initialLoadSlotId?: string) {
     // parented under it), so a sprite gets its frames ticked with no extra per-caller wiring.
     world.traverse((o) => { o.userData.spriteUpdate?.(sdt); });
     anim?.update(sdt); // sim time: pause freezes the character, 2×/3× speed it up
+    updateCarriedPropRotationLocks(); // authored world-axis locks apply after the animated bone pose
     if (marker && data.tuning.character) marker.update(sdt, data.tuning.character); // §7.7: same sim time as the mixer/doors/sprites
     // ROADMAP_NEXT B2-5: progress bar tracks durationState directly (elapsed/total, both already
     // sim-time) — visible for ANY duration-timed action, cook included (free consistency win).
@@ -3055,6 +3311,7 @@ async function start(initialLoadSlotId?: string) {
       lastCamPos.copy(cam.camera.position);
       lastCamQuat.copy(cam.camera.quaternion);
       garbage.updateFillBarOcclusion(cam.camera, world.children);
+      if (camMoved && wallViewMode === 'cutaway') applyWallView();
     }
 
     renderer.render(scene, cam.camera);

@@ -7,7 +7,7 @@
 import {
   GarbageRegistry, findNearestNonFullCan, decideWasteHandling, wasteItemCount, DEFAULT_GARBAGE_TUNING, type CanCandidate,
   garbageFillRatio, shouldShowFillBar, garbageFillBarGeometry, DEFAULT_GARBAGE_FILLBAR,
-  chooseFullestCan, fillBarOccluded,
+  chooseFullestCan, fillBarOccluded, depositOneAtNearestCan,
 } from '../game/garbage';
 
 let failures = 0;
@@ -49,6 +49,24 @@ console.log('garbage.test — GarbageRegistry');
     reg3.restore({ fills: undefined as any });
     return reg3.fillOf('anything') === 0;
   })());
+}
+
+console.log('garbage.test — completed throw-away capacity');
+{
+  const reg = new GarbageRegistry();
+  const cans: CanCandidate[] = [
+    { key: 'near-full', pos: [1, 0], capacity: 1 },
+    { key: 'far-open', pos: [4, 0], capacity: 2 },
+  ];
+  check('first thrown-away item fills the nearest can by one',
+    depositOneAtNearestCan(reg, [0, 0], cans) === 'near-full' && reg.fillOf('near-full') === 1);
+  check('next item skips the newly-full can and fills another',
+    depositOneAtNearestCan(reg, [0, 0], cans) === 'far-open' && reg.fillOf('far-open') === 1);
+  reg.deposit('far-open', 2);
+  const before = reg.serialize();
+  check('all-full refusal returns null and changes no capacity',
+    depositOneAtNearestCan(reg, [0, 0], cans) === null
+      && JSON.stringify(reg.serialize()) === JSON.stringify(before));
 }
 
 console.log('garbage.test — findNearestNonFullCan');

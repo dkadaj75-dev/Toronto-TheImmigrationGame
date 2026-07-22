@@ -94,7 +94,7 @@ export interface NearestCan { key: string; pos: [number, number]; dist: number; 
 /** Nearest can with fill < capacity, or null if every known can is full (or there are none at all). */
 export function findNearestNonFullCan(
   simPos: [number, number],
-  cans: CanCandidate[],
+  cans: readonly CanCandidate[],
   fillOf: (key: string) => number,
 ): NearestCan | null {
   let best: NearestCan | null = null;
@@ -104,6 +104,20 @@ export function findNearestNonFullCan(
     if (!best || dist < best.dist) best = { key: c.key, pos: c.pos, dist };
   }
   return best;
+}
+
+/** Deposit one discarded/cleaned item into the nearest non-full can. Returns that can's key, or
+ * null without mutating fill state when no capacity is available. Kept pure so throw-away
+ * completion and the existing carry-to-garbage path share one tested capacity operation. */
+export function depositOneAtNearestCan(
+  registry: GarbageRegistry,
+  simPos: [number, number],
+  cans: readonly CanCandidate[],
+): string | null {
+  const nearest = findNearestNonFullCan(simPos, cans, (key) => registry.fillOf(key));
+  const can = nearest ? cans.find((entry) => entry.key === nearest.key) : undefined;
+  if (!nearest || !can || !registry.deposit(nearest.key, can.capacity)) return null;
+  return nearest.key;
 }
 
 export interface FullestCan { key: string; pos: [number, number]; fill: number; dist: number; }
@@ -486,12 +500,9 @@ export class GarbageController {
    *  rather than adding rollback/retry complexity. */
   depositAtNearestCan(simPos: [number, number]): boolean {
     const cans = this.cans();
-    const nearest = findNearestNonFullCan(simPos, cans, (k) => this.registry.fillOf(k));
-    if (!nearest) return false;
-    const capacity = cans.find((c) => c.key === nearest.key)?.capacity ?? Infinity;
-    const deposited = this.registry.deposit(nearest.key, capacity);
-    if (deposited) this.syncFillBars(); // fill-bar request: reflect the carry-to-garbage deposit immediately
-    return deposited;
+    const canKey = depositOneAtNearestCan(this.registry, simPos, cans);
+    if (canKey) this.syncFillBars(); // fill-bar request: reflect the carry-to-garbage/discard deposit immediately
+    return canKey !== null;
   }
 
   /** ROADMAP_NEXT item 4: the exterior door's `empty_garbage` interaction — resets every can. */

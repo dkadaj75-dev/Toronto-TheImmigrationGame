@@ -102,6 +102,18 @@
           }
         ]
       }
+    },
+    {
+      "id": "lmia_extension",
+      "name": "LMIA Extension",
+      "durationDays": 20,
+      "losable": false,
+      "graceDays": 5,
+      "obtainedVia": "quest",
+      "applicationDays": 0,
+      "requirements": {
+        "all": []
+      }
     }
   ]
 }

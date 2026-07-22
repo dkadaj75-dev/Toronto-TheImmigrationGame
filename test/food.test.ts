@@ -35,6 +35,17 @@ food.beginEating('snack#2');
 food.interruptActive([9, 9], 20);
 check('interrupted eating grants no hunger', food.completeEating('snack#2', 25) === null);
 
+const partial = new FoodRegistry();
+partial.startCarrying('meal#partial', 'meal', { hungerGain: 40, perishHours: 4, rottenAssetId: 'rotten_food' }, [0, 0]);
+partial.beginEating('meal#partial');
+const half = partial.interruptActiveWithProgress([2, 3], 10, 0.5);
+check('half-eaten interruption reports the consumed half', half?.consumedGain === 20);
+check('half-eaten interruption preserves half the hunger on the same item', half?.item.hungerGain === 20 && half.item.phase === 'dropped');
+check('dropped food can be selected and eaten again', partial.activateDropped('meal#partial')?.key === 'meal#partial' && partial.beginEating('meal#partial'));
+partial.interruptActiveWithProgress([2, 3], 10, -1);
+const perished = partial.tickDetailed(14);
+check('perishing reports authored rotten replacement and position', perished[0]?.rottenAssetId === 'rotten_food' && perished[0].pos[0] === 2);
+
 console.log('food.test — B7-4 two-leg order decision (walk to fridge BEFORE carrying to a seat)');
 // The regression: `eat` is seatAware, so the old order sites resolved a seat up front and routed the
 // sim straight to a chair near the fridge — skipping the fridge, spawning the snack at the seat.
@@ -93,7 +104,7 @@ check('skill scaling applies to the asset-default base (45 * 0.6 = 27)',
 check('skill scaling applies to the action-override base (12 * 1.5 = 18)',
   Math.abs(cookedMealHungerGain(lightCfg.hungerGain, 100, 100, ct2) - 18) < 1e-9);
 
-console.log('food.test — item 1 fix: abandoned carried food becomes clearable waste, never self-despawns');
+console.log('food.test — legacy waste compatibility and resumable dropped food');
 const foodW = new FoodRegistry();
 const carried = foodW.startCarrying('snack#w', 'snack', { hungerGain: 18, perishHours: 3 }, [1, 2], 'dirty_dishes');
 check('carried food records the waste asset it becomes when abandoned', carried.wasteAssetId === 'dirty_dishes');

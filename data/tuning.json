@@ -267,5 +267,9 @@
   },
   "cleanup": {
     "radiusMeters": 2
+  },
+  "surfacePlacement": {
+    "radiusMeters": 3,
+    "_source": "New.txt elevated surfaces: nearest free counter/table socket search radius for interrupted food and carried props; fallback is a legal floor cell."
   }
 }

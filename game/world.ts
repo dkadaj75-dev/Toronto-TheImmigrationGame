@@ -11,7 +11,7 @@ import { classifyMeshPath, createSpriteInstance, createOverlayInstance, preloadG
 import { resolveScreenOverlay, overlayVisibleWhenOn, meshForStateId, allStateMeshes, type ResolvedScreenOverlay } from './stateviz';
 import { retargetTrackName, stripPositionTracks, resolveClipName, fileStem } from './fbxclips';
 import { resolveWindowConfig, windowFacePositions, windowPaneRect } from './windows';
-import { wallCutShownHeight } from './wallview';
+import { wallCutShownHeight, wallShouldCut, type WallViewMode } from './wallview';
 import { resolveAssetLight, defaultAssetOn, defaultStateId, LEGACY_ON, LEGACY_OFF } from './assetstate';
 import { resolveMetersPerTile, effectiveMetersPerTile, textureRepeat, polygonBounds } from './textures';
 import { publicUrl } from './urls';
@@ -740,9 +740,19 @@ export function applyExteriorScene(scene: THREE.Scene, world: THREE.Group, map: 
 /** Apply the Sims-style wall-cut presentation without rebuilding nav or changing map data.
  * Walls and door visuals shrink from ground level; windows hide because their authored pane is
  * above the cut. Furniture, sim, collision, paths, and interactions remain unchanged. */
-export function applyWallCutView(root: THREE.Group, active: boolean, requestedHeight: number) {
+export function applyWallCutView(
+  root: THREE.Group,
+  modeOrActive: WallViewMode | boolean,
+  requestedHeight: number,
+  cameraPos?: readonly [number, number],
+  mapCenter?: readonly [number, number],
+) {
+  const mode: WallViewMode = typeof modeOrActive === 'boolean' ? (modeOrActive ? 'cut' : 'full') : modeOrActive;
+  const worldPos = new THREE.Vector3();
   root.traverse((object) => {
     const kind = object.userData.wallCutVisual as string | undefined;
+    object.getWorldPosition(worldPos);
+    const active = wallShouldCut(mode, [worldPos.x, worldPos.z], cameraPos, mapCenter);
     if (kind === 'window') {
       object.visible = !active;
       return;

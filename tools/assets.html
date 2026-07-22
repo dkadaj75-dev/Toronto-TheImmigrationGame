@@ -71,6 +71,7 @@
 <script>
 // ------------------------------------------------------------------ state
 const API = '/api/data/';
+const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const FEATURE_CATEGORY_CARDS = Object.freeze({
   electronics: ['Light', 'Sound', 'Power (Hydro)', 'State visuals'],
   comfort: ['Sit / lie / use pose', 'Seat locations (multiple)', 'Need multipliers'],
@@ -83,6 +84,7 @@ const state = {
   selected: null, dirty: false,
   // Preview-only state: never written to assets.json. Character starts hidden on every load.
   showCharacter: false, previewPose: null, previewOn: false, previewSeatLocation: null,
+  helperVisibility: { footprint: true, sit: true, lie: true, facing: true, surfaces: true, handle: true },
 };
 const previewGridSize = () => {
   const size = Number(state.map?.gridSize);
@@ -124,7 +126,18 @@ function resolvePoseAnimation(pose, asset, actions = state.interactions?.actions
   return { logicalState, clipName: clipMap[logicalState] ?? null };
 }
 
-window.AssetEditor = { state, previewGridSize, previewGridSpec, availablePreviewPoses, previewPoseSource, resolvePoseAnimation };
+function setCarryHandleFromPreview(position, final = false) {
+  const asset = selectedAsset();
+  if (!asset?.carryHandle || !Array.isArray(position)) return;
+  asset.carryHandle = [0, 1, 2].map((index) => Number((Number(position[index]) || 0).toFixed(3)));
+  for (let index = 0; index < 3; index++) {
+    const input = document.querySelector(`input[data-path="carryHandle.${['x', 'y', 'z'][index]}"]`);
+    if (input) input.value = String(asset.carryHandle[index]);
+  }
+  if (final) { state.dirty = true; updateSave(); setStatus('unsaved changes'); }
+}
+
+window.AssetEditor = { state, previewGridSize, previewGridSpec, availablePreviewPoses, previewPoseSource, resolvePoseAnimation, setCarryHandleFromPreview };
 
 async function load() {
   setStatus('loading…');
@@ -741,6 +754,29 @@ function renderEditor() {
   faceCard.appendChild(frow('target x / z (model-local meters)', targetPair));
   root.appendChild(faceCard);
 
+  // Carried-asset handle: this exact model-local point is aligned to the selected character bone.
+  const handleCard = document.createElement('div');
+  handleCard.className = 'card';
+  handleCard.innerHTML = '<h2>Carry handle</h2><div class="hint">The exact model-local point that anchors to a character bone. Enable it, then drag the orange handle in the 3D preview or edit X/Y/Z here. Leave it off to keep the asset origin as the anchor.</div>';
+  const handleEnabled = checkInput(
+    () => Array.isArray(a.carryHandle),
+    (value) => { if (value) a.carryHandle = [0, 0, 0]; else delete a.carryHandle; renderAll(); },
+    'carryHandle.enabled',
+  );
+  handleCard.appendChild(frow('custom carry handle', handleEnabled));
+  const handleCoords = document.createElement('div');
+  handleCoords.style.display = 'grid'; handleCoords.style.gridTemplateColumns = 'repeat(3,1fr)'; handleCoords.style.gap = '6px';
+  for (const [index, axis] of ['x', 'y', 'z'].entries()) {
+    const input = numInput(
+      () => a.carryHandle?.[index],
+      (value) => { if (a.carryHandle) a.carryHandle[index] = value ?? 0; },
+      `carryHandle.${axis}`,
+    );
+    input.placeholder = axis; input.disabled = !a.carryHandle; handleCoords.appendChild(input);
+  }
+  handleCard.appendChild(frow('handle x / y / z', handleCoords));
+  root.appendChild(handleCard);
+
   // --- sit/lie/use perch override (§7.8, roadmap item 1; `use` added ROADMAP_NEXT B2-3): sparse
   // per-pose fields, same ensure/prune convention as meshFit/door/sprite below. Defaults with
   // nothing set: sit/lie perch ON the footprint center at tuning.character.sitHeight/lieHeight,
@@ -892,6 +928,44 @@ function renderEditor() {
   cardSeatLoc.appendChild(frow('Preview location', seatPreviewSel));
   appendFeatureCard(root, cardSeatLoc, a, 'comfort', ['useLocations']);
 
+  // --- New.txt elevated surfaces: discrete top sockets shared by transient placement + Buy Mode.
+  const cardSurface = document.createElement('div');
+  cardSurface.className = 'card';
+  cardSurface.innerHTML = '<h2>Elevated surface sockets</h2><div class="hint">Discrete model-local places on top of a counter/table. A green cube in the preview is AVAILABLE; occupied sockets are reserved at runtime. X/Z rotate with the asset; Y is metres above the floor anchor.</div>';
+  const surfacePlaceable = document.createElement('input');
+  surfacePlaceable.type = 'checkbox'; surfacePlaceable.dataset.path = 'placeableOnSurface';
+  surfacePlaceable.checked = a.placeableOnSurface === true;
+  surfacePlaceable.addEventListener('change', () => { if (surfacePlaceable.checked) a.placeableOnSurface = true; else delete a.placeableOnSurface; markDirty(); });
+  const surfacePlaceableLabel = document.createElement('label');
+  surfacePlaceableLabel.append(surfacePlaceable, document.createTextNode(' this asset can occupy another asset\'s elevated socket in Buy Mode'));
+  cardSurface.appendChild(frow('Place on surfaces', surfacePlaceableLabel));
+  const sockets = a.surfaceSockets ?? [];
+  sockets.forEach((socket, index) => {
+    const box = document.createElement('div'); box.className = 'card'; box.style.background = '#141c2e'; box.style.margin = '6px 0 0';
+    box.dataset.surfaceSocketRow = String(index);
+    box.insertAdjacentHTML('afterbegin', `<div class="hint" style="margin:0 0 6px;text-transform:uppercase;">socket #${index} · available</div>`);
+    const pair = document.createElement('div'); pair.className = 'pair';
+    for (const axis of [0, 1]) pair.appendChild(numInput(
+      () => a.surfaceSockets?.[index]?.offset?.[axis],
+      (v) => { const s = a.surfaceSockets[index]; const p = [...(s.offset ?? [0, 0])]; p[axis] = v ?? 0; s.offset = p; },
+      `surfaceSockets.${index}.${axis === 0 ? 'x' : 'z'}`,
+    ));
+    box.appendChild(frow('offset x / z', pair));
+    box.appendChild(frow('height y', numInput(() => a.surfaceSockets?.[index]?.y, (v) => { a.surfaceSockets[index].y = v ?? 0; }, `surfaceSockets.${index}.y`)));
+    box.appendChild(frow('object rotation ° (optional)', numInput(
+      () => a.surfaceSockets?.[index]?.rotationDeg,
+      (v) => { if (v === undefined) delete a.surfaceSockets[index].rotationDeg; else a.surfaceSockets[index].rotationDeg = v; },
+      `surfaceSockets.${index}.rotationDeg`,
+    )));
+    const rm = document.createElement('button'); rm.className = 'danger mini'; rm.textContent = 'Remove'; rm.dataset.action = 'remove-surface-socket';
+    rm.addEventListener('click', () => { a.surfaceSockets.splice(index, 1); if (!a.surfaceSockets.length) delete a.surfaceSockets; markDirty(); renderAll(); });
+    box.appendChild(rm); cardSurface.appendChild(box);
+  });
+  const addSocket = document.createElement('button'); addSocket.textContent = '+ Add elevated socket'; addSocket.dataset.action = 'add-surface-socket';
+  addSocket.addEventListener('click', () => { (a.surfaceSockets ??= []).push({ offset: [0, 0], y: 0.9 }); markDirty(); renderAll(); });
+  cardSurface.appendChild(addSocket);
+  root.appendChild(cardSurface);
+
   // --- interactions
   const card3 = document.createElement('div');
   card3.className = 'card';
@@ -952,7 +1026,7 @@ function renderEditor() {
     const cardFood = document.createElement('div');
     cardFood.className = 'card';
     cardFood.innerHTML = '<h2>Food</h2><div class="hint">Optional carried-food payload. Hunger is granted once eating completes; interrupted food drops and despawns after perishHours in-game hours. Leave both blank for non-food transients.</div>';
-    const pruneFood = () => { if (a.food && a.food.hungerGain === undefined && a.food.perishHours === undefined) delete a.food; };
+    const pruneFood = () => { if (a.food && a.food.hungerGain === undefined && a.food.perishHours === undefined && !a.food.rottenAssetId) delete a.food; };
     cardFood.appendChild(frow('hunger gain', numInput(
       () => a.food?.hungerGain,
       (v) => { if (v === undefined) { if (a.food) delete a.food.hungerGain; } else (a.food ??= {}).hungerGain = v; pruneFood(); },
@@ -963,6 +1037,13 @@ function renderEditor() {
       (v) => { if (v === undefined) { if (a.food) delete a.food.perishHours; } else (a.food ??= {}).perishHours = Math.max(0, v); pruneFood(); },
       'food.perishHours',
     )));
+    const rotten = document.createElement('select'); rotten.dataset.path = 'food.rottenAssetId';
+    rotten.innerHTML = '<option value="">(despawn when perished)</option>' + state.assets.assets
+      .filter((x) => x.category === 'transient' && x.id !== a.id)
+      .map((x) => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
+    rotten.value = a.food?.rottenAssetId ?? '';
+    rotten.addEventListener('change', () => { if (!rotten.value) { if (a.food) delete a.food.rottenAssetId; } else (a.food ??= {}).rottenAssetId = rotten.value; pruneFood(); markDirty(); });
+    cardFood.appendChild(frow('rotten replacement asset', rotten));
     appendFeatureCard(root, cardFood, a, 'kitchen', ['food']);
   } else {
     appendFeatureCard(root, renderAccidentsCard(a), a, 'plumbing', ['accidents']);
@@ -1188,6 +1269,14 @@ function renderEditor() {
   poseSelect.addEventListener('change', () => { state.previewPose = poseSelect.value; schedulePreview(); });
   previewControls.append(showLabel, poseSelect);
   card4.appendChild(frow('Pose preview', previewControls));
+  const helperChecks = document.createElement('div'); helperChecks.className = 'checks'; helperChecks.dataset.previewHelpers = '';
+  for (const [key, label] of Object.entries({ footprint: 'Footprint', sit: 'Sit refs', lie: 'Lie refs', facing: 'Facing point', surfaces: 'Elevated sockets', handle: 'Carry handle' })) {
+    const lab = document.createElement('label'); const cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.helper = key;
+    cb.checked = state.helperVisibility[key] !== false;
+    cb.addEventListener('change', () => { state.helperVisibility[key] = cb.checked; schedulePreview(); });
+    lab.append(cb, document.createTextNode(label)); helperChecks.appendChild(lab);
+  }
+  card4.appendChild(frow('Visual references', helperChecks));
   card4.insertAdjacentHTML('beforeend', '<canvas id="preview"></canvas><div id="preview-msg"></div>');
   if (!hasCharacterTuning) {
     card4.querySelector('#preview-msg').textContent = 'Character preview unavailable: tuning.character is not configured.';
@@ -1465,6 +1554,7 @@ load();
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { AnimController } from '/game/anim.ts';
 import { facingVector, seatLocationEntries, useFacingTargetFor, usePoseFor, usePoseForEntry, useSpotFor } from '/game/facing.ts';
 import { classifyMeshPath, createSpriteInstance, createOverlayInstance } from '/game/sprites.ts';
@@ -1472,7 +1562,7 @@ import { normalizeModelToFootprint, applyMeshFit, loadMeshTemplate, loadRiggedCh
 import { resolvePaneConfig } from '/game/doors.ts';
 import { resolveScreenOverlay, overlayVisibleWhenOn, meshForState } from '/game/stateviz.ts';
 
-let renderer = null, scene, camera, controls, current = null, raf = 0;
+let renderer = null, scene, camera, controls, transformControls = null, current = null, raf = 0;
 let footprintHelper = null; // translucent ground rect + outline at y=0 showing the asset's footprint
 let useHelpers = null; // preview-only seat/lie markers and the custom facing-target cube
 let activeSprite = null; // §7.5: SpriteInstance being previewed — its update() drives GIF frames (real time here, sim time in-game)
@@ -1498,6 +1588,7 @@ function updateFootprintHelper(def) {
     footprintHelper.traverse((o) => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
     footprintHelper = null;
   }
+  if (window.AssetEditor?.state?.helperVisibility?.footprint === false) return;
   const fp = def && Array.isArray(def.footprint) ? def.footprint : null;
   const w = fp && fp[0] > 0 ? fp[0] : 0, d = fp && fp[1] > 0 ? fp[1] : 0;
   if (!(w > 0) || !(d > 0)) return;
@@ -1521,6 +1612,8 @@ function updateFootprintHelper(def) {
 }
 
 function updateUseHelpers(def) {
+  transformControls?.detach();
+  if (transformControls) transformControls.visible = false;
   if (useHelpers) {
     scene.remove(useHelpers);
     useHelpers.traverse((object) => { object.geometry?.dispose?.(); object.material?.dispose?.(); });
@@ -1529,6 +1622,7 @@ function updateUseHelpers(def) {
   useHelpers.name = 'asset-editor-use-helpers';
   const instance = { pos: [0, 0], rotDeg: 0 };
   for (const pose of ['sit', 'lie']) {
+    if (window.AssetEditor.state.helperVisibility?.[pose] === false) continue;
     (def ? seatLocationEntries(def, pose) : []).forEach((entry, index) => {
       const transform = usePoseForEntry(pose, entry, instance, def, window.AssetEditor.state.tuning);
       const color = pose === 'sit' ? 0x43d9ff : 0xd66bff;
@@ -1543,7 +1637,7 @@ function updateUseHelpers(def) {
       useHelpers.add(marker, arrow);
     });
   }
-  const target = def ? useFacingTargetFor(instance, def) : null;
+  const target = window.AssetEditor.state.helperVisibility?.facing === false ? null : def ? useFacingTargetFor(instance, def) : null;
   if (target) {
     const cube = new THREE.Mesh(
       new THREE.BoxGeometry(0.16, 0.16, 0.16),
@@ -1552,6 +1646,31 @@ function updateUseHelpers(def) {
     cube.name = 'use-facing-target';
     cube.position.set(target[0], 0.12, target[1]);
     useHelpers.add(cube);
+  }
+  if (window.AssetEditor.state.helperVisibility?.surfaces !== false) {
+    (def?.surfaceSockets ?? []).forEach((socket, index) => {
+      const marker = new THREE.Mesh(
+        new THREE.BoxGeometry(0.2, 0.035, 0.2),
+        new THREE.MeshBasicMaterial({ color: 0x61e786, transparent: true, opacity: 0.85, depthWrite: false }),
+      );
+      marker.name = `surface-socket-${index}-available`;
+      marker.position.set(socket.offset?.[0] ?? 0, Math.max(0.02, socket.y ?? 0), socket.offset?.[1] ?? 0);
+      marker.rotation.y = THREE.MathUtils.degToRad(socket.rotationDeg ?? 0);
+      useHelpers.add(marker);
+    });
+  }
+  if (window.AssetEditor.state.helperVisibility?.handle !== false && Array.isArray(def?.carryHandle)) {
+    const marker = new THREE.Mesh(
+      new THREE.SphereGeometry(0.095, 16, 10),
+      new THREE.MeshBasicMaterial({ color: 0xff8a3d, transparent: true, opacity: 0.92, depthWrite: false }),
+    );
+    marker.name = 'carry-handle';
+    marker.position.fromArray(def.carryHandle);
+    useHelpers.add(marker);
+    if (transformControls) {
+      transformControls.attach(marker);
+      transformControls.visible = true;
+    }
   }
   scene.add(useHelpers);
 }
@@ -1675,6 +1794,21 @@ function ensure(canvas) {
   camera.position.set(2, 1.6, 2.6);
   controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
+  transformControls = new TransformControls(camera, canvas);
+  transformControls.setMode('translate');
+  transformControls.setSpace('local');
+  transformControls.setSize(0.7);
+  transformControls.visible = false;
+  transformControls.addEventListener('dragging-changed', (event) => { controls.enabled = !event.value; });
+  transformControls.addEventListener('objectChange', () => {
+    const object = transformControls.object;
+    if (object?.name === 'carry-handle') window.AssetEditor?.setCarryHandleFromPreview?.(object.position.toArray(), false);
+  });
+  transformControls.addEventListener('mouseUp', () => {
+    const object = transformControls.object;
+    if (object?.name === 'carry-handle') window.AssetEditor?.setCarryHandleFromPreview?.(object.position.toArray(), true);
+  });
+  scene.add(transformControls);
   scene.add(new THREE.AmbientLight(0xbfd0e8, 1.1));
   const sun = new THREE.DirectionalLight(0xffffff, 2);
   sun.position.set(3, 5, 2);

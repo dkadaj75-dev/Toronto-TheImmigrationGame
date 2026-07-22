@@ -413,6 +413,32 @@ faceTargetX.value = '1.25'; faceTargetX.dispatchEvent(new window.Event('input', 
 faceTargetZ.value = '-0.5'; faceTargetZ.dispatchEvent(new window.Event('input', { bubbles: true }));
 assert(JSON.stringify(window.AssetEditor.state.assets.assets[0].useFacingTarget) === JSON.stringify([1.25, -0.5]), 'facing target writes model-local x/z data');
 
+// New.txt elevated sockets + right-pane helper visibility.
+assert(doc.querySelectorAll('[data-preview-helpers] input[type="checkbox"]').length === 6, 'right preview exposes six independent visual-reference toggles');
+assert([...doc.querySelectorAll('[data-preview-helpers] input')].every((x) => x.checked), 'all visual references default visible');
+const placeOnSurface = doc.querySelector('input[data-path="placeableOnSurface"]');
+assert(placeOnSurface && !placeOnSurface.checked, 'surface-placeable flag starts sparse/off');
+placeOnSurface.checked = true; placeOnSurface.dispatchEvent(new window.Event('change', { bubbles: true }));
+const addSurface = [...doc.querySelectorAll('button')].find((b) => b.textContent === '+ Add elevated socket');
+assert(addSurface, 'elevated socket add button rendered'); addSurface.click();
+assert(doc.querySelector('[data-surface-socket-row="0"]'), 'adding creates surface socket row zero');
+const socketY = doc.querySelector('input[data-path="surfaceSockets.0.y"]');
+socketY.value = '0.82'; socketY.dispatchEvent(new window.Event('input', { bubbles: true }));
+assert(window.AssetEditor.state.assets.assets[0].surfaceSockets[0].y === 0.82, 'surface socket height writes through');
+assert(window.AssetEditor.state.assets.assets[0].placeableOnSurface === true, 'surface-placeable flag writes sparse true');
+
+// Carry handle is an asset-local point and the module exposes a TransformControls drag seam.
+let carryHandleEnabled = doc.querySelector('input[data-path="carryHandle.enabled"]');
+assert(carryHandleEnabled && !carryHandleEnabled.checked, 'carry handle starts sparse/off');
+carryHandleEnabled.checked = true; carryHandleEnabled.dispatchEvent(new window.Event('change', { bubbles: true }));
+const carryHandleY = doc.querySelector('input[data-path="carryHandle.y"]');
+assert(carryHandleY && !carryHandleY.disabled, 'enabling carry handle exposes editable x/y/z coordinates');
+carryHandleY.value = '0.35'; carryHandleY.dispatchEvent(new window.Event('input', { bubbles: true }));
+assert(JSON.stringify(window.AssetEditor.state.assets.assets[0].carryHandle) === JSON.stringify([0, 0.35, 0]), 'carry handle numeric edit writes model-local xyz');
+window.AssetEditor.setCarryHandleFromPreview([0.1236, 0.4564, -0.2], true);
+assert(JSON.stringify(window.AssetEditor.state.assets.assets[0].carryHandle) === JSON.stringify([0.124, 0.456, -0.2]), '3D handle drag seam writes rounded model-local xyz');
+assert(html.includes('TransformControls') && html.includes("marker.name = 'carry-handle'"), '3D preview renders and translates the carry handle helper');
+
 // --- New.txt #5: multiple sit/lie seat locations (couch cushions, a two-person bed's sides).
 // Renders under the same 'comfort' feature category as the single usePose card above.
 assert(renderedCardTitles().includes('Seat locations (multiple)'), 'Seat locations card renders under comfort');

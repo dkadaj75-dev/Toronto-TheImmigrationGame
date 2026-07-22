@@ -499,6 +499,20 @@ export class AccidentsController {
     return true;
   }
 
+  /** Elevated-surface placement: unlike floor placement this deliberately bypasses the 2D
+   * footprint/free-cell resolver because the host furniture already owns that floor footprint. */
+  setTransientElevatedPlacement(key: string, pos: [number, number, number], rotDeg = 0, visible = true) {
+    const rec = this.registry.all.find((i) => i.key === key);
+    const group = this.groups.get(key);
+    if (!rec || !group) return false;
+    rec.pos = [pos[0], pos[2]];
+    rec.rotDeg = rotDeg;
+    group.position.set(pos[0], pos[1], pos[2]);
+    group.rotation.y = THREE.MathUtils.degToRad(rotDeg);
+    group.visible = visible;
+    return true;
+  }
+
   /** Public only for B4-2 consumption/perishing; cleanup actions still use maybeCleanup. */
   despawnTransient(key: string) { this.despawn(key); }
 
