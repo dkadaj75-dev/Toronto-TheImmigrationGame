@@ -3,22 +3,21 @@
   "actions": [
     {
       "id": "eat",
-      "name": "Eat a cheese slice",
-      "needGains": {
-        "hunger": 5,
-        "bladder": -2
-      },
+      "name": "Get a snack",
+      "needGains": {},
       "skillGains": {},
-      "animation": "sit_eat",
+      "animation": "stand_use",
       "autonomyEligible": true,
-      "primaryNeed": "hunger",
+      "primaryNeed": null,
       "cost": 5,
       "duration": {
         "baseSeconds": 3
       },
-      "producesWaste": "dirty_dishes",
-      "_wasteNote": "ROADMAP_NEXT item 10 — on stop, either auto-tidied into a nearby non-full garbage can (sim cleanliness personality stat permitting) or dropped as a 'dirty_dishes' transient. See game/garbage.ts.",
-      "seatAware": true
+      "spawnsAsset": {
+        "assetId": "snack",
+        "actionId": "consume_food"
+      },
+      "faceTarget": false
     },
     {
       "id": "consume_food",
@@ -32,7 +31,13 @@
       "duration": {
         "baseSeconds": 5
       },
-      "consumesFood": true
+      "consumesFood": true,
+      "spawnsAsset": {
+        "assetId": "dirty_dishes",
+        "actionId": "clean_up"
+      },
+      "_note": "Eating creates the authored Dirty dishes transient, then automatically runs its ordinary Clean up container-transfer action. Eating itself never changes container fill.",
+      "faceTarget": false
     },
     {
       "id": "throw_away_food",
@@ -45,13 +50,18 @@
       "duration": {
         "baseSeconds": 2
       },
-      "discardsFood": true
+      "containerTransfer": {
+        "mode": "deposit",
+        "containerAssetId": "garbage_can"
+      },
+      "_note": "Authored container deposit: carry the exact targeted food/rotten-food transient to a compatible garbage can."
     },
     {
       "id": "sleep",
       "name": "Sleep",
       "needGains": {
-        "energy": 3
+        "energy": 3,
+        "comfort": 1
       },
       "skillGains": {},
       "animation": "lie_sleep",
@@ -152,41 +162,36 @@
         "baseSeconds": 12,
         "atMaxSeconds": 6
       },
-      "producesWaste": "dirty_dishes",
-      "seatAware": true,
-      "faceTarget": false
+      "faceTarget": false,
+      "requiredAsset": {
+        "assetId": "fridge",
+        "alternativeAssetIds": [
+          "stinky_fridge"
+        ],
+        "radiusMeters": 5,
+        "visitBefore": true
+      },
+      "spawnsAsset": {
+        "assetId": "meal",
+        "actionId": "consume_food",
+        "applyCookingSkill": true
+      }
     },
     {
       "id": "read_book",
       "name": "Read a book",
-      "needGains": {
-        "fun": 1
-      },
+      "needGains": {},
       "skillGains": {},
-      "animation": "sit_idle",
+      "animation": "stand_use",
       "autonomyEligible": true,
       "primaryNeed": "fun",
-      "seatAware": true,
-      "fetchBeforeSeat": true,
-      "faceTarget": false
-    },
-    {
-      "id": "practice_english",
-      "name": "Practice English",
-      "needGains": {},
-      "skillGains": {
-        "english": 0.2
-      },
-      "animation": "sit_idle",
-      "autonomyEligible": false,
-      "primaryNeed": null,
-      "seatAware": true,
-      "fetchBeforeSeat": true,
       "faceTarget": false,
-      "happinessMod": {
-        "skillEffAtMin": 0,
-        "skillEffAtMax": 2,
-        "refuseBelow": 35
+      "duration": {
+        "baseSeconds": 0.1
+      },
+      "spawnsAsset": {
+        "assetId": "book",
+        "actionId": "read"
       }
     },
     {
@@ -305,6 +310,10 @@
             "atMax": 1
           }
         ]
+      },
+      "containerTransfer": {
+        "mode": "deposit",
+        "containerAssetId": "garbage_can"
       }
     },
     {
@@ -347,7 +356,7 @@
       "animation": "cleaning",
       "autonomyEligible": true,
       "primaryNeed": null,
-      "_note": "ROADMAP_NEXT item 10 — cleanup action for the 'dirty_dishes' transient's clearedBy (player-taps-it path). game/main.ts refuses to order this action at all (HUD toast) if every garbage can is full/none exist; on completion it deposits into the nearest non-full can (see game/garbage.ts's depositAtNearestCan).",
+      "_note": "Authored deposit action: after cleaning the targeted transient, carry that exact instance to the nearest compatible garbage_can with enough remaining capacity.",
       "_durationNote": "ROADMAP_NEXT B2-5 — base ~6s, slower when tired (same energy modifier as extinguish/sweep/mop). Duration completion goes through the same agent.stopAction() path as any other stop, so the existing clearedBy/deposit flow above still fires normally.",
       "duration": {
         "baseSeconds": 6,
@@ -358,6 +367,10 @@
             "atMax": 1
           }
         ]
+      },
+      "containerTransfer": {
+        "mode": "deposit",
+        "containerAssetId": "garbage_can"
       }
     },
     {
@@ -369,28 +382,26 @@
       "autonomyEligible": true,
       "primaryNeed": null,
       "duration": {
-        "baseSeconds": 3
+        "baseSeconds": 0.5
       },
+      "_note": "Authored empty action: collect this exact filled container, show the carried garbage bag, walk to the selected destination asset, then clear only the source container.",
       "carriedAsset": {
         "assetId": "garbage_bag",
-        "bone": "mixamorigRightHand",
-        "offset": [
-          0,
-          0.08,
-          0
-        ],
-        "scale": 0.55
+        "bone": "mixamorigRightHand"
       },
-      "_note": "ROADMAP_NEXT item 10 (item 4: emptying) — shipped on 'door_exterior'. Resets EVERY garbage can's fill to 0 (game/main.ts's onActionStop, action.id === 'empty_garbage' -> garbage.emptyAll()). Ships a short fixed `duration` purely so it auto-completes via the existing §7.11 timer instead of needing new instant-action plumbing — documented simplification, no carrying-garbage-out animation (same precedent as §7.14's exterior door itself)."
+      "containerTransfer": {
+        "mode": "empty",
+        "destinationAssetId": "door_exterior"
+      },
+      "faceTarget": false,
+      "cost": 1
     },
     {
       "id": "learn_cooking",
-      "name": "Learn Cooking",
+      "name": "Hell's Kitchen",
       "needGains": {},
-      "skillGains": {
-        "cooking": 0.5
-      },
-      "animation": "sit_idle",
+      "skillGains": {},
+      "animation": "stand_use",
       "autonomyEligible": true,
       "primaryNeed": null,
       "conditions": {
@@ -402,7 +413,15 @@
         ]
       },
       "fetchBeforeSeat": true,
-      "faceTarget": false
+      "seatAware": true,
+      "faceTarget": false,
+      "duration": {
+        "baseSeconds": 0.05
+      },
+      "spawnsAsset": {
+        "assetId": "book",
+        "actionId": "learn_cooking_2"
+      }
     },
     {
       "id": "turn_on",
@@ -415,7 +434,8 @@
       "duration": {
         "baseSeconds": 0.2
       },
-      "_note": "B6-12 generic power action. main.ts filters it to OFF instances and flips state on arrival; normal use-spot walking remains unchanged."
+      "_note": "B6-12 generic power action. main.ts filters it to OFF instances and flips state on arrival; normal use-spot walking remains unchanged.",
+      "sound": "/sounds/switch_004.ogg"
     },
     {
       "id": "turn_off",
@@ -428,25 +448,27 @@
       "duration": {
         "baseSeconds": 0.2
       },
-      "_note": "B6-12 generic power action. main.ts filters it to ON instances and flips state on arrival; normal use-spot walking remains unchanged."
+      "_note": "B6-12 generic power action. main.ts filters it to ON instances and flips state on arrival; normal use-spot walking remains unchanged.",
+      "sound": "/sounds/switch_004.ogg"
     },
     {
       "id": "eat_a_snack",
       "name": "Eat a snack",
-      "needGains": {
-        "hunger": 15
-      },
+      "needGains": {},
       "skillGains": {},
-      "animation": "sit_eat",
+      "animation": "sit",
       "autonomyEligible": true,
-      "primaryNeed": "hunger",
-      "seatAware": true,
+      "primaryNeed": null,
       "duration": {
         "baseSeconds": 5
       },
-      "producesWaste": "dirty_dishes",
       "cost": 8,
-      "faceTarget": false
+      "faceTarget": false,
+      "spawnsAsset": {
+        "assetId": "snack",
+        "actionId": "consume_food"
+      },
+      "seatAware": true
     },
     {
       "id": "watch_tv_radio_canada",
@@ -480,40 +502,56 @@
       "id": "cook_a_large_meal",
       "name": "Cook a large meal",
       "needGains": {},
-      "skillGains": {},
+      "skillGains": {
+        "cooking": 0.07
+      },
       "animation": "stand_use",
       "autonomyEligible": true,
       "primaryNeed": null,
       "cost": 25,
       "duration": {
-        "baseSeconds": 20,
-        "atMaxSeconds": 10,
+        "baseSeconds": 15,
+        "atMaxSeconds": 5,
         "skillVar": "skills.cooking"
       },
-      "producesWaste": "dirty_dishes",
-      "food": {
-        "hungerGain": 15
-      },
       "faceTarget": false,
-      "seatAware": true
+      "requiredAsset": {
+        "assetId": "fridge",
+        "alternativeAssetIds": [
+          "stinky_fridge"
+        ],
+        "radiusMeters": 5,
+        "visitBefore": true
+      },
+      "spawnsAsset": {
+        "assetId": "meal",
+        "actionId": "consume_food",
+        "applyCookingSkill": true
+      },
+      "food": {
+        "hungerGain": 35
+      }
     },
     {
       "id": "read_the_psychology_of_money",
-      "name": "Read \"The Psychology of Money\"",
+      "name": "The Psychology of Money",
       "needGains": {},
-      "skillGains": {
-        "finance": 0.5
-      },
-      "animation": "sit_idle",
+      "skillGains": {},
+      "animation": "stand_use",
       "autonomyEligible": true,
       "primaryNeed": null,
-      "fetchBeforeSeat": true,
       "faceTarget": false,
-      "seatAware": true
+      "spawnsAsset": {
+        "assetId": "book",
+        "actionId": "learn_finance_i"
+      },
+      "duration": {
+        "baseSeconds": 0.05
+      }
     },
     {
       "id": "fake_speech",
-      "name": "Fake speech",
+      "name": "Practice speech",
       "needGains": {},
       "skillGains": {
         "charisma": 0.25
@@ -532,21 +570,215 @@
       "id": "drink_coffee",
       "name": "Drink coffee",
       "needGains": {
-        "energy": 5
+        "energy": 3,
+        "bladder": -2
       },
       "skillGains": {},
-      "animation": "",
+      "animation": "sit_eat",
       "autonomyEligible": true,
-      "primaryNeed": null
+      "primaryNeed": null,
+      "faceTarget": false,
+      "seatAware": true,
+      "seatSearch": "nearest",
+      "emitsEvent": "event_1",
+      "duration": {
+        "baseSeconds": 1.5
+      },
+      "carriedAsset": {
+        "assetId": "coffee",
+        "bone": "mixamorigRightHand"
+      }
     },
     {
       "id": "make_coffee",
       "name": "Make coffee",
       "needGains": {},
       "skillGains": {},
+      "animation": "stand_use",
+      "autonomyEligible": true,
+      "primaryNeed": null,
+      "spawnsAsset": {
+        "assetId": "coffee",
+        "actionId": "drink_coffee"
+      },
+      "faceTarget": false,
+      "duration": {
+        "baseSeconds": 1
+      },
+      "cost": 1
+    },
+    {
+      "id": "read",
+      "name": "Read",
+      "needGains": {
+        "fun": 1
+      },
+      "skillGains": {},
+      "animation": "Reading",
+      "pose": "sit",
+      "autonomyEligible": true,
+      "primaryNeed": "fun",
+      "seatAware": true,
+      "seatSearch": "nearest",
+      "faceTarget": false,
+      "carriedAsset": {
+        "assetId": "book",
+        "bone": "mixamorigRightHand",
+        "dropOnInterrupt": false
+      }
+    },
+    {
+      "id": "reading_victor_hugo",
+      "name": "Learning French I",
+      "needGains": {
+        "fun": 0.01
+      },
+      "skillGains": {
+        "french": 0.1
+      },
+      "animation": "Reading",
+      "autonomyEligible": true,
+      "primaryNeed": null,
+      "pose": "sit",
+      "seatAware": true,
+      "seatSearch": "nearest",
+      "faceTarget": false,
+      "carriedAsset": {
+        "assetId": "book",
+        "bone": "mixamorigRightHand",
+        "dropOnInterrupt": false
+      }
+    },
+    {
+      "id": "reading_leaves_of_grass",
+      "name": "Learning English I",
+      "needGains": {
+        "fun": 0.02
+      },
+      "skillGains": {
+        "english": 0.1
+      },
+      "animation": "Reading",
+      "autonomyEligible": true,
+      "primaryNeed": null,
+      "seatAware": true,
+      "seatSearch": "nearest",
+      "faceTarget": false,
+      "carriedAsset": {
+        "assetId": "book",
+        "bone": "mixamorigRightHand",
+        "dropOnInterrupt": false
+      },
+      "pose": "sit"
+    },
+    {
+      "id": "victor_hugo",
+      "name": "Victor Hugo",
+      "needGains": {},
+      "skillGains": {},
+      "animation": "stand_use",
+      "autonomyEligible": true,
+      "primaryNeed": null,
+      "duration": {
+        "baseSeconds": 0.05
+      },
+      "spawnsAsset": {
+        "assetId": "book",
+        "actionId": "reading_victor_hugo"
+      },
+      "faceTarget": false
+    },
+    {
+      "id": "leaves_of_grass",
+      "name": "Leaves of Grass",
+      "needGains": {},
+      "skillGains": {},
+      "animation": "stand_use",
+      "autonomyEligible": true,
+      "primaryNeed": null,
+      "spawnsAsset": {
+        "assetId": "book",
+        "actionId": "reading_leaves_of_grass"
+      },
+      "faceTarget": false,
+      "duration": {
+        "baseSeconds": 0.05
+      }
+    },
+    {
+      "id": "learn_cooking_2",
+      "name": "Learning cooking I",
+      "needGains": {
+        "fun": 0.02
+      },
+      "skillGains": {
+        "cooking": 0.1
+      },
+      "animation": "Reading",
+      "autonomyEligible": true,
+      "primaryNeed": null,
+      "faceTarget": false,
+      "pose": "sit",
+      "carriedAsset": {
+        "assetId": "book",
+        "bone": "mixamorigRightHand",
+        "dropOnInterrupt": false
+      },
+      "seatAware": true,
+      "seatSearch": "nearest"
+    },
+    {
+      "id": "learn_finance_i",
+      "name": "Learning Finance I",
+      "needGains": {},
+      "skillGains": {
+        "finance": 0.1
+      },
+      "animation": "Reading",
+      "autonomyEligible": true,
+      "primaryNeed": null,
+      "carriedAsset": {
+        "assetId": "book",
+        "bone": "mixamorigRightHand",
+        "dropOnInterrupt": false
+      },
+      "pose": "sit",
+      "faceTarget": false,
+      "seatAware": true,
+      "seatSearch": "nearest"
+    },
+    {
+      "id": "take_it_out",
+      "name": "Take it out",
+      "needGains": {},
+      "skillGains": {},
       "animation": "",
       "autonomyEligible": true,
-      "primaryNeed": null
+      "primaryNeed": null,
+      "faceTarget": false,
+      "carriedAsset": {
+        "assetId": "garbage_bag",
+        "bone": "mixamorigRightHand"
+      },
+      "requiredAsset": {
+        "assetId": "door_exterior",
+        "radiusMeters": 20,
+        "visitBefore": true
+      }
+    },
+    {
+      "id": "put_in_the_trash",
+      "name": "Put in the trash",
+      "needGains": {},
+      "skillGains": {},
+      "animation": "",
+      "autonomyEligible": true,
+      "primaryNeed": null,
+      "containerTransfer": {
+        "mode": "deposit",
+        "containerAssetId": "garbage_can"
+      },
+      "faceTarget": false
     }
   ]
 }

@@ -4,16 +4,53 @@
   "background": "textures/Title1.jpg",
   "music": null,
   "hideCard": true,
-  "menuLayout": { "anchor": "bc", "offsetX": 0, "offsetY": 48 },
+  "menuLayout": {
+    "anchor": "bc",
+    "offsetX": 0,
+    "offsetY": 48
+  },
   "menu": [
-    { "id": "new", "label": "New Game" },
-    { "id": "load", "label": "Load Game" },
-    { "id": "options", "label": "Options" }
+    {
+      "id": "new",
+      "label": "New Game"
+    },
+    {
+      "id": "load",
+      "label": "Load Game"
+    },
+    {
+      "id": "options",
+      "label": "Options"
+    }
   ],
   "options": [
-    { "id": "masterVolume", "type": "slider", "label": "Master volume", "min": 0, "max": 1, "step": 0.05, "default": 1 },
-    { "id": "musicVolume", "type": "slider", "label": "Music volume", "min": 0, "max": 1, "step": 0.05, "default": 1 },
-    { "id": "feedbackVolume", "type": "slider", "label": "Feedback volume", "min": 0, "max": 1, "step": 0.05, "default": 1 }
+    {
+      "id": "masterVolume",
+      "type": "slider",
+      "label": "Master volume",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "default": 1
+    },
+    {
+      "id": "musicVolume",
+      "type": "slider",
+      "label": "Music volume",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "default": 1
+    },
+    {
+      "id": "feedbackVolume",
+      "type": "slider",
+      "label": "Feedback volume",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "default": 1
+    }
   ],
-  "credits": ""
+  "credits": "Septentrion Games"
 }

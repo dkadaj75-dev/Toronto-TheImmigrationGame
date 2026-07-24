@@ -515,9 +515,10 @@
       ],
       "interactions": [
         "read_book",
-        "practice_english",
         "learn_cooking",
-        "read_the_psychology_of_money"
+        "read_the_psychology_of_money",
+        "victor_hugo",
+        "leaves_of_grass"
       ],
       "meshFit": {
         "yawOffsetDeg": 90,
@@ -692,8 +693,7 @@
       ],
       "_note": "ROADMAP_NEXT item 9: does NOT open/close on path-crossing (game/doors.ts skips it in the tick, see door.exterior) — it's a tappable interactable instead. 'leave_for_work' remains a placeholder; 'empty_garbage' (ROADMAP_NEXT item 10) is wired — see game/garbage.ts.",
       "interactions": [
-        "leave_for_work",
-        "empty_garbage"
+        "leave_for_work"
       ],
       "buyable": false,
       "door": {
@@ -820,11 +820,13 @@
         0.5,
         0.5
       ],
-      "interactions": [],
-      "garbage": {
+      "interactions": [
+        "empty_garbage"
+      ],
+      "container": {
         "capacity": 10
       },
-      "_note": "ROADMAP_NEXT item 10 — real capacity (game/garbage.ts's GarbageRegistry tracks a live fill count per placed instance, keyed by its THREE.Object3D.uuid). No real mesh yet — box stand-in until models/garbage_can.glb is imported. Buyable (unlike the transient assets below).",
+      "_note": "Generalized container loop: capacity is authored on this asset; its Empty action routes this exact instance to an authored destination.",
       "combustibility": {
         "chancePercent": 90,
         "delaySeconds": 5
@@ -852,18 +854,19 @@
         0.25
       ],
       "interactions": [
-        "clean_up"
+        "put_in_the_trash"
       ],
       "clearedBy": [
         "clean_up"
       ],
       "buyable": false,
-      "_note": "ROADMAP_NEXT item 10 — spawned by game/garbage.ts (via game/accidents.ts's spawnTransient) when 'eat' finishes and no non-full garbage can is close enough / the sim isn't clean enough to bother auto-tidying. Player taps it -> 'clean_up' -> despawns + deposits into the nearest non-full can. No real mesh yet — flat box stand-in until models/dirty_dishes.glb is imported.",
+      "_note": "Spawned waste transient. Its authored Clean up action carries this exact instance to a compatible container and consumes one capacity unit.",
       "carryHandle": [
         0,
         0,
         -0.126
-      ]
+      ],
+      "containerSpace": 1
     },
     {
       "id": "snack",
@@ -879,7 +882,7 @@
       ],
       "interactions": [
         "consume_food",
-        "throw_away_food"
+        "put_in_the_trash"
       ],
       "buyable": false,
       "food": {
@@ -899,6 +902,10 @@
         0,
         0.08,
         -0.06
+      ],
+      "containerSpace": 1,
+      "featureCategories": [
+        "kitchen"
       ]
     },
     {
@@ -932,7 +939,8 @@
         0,
         0,
         -0.127
-      ]
+      ],
+      "containerSpace": 2
     },
     {
       "id": "rotten_food",
@@ -957,7 +965,8 @@
         0,
         0,
         -0.14
-      ]
+      ],
+      "containerSpace": 1
     },
     {
       "id": "garbage_bag",
@@ -972,11 +981,13 @@
         0.4
       ],
       "interactions": [
-        "clean_up"
+        "clean_up",
+        "take_it_out"
       ],
       "clearedBy": [
         "clean_up"
       ],
+      "containerSpace": 1,
       "buyable": false,
       "carryHandle": [
         0,
@@ -1006,7 +1017,8 @@
       "_note": "ROADMAP_NEXT item 6 (fire destruction). Spawned by game/accidents.ts when an unextinguished 'fire' instance burns past tuning.fire.burnSeconds — replaces the destroyed base object at the same spot. No real mesh yet — flat box stand-in until models/ash.glb is imported.",
       "sprite": {
         "orientation": "flat"
-      }
+      },
+      "containerSpace": 1
     },
     {
       "id": "stinky_fridge",
@@ -1328,22 +1340,23 @@
         0,
         0.08,
         -0.06
-      ]
+      ],
+      "containerSpace": 1
     },
     {
       "id": "coffee_machine",
       "name": "Coffee machine",
       "category": "electronics",
       "mesh": "models/coffeemachine1.glb",
-      "buyPrice": 0,
-      "sellPrice": 0,
-      "environmentScore": 0,
+      "buyPrice": 35,
+      "sellPrice": 15,
+      "environmentScore": 1,
       "footprint": [
         0.25,
         0.25
       ],
       "interactions": [
-        "drink_coffee"
+        "make_coffee"
       ],
       "placeableOnSurface": true,
       "featureCategories": [
@@ -1357,6 +1370,35 @@
       "power": {
         "ratePerHour": 0.01
       }
+    },
+    {
+      "id": "book",
+      "name": "Book",
+      "category": "transient",
+      "mesh": "models/Book.glb",
+      "buyPrice": 0,
+      "sellPrice": 0,
+      "environmentScore": 0,
+      "footprint": [
+        0.25,
+        0.25
+      ],
+      "interactions": [
+        "read",
+        "reading_victor_hugo",
+        "reading_leaves_of_grass",
+        "learn_cooking_2",
+        "learn_finance_i"
+      ],
+      "featureCategories": [
+        "comfort"
+      ],
+      "carryHandle": [
+        -0.057,
+        0,
+        0.081
+      ],
+      "buyable": false
     }
   ]
 }

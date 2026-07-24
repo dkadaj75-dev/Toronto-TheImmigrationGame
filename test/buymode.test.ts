@@ -289,6 +289,43 @@ console.log('buymode.test — elevated-surface purchases');
   check('surface reference survives save round-trip', restored.allAdditions[0]?.surface?.hostKey === 'designer#4');
 }
 
+console.log('buymode.test — elevated purchase restore and world rebuild');
+{
+  const table = asset({
+    id: 'table_restore', category: 'surfaces', footprint: [2, 1],
+    surfaceSockets: [{ offset: [0, 0], y: 0.92 }],
+  });
+  const decor = asset({
+    id: 'decor_restore', category: 'decor', footprint: [0.2, 0.2], placeableOnSurface: true, mesh: '',
+  });
+  const data = {
+    map: { placedObjects: [{ asset: table.id, pos: [2, 3], rotDeg: 0 }] },
+    assets: { categories: ['surfaces', 'decor'], assets: [table, decor] },
+  } as unknown as GameData;
+  let world = new THREE.Group();
+  const host = new THREE.Group();
+  host.userData = { assetId: table.id, placedIndex: 0 };
+  world.add(host);
+  const ctrl = new BuyModeController(() => data, () => world);
+  ctrl.restore({
+    additions: [{ key: 'buy#0', asset: decor.id, pos: [2, 3], rotDeg: 0, surface: { hostKey: 'designer#0', index: 0, y: 0.92 } }],
+    overrides: [], seq: 1,
+  });
+  const restoredGroup = world.children.find((child) => child.userData?.buyKey === 'buy#0');
+  check('surface purchase restore reapplies socket height after overlay refresh', !!restoredGroup && approx(restoredGroup.position.y, 0.92));
+
+  // Reproduce a previously flattened group, then run the map/world rebuild hook.
+  restoredGroup!.position.y = 0;
+  const rebuilt = new THREE.Group();
+  const rebuiltHost = new THREE.Group();
+  rebuiltHost.userData = { assetId: table.id, placedIndex: 0 };
+  rebuilt.add(rebuiltHost);
+  world = rebuilt;
+  ctrl.reattach(rebuilt);
+  const reattachedGroup = rebuilt.children.find((child) => child.userData?.buyKey === 'buy#0');
+  check('world rebuild reapplies socket height instead of leaving purchase below the plane', !!reattachedGroup && approx(reattachedGroup.position.y, 0.92));
+}
+
 console.log('buymode.test — attemptBuy / attemptSell / attemptMove (funds + overlay mutation)');
 {
   const lamp = asset({ id: 'lamp', name: 'Lamp', buyPrice: 100, sellPrice: 70, footprint: [1, 1] });

@@ -2,6 +2,9 @@
 
 export type WallViewMode = 'full' | 'cut' | 'cutaway';
 
+/** In-page starting preference. `cutaway` is labelled "Cut front" in the HUD. */
+export const DEFAULT_WALL_VIEW_MODE: WallViewMode = 'cutaway';
+
 export function nextWallViewMode(mode: WallViewMode): WallViewMode {
   return mode === 'full' ? 'cut' : mode === 'cut' ? 'cutaway' : 'full';
 }

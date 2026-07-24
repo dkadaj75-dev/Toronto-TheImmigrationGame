@@ -1,14 +1,15 @@
 // accidents.test.ts — game/accidents.ts pure logic (PROJECT_CONTEXT.md §7.3 accidents slice).
 // Run: npx tsx test/accidents.test.ts
+import * as THREE from 'three';
 import {
   accidentModifierContribution, computeAccidentChance, rollAccident,
   footprintRect, rectsOverlap,
   findAdjacentCell, findNearestFreeCell, planAccidentPlacement,
-  AccidentRegistry, shouldDespawnOnCleanup, shouldRemovePlacedOnCleanup, resolveTapAssetId, isAutonomyBlocked,
+  AccidentRegistry, AccidentsController, shouldDespawnOnCleanup, shouldRemovePlacedOnCleanup, resolveTapAssetId, isAutonomyBlocked,
   fireShouldDestroy, spreadShouldRoll, DEFAULT_FIRE_TUNING,
   type AccidentInstanceRecord,
 } from '../game/accidents';
-import type { AccidentRisk, StatsData } from '../game/data';
+import type { AccidentRisk, AssetDef, GameData, StatsData } from '../game/data';
 import type { EvalContext } from '../game/quests';
 import type { NavGrid, Cell } from '../game/nav';
 
@@ -309,6 +310,28 @@ console.log('accidents.test — AccidentRegistry fire bookkeeping (destroyedBase
 
   // --- bornAt round-trips through spawn/serialize like any other field
   check('spawned fire instance carries bornAt', fire.bornAt === 0 && fire2.bornAt === 5);
+}
+
+console.log('accidents.test — carried transient placement orientation');
+{
+  const plate = {
+    id: 'meal', name: 'Meal', category: 'transient', footprint: [0.2, 0.2],
+    buyPrice: 0, sellPrice: 0, interactions: [],
+  } as unknown as AssetDef;
+  const data = { assets: { categories: ['transient'], assets: [plate] } } as unknown as GameData;
+  const world = new THREE.Group();
+  const grid: NavGrid = { cols: 1, rows: 1, cellSize: 1, walkable: new Uint8Array([1]) };
+  const controller = new AccidentsController(() => data, () => world, () => grid);
+  const rec = controller.spawnTransient('meal', [0.5, 0.5]);
+  const group = rec ? controller.groupFor(rec.key) : null;
+  check('transient test fixture spawns a live group', !!rec && !!group);
+  group!.rotation.set(0.7, 0.2, -0.4); // tilt inherited from an animated hand bone
+  controller.setTransientElevatedPlacement(rec!.key, [2, 0.8, 3], 90, true);
+  check('elevated placement discards carried pitch and roll', approx(group!.rotation.x, 0) && approx(group!.rotation.z, 0));
+  check('elevated placement applies only socket yaw', approx(group!.rotation.y, Math.PI / 2));
+  group!.rotation.set(-0.3, 0.6, 0.9);
+  controller.setTransientPlacement(rec!.key, [0.5, 0.5], true);
+  check('floor fallback also discards carried pitch and roll', approx(group!.rotation.x, 0) && approx(group!.rotation.z, 0));
 }
 
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }

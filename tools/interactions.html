@@ -27,9 +27,10 @@
   .action-item:hover { background: #1c2436; }
   .action-item.active { background: rgba(90,120,190,.28); }
   .action-item .badge { margin-left: auto; font-size: 10px; color: #8fa3c8; background: #1c2436; border-radius: 999px; padding: 2px 7px; }
-  #editor { overflow-y: auto; padding: 16px; }
+  #editor { overflow-y: auto; padding: 16px; display: grid; grid-template-columns: repeat(2, minmax(360px, 660px)); gap: 14px; align-items: start; }
   #editor .empty { color: #5f6f93; padding: 40px; text-align: center; }
-  .card { background: #1a2133; border: 1px solid #26304a; border-radius: 12px; padding: 14px; margin-bottom: 14px; max-width: 660px; }
+  .card { background: #1a2133; border: 1px solid #26304a; border-radius: 12px; padding: 14px; min-width: 0; }
+  .card.wide { grid-column: 1 / -1; }
   .card h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: #93a3c0; }
   .frow { display: grid; grid-template-columns: 190px 1fr; gap: 10px; align-items: center; padding: 5px 0; }
   .frow label { font-size: 13px; }
@@ -39,6 +40,12 @@
   .hint-line { font-size: 11px; color: #5f6f93; margin-top: 4px; }
   .hint-line.warn { color: #e0a44a; }
   .row-actions { display: flex; gap: 8px; margin-top: 8px; }
+  .flow-steps { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .flow-step { background: #10182a; border: 1px solid #2c3a58; border-radius: 999px; padding: 7px 11px; font-size: 12px; }
+  .flow-arrow { color: #6f7fa3; }
+  .connection-issue { border-radius: 8px; margin-top: 8px; padding: 7px 9px; font-size: 12px; }
+  .connection-issue.error { color: #ffd4d4; background: rgba(122,48,64,.38); border: 1px solid #7a3040; }
+  .connection-issue.warning { color: #f4d99e; background: rgba(128,91,34,.28); border: 1px solid #805b22; }
 
   .cond-group { border: 1px solid #2c3a58; border-radius: 10px; padding: 8px 10px; margin: 6px 0; background: #10182a; }
   .cond-group-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -54,6 +61,10 @@
   .cond-add-row { display: flex; gap: 6px; margin-top: 6px; }
   .cond-add-row button, .cond-remove { font-size: 11px; padding: 5px 9px; }
   .cond-remove { background: #7a3040; flex-shrink: 0; }
+  @media (max-width: 1120px) {
+    #editor { display: block; }
+    .card { margin-bottom: 14px; }
+  }
 </style>
 </head>
 <body>
@@ -83,7 +94,12 @@ const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '
 // assets.json/stats.json already play) — they only feed the Conditions card's var-path dropdowns
 // (vars.<id> / quests.<id>.state), mirroring the Quest Editor's own condition builder exactly.
 // Neither file is ever PUT by this tool.
-const state = { interactions: null, assets: null, stats: null, simstate: null, quests: null, events: null, selected: null, dirty: new Set() };
+const state = { interactions: null, assets: null, stats: null, simstate: null, quests: null, events: null, selected: null, dirty: new Set(), actionChainEngine: null };
+
+function setActionChainEngine(engine) {
+  state.actionChainEngine = engine;
+  if (state.interactions && state.assets) renderAll();
+}
 
 async function load() {
   setStatus('loading…');
@@ -123,7 +139,7 @@ async function saveAll() {
   } catch (e) { setStatus(String(e.message || e), 'err'); }
 }
 
-function markDirty(file) { state.dirty.add(file); updateSave(); setStatus('unsaved changes'); }
+function markDirty(file) { state.dirty.add(file); updateSave(); setStatus('unsaved changes'); if (file === 'interactions.json') refreshActionFlow(); }
 function updateSave() { document.getElementById('save').disabled = state.dirty.size === 0; }
 function setStatus(msg, cls = '') { const s = document.getElementById('status'); s.textContent = msg; s.className = cls; }
 const selectedAction = () => state.interactions.actions.find((a) => a.id === state.selected) ?? null;
@@ -236,6 +252,44 @@ function appendDurationVarOptions(sel, currentValue) {
   }
   sel.value = currentValue;
 }
+function renderActionFlowCard(action) {
+  const card = document.createElement('div');
+  card.className = 'card wide'; card.dataset.actionFlow = '';
+  card.innerHTML = '<h2>Action flow</h2>';
+  const flow = document.createElement('div'); flow.className = 'flow-steps';
+  const steps = state.actionChainEngine?.describeActionFlow?.(action, state.interactions.actions, state.assets.assets)
+    ?? [`Perform ${action.name}`];
+  steps.forEach((step, index) => {
+    if (index) { const arrow = document.createElement('span'); arrow.className = 'flow-arrow'; arrow.textContent = '\u2192'; flow.appendChild(arrow); }
+    const pill = document.createElement('span'); pill.className = 'flow-step'; pill.textContent = step; flow.appendChild(pill);
+  });
+  card.appendChild(flow);
+  const directIssues = state.actionChainEngine?.actionConnectionIssues?.(action, state.interactions.actions, state.assets.assets) ?? [];
+  const graphIssues = (state.actionChainEngine?.actionGraphIssues?.(state.interactions.actions, state.assets.assets) ?? [])
+    .filter((issue) => issue.actionId === action.id);
+  const issues = [...directIssues];
+  for (const issue of graphIssues) {
+    if (!issues.some((entry) => entry.code === issue.code && entry.assetId === issue.assetId)) issues.push(issue);
+  }
+  for (const issue of issues) {
+    const row = document.createElement('div'); row.className = `connection-issue ${issue.level}`;
+    row.dataset.connectionIssue = issue.code;
+    row.textContent = `${issue.level === 'error' ? 'Error' : 'Warning'}: ${issue.message}`;
+    card.appendChild(row);
+  }
+  if (!issues.length) {
+    const ok = document.createElement('div'); ok.className = 'hint-line';
+    ok.textContent = 'All linked assets and actions are connected correctly.'; card.appendChild(ok);
+  }
+  return card;
+}
+
+function refreshActionFlow() {
+  const current = document.querySelector('[data-action-flow]');
+  const action = selectedAction();
+  if (current && action) current.replaceWith(renderActionFlowCard(action));
+}
+
 // ------------------------------------------------------------------ editor
 function renderEditor() {
   const root = document.getElementById('editor');
@@ -251,6 +305,10 @@ function renderEditor() {
     datalist.appendChild(o);
   }
   root.appendChild(datalist);
+
+  // Read-only view of the same connections the runtime executes. It refreshes independently on
+  // field edits, so inputs keep focus while graph sequencing and validation stay current.
+  root.appendChild(renderActionFlowCard(a));
 
   // --- identity
   const card1 = document.createElement('div');
@@ -276,6 +334,15 @@ function renderEditor() {
   hint.textContent = 'states in use: ' + animationStatesInUse().join(', ') + ' — feeds the Animation Mapper’s state list';
   animWrap.appendChild(hint);
   card1.appendChild(frow('animation state', animWrap));
+  const pose = document.createElement('select'); pose.dataset.path = 'pose';
+  pose.innerHTML = '<option value="">Automatic from animation name</option><option value="sit">Sit on seat/target</option><option value="lie">Lie on seat/target</option><option value="use">Use authored standing pose</option>';
+  pose.value = a.pose ?? '';
+  pose.addEventListener('change', () => {
+    if (pose.value) a.pose = pose.value; else delete a.pose;
+    markDirty('interactions.json');
+  });
+  card1.appendChild(frow('physical placement pose', pose));
+  card1.insertAdjacentHTML('beforeend', '<div class="hint-line">Use an explicit pose when the animation name is semantic rather than prefixed with sit/lie—for example, Reading.</div>');
   root.appendChild(card1);
 
   // --- behavior
@@ -285,7 +352,19 @@ function renderEditor() {
   card2.appendChild(frow('autonomy eligible (sim may pick this on its own)',
     checkInput(() => a.autonomyEligible, (v) => { a.autonomyEligible = v; renderSidebar(); }, 'autonomyEligible')));
   card2.appendChild(frow('seat aware (walks to nearest seat facing the object, e.g. TV)',
-    checkInput(() => !!a.seatAware, (v) => { if (v) a.seatAware = true; else delete a.seatAware; }, 'seatAware')));
+    checkInput(() => !!a.seatAware, (v) => {
+      if (v) a.seatAware = true;
+      else { delete a.seatAware; delete a.fetchBeforeSeat; }
+      renderAll();
+    }, 'seatAware')));
+  const seatSearch = document.createElement('select'); seatSearch.dataset.path = 'seatSearch';
+  seatSearch.innerHTML = '<option value="targetFacing">Target-facing viewing seat (TV)</option><option value="nearest">Nearest seat (reading / self-contained activity)</option>';
+  seatSearch.value = a.seatSearch ?? 'targetFacing'; seatSearch.disabled = !a.seatAware;
+  seatSearch.addEventListener('change', () => {
+    if (seatSearch.value === 'nearest') a.seatSearch = 'nearest'; else delete a.seatSearch;
+    markDirty('interactions.json');
+  });
+  card2.appendChild(frow('seat selection', seatSearch));
   card2.appendChild(frow('fetch source before seating (two legs: visit this object first, then walk to a seat — e.g. bookshelf reading/studying)',
     checkInput(() => !!a.fetchBeforeSeat, (v) => { if (v) a.fetchBeforeSeat = true; else delete a.fetchBeforeSeat; }, 'fetchBeforeSeat')));
   card2.appendChild(frow('face target after sitting (unticking keeps the seat’s own facing instead — e.g. read_book stays facing however the sofa’s usePose points it, rather than spinning to stare at the bookshelf)',
@@ -298,9 +377,151 @@ function renderEditor() {
     numInput(() => a.cost, (v) => { if (v === undefined) delete a.cost; else a.cost = Math.max(0, v); }, 'cost')));
   card2.lastElementChild.querySelector('label').textContent = 'cost (optional — checked before ordering; charged only when the action finishes)';
 
+  const requiredCard = document.createElement('div');
+  requiredCard.className = 'card';
+  requiredCard.innerHTML = '<h2>Required asset</h2><div class="hint-line">Optional presence gate around the action target. A before visit routes required asset → target; an after visit routes target → required asset.</div>';
+  requiredCard.querySelector('h2').textContent = 'Extra asset requirement';
+  requiredCard.querySelector('.hint-line').textContent = 'A nearby asset this action needs in addition to its target. A before visit routes requirement → target; an after visit routes target → requirement.';
+  const requiredAsset = document.createElement('select'); requiredAsset.dataset.path = 'requiredAsset.assetId';
+  requiredAsset.innerHTML = '<option value="">(none)</option>' + state.assets.assets
+    .filter((asset) => asset.category !== 'transient')
+    .map((asset) => `<option value="${esc(asset.id)}">${esc(asset.name)}</option>`).join('');
+  if (a.requiredAsset?.assetId && !state.assets.assets.some((asset) => asset.id === a.requiredAsset.assetId)) {
+    requiredAsset.insertAdjacentHTML('beforeend', `<option value="${esc(a.requiredAsset.assetId)}">${esc(a.requiredAsset.assetId)} (unknown)</option>`);
+  }
+  requiredAsset.value = a.requiredAsset?.assetId ?? '';
+  requiredAsset.addEventListener('change', () => {
+    if (!requiredAsset.value) delete a.requiredAsset;
+    else a.requiredAsset = { ...(a.requiredAsset ?? {}), assetId: requiredAsset.value, radiusMeters: a.requiredAsset?.radiusMeters ?? 5 };
+    markDirty('interactions.json'); renderAll();
+  });
+  requiredCard.appendChild(frow('asset required', requiredAsset));
+  if (a.requiredAsset) {
+    const alternatives = document.createElement('select'); alternatives.multiple = true; alternatives.size = 4;
+    alternatives.dataset.path = 'requiredAsset.alternativeAssetIds';
+    const acceptedAlternatives = a.requiredAsset.alternativeAssetIds ?? [];
+    const selectableAlternatives = state.assets.assets.filter((asset) => asset.category !== 'transient' && asset.id !== a.requiredAsset.assetId);
+    alternatives.innerHTML = selectableAlternatives
+      .map((asset) => `<option value="${esc(asset.id)}"${acceptedAlternatives.includes(asset.id) ? ' selected' : ''}>${esc(asset.name)}</option>`).join('');
+    for (const id of acceptedAlternatives.filter((id) => !state.assets.assets.some((asset) => asset.id === id))) {
+      alternatives.insertAdjacentHTML('beforeend', `<option value="${esc(id)}" selected>${esc(id)} (unknown)</option>`);
+    }
+    alternatives.addEventListener('change', () => {
+      if (!a.requiredAsset) return;
+      const ids = [...alternatives.selectedOptions].map((option) => option.value);
+      if (ids.length) a.requiredAsset.alternativeAssetIds = ids; else delete a.requiredAsset.alternativeAssetIds;
+      markDirty('interactions.json');
+    });
+    requiredCard.appendChild(frow('also accept asset variants (Ctrl/Cmd-click)', alternatives));
+    requiredCard.appendChild(frow('radius from action target (m)', numInput(
+      () => a.requiredAsset?.radiusMeters,
+      (value) => { if (a.requiredAsset) a.requiredAsset.radiusMeters = Math.max(0, value ?? 0); },
+      'requiredAsset.radiusMeters',
+    )));
+    requiredCard.appendChild(frow('visit required asset before performing this action', checkInput(
+      () => !!a.requiredAsset?.visitBefore,
+      (value) => { if (value) a.requiredAsset.visitBefore = true; else delete a.requiredAsset.visitBefore; },
+      'requiredAsset.visitBefore',
+    )));
+    requiredCard.appendChild(frow('visit required asset after performing this action', checkInput(
+      () => !!a.requiredAsset?.visitAfter,
+      (value) => { if (value) a.requiredAsset.visitAfter = true; else delete a.requiredAsset.visitAfter; },
+      'requiredAsset.visitAfter',
+    )));
+  }
+  root.appendChild(requiredCard);
+
+  const spawnCard = document.createElement('div');
+  spawnCard.className = 'card';
+  spawnCard.innerHTML = '<h2>Completion product</h2><div class="hint-line">Created only after this action completes and its cost is paid. The optional automatic action is a separate action with its own settings and can be interrupted.</div>';
+  spawnCard.querySelector('h2').textContent = 'After completion';
+  spawnCard.querySelector('.hint-line').textContent = 'Optionally create a product after this action completes and its cost is paid, then start a separate interruptible action on that exact product.';
+  const spawnedAsset = document.createElement('select'); spawnedAsset.dataset.path = 'spawnsAsset.assetId';
+  spawnedAsset.innerHTML = '<option value="">(none)</option>' + state.assets.assets
+    .filter((asset) => asset.category === 'transient')
+    .map((asset) => `<option value="${esc(asset.id)}">${esc(asset.name)}</option>`).join('');
+  if (a.spawnsAsset?.assetId && !state.assets.assets.some((asset) => asset.id === a.spawnsAsset.assetId)) {
+    spawnedAsset.insertAdjacentHTML('beforeend', `<option value="${esc(a.spawnsAsset.assetId)}">${esc(a.spawnsAsset.assetId)} (unknown)</option>`);
+  }
+  spawnedAsset.value = a.spawnsAsset?.assetId ?? '';
+  spawnedAsset.addEventListener('change', () => {
+    if (!spawnedAsset.value) delete a.spawnsAsset;
+    else a.spawnsAsset = { assetId: spawnedAsset.value };
+    markDirty('interactions.json'); renderAll();
+  });
+  spawnCard.appendChild(frow('asset spawned on completion', spawnedAsset));
+  if (a.spawnsAsset) {
+    const productDef = state.assets.assets.find((asset) => asset.id === a.spawnsAsset.assetId);
+    const productActionIds = productDef?.interactions ?? [];
+    const autoAction = document.createElement('select'); autoAction.dataset.path = 'spawnsAsset.actionId';
+    autoAction.innerHTML = '<option value="">(none — leave spawned asset in world)</option>' + productActionIds.map((id) => {
+      const action = state.interactions.actions.find((entry) => entry.id === id);
+      return `<option value="${esc(id)}">${esc(action?.name ?? id)}${action ? '' : ' (unknown)'}</option>`;
+    }).join('');
+    if (a.spawnsAsset.actionId && !productActionIds.includes(a.spawnsAsset.actionId)) {
+      autoAction.insertAdjacentHTML('beforeend', `<option value="${esc(a.spawnsAsset.actionId)}">${esc(a.spawnsAsset.actionId)} (not offered by asset)</option>`);
+    }
+    autoAction.value = a.spawnsAsset.actionId ?? '';
+    autoAction.addEventListener('change', () => {
+      if (autoAction.value) a.spawnsAsset.actionId = autoAction.value; else delete a.spawnsAsset.actionId;
+      markDirty('interactions.json');
+    });
+    spawnCard.appendChild(frow('automatic action on spawned asset', autoAction));
+    if (productDef?.food) spawnCard.appendChild(frow('apply cooking-skill food quality scaling', checkInput(
+      () => !!a.spawnsAsset?.applyCookingSkill,
+      (value) => { if (value) a.spawnsAsset.applyCookingSkill = true; else delete a.spawnsAsset.applyCookingSkill; },
+      'spawnsAsset.applyCookingSkill',
+    )));
+  }
+  root.appendChild(spawnCard);
+
+  const transferCard = document.createElement('div');
+  transferCard.className = 'card'; transferCard.dataset.card = 'container-transfer';
+  transferCard.innerHTML = '<h2>Container transfer</h2><div class="hint-line">Optional. Deposit moves the targeted transient into a compatible container. Empty carries a targeted container\'s contents to another authored asset.</div>';
+  const transferMode = document.createElement('select'); transferMode.dataset.path = 'containerTransfer.mode';
+  transferMode.innerHTML = '<option value="">(none)</option><option value="deposit">Put targeted transient in a container</option><option value="empty">Empty targeted container at a destination</option>';
+  transferMode.value = a.containerTransfer?.mode ?? '';
+  transferMode.addEventListener('change', () => {
+    if (!transferMode.value) delete a.containerTransfer;
+    else if (transferMode.value === 'deposit') {
+      const first = state.assets.assets.find((asset) => asset.category !== 'transient' && (asset.container?.capacity ?? asset.garbage?.capacity) > 0);
+      a.containerTransfer = { mode: 'deposit', containerAssetId: first?.id ?? '' };
+    } else {
+      const first = state.assets.assets.find((asset) => asset.category !== 'transient');
+      a.containerTransfer = { mode: 'empty', destinationAssetId: first?.id ?? '' };
+    }
+    markDirty('interactions.json'); renderAll();
+  });
+  transferCard.appendChild(frow('transfer behavior', transferMode));
+  if (a.containerTransfer?.mode === 'deposit') {
+    const current = a.containerTransfer.containerAssetId;
+    const choices = state.assets.assets.filter((asset) => asset.category !== 'transient' && (asset.container?.capacity ?? asset.garbage?.capacity) > 0);
+    const sel = document.createElement('select'); sel.dataset.path = 'containerTransfer.containerAssetId';
+    sel.innerHTML = choices.map((asset) => `<option value="${esc(asset.id)}">${esc(asset.name)}</option>`).join('');
+    if (current && !choices.some((asset) => asset.id === current)) sel.insertAdjacentHTML('beforeend', `<option value="${esc(current)}">${esc(current)} (unknown or not a container)</option>`);
+    if (!choices.length && !current) sel.innerHTML = '<option value="">(author a container capacity in Asset Editor first)</option>';
+    sel.value = current ?? '';
+    sel.addEventListener('change', () => { if (a.containerTransfer?.mode === 'deposit') a.containerTransfer.containerAssetId = sel.value; markDirty('interactions.json'); });
+    transferCard.appendChild(frow('compatible container', sel));
+    transferCard.insertAdjacentHTML('beforeend', '<div class="hint-line">Flow: perform this action on the transient → carry that exact item to a non-full matching container → add its authored space and remove it from the world.</div>');
+  } else if (a.containerTransfer?.mode === 'empty') {
+    const current = a.containerTransfer.destinationAssetId;
+    const choices = state.assets.assets.filter((asset) => asset.category !== 'transient');
+    const sel = document.createElement('select'); sel.dataset.path = 'containerTransfer.destinationAssetId';
+    sel.innerHTML = choices.map((asset) => `<option value="${esc(asset.id)}">${esc(asset.name)}</option>`).join('');
+    if (current && !choices.some((asset) => asset.id === current)) sel.insertAdjacentHTML('beforeend', `<option value="${esc(current)}">${esc(current)} (unknown)</option>`);
+    sel.value = current ?? '';
+    sel.addEventListener('change', () => { if (a.containerTransfer?.mode === 'empty') a.containerTransfer.destinationAssetId = sel.value; markDirty('interactions.json'); });
+    transferCard.appendChild(frow('empty contents at', sel));
+    transferCard.insertAdjacentHTML('beforeend', '<div class="hint-line">Flow: visit the targeted filled container → carry the action prop to the chosen destination → clear only that container when the action completes.</div>');
+  }
+  root.appendChild(transferCard);
+
   const carriedCard = document.createElement('div');
   carriedCard.className = 'card';
   carriedCard.innerHTML = '<h2>Carried asset</h2><div class="hint-line">Optional visible prop attached after reaching the target. Completion removes it; interruption drops it on a legal nav square.</div>';
+  carriedCard.querySelector('h2').textContent = 'Prop during this action';
+  carriedCard.querySelector('.hint-line').textContent = 'Optional visible prop held only while this action runs. This is separate from the completion product; completion removes it and interruption safely places it in the world.';
   const carriedAsset = document.createElement('select'); carriedAsset.dataset.path = 'carriedAsset.assetId';
   carriedAsset.innerHTML = '<option value="">(none)</option>' + state.assets.assets.filter((x) => x.category === 'transient')
     .map((x) => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
@@ -349,6 +570,12 @@ function renderEditor() {
     }
     carriedCard.appendChild(frow('keep world rotation axes', lockChecks));
     carriedCard.insertAdjacentHTML('beforeend', '<div class="hint-line">A locked axis ignores the animated hand tilt and keeps the authored rotation above. Lock X and Z to keep a plate upright while still allowing Y to turn with the hand.</div>');
+    carriedCard.appendChild(frow('place prop in world if interrupted', checkInput(
+      () => a.carriedAsset?.dropOnInterrupt !== false,
+      (value) => { if (value) delete a.carriedAsset.dropOnInterrupt; else a.carriedAsset.dropOnInterrupt = false; },
+      'carriedAsset.dropOnInterrupt',
+    )));
+    carriedCard.insertAdjacentHTML('beforeend', '<div class="hint-line">Turn this off for temporary source props such as bookshelf books: interruption removes/returns the prop instead of leaving it on the floor.</div>');
     carriedCard.appendChild(frow('scale', numInput(() => a.carriedAsset?.scale, (v) => { if (v === undefined) delete a.carriedAsset.scale; else a.carriedAsset.scale = v; }, 'carriedAsset.scale')));
   }
   root.appendChild(carriedCard);
@@ -433,9 +660,15 @@ function renderEditor() {
   needSel.addEventListener('change', () => { a.primaryNeed = needSel.value || null; markDirty('interactions.json'); });
   card2.appendChild(frow('primary need (auto-stop threshold target)', needSel));
   card2.appendChild(frow('consumes targeted food (partial hunger is applied and the remainder survives interruption)',
-    checkInput(() => !!a.consumesFood, (v) => { if (v) a.consumesFood = true; else delete a.consumesFood; }, 'consumesFood')));
-  card2.appendChild(frow('discards targeted food (fills 1 garbage capacity; no hunger gain)',
-    checkInput(() => !!a.discardsFood, (v) => { if (v) a.discardsFood = true; else delete a.discardsFood; }, 'discardsFood')));
+    checkInput(() => !!a.consumesFood, (v) => {
+      if (v) { a.consumesFood = true; delete a.discardsFood; } else delete a.consumesFood;
+      renderAll();
+    }, 'consumesFood')));
+  card2.appendChild(frow('legacy food discard (compatibility only; use Container transfer for new gameplay)',
+    checkInput(() => !!a.discardsFood, (v) => {
+      if (v) { a.discardsFood = true; delete a.consumesFood; } else delete a.discardsFood;
+      renderAll();
+    }, 'discardsFood')));
   root.appendChild(card2);
   root.appendChild(cardMood);
 
@@ -578,7 +811,7 @@ function renderEditor() {
   // in this tool), + "(none)". See game/garbage.ts's module doc comment for the full decision flow.
   const cardWaste = document.createElement('div');
   cardWaste.className = 'card';
-  cardWaste.innerHTML = '<h2>Waste <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#5f6f93">(optional — spawns this transient asset on stop, unless auto-tidied into a nearby garbage can)</span></h2>';
+  cardWaste.innerHTML = '<h2>Legacy waste <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#5f6f93">(compatibility only — use After completion + a transient\'s Container transfer for new gameplay)</span></h2>';
   const wasteSel = document.createElement('select');
   wasteSel.dataset.path = 'producesWaste';
   const noWasteOpt = document.createElement('option'); noWasteOpt.value = ''; noWasteOpt.textContent = '(none)';
@@ -592,7 +825,7 @@ function renderEditor() {
     if (!wasteSel.value) delete a.producesWaste; else a.producesWaste = wasteSel.value;
     markDirty('interactions.json');
   });
-  cardWaste.appendChild(frow('produces waste (transient asset)', wasteSel));
+  cardWaste.appendChild(frow('legacy produced-waste transient', wasteSel));
   root.appendChild(cardWaste);
 
   // --- food override (ROADMAP item 2, meal tiers): sparse per-action override of the food transient
@@ -779,8 +1012,12 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('beforeunload', (e) => { if (state.dirty.size > 0) e.preventDefault(); });
 // Exposed for the jsdom suite (PROJECT_CONTEXT §5: editor logic lives in a plain inline script
 // reachable as window.<Tool>), so tests can assert edits reach the data, not just the DOM.
-window.InteractionEditor = { state, load, saveAll, renderAll };
+window.InteractionEditor = { state, load, saveAll, renderAll, setActionChainEngine };
 load();
+</script>
+<script type="module">
+import { actionConnectionIssues, actionGraphIssues, describeActionFlow } from '/game/actionchain.ts';
+window.InteractionEditor?.setActionChainEngine({ actionConnectionIssues, actionGraphIssues, describeActionFlow });
 </script>
 <script src="/tools/refscan.js"></script>
 <script src="/tools/nav.js"></script>

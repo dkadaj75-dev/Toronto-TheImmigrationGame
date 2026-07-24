@@ -12,7 +12,7 @@ const assets = {
   assets: [
     { id: 'couch', name: 'Couch', category: 'seating', mesh: '/models/couch.glb', buyPrice: 500, sellPrice: 375, environmentScore: 5, footprint: [2, 1], seats: 3, seatTarget: true, interactions: [] },
     { id: 'tv', name: 'TV', category: 'electronics', mesh: '/models/tv.glb', buyPrice: 800, sellPrice: 600, environmentScore: 8, footprint: [1, 1], interactions: ['watch_tv'] },
-    { id: 'stove', name: 'Stove', category: 'appliances', mesh: '/models/stove.glb', buyPrice: 400, sellPrice: 300, environmentScore: 1, footprint: [1, 1], interactions: ['cook'] },
+    { id: 'stove', name: 'Stove', category: 'appliances', mesh: '/models/stove.glb', buyPrice: 400, sellPrice: 300, environmentScore: 1, footprint: [1, 1], interactions: ['cook'], garbage: { capacity: 3, legacyNote: true } },
     { id: 'fire', name: 'Fire', category: 'transient', mesh: '/models/fire.glb', buyPrice: 0, sellPrice: 0, environmentScore: -10, footprint: [1, 1], interactions: ['extinguish'], clearedBy: ['extinguish'], buyable: false },
     { id: 'water_puddle', name: 'Water puddle', category: 'transient', mesh: '/models/water_puddle.glb', buyPrice: 0, sellPrice: 0, environmentScore: -5, footprint: [1, 1], interactions: [], buyable: false },
   ],
@@ -68,6 +68,19 @@ const dom = new JSDOM(html, {
 const { window } = dom;
 const doc = window.document;
 await new Promise((r) => setTimeout(r, 50));
+
+window.AssetEditor.setActionChainEngine({
+  describeActionFlow: (action) => [`Perform ${action.name}`, 'Create linked product'],
+  actionConnectionIssues: (action) => action.id === 'nap'
+    ? [{ level: 'warning', code: 'test_link', message: 'Test connection warning.' }]
+    : [],
+  actionGraphIssues: () => [{ level: 'error', code: 'test_asset_graph', assetId: 'tv', actionId: 'watch_tv', message: 'Test asset graph warning.' }],
+});
+assert(doc.querySelector('[data-card="categories"]')?.classList.contains('collapsed'), 'global category manager starts collapsed');
+doc.querySelector('[data-asset-id="tv"]').click();
+assert(doc.querySelector('[data-card="connections"]')?.textContent.includes('Create linked product'), 'asset connections render the shared action flow');
+assert(doc.querySelector('[data-connection-issue="test_asset_graph"]')?.textContent.includes('Test asset graph warning'), 'asset connections render owner/category graph validation');
+doc.querySelector('[data-asset-id="couch"]').click();
 
 // --- preview live-refresh (B7-1): the module 3D script is inert in jsdom, so spy on the API it
 // exposes. schedulePreview must always hand the CURRENT asset to the preview, and any field edit
@@ -130,7 +143,7 @@ assert(doc.querySelector('[data-asset-id="tv"] .badge') === null, 'tv has no bad
 const renderedCardTitles = () => [...doc.querySelectorAll('#editor > .card > h2')].map((heading) => heading.textContent);
 const allDefaultFeatureCards = [
   'Light', 'Sound', 'Power (Hydro)', 'State visuals', 'Sit / lie / use pose',
-  'Need multipliers', 'Accidents', 'Garbage', 'Combustibility',
+  'Need multipliers', 'Accidents', 'Container', 'Combustibility',
 ];
 assert(allDefaultFeatureCards.every((title) => renderedCardTitles().includes(title)), 'absent featureCategories renders every applicable feature card (legacy behaviour)');
 const topCardTitles = renderedCardTitles();
@@ -147,7 +160,7 @@ const couchIgnoringFeatureCategories = structuredClone(couchWithElectronics);
 delete couchIgnoringFeatureCategories.featureCategories;
 assert(JSON.stringify(couchIgnoringFeatureCategories) === couchBeforeFeatureToggle, 'checking a feature category mutates no other asset data');
 assert(['Light', 'Sound', 'Power (Hydro)', 'State visuals'].every((title) => renderedCardTitles().includes(title)), 'electronics shows Light, Sound, Power, and State visuals');
-assert(!renderedCardTitles().includes('Garbage'), 'electronics hides an unconfigured Garbage card');
+assert(!renderedCardTitles().includes('Container'), 'electronics hides an unconfigured Container card');
 
 electronicsFeature = doc.querySelector('input[data-path="featureCategories:electronics"]');
 electronicsFeature.checked = false;
@@ -156,7 +169,7 @@ const couchAfterFeaturePrune = window.AssetEditor.state.assets.assets.find((asse
 assert(!('featureCategories' in couchAfterFeaturePrune), 'unchecking the last category prunes the empty featureCategories array');
 assert(JSON.stringify(couchAfterFeaturePrune) === couchBeforeFeatureToggle, 'unchecking a feature category mutates no other asset data');
 
-const garbageCapacityForVisibility = doc.querySelector('input[data-path="garbage.capacity"]');
+const garbageCapacityForVisibility = doc.querySelector('input[data-path="container.capacity"]');
 garbageCapacityForVisibility.value = '9';
 garbageCapacityForVisibility.dispatchEvent(new window.Event('input', { bubbles: true }));
 const couchWithAuthoredGarbage = JSON.stringify(window.AssetEditor.state.assets.assets.find((asset) => asset.id === 'couch'));
@@ -164,7 +177,7 @@ electronicsFeature = doc.querySelector('input[data-path="featureCategories:elect
 electronicsFeature.checked = true;
 electronicsFeature.dispatchEvent(new window.Event('change', { bubbles: true }));
 assert(!doc.querySelector('input[data-path="featureCategories:garbage"]').checked, 'garbage category remains unchecked');
-assert(renderedCardTitles().includes('Garbage'), 'a configured card stays visible while its feature category is unchecked');
+assert(renderedCardTitles().includes('Container'), 'a configured card stays visible while its feature category is unchecked');
 const authoredCouchIgnoringFeatures = structuredClone(window.AssetEditor.state.assets.assets.find((asset) => asset.id === 'couch'));
 delete authoredCouchIgnoringFeatures.featureCategories;
 assert(JSON.stringify(authoredCouchIgnoringFeatures) === couchWithAuthoredGarbage, 'category filtering never mutates authored card data');
@@ -178,10 +191,27 @@ assert(rawPuts['assets.json'] === JSON.stringify(window.AssetEditor.state.assets
 electronicsFeature = doc.querySelector('input[data-path="featureCategories:electronics"]');
 electronicsFeature.checked = false;
 electronicsFeature.dispatchEvent(new window.Event('change', { bubbles: true }));
-const cleanupGarbageCapacity = doc.querySelector('input[data-path="garbage.capacity"]');
+const cleanupGarbageCapacity = doc.querySelector('input[data-path="container.capacity"]');
 cleanupGarbageCapacity.value = '';
 cleanupGarbageCapacity.dispatchEvent(new window.Event('input', { bubbles: true }));
 assert(JSON.stringify(window.AssetEditor.state.assets.assets.find((asset) => asset.id === 'couch')) === couchBeforeFeatureToggle, 'feature-category test cleanup restores the couch fixture exactly');
+
+// Generalized container authoring is category-safe, sparse, and migrates the old capacity alias
+// without deleting unknown legacy keys.
+doc.querySelector('[data-asset-id="fire"]').click();
+assert(doc.querySelector('input[data-path="containerSpace"]') && !doc.querySelector('input[data-path="container.capacity"]'), 'transients expose space used, not container capacity');
+const transientSpace = doc.querySelector('input[data-path="containerSpace"]');
+transientSpace.value = '2.5'; transientSpace.dispatchEvent(new window.Event('input', { bubbles: true }));
+assert(window.AssetEditor.state.assets.assets.find((asset) => asset.id === 'fire').containerSpace === 2.5, 'transient container space writes the sparse field');
+transientSpace.value = ''; transientSpace.dispatchEvent(new window.Event('input', { bubbles: true }));
+assert(!('containerSpace' in window.AssetEditor.state.assets.assets.find((asset) => asset.id === 'fire')), 'clearing transient space prunes it');
+doc.querySelector('[data-asset-id="stove"]').click();
+const migratedCapacity = doc.querySelector('input[data-path="container.capacity"]');
+assert(migratedCapacity?.value === '3', 'legacy garbage capacity remains visible through the generalized control');
+migratedCapacity.value = '6'; migratedCapacity.dispatchEvent(new window.Event('input', { bubbles: true }));
+const migratedStove = window.AssetEditor.state.assets.assets.find((asset) => asset.id === 'stove');
+assert(migratedStove.container?.capacity === 6 && migratedStove.garbage?.legacyNote === true && !('capacity' in migratedStove.garbage), 'editing migrates capacity while preserving unknown legacy garbage data');
+doc.querySelector('[data-asset-id="couch"]').click();
 
 // --- categories card: counts, unique add, reference-following rename, guarded delete, stale option
 const categoryRows = [...doc.querySelectorAll('[data-category-row]')];
@@ -431,6 +461,11 @@ assert(window.AssetEditor.state.assets.assets[0].placeableOnSurface === true, 's
 let carryHandleEnabled = doc.querySelector('input[data-path="carryHandle.enabled"]');
 assert(carryHandleEnabled && !carryHandleEnabled.checked, 'carry handle starts sparse/off');
 carryHandleEnabled.checked = true; carryHandleEnabled.dispatchEvent(new window.Event('change', { bubbles: true }));
+window.AssetEditor.setCharacterBoneNames(['mixamorig2:RightHand', 'mixamorig2:LeftHand']);
+const carryBone = doc.querySelector('select[data-path="carryBone"]');
+assert(carryBone && [...carryBone.options].some((option) => option.value === 'mixamorig2:LeftHand'), 'carry-bone dropdown is populated from the live character rig');
+carryBone.value = 'mixamorig2:LeftHand'; carryBone.dispatchEvent(new window.Event('change', { bubbles: true }));
+assert(window.AssetEditor.state.assets.assets[0].carryBone === 'mixamorig2:LeftHand', 'carry-bone selection writes the asset-level attachment bone');
 const carryHandleY = doc.querySelector('input[data-path="carryHandle.y"]');
 assert(carryHandleY && !carryHandleY.disabled, 'enabling carry handle exposes editable x/y/z coordinates');
 carryHandleY.value = '0.35'; carryHandleY.dispatchEvent(new window.Event('input', { bubbles: true }));
@@ -818,6 +853,7 @@ assert(savedCouch.buyable === false, 'PUT carries explicit buyable:false');
 assert(savedCouch.blocksNav === false, 'PUT carries explicit blocksNav:false');
 assert(savedCouch.survivalImportance === 75, 'PUT carries sparse survivalImportance');
 assert(savedCouch.facingDeg === 90, 'PUT carries edited facingDeg');
+assert(savedCouch.carryBone === 'mixamorig2:LeftHand', 'PUT carries the selected asset-level carry bone');
 assert(savedCouch.meshFit.scale === 1.2, 'PUT carries sparse meshFit.scale');
 assert(savedCouch.meshFit.yawOffsetDeg === 45, 'PUT carries sparse meshFit.yawOffsetDeg');
 assert(savedCouch.meshFit.xOffset === 0.25, 'PUT carries sparse meshFit.xOffset (3-axis)');

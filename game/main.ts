@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { loadAll, loadAllMaps, loadTitleBootstrap, setRuntimeHomeMap, watchData, type ActionDef, type AssetDef, type GameData, type MapData, type SaveConfig } from './data';
 import { TouchCamera } from './camera';
 import { applyWallCutView, buildWorld, makeSimStandIn, makeLights, applyDayNight, applyExteriorScene, loadRiggedCharacter, normalizeMeshUrl, setAssetObjectState } from './world';
-import { nextWallViewMode, type WallViewMode } from './wallview';
+import { DEFAULT_WALL_VIEW_MODE, nextWallViewMode, type WallViewMode } from './wallview';
 import { canAffordActionCost } from './actioncost';
 import { buildDoors, ExteriorDoorTransit, type ExteriorDoorTransitRequest } from './doors';
 import { AnimController } from './anim';
@@ -26,7 +26,7 @@ import { FinanceState, decideRepoSeizure } from './bills';
 import { WorkTracker, applyNeedsCost, decideAutoDepart, isLeaveForWorkAvailable, isScheduledWorkWindow, isWithinDepartureWindow, jobLevelNumber, jobLevelPay, jobLevelTitle, promotionRequirementsFor, shouldStartVisaGrace, weekdayName, type WorkReturnPoint, type WorkTickEvent } from './work';
 import { computeHappiness, happinessSkillFactor, isRefusedByMood } from './happiness';
 import { EventFiringRegistry, MAX_EVENT_DEPTH, canFireAtDepth, findEvent, resolveEvent } from './events';
-import { AccidentsController, resolveTapAssetId, shouldDespawnOnCleanup, shouldRemovePlacedOnCleanup } from './accidents';
+import { AccidentsController, resolveTapAssetId, shouldRemovePlacedOnCleanup } from './accidents';
 import { GarbageController, wasteItemCount } from './garbage';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials, isSelectableForSell } from './buymode';
 import { createMarkerInstance, type MarkerInstance } from './marker';
@@ -37,7 +37,10 @@ import { AudioManager, loopSoundFor } from './audio';
 import { initBladderFailureState, checkBladderFailure, rearmBladderFailure } from './bladder';
 import { FoodRegistry, foodAssetForActionEvent, firstLegSeatAware, actionAfterSourceFetch, cookedMealHungerGain, resolveFoodConfig } from './food';
 import { nearestFreeSurfaceSocket, retainedSurfaceSocket, surfaceOccupantId, surfaceSocketWorld, type SurfaceHost, type SurfaceSocketCandidate, type SurfaceSocketRef } from './surfaces';
-import { carryAnchorPosition, hasCarryRotationLock, resolveLockedCarryEuler } from './carry';
+import { DEFAULT_CARRY_BONE } from './carry';
+import { actionGraphIssues, carriesSpawnedProduct, nearestRequiredAsset, resolvedFollowUpActionId, type RequiredAssetMatch, type SpawnedAssetRule } from './actionchain';
+import { attachGroupToBone, CarriedPropController, findCharacterBone } from './actionprops';
+import { transientContainerSpace } from './containers';
 import { initEnergyCollapseState, StarvationTracker, tickEnergyCollapse } from './survival';
 import { formatMoneyChange, formatSkillUp, skillLevelUps } from './feedback';
 import { AssetStateRegistry, LEGACY_ON, hasCustomStates, isActionAvailableInState, isStatefulAsset, planToReachAction, powerStateForAction, stateAfterAction, stateDef } from './assetstate';
@@ -72,8 +75,6 @@ function animStateFor(a: ActiveAction): string {
 /** ROADMAP_NEXT B3-5: actions whose completed cleanup "carries" the cleared transient to a garbage
  *  can instead of despawning it in place — dirty_dishes (clean_up) and ash (sweep). `mop` (water_
  *  puddle/pee_puddle) is deliberately excluded per the brief ("puddles just vanish"). */
-const CARRY_TO_GARBAGE_ACTIONS = new Set(['clean_up', 'sweep']);
-
 const app = document.getElementById('app')!;
 const boot = document.getElementById('boot')!;
 const loadingPhrase = document.getElementById('loading-phrase')!;
@@ -99,6 +100,15 @@ async function start(initialLoadSlotId?: string) {
     boot.textContent = `data failed to load — is server.js running? (${(err as Error).message})`;
     return;
   }
+  let actionGraphIssueSignature = '';
+  const reportActionGraphIssues = (bundle: GameData) => {
+    const issues = actionGraphIssues(bundle.interactions.actions, bundle.assets.assets);
+    const signature = JSON.stringify(issues);
+    if (signature === actionGraphIssueSignature) return;
+    actionGraphIssueSignature = signature;
+    for (const issue of issues) console.warn(`[action graph:${issue.code}] ${issue.message}`);
+  };
+  reportActionGraphIssues(data);
   const saveConfig = data.save ?? DEFAULT_SAVE_CONFIG;
   const saveStore = new SaveStore(window.localStorage);
 
@@ -175,12 +185,11 @@ async function start(initialLoadSlotId?: string) {
   // recomputes the combined rate of ON metered assets each frame into currentHydroRate.
   const hydro = new HydroMeter();
   let currentHydroRate = 0;
-  let wallViewMode: WallViewMode = 'full'; // in-page preference only; deliberately not serialized
+  let wallViewMode: WallViewMode = DEFAULT_WALL_VIEW_MODE; // in-page preference only; deliberately not serialized
   let world = buildWorld(data, trackInitialLoad);
   let doors = buildDoors(data, trackInitialLoad);
   const exteriorDoorTransit = new ExteriorDoorTransit();
   world.add(doors.group);
-  applyWallCutView(world, wallViewMode, data.tuning.view?.wallCutHeight ?? 1);
   const lights = makeLights();
   scene.add(world, lights);
   applyExteriorScene(scene, world, data.map); // D4: sky/ground/backdrop/fog for this map (sparse — no-op on a void map)
@@ -197,6 +206,7 @@ async function start(initialLoadSlotId?: string) {
     [cam.camera.position.x, cam.camera.position.z],
     [data.map.bounds.w / 2, data.map.bounds.h / 2],
   );
+  applyWallView();
 
   // --- Phase 1: tap-to-go + needs/skills simulation + actions ---
   // id → AssetDef lookup for SimAgent's sit/lie perch resolution (usePoseFor, §7.8) — rebuilt
@@ -483,6 +493,7 @@ async function start(initialLoadSlotId?: string) {
   };
   applyTheme(data.theme);
   hud.setPhoneIcon(data.tuning.phone?.icon ?? '/icons/Smartphone.png');
+  hud.setWallCutMode(wallViewMode);
   hud.onWallCutToggle = () => {
     wallViewMode = nextWallViewMode(wallViewMode);
     applyWallView();
@@ -592,6 +603,14 @@ async function start(initialLoadSlotId?: string) {
   // serialize/restore stay exposed without coupling persistence to main.ts.
   const socialRuntime = new SocialRuntime(data.social);
   let autonomy: Autonomy;
+  // Assigned once the authored action-chain runtime is built below. Autonomy is constructed first
+  // but cannot run until the startup function has finished and the render loop begins.
+  let authoredRequirementAvailable = (_action: ActionDef, _target: THREE.Object3D) => true;
+  let authoredActionOrder = (action: ActionDef, target: THREE.Object3D, targetDef: AssetDef) => {
+    const legSeatAware = firstLegSeatAware(action);
+    const seat = legSeatAware ? findSeatFor(world, data, target, action.seatSearch) : null;
+    return agent.orderAction(action, target, seat, targetDef, legSeatAware);
+  };
 
   /** One transit entry point for visitors, work/visit departures and returns, and trash removal. */
   const requestExteriorTransit = (request: ExteriorDoorTransitRequest) =>
@@ -712,6 +731,7 @@ async function start(initialLoadSlotId?: string) {
     () => data, () => world, agent, stats, accidents, buildEvalContext,
     {
       candidateAvailable: (action, object, asset) => !isRefusedByMood(action.happinessMod, happiness) // H2: autonomy respects mood refusal
+        && authoredRequirementAvailable(action, object)
         && (!sleepAction(action)
           || !sleepDecisionAt([object.position.x, object.position.z]).blocked)
         // New.txt (2026-07-20): a goal blocked by the asset's current state stays eligible ONLY if
@@ -723,6 +743,7 @@ async function start(initialLoadSlotId?: string) {
         const first = plan?.[0];
         return (first && data.interactions.actions.find((entry) => entry.id === first)) || action;
       },
+      orderAction: (action, object, asset) => authoredActionOrder(action, object, asset),
       extraCandidates: () => {
         if (!data.social || socialSession.active || phoneContactSession.active) return [];
         if (visitors.state.phase === 'visiting') {
@@ -1392,117 +1413,24 @@ async function start(initialLoadSlotId?: string) {
   // `action` identity (not just id) is the guard against a stale timer surviving a stop+restart of
   // the very same action.
   let durationState: { action: ActiveAction; totalSeconds: number; elapsed: number } | null = null;
-  // ROADMAP_NEXT B3-5: "carry to garbage" — set right after a clean_up/sweep action completes on
-  // a non-puddle transient (dirty_dishes/ash) whose nearest non-full can is reachable; the actual
-  // despawn/deposit is deferred until the render loop below observes the sim has arrived (or the
-  // walk gets cancelled by any other order, in which case the transient simply stays put, still
-  // dirty — see cancelCarry). `target` is the transient's own Object3D (still valid/undespawned
-  // while carrying) so accidents.maybeCleanup can be called normally on arrival; deposit itself is
-  // re-resolved at arrival time (not the can chosen at carry-start) via depositAtNearestCan, same
-  // "recompute, don't assume" convention garbage.ts's own doc comment already uses for the no-carry
-  // clean_up path this replaces.
-  let carryState: { target: THREE.Object3D; actionId: string } | null = null;
-  // ITEM 3 (put-trash-out routing, 2026-07-17): set when the take-out-trash flow is walking the sim
-  // to the FIRST stop (the fullest can, or a specific can the action was ordered on) BEFORE the
-  // exterior door. On arrival (render loop) the actual `empty_garbage` action is ordered on
-  // `doorTarget`, which walks to the door and — on completion — empties every can as today. Same
-  // main.ts-owned extra-leg pattern as carryState (sim.ts has no multi-leg chaining).
-  let trashOutState: { doorTarget: THREE.Object3D; action: ActionDef } | null = null;
+  // One authored two-leg state for every container transfer. The source object remains authoritative
+  // until the destination route genuinely arrives, which makes cancellation side-effect free.
+  type ContainerTransferState =
+    | { mode: 'deposit'; source: THREE.Object3D; sourceKey: string; action: ActiveAction; containerAssetId: string; space: number }
+    | { mode: 'empty'; source: THREE.Object3D; action: ActiveAction; destinationAssetId: string };
+  let containerTransferState: ContainerTransferState | null = null;
   const food = new FoodRegistry();
   const foodSurface = new Map<string, SurfaceSocketRef>();
-  let carriedProp: { key: string; action: ActiveAction; group: THREE.Object3D; stableWorldEuler: THREE.Euler } | null = null;
-  let carriedPropTransitioning = false;
-  const FOOD_EATING_ACTION_ID = '__eat_carried_food';
   let foodTransitioning = false;
   const gameHourNow = () => (gameDay - 1) * 24 + gameSeconds / 3600;
-  const findCarryBone = (name: string): THREE.Object3D => {
-    const exact = sim.getObjectByName(name);
-    if (exact) return exact;
-    const wanted = name.toLowerCase().replace(/^mixamorig:?/, '');
-    let match: THREE.Object3D | null = null;
-    sim.traverse((object) => {
-      const normalized = object.name.toLowerCase().replace(/^mixamorig:?/, '');
-      if (!match && normalized === wanted) match = object;
-    });
-    return match ?? sim;
-  };
-  const anchorCarriedGroup = (group: THREE.Object3D, handle: readonly number[] | undefined, offset: readonly number[]) => {
-    const transformedHandle = new THREE.Vector3(handle?.[0] ?? 0, handle?.[1] ?? 0, handle?.[2] ?? 0)
-      .multiply(group.scale)
-      .applyQuaternion(group.quaternion);
-    group.position.set(offset[0] ?? 0, offset[1] ?? 0, offset[2] ?? 0).sub(transformedHandle);
-  };
-  const startCarriedProp = (active: ActiveAction) => {
-    const cfg = active.action.carriedAsset;
-    if (!cfg) return;
-    if (carriedProp?.action.action.id === active.action.id) { carriedProp.action = active; return; }
-    if (carriedProp) return;
-    const rec = accidents.spawnTransient(cfg.assetId, [sim.position.x, sim.position.z], 0, simClockSeconds);
-    const group = rec ? accidents.groupFor(rec.key) : null;
-    if (!rec || !group) return;
-    const bone = findCarryBone(cfg.bone);
-    bone.add(group);
-    const def = data.assets.assets.find((entry) => entry.id === cfg.assetId);
-    const offset = cfg.offset ?? [0, 0, 0];
-    const rotation = cfg.rotationDeg ?? [0, 0, 0];
-    group.rotation.set(
-      THREE.MathUtils.degToRad(rotation[0]),
-      THREE.MathUtils.degToRad(rotation[1]),
-      THREE.MathUtils.degToRad(rotation[2]),
-    );
-    const scale = cfg.scale ?? 1;
-    group.scale.setScalar(scale);
-    group.position.fromArray(carryAnchorPosition(def?.carryHandle, offset, rotation, scale));
-    group.visible = true;
-    sim.updateWorldMatrix(true, true);
-    const stableWorldQuaternion = sim.getWorldQuaternion(new THREE.Quaternion())
-      .multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(
-        THREE.MathUtils.degToRad(rotation[0]),
-        THREE.MathUtils.degToRad(rotation[1]),
-        THREE.MathUtils.degToRad(rotation[2]),
-      )));
-    carriedProp = { key: rec.key, action: active, group, stableWorldEuler: new THREE.Euler().setFromQuaternion(stableWorldQuaternion, 'XYZ') };
-  };
-  const updateCarriedPropRotationLocks = () => {
-    if (!carriedProp) return;
-    const cfg = carriedProp.action.action.carriedAsset;
-    if (!cfg || !hasCarryRotationLock(cfg.lockRotationAxes)) return;
-    const group = carriedProp.group;
-    const parent = group.parent;
-    if (!parent) return;
-    parent.updateWorldMatrix(true, false);
-    const rotation = cfg.rotationDeg ?? [0, 0, 0];
-    const authoredLocal = new THREE.Quaternion().setFromEuler(new THREE.Euler(
-      THREE.MathUtils.degToRad(rotation[0]),
-      THREE.MathUtils.degToRad(rotation[1]),
-      THREE.MathUtils.degToRad(rotation[2]),
-      'XYZ',
-    ));
-    const parentWorld = parent.getWorldQuaternion(new THREE.Quaternion());
-    // Always reconstruct the ordinary bone-followed orientation from the current bone pose and
-    // the authored attachment rotation. Reading group.worldQuaternion here would feed last
-    // frame's locked result back into this frame and make the unlocked axes drift over time.
-    const followed = new THREE.Euler().setFromQuaternion(parentWorld.clone().multiply(authoredLocal), 'XYZ');
-    const stable = carriedProp.stableWorldEuler;
-    const resolved = resolveLockedCarryEuler(
-      [followed.x, followed.y, followed.z], [stable.x, stable.y, stable.z], cfg.lockRotationAxes,
-    );
-    const desiredWorld = new THREE.Quaternion().setFromEuler(new THREE.Euler(resolved[0], resolved[1], resolved[2], 'XYZ'));
-    const parentWorldInverse = parentWorld.invert();
-    group.quaternion.copy(parentWorldInverse.multiply(desiredWorld));
-    const def = data.assets.assets.find((entry) => entry.id === cfg.assetId);
-    anchorCarriedGroup(group, def?.carryHandle, cfg.offset ?? [0, 0, 0]);
-    group.updateMatrixWorld(true);
-  };
-  const stopCarriedProp = (active: ActiveAction, completed: boolean) => {
-    if (!carriedProp || carriedProp.action !== active) return;
-    if (carriedPropTransitioning) return;
-    const { key } = carriedProp; carriedProp = null;
-    const group = accidents.groupFor(key);
-    if (completed) { accidents.despawnTransient(key); return; }
-    if (group) world.attach(group);
-    accidents.setTransientPlacement(key, [sim.position.x, sim.position.z], true);
-  };
+  const carriedProps = new CarriedPropController({
+    sim,
+    getWorld: () => world,
+    assetById: (id) => data.assets.assets.find((entry) => entry.id === id),
+    transients: accidents,
+    nowSeconds: () => simClockSeconds,
+  });
+  const findCarryBone = (name: string) => findCharacterBone(sim, name);
   const handleProducedWaste = (assetId: string) => {
     const count = wasteItemCount(data.tuning.waste, buildEvalContext(), data.stats);
     const cleanliness = stats.personality.get(garbage.cleanlinessVarId());
@@ -1576,40 +1504,199 @@ async function start(initialLoadSlotId?: string) {
    *  from every place that can send the sim somewhere else: a fresh ground-tap/action order, the
    *  buy-mode "stop in place" safety net, and the panic/bladder-failure interrupts (both of which
    *  otherwise leave the sim mid-walk toward the can while "reacting" to something else). */
-  const cancelCarry = () => { carryState = null; trashOutState = null; dropActiveFood(); };
+  const cancelContainerTransfer = () => {
+    const state = containerTransferState;
+    containerTransferState = null;
+    if (!state) return;
+    if (state.mode === 'deposit') {
+      carriedProps.releaseBinding(state.sourceKey);
+      const group = accidents.groupFor(state.sourceKey);
+      if (group && group.parent !== world) world.attach(group);
+      accidents.setTransientPlacement(state.sourceKey, [sim.position.x, sim.position.z], true);
+      const foodItem = food.all.find((entry) => entry.key === state.sourceKey);
+      if (foodItem) foodItem.pos = [sim.position.x, sim.position.z];
+    } else {
+      // The carried object on an empty action is only a presentation prop. Cancelling removes it,
+      // while the exact source container and its load remain untouched.
+      carriedProps.stop(state.action, true);
+    }
+  };
+  const cancelCarry = () => { cancelContainerTransfer(); dropActiveFood(); };
 
   const assetById = (id?: string) => (id ? data.assets.assets.find((a) => a.id === id) : undefined);
+  const REQUIRED_ASSET_VISIT_ID = '__required_asset_visit';
+  const requiredAssetVisitAction: ActionDef = {
+    id: REQUIRED_ASSET_VISIT_ID, name: 'Collecting required asset', animation: 'idle',
+    autonomyEligible: false, primaryNeed: null, needGains: {}, skillGains: {},
+  };
+  const CONTAINER_TRANSFER_ARRIVAL_ID = '__container_transfer_arrival';
+  const containerTransferArrivalAction: ActionDef = {
+    id: CONTAINER_TRANSFER_ARRIVAL_ID, name: 'Transferring item', animation: 'idle',
+    autonomyEligible: false, primaryNeed: null, needGains: {}, skillGains: {},
+  };
+  let completingContainerTransferArrival = false;
+  let requiredVisitTransitioning = false;
+  let pendingRequiredVisit: { onArrive: () => void } | null = null;
+  const liveAssetCandidates = (exclude?: THREE.Object3D) => {
+    const candidates: { assetId: string; pos: [number, number]; value: THREE.Object3D }[] = [];
+    for (const root of [world, doors.group]) {
+      root.traverse((object) => {
+        const assetId = object.userData?.assetId as string | undefined;
+        if (!assetId || object === exclude || object.visible === false || !object.parent) return;
+        const worldPos = object.getWorldPosition(new THREE.Vector3());
+        candidates.push({ assetId, pos: [worldPos.x, worldPos.z], value: object });
+      });
+    }
+    return candidates;
+  };
+  const requiredAssetMatch = (action: ActionDef, target: THREE.Object3D): RequiredAssetMatch<THREE.Object3D> | null =>
+    nearestRequiredAsset(
+      (() => { const pos = target.getWorldPosition(new THREE.Vector3()); return [pos.x, pos.z] as [number, number]; })(), action.requiredAsset,
+      liveAssetCandidates(target),
+    );
+  const notifyMissingRequiredAsset = (action: ActionDef, target: THREE.Object3D) => {
+    const rule = action.requiredAsset;
+    if (!rule) return;
+    const requiredDef = assetById(rule.assetId);
+    const targetDef = assetById(target.userData?.assetId as string);
+    postNotification(
+      'actionTargetUnavailable',
+      `${requiredDef?.name ?? rule.assetId} required`,
+      `Place one within ${Math.max(0, rule.radiusMeters)} m of ${targetDef?.name ?? 'the action target'}.`,
+    );
+  };
+  const orderDirectAction = (action: ActionDef, target: THREE.Object3D, targetDef?: AssetDef): boolean => {
+    const legSeatAware = firstLegSeatAware(action);
+    const seat = legSeatAware ? findSeatFor(world, data, target, action.seatSearch) : null;
+    return agent.orderAction(action, target, seat, targetDef, legSeatAware);
+  };
+  const nearestLiveAsset = (assetId: string, from: [number, number]): THREE.Object3D | null => {
+    let best: THREE.Object3D | null = null;
+    let bestDistance = Infinity;
+    for (const candidate of liveAssetCandidates()) {
+      if (candidate.assetId !== assetId) continue;
+      const distance = Math.hypot(candidate.pos[0] - from[0], candidate.pos[1] - from[1]);
+      if (distance < bestDistance) { best = candidate.value; bestDistance = distance; }
+    }
+    return best;
+  };
+  const transferDestination = (action: ActionDef, target: THREE.Object3D): THREE.Object3D | null => {
+    const transfer = action.containerTransfer;
+    if (!transfer) return null;
+    const pos = target.getWorldPosition(new THREE.Vector3());
+    if (transfer.mode === 'empty') return nearestLiveAsset(transfer.destinationAssetId, [pos.x, pos.z]);
+    const space = transientContainerSpace(assetById(target.userData?.assetId as string));
+    if (space === null) return null;
+    const destinationPos = garbage.nearestContainerWithSpacePos([pos.x, pos.z], transfer.containerAssetId, space);
+    return destinationPos ? nearestLiveAsset(transfer.containerAssetId, destinationPos) : null;
+  };
+  const containerTransferAvailable = (action: ActionDef, target: THREE.Object3D): boolean => {
+    const transfer = action.containerTransfer;
+    if (!transfer) return true;
+    if (transfer.mode === 'empty' && garbage.fillOfObject(target) <= 0) return false;
+    return !!transferDestination(action, target);
+  };
+  authoredRequirementAvailable = (action, target) =>
+    (!action.requiredAsset || !!requiredAssetMatch(action, target)) && containerTransferAvailable(action, target);
+  const queueRequiredVisit = (required: THREE.Object3D, onArrive: () => void): boolean => {
+    pendingRequiredVisit = { onArrive };
+    const requiredDef = assetById(required.userData?.assetId as string);
+    if (agent.orderAction(requiredAssetVisitAction, required, null, requiredDef)) return true;
+    pendingRequiredVisit = null;
+    return false;
+  };
+  const orderWithRequirements = (
+    action: ActionDef,
+    target: THREE.Object3D,
+    targetDef: AssetDef | undefined,
+    directOrder: () => boolean = () => orderDirectAction(action, target, targetDef),
+  ): boolean => {
+    const rule = action.requiredAsset;
+    const match = rule ? requiredAssetMatch(action, target) : null;
+    if (rule && !match) { notifyMissingRequiredAsset(action, target); return false; }
+    if (rule?.visitBefore && match) {
+      return queueRequiredVisit(match.value, () => {
+        if (!directOrder()) console.log('no path from required asset to action target', action.id);
+      });
+    }
+    return directOrder();
+  };
+  authoredActionOrder = (action, target, targetDef) => orderWithRequirements(action, target, targetDef);
+  const finishContainerTransfer = () => {
+    const state = containerTransferState;
+    containerTransferState = null;
+    if (!state) return;
+    if (state.mode === 'deposit') {
+      const deposited = garbage.depositAtNearestContainer(
+        [sim.position.x, sim.position.z], state.containerAssetId, state.space,
+      );
+      carriedProps.releaseBinding(state.sourceKey);
+      if (deposited) {
+        if (food.discard(state.sourceKey)) releaseFoodSurface(state.sourceKey);
+        accidents.despawnTransient(state.sourceKey);
+      } else {
+        const group = accidents.groupFor(state.sourceKey);
+        if (group && group.parent !== world) world.attach(group);
+        accidents.setTransientPlacement(state.sourceKey, [sim.position.x, sim.position.z], true);
+        const foodItem = food.all.find((entry) => entry.key === state.sourceKey);
+        if (foodItem) foodItem.pos = [sim.position.x, sim.position.z];
+        postNotification('garbageUnavailable', 'That container no longer has enough space');
+      }
+      return;
+    }
+    garbage.emptyContainer(state.source.uuid);
+    carriedProps.stop(state.action, true);
+  };
+  const beginContainerTransfer = (active: ActiveAction): boolean => {
+    const transfer = active.action.containerTransfer;
+    if (!transfer) return false;
+    const destination = transferDestination(active.action, active.target);
+    if (!destination) {
+      if (transfer.mode === 'empty') carriedProps.stop(active, true);
+      postNotification('garbageUnavailable', transfer.mode === 'deposit'
+        ? 'No compatible container has enough space'
+        : 'No emptying destination is available');
+      return true;
+    }
+    if (transfer.mode === 'deposit') {
+      const sourceKey = active.target.userData?.accidentKey as string | undefined;
+      const sourceDef = assetById(active.target.userData?.assetId as string);
+      const sourceGroup = sourceKey ? accidents.groupFor(sourceKey) : null;
+      const space = transientContainerSpace(sourceDef);
+      const carryAction: ActionDef | null = sourceDef
+        ? (active.action.carriedAsset ? active.action : {
+          ...active.action,
+          carriedAsset: { assetId: sourceDef.id, bone: sourceDef.carryBone ?? DEFAULT_CARRY_BONE },
+        })
+        : null;
+      if (!sourceKey || !sourceGroup || space === null
+        || !carryAction || !carriedProps.bindExisting(sourceKey, sourceGroup, carryAction)) {
+        postNotification('garbageUnavailable', 'That item cannot be transferred');
+        return true;
+      }
+      // A carried food transient no longer occupies its former table/counter socket. Generic
+      // non-food transients have no surface claim, so this is a harmless no-op for them.
+      releaseFoodSurface(sourceKey);
+      containerTransferState = {
+        mode: 'deposit', source: active.target, sourceKey, action: active,
+        containerAssetId: transfer.containerAssetId, space,
+      };
+    } else {
+      containerTransferState = {
+        mode: 'empty', source: active.target, action: active,
+        destinationAssetId: transfer.destinationAssetId,
+      };
+    }
+    if (!orderDirectAction(containerTransferArrivalAction, destination, assetById(destination.userData?.assetId as string))) {
+      cancelContainerTransfer();
+      postNotification('actionTargetUnavailable', 'No path to the transfer destination');
+    }
+    return true;
+  };
   /** The live exterior-door Object3D (the one carrying `empty_garbage`/`leave_for_work`), or
    *  undefined if the map has none. Same lookup autoDepart uses for the work door. */
   const findExteriorDoorObject = (): THREE.Object3D | undefined =>
     doors.group.children.find((entry) => assetById(entry.userData.assetId as string)?.door?.exterior === true);
-
-  /** ITEM 3 (put-trash-out routing, 2026-07-17): the take-out-trash flow. `empty_garbage` may be
-   *  ordered on the exterior door (as today) OR on a garbage can (the designer attaches the action
-   *  to the can asset in the tools). Either way the sim FIRST walks to a collection stop — the
-   *  ordered-on can if it has any fill, otherwise the FULLEST can (tie-break nearest, garbage.ts's
-   *  chooseFullestCan) — and only then (render-loop arrival) walks to the exterior door and runs the
-   *  action, whose completion empties every can exactly as before. If no can has any fill (nothing
-   *  to collect) or the collection stop is unreachable, the sim goes straight to the door as today. */
-  const startTrashOut = (action: ActionDef, target: THREE.Object3D) => {
-    const targetDef = assetById(target.userData.assetId as string);
-    const doorTarget = targetDef?.door?.exterior ? target : findExteriorDoorObject();
-    if (!doorTarget) { console.log('empty_garbage: no exterior door on this map'); return; }
-    const doorDef = assetById(doorTarget.userData.assetId as string);
-    const simPos: [number, number] = [sim.position.x, sim.position.z];
-    const firstStop: [number, number] | null =
-      targetDef?.garbage && garbage.fillOfObject(target) > 0
-        ? [target.position.x, target.position.z]
-        : garbage.fullestCanPos(simPos);
-    if (firstStop && agent.goTo(firstStop[0], firstStop[1])) {
-      trashOutState = { doorTarget, action };
-      cue.showAt(firstStop[0], firstStop[1]);
-    } else if (agent.orderAction(action, doorTarget, null, doorDef)) {
-      cue.showAt(doorTarget.position.x, doorTarget.position.z); // nothing to collect / unreachable can → straight to door
-    } else {
-      console.log('empty_garbage: no path to exterior door');
-    }
-  };
 
   const foodSeatAvailable = (object: THREE.Object3D, def: AssetDef): boolean => {
     const locations = [...(def.useLocations?.sit ?? []), ...(def.useLocations?.lie ?? [])];
@@ -1652,64 +1739,169 @@ async function start(initialLoadSlotId?: string) {
     return { surface: null, seat: nearestFoodSeat() };
   };
 
-  /** Starts B4-2's second leg using the same bare main.ts orchestration as B3-5 carry-to-garbage.
-   *  The source action has already arrived at the fridge/stove; the transient is hidden while
-   *  carried, then an internal duration action reuses SimAgent's seat pose / sit_ground fallback. */
-  const startCarriedFood = (assetId: string, cooked = false, sourceAction?: ActionDef) => {
-    const def = data.assets.assets.find((a) => a.id === assetId && a.category === 'transient');
-    if (!def?.food) return;
-    const eatDef = data.interactions.actions.find((a) => a.id === 'eat');
-    if (!eatDef) return;
+  interface SpawnedProduct {
+    key: string;
+    def: AssetDef;
+    rule: SpawnedAssetRule;
+    sourceAction: ActionDef;
+  }
+  const legacySpawnRule = (sourceAction: ActionDef, event: 'arrival' | 'completion'): SpawnedAssetRule | null => {
+    const assetId = foodAssetForActionEvent(sourceAction.id, event);
+    return assetId ? { assetId, actionId: 'consume_food', applyCookingSkill: event === 'completion' } : null;
+  };
+  const createSpawnedProduct = (sourceAction: ActionDef, rule: SpawnedAssetRule): SpawnedProduct | null => {
+    const def = data.assets.assets.find((asset) => asset.id === rule.assetId);
+    if (!def) { console.log('spawned asset is unknown', rule.assetId); return null; }
     const pos: [number, number] = [sim.position.x, sim.position.z];
-    const rec = accidents.spawnTransient(assetId, pos, THREE.MathUtils.radToDeg(sim.rotation.y), simClockSeconds);
-    if (!rec) return;
-    // ROADMAP item 2 (meal tiers): the SOURCE action (fridge Eat / stove cook_light_meal /
-    // cook_large_meal) may sparsely override the spawned transient's own food block; present fields
-    // win, absent fields fall back to def.food. ROADMAP_NEXT B7-2: a COOKED meal's hunger fill then
-    // scales with cooking skill ON TOP of the resolved base (snacks unaffected — cooked=false).
-    let foodConfig = resolveFoodConfig(def.food, sourceAction?.food);
-    if (cooked) {
-      const ft = data.tuning.food;
-      const cookingSkill = stats.skills.get('cooking') ?? 0;
-      const skillMax = data.stats.skills.find((s) => s.id === 'cooking')?.max ?? 100;
-      const gain = cookedMealHungerGain(foodConfig.hungerGain, cookingSkill, skillMax, {
-        cookHungerAtSkill0: ft?.cookHungerAtSkill0 ?? 0.6,
-        cookHungerAtSkillMax: ft?.cookHungerAtSkillMax ?? 1.5,
-      });
-      foodConfig = { ...foodConfig, hungerGain: gain };
+    const rec = accidents.spawnTransient(rule.assetId, pos, THREE.MathUtils.radToDeg(sim.rotation.y), simClockSeconds);
+    if (!rec) return null;
+    if (def.food) {
+      let foodConfig = resolveFoodConfig(def.food, sourceAction.food);
+      if (rule.applyCookingSkill) {
+        const ft = data.tuning.food;
+        const cookingSkill = stats.skills.get('cooking') ?? 0;
+        const skillMax = data.stats.skills.find((skill) => skill.id === 'cooking')?.max ?? 100;
+        foodConfig = {
+          ...foodConfig,
+          hungerGain: cookedMealHungerGain(foodConfig.hungerGain, cookingSkill, skillMax, {
+            cookHungerAtSkill0: ft?.cookHungerAtSkill0 ?? 0.6,
+            cookHungerAtSkillMax: ft?.cookHungerAtSkillMax ?? 1.5,
+          }),
+        };
+      }
+      food.startCarrying(rec.key, rule.assetId, foodConfig, pos);
     }
-    // The legacy waste id remains in the save shape for backward compatibility. Interrupted food
-    // now remains edible and later becomes its authored rottenAssetId instead of converting at once.
-    food.startCarrying(rec.key, assetId, foodConfig, pos, eatDef.producesWaste);
-    const carriedFoodGroup = accidents.groupFor(rec.key);
-    if (!carriedFoodGroup) { dropActiveFood(); return; }
-    const hand = findCarryBone('mixamorigRightHand');
-    hand.add(carriedFoodGroup);
-    carriedFoodGroup.rotation.set(0, 0, 0);
-    carriedFoodGroup.position.fromArray(carryAnchorPosition(def.carryHandle, [0, 0.06, 0], [0, 0, 0], carriedFoodGroup.scale.x));
-    carriedFoodGroup.visible = true;
-    const destination = foodDestination(rec.key);
-    const eatingAction = {
-      ...eatDef,
-      id: FOOD_EATING_ACTION_ID,
-      name: `Eating ${def.name.toLowerCase()}`,
-      needGains: {}, skillGains: {}, primaryNeed: null, autonomyEligible: false,
-      cost: cooked ? undefined : sourceAction?.cost,
-      duration: eatDef.duration ?? { baseSeconds: 5 },
-      animation: destination.seat ? eatDef.animation : 'stand_use',
-    };
-    const seat = destination.seat;
-    // Keep the hidden target at the eating destination so SimAgent's final face-target step does
-    // not turn a seated sim back toward the distant fridge/stove after applying the seat pose.
-    const target = new THREE.Object3D();
-    target.userData = { assetId: def.id, interactions: [] };
-    if (destination.surface) target.position.set(destination.surface.pos[0], destination.surface.pos[1], destination.surface.pos[2]);
-    else if (seat) target.position.copy(seat.position);
-    else target.position.copy(sim.position);
-    foodTransitioning = true;
-    const ordered = agent.orderAction(eatingAction, target, seat, undefined, !!seat);
-    foodTransitioning = false;
-    if (!ordered) dropActiveFood();
+    return { key: rec.key, def, rule, sourceAction };
+  };
+  const attachFoodProduct = (product: SpawnedProduct): boolean => {
+    if (!product.def.food || !food.beginCarrying(product.key)) return false;
+    const group = accidents.groupFor(product.key);
+    if (!group) return false;
+    attachGroupToBone(
+      sim,
+      group,
+      findCarryBone(product.def.carryBone ?? DEFAULT_CARRY_BONE),
+      product.def.carryHandle,
+      [0, 0.06, 0],
+      [0, 0, 0],
+      1,
+    );
+    return true;
+  };
+  const placeSpawnedProduct = (product: SpawnedProduct) => {
+    if (product.def.food && food.active?.key === product.key) {
+      const dropped = food.interruptActive([sim.position.x, sim.position.z], gameHourNow());
+      if (dropped) { placeFoodAfterInterrupt(product.key); return; }
+    }
+    const group = accidents.groupFor(product.key);
+    if (group && group.parent !== world) world.attach(group);
+    accidents.setTransientPlacement(product.key, [sim.position.x, sim.position.z], true);
+  };
+  const launchSpawnedFollowUp = (product: SpawnedProduct) => {
+    const followUpId = resolvedFollowUpActionId(
+      product.rule,
+      new Set(data.interactions.actions.map((action) => action.id)),
+    );
+    if (!followUpId) {
+      if (product.rule.actionId) postNotification('actionTargetUnavailable', `Automatic action ${product.rule.actionId} is unavailable`);
+      placeSpawnedProduct(product);
+      return;
+    }
+    const followUp = data.interactions.actions.find((action) => action.id === followUpId)!;
+    if (!isActionAvailable(followUp.conditions, buildEvalContext())) {
+      postNotification('actionTargetUnavailable', `${followUp.name} conditions are not met`);
+      placeSpawnedProduct(product);
+      return;
+    }
+    if (isRefusedByMood(followUp.happinessMod, happiness)) {
+      postNotification('actionRefusedUnhappy', `Too unhappy for ${followUp.name}`);
+      placeSpawnedProduct(product);
+      return;
+    }
+    if (!canAffordActionCost(quests.funds, followUp.cost)) {
+      postNotification('insufficientFunds', `Not enough funds for ${followUp.name}`);
+      placeSpawnedProduct(product);
+      return;
+    }
+    const transferTarget = followUp.containerTransfer ? accidents.groupFor(product.key) : null;
+    if (followUp.containerTransfer && (!transferTarget || !containerTransferAvailable(followUp, transferTarget))) {
+      postNotification('garbageUnavailable', followUp.containerTransfer.mode === 'deposit'
+        ? 'No compatible container has enough space'
+        : 'No emptying destination is available');
+      placeSpawnedProduct(product);
+      return;
+    }
+    if (followUp.consumesFood && product.def.food) {
+      if (!attachFoodProduct(product)) { placeSpawnedProduct(product); return; }
+      const destination = foodDestination(product.key);
+      const seat = destination.seat;
+      const target = new THREE.Object3D();
+      target.userData = {
+        assetId: product.def.id,
+        accidentKey: product.key,
+        interactions: product.def.interactions,
+        autoSpawnedFollowUp: true,
+      };
+      if (destination.surface) target.position.set(destination.surface.pos[0], destination.surface.pos[1], destination.surface.pos[2]);
+      else if (seat) target.position.copy(seat.position);
+      else target.position.copy(sim.position);
+      const direct = () => agent.orderAction(followUp, target, seat, undefined, !!seat);
+      foodTransitioning = true;
+      const ordered = orderWithRequirements(followUp, target, product.def, direct);
+      foodTransitioning = false;
+      if (!ordered) placeSpawnedProduct(product);
+      return;
+    }
+    const group = accidents.groupFor(product.key);
+    if (!group) return;
+    if (carriesSpawnedProduct(followUp, product.def.id)) {
+      let placementHandled = false;
+      const direct = () => {
+        // Resolve the destination while the exact product is still at its source, then attach it
+        // before walking. onActionStart adopts this pending carried record instead of creating a
+        // second transient when the sim reaches the seat/ground-reading destination.
+        const legSeatAware = firstLegSeatAware(followUp);
+        const seat = legSeatAware ? findSeatFor(world, data, group, followUp.seatSearch) : null;
+        const actionTarget = new THREE.Object3D();
+        actionTarget.position.copy(group.getWorldPosition(new THREE.Vector3()));
+        actionTarget.userData = { ...group.userData };
+        if (!carriedProps.bindExisting(product.key, group, followUp)) {
+          placementHandled = true;
+          placeSpawnedProduct(product);
+          return false;
+        }
+        // Once attached, the product's `.position` is bone-local. Keep a world-space target proxy
+        // for routing/facing/event context; the carried record still owns the real transient.
+        const ordered = agent.orderAction(followUp, actionTarget, seat, product.def, legSeatAware);
+        if (!ordered) {
+          carriedProps.releaseBinding(product.key);
+          placementHandled = true;
+          placeSpawnedProduct(product);
+        }
+        return ordered;
+      };
+      if (!orderWithRequirements(followUp, group, product.def, direct) && !placementHandled) {
+        placeSpawnedProduct(product);
+      }
+      return;
+    }
+    if (group.parent !== world) world.attach(group);
+    accidents.setTransientPlacement(product.key, [sim.position.x, sim.position.z], true);
+    if (!orderWithRequirements(followUp, group, product.def)) placeSpawnedProduct(product);
+  };
+  const runSpawnedProduct = (sourceAction: ActionDef, rule: SpawnedAssetRule, sourceTarget: THREE.Object3D) => {
+    const product = createSpawnedProduct(sourceAction, rule);
+    if (!product) return;
+    const afterMatch = sourceAction.requiredAsset?.visitAfter
+      ? requiredAssetMatch(sourceAction, sourceTarget)
+      : null;
+    if (sourceAction.requiredAsset?.visitAfter && afterMatch) {
+      if (product.def.food) attachFoodProduct(product);
+      if (queueRequiredVisit(afterMatch.value, () => launchSpawnedFollowUp(product))) return;
+    } else if (sourceAction.requiredAsset?.visitAfter) {
+      notifyMissingRequiredAsset(sourceAction, sourceTarget);
+    }
+    launchSpawnedFollowUp(product);
   };
 
   // --- ROADMAP_NEXT B2-4: bladder failure ("pees itself" at 0) ---------------------------------
@@ -1744,6 +1936,28 @@ async function start(initialLoadSlotId?: string) {
   agent.onClaimSeat = buildSeatClaimer('player');
   agent.onReleaseSeat = buildSeatReleaser('player');
   agent.onActionStart = (a) => {
+    if (a.action.id === CONTAINER_TRANSFER_ARRIVAL_ID) {
+      completingContainerTransferArrival = true;
+      agent.stopAction(true);
+      completingContainerTransferArrival = false;
+      return;
+    }
+    if (a.action.id === REQUIRED_ASSET_VISIT_ID) {
+      const pending = pendingRequiredVisit;
+      pendingRequiredVisit = null;
+      requiredVisitTransitioning = true;
+      agent.stopAction(false);
+      pending?.onArrive();
+      requiredVisitTransitioning = false;
+      return;
+    }
+    // Recheck the live presence gate at arrival. A required asset may have been sold/moved while
+    // the sim was walking; no authored action or completion side effect starts without it.
+    if (a.action.requiredAsset && !requiredAssetMatch(a.action, a.target)) {
+      notifyMissingRequiredAsset(a.action, a.target);
+      agent.stopAction(false);
+      return;
+    }
     // B10-6: generic source-first seated action. This callback fires only after the first route
     // reaches the source's use spot. Replace that just-started action with a flag-cleared second
     // leg to the resolved seat; ordinary start effects (cost, duration, gains/audio) therefore
@@ -1751,14 +1965,12 @@ async function start(initialLoadSlotId?: string) {
     if (a.action.fetchBeforeSeat) {
       const sourceAssetId = a.target.userData?.assetId as string | undefined;
       const sourceDef = sourceAssetId ? data.assets.assets.find((x) => x.id === sourceAssetId) : undefined;
-      const seat = findSeatFor(world, data, a.target);
+      const seat = findSeatFor(world, data, a.target, a.action.seatSearch);
       const secondLeg = actionAfterSourceFetch(a.action);
-      startCarriedProp(a);
-      carriedPropTransitioning = true;
-      const ordered = agent.orderAction(secondLeg, a.target, seat, sourceDef, true);
-      carriedPropTransitioning = false;
+      carriedProps.start(a);
+      const ordered = carriedProps.withTransition(() => agent.orderAction(secondLeg, a.target, seat, sourceDef, true));
       if (!ordered) {
-        stopCarriedProp(a, false);
+        carriedProps.stop(a, false);
         console.log('no path from source to seat', sourceAssetId ?? a.action.id);
       }
       return;
@@ -1785,7 +1997,7 @@ async function start(initialLoadSlotId?: string) {
       visitor.rotation.y = THREE.MathUtils.degToRad(visitorDeg);
       visitors.playInteraction(socialAnimationFor(socialOrder.interaction, 'npc'));
     }
-    if (a.action.id !== FOOD_EATING_ACTION_ID && !canAffordActionCost(quests.funds, a.action.cost)) {
+    if (!canAffordActionCost(quests.funds, a.action.cost)) {
       postNotification('insufficientFunds', 'Not enough funds for that action');
       agent.stopAction();
       return;
@@ -1798,31 +2010,32 @@ async function start(initialLoadSlotId?: string) {
       agent.stopAction(false);
       return;
     }
-    startCarriedProp(a);
+    // Deposits adopt the exact target only after their authored source phase completes. Emptying
+    // actions show their authored carried prop as soon as the Sim reaches the source container.
+    if (a.action.containerTransfer?.mode !== 'deposit') carriedProps.start(a);
     hud.showActivity(a.action.name);
     anim?.play(animStateFor(a)); // unmapped states fall back to idle inside AnimController
     const totalSeconds = computeDurationSeconds(a.action.duration, Object.fromEntries(stats.skills), data.stats.skills, Object.fromEntries(stats.needs));
     durationState = totalSeconds !== null ? { action: a, totalSeconds, elapsed: 0 } : null;
     if (a.action.consumesFood) {
       const key = a.target.userData?.accidentKey as string | undefined;
-      if (!key || !food.activateDropped(key)) { agent.stopAction(false); return; }
-      releaseFoodSurface(key);
-      accidents.setTransientPlacement(key, [sim.position.x, sim.position.z], false);
-      food.beginEating(key);
-    } else if (a.action.id === FOOD_EATING_ACTION_ID) {
-      const active = food.active;
-      if (active) {
-        food.beginEating(active.key);
-        const ref = foodSurface.get(active.key);
+      const item = key && food.active?.key === key ? food.active : key ? food.activateDropped(key) : null;
+      if (!key || !item) { agent.stopAction(false); return; }
+      if (a.target.userData?.autoSpawnedFollowUp) {
+        const ref = foodSurface.get(key);
         const host = ref ? surfaceHosts().find((entry) => entry.key === ref.hostKey) : undefined;
         const socket = host && ref ? host.sockets[ref.index] : undefined;
         if (host && socket) {
           const resolved = surfaceSocketWorld(host, socket);
-          const group = accidents.groupFor(active.key);
+          const group = accidents.groupFor(key);
           if (group && group.parent !== world) world.attach(group);
-          accidents.setTransientElevatedPlacement(active.key, resolved.pos, resolved.rotDeg, true);
+          accidents.setTransientElevatedPlacement(key, resolved.pos, resolved.rotDeg, true);
         }
+      } else {
+        releaseFoodSurface(key);
+        accidents.setTransientPlacement(key, [sim.position.x, sim.position.z], false);
       }
+      food.beginEating(key);
     }
     // ROADMAP_NEXT item 7: start whichever of the target asset's own `sound` (wins, per-instance
     // key so two placed instances of the same asset loop independently) or the action's `sound`
@@ -1853,8 +2066,8 @@ async function start(initialLoadSlotId?: string) {
     if (a.action.id === 'use_phone') {
       openPhoneAt('jobs');
     }
-    const foodAssetId = foodAssetForActionEvent(a.action.id, 'arrival');
-    if (foodAssetId) startCarriedFood(foodAssetId, false, a.action);
+    const arrivalSpawn = a.action.spawnsAsset ? null : legacySpawnRule(a.action, 'arrival');
+    if (arrivalSpawn) runSpawnedProduct(a.action, arrivalSpawn, a.target);
   };
 
   // B6-14/B6-15: pure state lives in survival.ts; this layer owns interruption and presentation.
@@ -1900,9 +2113,27 @@ async function start(initialLoadSlotId?: string) {
     }
   };
   agent.onActionStop = (a, completed) => {
+    if (a.action.id === CONTAINER_TRANSFER_ARRIVAL_ID) {
+      if (completed && completingContainerTransferArrival) finishContainerTransfer();
+      else cancelContainerTransfer();
+      return;
+    }
+    if (a.action.id === REQUIRED_ASSET_VISIT_ID) {
+      if (!requiredVisitTransitioning) {
+        pendingRequiredVisit = null;
+        if (food.active?.phase === 'carried') dropActiveFood();
+      }
+      return;
+    }
     const socialStop = socialSession.active?.action === a.action;
     const phoneContactStop = phoneContactSession.active?.action === a.action;
-    stopCarriedProp(a, completed);
+    if (a.action.containerTransfer?.mode === 'empty') {
+      // This prop visualizes the source container's load; cancelling must not turn it into a new
+      // world transient. A completed source phase preserves it for the destination leg.
+      if (!completed) carriedProps.stop(a, true);
+    } else {
+      carriedProps.stop(a, completed);
+    }
     hud.hideActivity();
     anim?.play('idle');
     const stoppedDuration = durationState;
@@ -1933,8 +2164,12 @@ async function start(initialLoadSlotId?: string) {
       }
       hud.setFunds(quests.funds, currencyName());
     }
+    if (completed) {
+      const completionSpawn = a.action.spawnsAsset ?? legacySpawnRule(a.action, 'completion');
+      if (completionSpawn) runSpawnedProduct(a.action, completionSpawn, a.target);
+    }
     if (a.action.id === 'use_phone') hud.closePhone();
-    if (a.action.id === FOOD_EATING_ACTION_ID || a.action.consumesFood) {
+    if (a.action.consumesFood) {
       const active = food.active;
       if (!completed) {
         if (!foodTransitioning) dropActiveFood(stoppedProgress);
@@ -2016,8 +2251,6 @@ async function start(initialLoadSlotId?: string) {
       }
       return;
     }
-    const completedFoodAssetId = foodAssetForActionEvent(a.action.id, 'completion');
-    if (completedFoodAssetId) { startCarriedFood(completedFoodAssetId, true, a.action); return; }
     // §7.20 V3: the short duration on leave_for_work finishes through the ordinary completed-only
     // action path. Re-check the live job/time here because the shift may have ended during the walk
     // from menu-open to the exterior door.
@@ -2070,6 +2303,33 @@ async function start(initialLoadSlotId?: string) {
       if (!transit) depart();
       return;
     }
+    // A container transfer takes ownership of the primary target before the ordinary transient
+    // cleanup branch below. Preserve the pre-existing completed-only radius cleanup for OTHER
+    // matching messes; only the exact target is carried and consumes container space.
+    if (a.action.containerTransfer) {
+      const transferAssetId = a.target.userData?.assetId as string | undefined;
+      const transferDef = transferAssetId ? data.assets.assets.find((x) => x.id === transferAssetId) : undefined;
+      const cleanupRadius = transferDef?.category === 'transient' && !transferDef.food
+        ? data.tuning.cleanup?.radiusMeters ?? 0
+        : 0;
+      if (cleanupRadius > 0) {
+        const center: [number, number] = [sim.position.x, sim.position.z];
+        let removed = accidents.cleanupWithinRadius(center, cleanupRadius, a.action.id, a.target);
+        for (const object of [...world.children]) {
+          if (object === a.target || !object.visible) continue;
+          const placedDef = data.assets.assets.find((x) => x.id === object.userData.assetId);
+          if (!placedDef || placedDef.category !== 'transient') continue;
+          if (!shouldRemovePlacedOnCleanup(true, a.action.id, placedDef.clearedBy)) continue;
+          if (Math.hypot(object.position.x - center[0], object.position.z - center[1]) > cleanupRadius) continue;
+          const inst = buyMode.instanceForObject(object);
+          if (inst) { buyMode.destroyInstance(inst); removed += 1; }
+        }
+        if (removed > 0) { rebakeNav(); applyEnvironment(); garbage.syncFillBars(); }
+      }
+      // The authored source phase has genuinely completed. The second leg keeps the exact source;
+      // fill/removal occurs only when the ordinary asset-aware destination route arrives.
+      if (beginContainerTransfer(a)) return;
+    }
     // §7.3: roll for a new accident (normal asset finishing a use) or despawn one (a cleanup
     // action just completed on an accident instance). Non-duration actions still roll HERE (their
     // only "the sim is done with this" moment — see accidents.ts's module doc comment); duration
@@ -2077,21 +2337,8 @@ async function start(initialLoadSlotId?: string) {
     const assetId = a.target.userData?.assetId as string | undefined;
     const def = assetId ? data.assets.assets.find((x) => x.id === assetId) : undefined;
     if (def?.category === 'transient') {
-      // ROADMAP_NEXT B3-5: clean_up (dirty_dishes) / sweep (ash) no longer despawn the transient
-      // instantly — the sim carries it to a garbage can first (see carryState above + the render
-      // loop's arrival check below). mop (water_puddle/pee_puddle) is NOT in this set and keeps the
-      // old immediate in-place despawn — puddles have nothing to carry anywhere.
-      if (CARRY_TO_GARBAGE_ACTIONS.has(a.action.id) && shouldDespawnOnCleanup(a.action.id, def.clearedBy)) {
-        const canPos = garbage.nearestNonFullCanPos([sim.position.x, sim.position.z]);
-        if (canPos && agent.goTo(canPos[0], canPos[1])) {
-          carryState = { target: a.target, actionId: a.action.id };
-        } else {
-          // No reachable non-full can right now — reuse the existing "reuse quest toast" refusal
-          // pattern (garbage.ts's own module doc comment / the clean_up order-time pre-check
-          // below). The transient is untouched: still there, still dirty, can fill unchanged.
-          postNotification('garbageUnavailable', 'No empty garbage can available');
-        }
-      } else if (!accidents.maybeCleanup(a.target, a.action.id)) {
+      // Ordinary non-transfer cleanup still removes its transient at the source (for example mop).
+      if (!accidents.maybeCleanup(a.target, a.action.id)) {
         // ROADMAP_NEXT item 2: the mop completed but the target was NOT a runtime AccidentRegistry
         // instance (maybeCleanup returned false) — it's a DESIGNER-PLACED puddle (a map placedObject).
         // Those never enter the registry, so remove the live instance through the buy-mode overlay's
@@ -2139,13 +2386,6 @@ async function start(initialLoadSlotId?: string) {
     // or predates this slice — garbage.ts's decideWasteHandling treats that as "not clean enough").
     if (a.action.producesWaste) {
       handleProducedWaste(a.action.producesWaste);
-    }
-    // ROADMAP_NEXT item 4/10: the exterior door's `empty_garbage` interaction resets every can —
-    // ships with a fixed `duration` (see interactions.json) so it auto-completes and lands here
-    // exactly like any other duration-timed action, no new instant-action plumbing needed.
-    if (a.action.id === 'empty_garbage') {
-      const transit = requestExteriorTransit({ passThrough: () => garbage.emptyAll(), passComplete: () => true });
-      if (!transit) garbage.emptyAll();
     }
   };
   hud.onCancelAction = () => { autonomy.notePlayerCommand(); agent.stopAction(); };
@@ -2250,7 +2490,7 @@ async function start(initialLoadSlotId?: string) {
             // toast surface per the brief ("reuse quest toast") rather than a new UI component.
             // (A can can still go full between now and completion — the render-loop carry check
             // re-verifies and shows the same toast then, transient left untouched either way.)
-            if ((CARRY_TO_GARBAGE_ACTIONS.has(action.id) || action.discardsFood) && !garbage.hasNonFullCan()) {
+            if (action.discardsFood && !garbage.hasNonFullCan()) {
               postNotification('garbageUnavailable', 'No empty garbage can available');
               return;
             }
@@ -2262,15 +2502,15 @@ async function start(initialLoadSlotId?: string) {
             }
             autonomy.notePlayerCommand();
             cancelCarry(); // ROADMAP_NEXT B3-5: a fresh order interrupts any in-progress carry walk
-            // ITEM 3 (2026-07-17): take-out-trash routes to the fullest can first, THEN the exterior
-            // door — whether the action was ordered on the door or directly on a can (see startTrashOut).
-            if (action.id === 'empty_garbage') { startTrashOut(action, target); return; }
-            // ROADMAP_NEXT B7-4: a food-source action (fridge Eat / stove Cook) is seatAware but its
-            // FIRST leg must reach the source — seat routing is deferred to the carry/eat second leg
-            // (startCarriedFood). firstLegSeatAware encodes that so the sim never skips the fridge.
-            const legSeatAware = firstLegSeatAware(action);
-            const seat = legSeatAware ? findSeatFor(world, data, target) : null;
-            if (agent.orderAction(action, target, seat, resolvedAsset, legSeatAware)) cue.showAt(target.position.x, target.position.z);
+            if (action.containerTransfer && !containerTransferAvailable(action, target)) {
+              postNotification('garbageUnavailable', action.containerTransfer.mode === 'deposit'
+                ? 'No compatible container has enough space'
+                : 'That container is empty or has no destination');
+              return;
+            }
+            // Spawn-producing and fetch-before-seat actions reach their source first. Their authored
+            // follow-up resolves its own seat after the source action has genuinely completed.
+            if (authoredActionOrder(action, target, resolvedAsset)) cue.showAt(target.position.x, target.position.z);
             else console.log('no path to object', resolvedAsset.id);
           // Next.txt (2026-07-18): sleep stays selectable with a TV/light on; the angry-wake
           // sequence handles the interruption instead of a disabled menu entry.
@@ -2539,6 +2779,7 @@ async function start(initialLoadSlotId?: string) {
   // wiping map-bound runtime state.
   const applyFreshData = (fresh: GameData) => {
     data = fresh;
+    reportActionGraphIssues(data);
     notifications.retune(data.notifications);
     applyTheme(data.theme);
     exteriorDoorTransit.cancel(true);
@@ -2688,8 +2929,7 @@ async function start(initialLoadSlotId?: string) {
       // Cancel whatever the sim was doing (a cancel, never a completion — no side effects) and
       // drop every map-bound runtime system per the KEEP/DROP table above.
       agent.stopAction(false);
-      carryState = null;
-      trashOutState = null;
+      cancelContainerTransfer();
       durationState = null;
       panicState = null;
       peeState = null;
@@ -2844,8 +3084,7 @@ async function start(initialLoadSlotId?: string) {
         agent.stopAction(false);
         socialSession.finish(false);
         phoneContactSession.finish(false, gameHourNow() * 60);
-        carryState = null;
-        trashOutState = null;
+        cancelContainerTransfer();
         durationState = null;
         panicState = null;
         peeState = null;
@@ -3110,32 +3349,6 @@ async function start(initialLoadSlotId?: string) {
     if (socialSession.active && visitors.state.phase !== 'visiting') agent.stopAction(false);
     // Relationship drift follows the same authored in-world clock as visits (sim-time, not real-time).
     socialRuntime.decay((sdt * clockScale()) / (24 * 60 * 60));
-    // ROADMAP_NEXT B3-5: "carry to garbage" arrival check — carryState is only ever set right after
-    // agent.goTo() successfully routed the sim to a can (see onActionStop above), and only ever
-    // cleared early by cancelCarry() when some other order redirects the sim mid-walk. So observing
-    // `!agent.isMoving` here means one of exactly two things: the sim genuinely reached the can (the
-    // common case), or goTo's arrivalRadius snapped it onto a cell it was already standing on this
-    // same frame (astronomically rare, harmless — same "deposit, then despawn" happens either way).
-    // Deposit is re-resolved at arrival (not the can picked at carry-start) via depositAtNearestCan,
-    // matching that method's own "recompute, don't assume" doc comment; despawn reuses the ordinary
-    // clearedBy/maybeCleanup path exactly like the pre-B3-5 instant-despawn code did.
-    if (carryState && !agent.isMoving) {
-      const cs = carryState;
-      carryState = null;
-      garbage.depositAtNearestCan([sim.position.x, sim.position.z]);
-      accidents.maybeCleanup(cs.target, cs.actionId);
-    }
-    // ITEM 3 (2026-07-17): take-out-trash arrival at the collection can (fullest can / the ordered-on
-    // can) — now order the real `empty_garbage` action on the exterior door. Its completion empties
-    // every can (existing onActionStop). Mutually exclusive with carryState (only one is ever set).
-    if (trashOutState && !agent.isMoving) {
-      const ts = trashOutState;
-      trashOutState = null;
-      const doorDef = assetById(ts.doorTarget.userData.assetId as string);
-      if (!agent.orderAction(ts.action, ts.doorTarget, null, doorDef)) {
-        postNotification('doorPathUnavailable', 'No path to the door');
-      }
-    }
     // B4-2: dropped food ages in monotonic in-game hours; pause freezes it and crossing midnight
     // stays monotonic through gameDay. The pure registry returns keys for the transient layer.
     for (const perished of food.tickDetailed(gameHourNow())) {
@@ -3230,7 +3443,7 @@ async function start(initialLoadSlotId?: string) {
     // parented under it), so a sprite gets its frames ticked with no extra per-caller wiring.
     world.traverse((o) => { o.userData.spriteUpdate?.(sdt); });
     anim?.update(sdt); // sim time: pause freezes the character, 2×/3× speed it up
-    updateCarriedPropRotationLocks(); // authored world-axis locks apply after the animated bone pose
+    carriedProps.updateRotationLocks(); // authored world-axis locks apply after the animated bone pose
     if (marker && data.tuning.character) marker.update(sdt, data.tuning.character); // §7.7: same sim time as the mixer/doors/sprites
     // ROADMAP_NEXT B2-5: progress bar tracks durationState directly (elapsed/total, both already
     // sim-time) — visible for ANY duration-timed action, cook included (free consistency win).

@@ -49,10 +49,15 @@ import type { GameData, StatsData, TuningData } from './data';
 import { resolveVar, type EvalContext } from './quests';
 import type { AccidentsController } from './accidents';
 import { clampProgress01, fillInnerHeight, fillScaleX, fillCenterX } from './progressbar';
+import {
+  ContainerRegistry, containerCapacity, depositAtNearestContainer, findNearestContainerWithSpace,
+  transientContainerSpace,
+  type ContainerCandidate, type ContainerSaveState,
+} from './containers';
 
 // ==================================================================== pure fill/capacity bookkeeping
 
-export interface GarbageSaveState { fills: [string, number][]; }
+export type GarbageSaveState = ContainerSaveState;
 
 /**
  * Per-instance fill count, keyed by the live garbage-can instance's stable string identity (the
@@ -61,26 +66,8 @@ export interface GarbageSaveState { fills: [string, number][]; }
  * headless-tested in test/garbage.test.ts. Mirrors AccidentRegistry/QuestRunner's
  * serialize()/restore() convention so a future save system is a direct JSON round-trip.
  */
-export class GarbageRegistry {
-  private fill = new Map<string, number>();
-
-  fillOf(key: string): number { return this.fill.get(key) ?? 0; }
-  isFull(key: string, capacity: number): boolean { return this.fillOf(key) >= capacity; }
-
-  /** Deposits one unit of waste. Returns false (no-op) if the can is already full. */
-  deposit(key: string, capacity: number): boolean {
-    const f = this.fillOf(key);
-    if (f >= capacity) return false;
-    this.fill.set(key, f + 1);
-    return true;
-  }
-
-  /** ROADMAP_NEXT item 4/10: the `empty_garbage` interaction resets EVERY can (seen or not) to 0. */
-  emptyAll() { this.fill.clear(); }
-
-  serialize(): GarbageSaveState { return { fills: [...this.fill.entries()] }; }
-  restore(s: GarbageSaveState) { this.fill = new Map(s.fills ?? []); }
-}
+/** Legacy public name retained for save wiring and older callers. */
+export class GarbageRegistry extends ContainerRegistry {}
 
 // ==================================================================== pure decision logic
 
@@ -88,7 +75,7 @@ export class GarbageRegistry {
  *  auto-tidy distance math above is 2D, ground-plane only); absent/undefined treated as 0 by
  *  callers, and existing pre-fill-bar test fixtures that build CanCandidate literals without it
  *  stay valid. */
-export interface CanCandidate { key: string; pos: [number, number]; capacity: number; y?: number; }
+export interface CanCandidate extends ContainerCandidate {}
 export interface NearestCan { key: string; pos: [number, number]; dist: number; }
 
 /** Nearest can with fill < capacity, or null if every known can is full (or there are none at all). */
@@ -97,13 +84,7 @@ export function findNearestNonFullCan(
   cans: readonly CanCandidate[],
   fillOf: (key: string) => number,
 ): NearestCan | null {
-  let best: NearestCan | null = null;
-  for (const c of cans) {
-    if (fillOf(c.key) >= c.capacity) continue;
-    const dist = Math.hypot(c.pos[0] - simPos[0], c.pos[1] - simPos[1]);
-    if (!best || dist < best.dist) best = { key: c.key, pos: c.pos, dist };
-  }
-  return best;
+  return findNearestContainerWithSpace(simPos, cans, fillOf, 1);
 }
 
 /** Deposit one discarded/cleaned item into the nearest non-full can. Returns that can's key, or
@@ -114,10 +95,7 @@ export function depositOneAtNearestCan(
   simPos: [number, number],
   cans: readonly CanCandidate[],
 ): string | null {
-  const nearest = findNearestNonFullCan(simPos, cans, (key) => registry.fillOf(key));
-  const can = nearest ? cans.find((entry) => entry.key === nearest.key) : undefined;
-  if (!nearest || !can || !registry.deposit(nearest.key, can.capacity)) return null;
-  return nearest.key;
+  return depositAtNearestContainer(registry, simPos, cans, 1);
 }
 
 export interface FullestCan { key: string; pos: [number, number]; fill: number; dist: number; }
@@ -237,6 +215,9 @@ export function garbageFillRatio(fill: number, capacity: number): number {
   return clampProgress01(fill / capacity);
 }
 
+/** Generic name for new container consumers; legacy garbageFillRatio remains stable. */
+export const containerFillRatio = garbageFillRatio;
+
 /** Whether the bar should be drawn at all: always once there's any fill, or always (even at 0) when
  *  the designer opts into `showWhenEmpty`. */
 export function shouldShowFillBar(ratio: number, showWhenEmpty: boolean): boolean {
@@ -255,6 +236,9 @@ export function garbageFillBarGeometry(widthMeters: number, heightMeters: number
     innerHeight: fillInnerHeight(heightMeters),
   };
 }
+
+/** Generic name for new container UI; legacy garbageFillBarGeometry remains stable. */
+export const containerFillBarGeometry = garbageFillBarGeometry;
 
 // ==================================================================== three.js layer
 
@@ -430,7 +414,9 @@ export class GarbageController {
    *  value out of SimStats.personality themselves and pass it into handleWaste/hasNonFullCan. */
   cleanlinessVarId(): string { return this.getData().tuning.garbage?.cleanlinessVar ?? DEFAULT_GARBAGE_TUNING.cleanlinessVar; }
 
-  private cans(): CanCandidate[] {
+  /** Live generic containers. `garbage.capacity` is accepted through containerCapacity for old
+   * data; new assets participate through `container.capacity` regardless of category. */
+  containers(): CanCandidate[] {
     const data = this.getData();
     const out: CanCandidate[] = [];
     for (const obj of this.getWorld().children) {
@@ -438,11 +424,15 @@ export class GarbageController {
       const assetId = obj.userData?.assetId as string | undefined;
       if (!assetId) continue;
       const def = data.assets.assets.find((a) => a.id === assetId);
-      if (!def?.garbage) continue;
-      out.push({ key: obj.uuid, pos: [obj.position.x, obj.position.z], capacity: def.garbage.capacity, y: obj.position.y });
+      const capacity = containerCapacity(def);
+      if (capacity === null) continue;
+      out.push({ key: obj.uuid, assetId, pos: [obj.position.x, obj.position.z], capacity, y: obj.position.y });
     }
     return out;
   }
+
+  /** Compatibility name for the pre-generalization internal call sites. */
+  private cans(): CanCandidate[] { return this.containers(); }
 
   /** Player-facing pre-check for the `clean_up` action (item 3: "if ALL cans full/none, action
    *  refuses with a HUD toast") — call BEFORE ordering the walk so the sim never sets off toward a
@@ -459,6 +449,18 @@ export class GarbageController {
     const cans = this.cans();
     const nearest = findNearestNonFullCan(simPos, cans, (k) => this.registry.fillOf(k));
     return nearest ? nearest.pos : null;
+  }
+
+  /** Authored deposit routing: filters by exact container asset type and whole-item space. */
+  nearestContainerWithSpacePos(
+    simPos: [number, number],
+    containerAssetId: string,
+    requiredSpace: number,
+  ): [number, number] | null {
+    const nearest = findNearestContainerWithSpace(
+      simPos, this.containers(), (key) => this.registry.fillOf(key), requiredSpace, containerAssetId,
+    );
+    return nearest?.pos ?? null;
   }
 
   /** ITEM 3 (put-trash-out routing, 2026-07-17): world position of the FULLEST can (tie-break
@@ -478,11 +480,25 @@ export class GarbageController {
    *  doesn't exist). `accidents` supplies spawnTransient for the drop case. Returns the plan taken
    *  (purely for logging/testing convenience). */
   handleWaste(wasteAssetId: string, simPos: [number, number], cleanliness: number | undefined, accidents: AccidentsController): WastePlan {
-    const cans = this.cans();
+    const data = this.getData();
+    const wasteDef = data.assets.assets.find((asset) => asset.id === wasteAssetId);
+    const depositAction = wasteDef?.interactions
+      .map((id) => data.interactions.actions.find((action) => action.id === id))
+      .find((action) => action?.containerTransfer?.mode === 'deposit');
+    const containerAssetId = depositAction?.containerTransfer?.mode === 'deposit'
+      ? depositAction.containerTransfer.containerAssetId
+      : undefined;
+    const requiredSpace = transientContainerSpace(wasteDef) ?? 1;
+    // Modern waste follows its own authored deposit action, so adding another container type
+    // cannot silently redirect dirty dishes/ash into it. Old content without that authoring keeps
+    // the former one-unit/any-legacy-container behaviour.
+    const cans = this.containers().filter((candidate) =>
+      (!containerAssetId || candidate.assetId === containerAssetId)
+      && candidate.capacity - this.registry.fillOf(candidate.key) >= requiredSpace);
     const plan = decideWasteHandling(simPos, cans, (k) => this.registry.fillOf(k), cleanliness, this.tuning());
     if (plan.kind === 'auto') {
       const capacity = cans.find((c) => c.key === plan.canKey)?.capacity ?? Infinity;
-      this.registry.deposit(plan.canKey, capacity);
+      this.registry.deposit(plan.canKey, capacity, requiredSpace);
       this.syncFillBars(); // fill-bar request: a deposit can flip a can's bar from hidden to visible (or grow it)
     } else {
       accidents.spawnTransient(wasteAssetId, simPos);
@@ -503,6 +519,26 @@ export class GarbageController {
     const canKey = depositOneAtNearestCan(this.registry, simPos, cans);
     if (canKey) this.syncFillBars(); // fill-bar request: reflect the carry-to-garbage/discard deposit immediately
     return canKey !== null;
+  }
+
+  /** Completion-time recheck and variable-space deposit for an authored transfer. */
+  depositAtNearestContainer(
+    simPos: [number, number],
+    containerAssetId: string,
+    requiredSpace: number,
+  ): string | null {
+    const key = depositAtNearestContainer(
+      this.registry, simPos, this.containers(), requiredSpace, containerAssetId,
+    );
+    if (key) this.syncFillBars();
+    return key;
+  }
+
+  /** Clears exactly one container; unrelated container loads are preserved. */
+  emptyContainer(key: string): boolean {
+    const changed = this.registry.empty(key);
+    if (changed) this.syncFillBars();
+    return changed;
   }
 
   /** ROADMAP_NEXT item 4: the exterior door's `empty_garbage` interaction — resets every can. */

@@ -37,6 +37,8 @@ export interface AutonomyOptions {
    *  opening step first, then the next scan finds sleep directly available. Absent = order the
    *  scored action unchanged. */
   resolveOrderAction?: (action: ActionDef, object: THREE.Object3D, asset: AssetDef) => ActionDef;
+  /** Optional shared authored-routing entry point (required-asset visits, product chains). */
+  orderAction?: (action: ActionDef, object: THREE.Object3D, asset: AssetDef) => boolean;
 }
 
 export interface AutonomyExtraCandidate {
@@ -180,8 +182,11 @@ export class Autonomy {
         const c = best.candidate.value!;
         const ordered = c.order ? c.action : (this.options.resolveOrderAction?.(c.action, c.obj, c.def) ?? c.action);
         const legSeatAware = firstLegSeatAware(ordered);
-        const seat = legSeatAware ? findSeatFor(this.getWorld(), data, c.obj) : null;
-        if ((c.order ? c.order() : this.agent.orderAction(ordered, c.obj, seat, c.def, legSeatAware))) {
+        const seat = legSeatAware ? findSeatFor(this.getWorld(), data, c.obj, ordered.seatSearch) : null;
+        const started = c.order ? c.order()
+          : this.options.orderAction?.(ordered, c.obj, c.def)
+            ?? this.agent.orderAction(ordered, c.obj, seat, c.def, legSeatAware);
+        if (started) {
           return { action: ordered, target: c.obj };
         }
         remaining.splice(remaining.indexOf(best.candidate), 1);
@@ -197,8 +202,11 @@ export class Autonomy {
       // carry/eat second leg — the first leg must reach the source (see game/food.ts firstLegSeatAware).
       const ordered = c.order ? c.action : (this.options.resolveOrderAction?.(c.action, c.obj, c.def) ?? c.action);
       const legSeatAware = firstLegSeatAware(ordered);
-      const seat = legSeatAware ? findSeatFor(this.getWorld(), data, c.obj) : null;
-      if ((c.order ? c.order() : this.agent.orderAction(ordered, c.obj, seat, c.def, legSeatAware))) {
+      const seat = legSeatAware ? findSeatFor(this.getWorld(), data, c.obj, ordered.seatSearch) : null;
+      const started = c.order ? c.order()
+        : this.options.orderAction?.(ordered, c.obj, c.def)
+          ?? this.agent.orderAction(ordered, c.obj, seat, c.def, legSeatAware);
+      if (started) {
         return { action: ordered, target: c.obj };
       }
     }

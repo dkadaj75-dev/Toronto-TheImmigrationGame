@@ -495,6 +495,9 @@ export class AccidentsController {
     if (!resolved) return false;
     rec.pos = [...resolved];
     group.position.set(resolved[0], 0, resolved[1]);
+    // A carried transient arrives here after world.attach() preserved the animated bone's full
+    // world transform. Floor placement is upright: keep only the instance's authored yaw.
+    group.rotation.set(0, THREE.MathUtils.degToRad(rec.rotDeg), 0);
     group.visible = visible;
     return true;
   }
@@ -508,7 +511,9 @@ export class AccidentsController {
     rec.pos = [pos[0], pos[2]];
     rec.rotDeg = rotDeg;
     group.position.set(pos[0], pos[1], pos[2]);
-    group.rotation.y = THREE.MathUtils.degToRad(rotDeg);
+    // Discard pitch/roll inherited from the hand bone. Elevated sockets author yaw only, and a
+    // plate/cup placed on a horizontal plane must be upright regardless of its carry pose.
+    group.rotation.set(0, THREE.MathUtils.degToRad(rotDeg), 0);
     group.visible = visible;
     return true;
   }

@@ -553,3 +553,175 @@ Design reading:
 3. Cancellation remains side-effect free: no capacity change and no item removal.
 
 **DONE (2026-07-21):** shipped as PROJECT_CONTEXT §7.62. A completed throw-away action now adds exactly one unit to the nearest non-full garbage can before removing the item. Full/no-can states refuse safely at menu, arrival, and completion; cancellations and failed completion rechecks preserve both the item and fill counts.
+
+## Generalized action prerequisites and spawned-action chains (2026-07-22)
+
+Designer intent (verbatim):
+
+> I have now a new job for you: I want to overhaul one part of the action system: Currently, we have actions that spawn transients, like a meal for example. What happens is that when we cook a meal (e.g. Large Meal $25), the character does the action then finds a place to eat and eats it, but this is technically the same action. What I want instead, is that when we Cook a large meal, there is the cooking process (additionally, this requires a fridge nearby, we should add this in the action conditions and generalize it, e.g. : Asset required [SELECT] - Radius Xm - Character goes to this place before performing the action on this asset? [Y/N] - Character goes to this place after performing the action on this asset? [Y/N]), then after the cooking process at the stove, the character pays the price (if any) and this spawns the other asset (Large meal), then the character goes to eat this meal with the specific conditions, automatically, e.g. : finds a table + chair and/or a place to sit and if none available eats standing up), but it will be technically 2 actions: one that the player makes: go cook, one that is performed automatically (and can be stopped, in this case the character puts the meal at the nearest elevated plane socket available or the ground if none). So the order: Players order the character to cook > character goes to the fridge (if none, we should see a notification to say that we do not have a fridge) > then the character goes to the stove and performs the action > if the action is successful: pay the price if any and spawns the new asset + associated action with it (e.g. eat) > performs the actions. This should be generalized like an asset is used then spawns another asset, and in the first asset we should be able to choose the automatic action to perform (if any).
+
+Design reading:
+
+1. `ActionDef.requiredAsset` authors an asset id, search radius, and independent visit-before/visit-after flags. Availability/order resolution finds the nearest live instance inside that radius; absence refuses with a notification naming the required asset. A before visit routes required asset → original target; an after visit routes original target → required asset.
+2. `ActionDef.spawnsAsset` authors the completion-created asset id and optional automatic action id. The source action ends and pays its own cost first; only a genuine completion creates the new transient and starts a separate action targeted at that exact spawned instance.
+3. The follow-up action uses its own authored duration, gains, conditions, animation, seating, cost, waste, and interruption behavior. If it is interrupted while carrying/eating food, the spawned item is placed on the nearest available elevated socket within the authored surface radius, otherwise on a legal floor cell.
+4. Cooking is migrated from action-id inference to authored data: cook actions require a fridge visit before the stove, spawn their chosen meal asset on completion, and automatically run the meal's authored Eat action. Legacy action-family inference remains only as a compatibility fallback for old data until authored links replace it.
+5. Interaction Editor exposes both cards with live asset/action dropdowns, sparse fields, understandable sequencing labels, and preserved unknown ids.
+
+**DONE (2026-07-22):** shipped as PROJECT_CONTEXT §7.63. Required assets now gate and optionally route before/after any action; successful completion can create a chosen transient and start a separate authored follow-up. Cooking is migrated to fridge → stove → paid meal spawn → interruptible Eat, with modern/stinky fridge equivalence and editor/test coverage.
+
+## Carry bone names with numbered Mixamo prefixes (2026-07-22)
+
+Designer intent (verbatim):
+
+> When a large meal (same with other assets) spawns, it does not spawn in the hand while I put a handle supposed to go to the hand bone
+
+Design reading:
+
+1. The carry handle is correct; the runtime must resolve the character's real `mixamorig2:RightHand` bone rather than falling back to the character root.
+2. Bone matching must tolerate unnumbered, colon-separated, and numbered Mixamo prefixes for spawned food and generic carried assets through one shared normalization rule.
+
+**DONE (2026-07-22):** shipped as PROJECT_CONTEXT §7.64. The shared carry resolver now recognizes Natalia's numbered `mixamorig2:` bone prefix, so spawned meals and all other hand-carried assets anchor their authored handle to the actual hand instead of the character root.
+
+## Per-asset carry-bone selection (2026-07-22)
+
+Designer intent (verbatim):
+
+> let me choose which bone it can be attached with a dropdown as well
+
+Design reading:
+
+1. `AssetDef.carryBone` is authored beside `carryHandle` in the Asset Editor and controls automatically carried/spawned assets.
+2. The dropdown is populated from the configured character rig's actual bone names, with useful fallback names for tool/test load failures and preservation of unknown authored values.
+3. Absent `carryBone` remains backward-compatible and attaches to the right hand.
+
+**DONE (2026-07-22):** shipped as PROJECT_CONTEXT §7.65. The Asset Editor Carry handle card now offers a rig-populated bone dropdown; spawned/automatic carried assets use the saved `AssetDef.carryBone`, with the right hand retained as the sparse default.
+
+## Bone-attached asset visibility regression (2026-07-22)
+
+Designer intent (verbatim):
+
+> Now I do not see the assets anymore, I do not even see the large meal or snack when she puts it on the table
+
+Design reading:
+
+1. A carried asset must retain its authored world size while parented to a bone inside the character rig, even when the whole imported rig is normalized with a small root scale.
+2. Detaching that asset from the bone onto an elevated socket or the floor must preserve that same visible size.
+3. The carry-anchor calculation must compensate both the rig's inherited scale and the authored handle so the handle still lands at the chosen bone/offset.
+
+**DONE (2026-07-22):** shipped as PROJECT_CONTEXT §7.66. Bone attachment now cancels the character rig's inherited normalization scale while preserving the authored handle/offset; the item remains full-size when later detached onto a table or the floor.
+
+## Elevated-placement orientation and purchase reload regression (2026-07-22)
+
+Designer intent (verbatim):
+
+> Except that now the asset is rotated when placed on the elevated plane, see screenshot. Also, earlier, I have noted that the assets I buy and put on an elevated plane end up below the plane if I reload the map, see other screenshot, with the arrow.
+
+Design reading:
+
+1. Detaching a carried transient onto an elevated socket (or the floor fallback) must discard the animated bone's pitch/roll and apply only the socket's authored yaw, leaving the asset upright.
+2. Every rendering/rebuild path for a purchased surface object—initial purchase, save restore, world/map rebuild, and later overlay refresh—must reapply its saved socket height rather than flattening it to the host's floor coordinates.
+3. Regression coverage must exercise both the carried-to-surface orientation reset and a surface purchase across restore/rebuild.
+
+**DONE (2026-07-22):** shipped as PROJECT_CONTEXT §7.67. Placed transients now discard hand-bone pitch/roll and keep only socket yaw; purchased surface objects reapply the current socket height after restore, overlay refresh, and map/world rebuild.
+
+## Spawned non-food follow-up carry regression (2026-07-22)
+
+Designer intent (verbatim):
+
+> When I "Read a book", it spawns the book, but the book is on the ground. The character then goes to read somewhere random while a book was spawned next to the bookshelf.
+
+Design reading:
+
+1. When a completion product's automatic action carries that same asset, the exact spawned instance must attach to the authored bone before the character walks to the action destination.
+2. The automatic action must not create a second generic carry transient while leaving the completion product behind at its source.
+3. Completion removes the exact carried instance; interruption drops that one instance at the character's current legal floor position.
+
+**DONE (2026-07-22):** shipped as PROJECT_CONTEXT §7.68. The automatic Read action now carries the exact book spawned by Read a book instead of leaving it beside the shelf and manufacturing a second copy; manual resume, completion, and interruption use that same instance lifecycle.
+
+## Action-system architecture and editor clarity overhaul (2026-07-22)
+
+Designer intent (verbatim):
+
+> This is becoming messy and spaguetti like. I want you to rearrange both the core code to ensure it makes sense, no overlap of functions, functions are connected properly between assets, actions etc and in terms of UI to be clear and simple. Basically review the code and fix bugs, optmize for more robustness.
+>
+> I am thinking out loud... what if every asset has some kind of "event graph" where we connect any interaction to the asset with is own rules, multipliers etc. And this can lead to events, events can call other interactions, assets, notifications etc. I understand that this would be a large redesign so I will "trust your judgement" on whatever is easier, less risky and will allow me to make whatever I want.
+
+Design reading:
+
+1. Audit the recently expanded action → prerequisite → completion product → automatic follow-up → carried instance → surface/floor lifecycle and remove duplicated or competing ownership paths.
+2. Move reusable decisions/state transitions out of `main.ts` into cohesive headless-tested modules, leaving runtime orchestration thin and explicit.
+3. Validate and clearly surface relationships between asset interactions, spawned products, follow-up actions, carried assets, food semantics, bones/handles, and surface placement.
+4. Reorganize Asset and Interaction editors around progressive disclosure and plain-language sequencing, hiding irrelevant controls while preserving all authored/unknown data.
+5. Fix concrete bugs found by the audit and verify backward compatibility across the affected suites, strict TypeScript, production build, and live tools/game.
+6. Do not introduce a second free-form execution engine. Keep Assets as link owners, Actions as reusable behavior nodes, and Events as reusable side-effect nodes; expose their graph clearly and establish one validated extension seam for future per-asset action overrides.
+
+**DONE (2026-07-22):** consolidated the generic carried-prop lifecycle in `game/actionprops.ts`, removed the dead legacy carry-action implementation, added one shared cross-file action-graph validator/flow description used by runtime and both editors, fixed the inert `learn_cooking` source-first route, made food consume/discard semantics mutually exclusive, added responsive Action-flow and Asset-connections views, and collapsed the global category manager. See PROJECT_CONTEXT §7.69.
+
+## Reading seat placement and book cleanup follow-up (2026-07-22)
+
+Designer intent (verbatim):
+
+> Why does she read, not seated properly on the chair?
+>
+> And sometimes in the middle of the room
+>
+> Also, books stay on the ground after being used, they should not, this is not like food.
+
+Design reading:
+
+1. Reading must prefer an available authored seat and must not use the target-facing viewing filter intended for TV-style actions when the carried book is the action target.
+2. The visible rig must remain aligned to the selected seat while the Reading clip plays.
+3. A completed Read action consumes/removes its temporary book prop. An interrupted Read may place the exact book down so the action remains resumable; books do not persist after successful completion like leftover food.
+4. Add regression coverage for seat selection, semantic animation-to-pose mapping, exact prop cleanup, and interruption semantics.
+
+**DONE (2026-07-22):** added per-action nearest/target-facing seat strategy, set Read to nearest-seat routing, added an explicit per-action physical pose so semantic `Reading` snaps to the resolved chair instead of remaining at its approach point, added a data-driven carried-prop interruption policy, and set bookshelf books to disappear on interruption as well as completion. The incorrect global seat-offset experiment was reverted; Sit/Watch authoring remains unchanged. Food's resumable drop behavior is unchanged. See PROJECT_CONTEXT §7.70.
+
+## Generalized containers and designer-authored transfer actions (2026-07-23)
+
+Designer intent (verbatim):
+
+> I suspect that the garbage can asset has its own, hardcoded, logic. I want to change that as I do not like hardcoded stuff: I want you to understand the logic of the garbage can filling up and then getting emptied. The character should go the the garbage can, take out the trash, to the exterior door. This is partially done with the new interactions / props system, however I want to make it work better (as right now it does not go all the way to the trash can and do not go anymore to the exterior door to put it out): generalize by adding an option for all transient assets, which would be off by default, to be able to, via an action (e.g. an action should have an option to perform this specific function), to put it to the trash, then the trash is not just "a trash" it is a container that receives transient assets that point to it through the action, meaning that any other asset can be a "container" with its loading bar depending on the level of filling and the possibility to empty it out somewhere. All of these actions should be editable by the designer to design whatever gameplay loop they want, similar to the system implemented earlier to use an asset that spawns another one and perform the action. The amount of stuff that can be put in a container is editable, the amount of space that an asset takes is also editable.
+
+Design reading:
+
+1. Replace garbage-only authoring with sparse `AssetDef.container` capacity on any non-transient asset and sparse `AssetDef.containerSpace` on transient assets. Both are absent/off by default; retain `garbage.capacity` as a read-compatible migration alias only.
+2. Add an action-authored container transfer block with two explicit modes: deposit the targeted transient into a selected container asset type, or empty the targeted container at a selected destination asset type. No action id, asset id, exterior-door flag, or transient kind determines this behavior.
+3. Deposit actions perform their normal source interaction, adopt/carry the exact target transient through the shared carried-prop lifecycle, walk all the way to a compatible non-full container, then consume the transient and add its authored space. Cancellation drops/retains the exact target without changing fill.
+4. Empty actions are ordered on a specific filled container, walk to that container, show the action's authored carried prop (for example a garbage bag), then walk all the way to the nearest authored destination (for example any exterior door asset selected by id) and clear only that container on genuine completion. Cancellation leaves its load unchanged.
+5. Capacity selection uses remaining space rather than item count. Fill bars, save/restore, hot reload, buy/sell rebuilds, and notifications become container-generic while legacy garbage data/saves remain compatible.
+6. Asset and Interaction editors expose the container capacity, transient space, transfer mode, compatible container, and emptying destination with live-data dropdowns, progressive disclosure, graph validation, and plain-language flow descriptions.
+7. Migrate the shipped dirty-dishes/ash cleanup and garbage-can/empty-garbage loop to authored container transfers, preserving autonomous waste behavior as a compatibility bridge until it receives its own fully authored action chain.
+
+**DONE (2026-07-23):** shipped as PROJECT_CONTEXT §7.71. Containers and transient space are sparse asset settings; Deposit/Empty are reusable action transfers; exact-target carry, destination arrival, cancellation, per-instance emptying, fill bars, legacy saves/data, autonomous waste, food disposal, editors, graph validation, and the garbage-can → exterior-door loop are wired and verified.
+
+## Eating waste chain and default Cut front wall view follow-up (2026-07-23)
+
+Designer intent (verbatim):
+
+> I think that when we eat, the fact that the food fills up the garbage can is hardcoded. Please review and make sure this can be done as the rest with this new logic (explain to me if it is already the case). Unrelated: for the walls, the default view we start with should be "Cut front"
+
+Design reading:
+
+1. Audit `consume_food` completion separately from manual Throw away. The shipped eating loop must not invoke the legacy `producesWaste` auto-tidy/capacity hook.
+2. Author eating through the existing generic completion-product graph: Eat creates the `dirty_dishes` transient and automatically starts its ordinary `clean_up` action; Clean up owns the authored `containerTransfer` to `garbage_can`, so capacity changes only after the real second leg reaches that container.
+3. Keep `producesWaste` runtime support as a read-compatible legacy field for old/custom data, but remove it from the shipped eating action and clearly label its editor surface as compatibility-only.
+4. Initialize the in-page `WallViewMode` as `cutaway` (the HUD label is “Cut front”), while preserving the existing cycle Cut front → Full → Cut all → Cut front from that new starting point.
+
+**DONE (2026-07-23):** shipped as PROJECT_CONTEXT §7.72. Eat now creates Dirty dishes and automatically runs its ordinary Clean up deposit action; the legacy direct-waste hook is no longer selected by shipped eating data. The game now boots in Cut front wall view.
+
+## Duplicate panel above door regression (2026-07-23)
+
+Designer intent (verbatim):
+
+> Bug at a door: there is another panel visible that is on top of the door: this is not in the asset settings
+
+Design reading:
+
+1. Reproduce the visible panel in the shipped condo and identify whether it belongs to procedural wall/aperture geometry or the split frame/pane door renderer.
+2. Correct the shared renderer rather than adding a per-door data workaround; the authored frame mesh and pane mesh must each appear exactly once and retain ordinary opening/cutaway behavior.
+3. Add focused regression coverage, run the affected door/wall suites and strict TypeScript, then verify the shipped scene live.
+
+**CORRECTION (2026-07-23):** the first wall-cut diagnosis was rejected after a closer designer screenshot showed two copies of the actual pane geometry. That unrelated wall change was fully reverted. This item remains open pending the runtime door-builder fix.
+
+**DONE (2026-07-23):** shipped as PROJECT_CONTEXT §7.73. The actual fault was async two-GLB pane adoption under an already-scaled Cut front root: position/yaw were neutralized but scale was not, so Three.js baked the inverse cut scale into the pane. Full-transform canonical adoption fixes the floating full-height pane; the rejected wall change remains reverted.

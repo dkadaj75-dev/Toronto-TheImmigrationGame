@@ -69,8 +69,8 @@ export function wasteAssetForDroppedFood(item: { wasteAssetId?: string }): strin
  *  completion). Such an action's FIRST leg MUST walk to the food source, so its order must NOT resolve
  *  a seat up front even if the action is `seatAware` — otherwise the sim beelines to a chair near the
  *  fridge and never visits it (the carried snack then spawns at the seat: no fridge trip at all). The
- *  seat is chosen only for the SECOND leg (main.ts startCarriedFood → its own nearestFoodSeat). The
- *  two-leg decision at both order sites is therefore `seatAware && !actionSpawnsCarriedFood(id)`. */
+ *  seat is chosen only for the separate spawned follow-up action (main.ts launchSpawnedFollowUp).
+ *  Authored `spawnsAsset` links supersede the legacy id-family inference below. */
 export function actionSpawnsCarriedFood(actionId: string): boolean {
   return foodAssetForActionEvent(actionId, 'arrival') !== null
     || foodAssetForActionEvent(actionId, 'completion') !== null;
@@ -81,12 +81,14 @@ export function actionSpawnsCarriedFood(actionId: string): boolean {
  *  seat to the carry/eat second leg; generic fetchBeforeSeat actions use the same source-first
  *  decision. Every other seat-aware action keeps sitting in front of its target as before. Used
  *  at both order sites (main.ts tap menu + autonomy). */
-export interface TwoLegSeatAction { id: string; seatAware?: boolean; fetchBeforeSeat?: boolean; }
+export interface TwoLegSeatAction { id: string; seatAware?: boolean; fetchBeforeSeat?: boolean; spawnsAsset?: unknown; }
 
 /** Whether a seat-aware action deliberately visits its source before resolving a seat. Food
  *  sources imply this from their lifecycle; other actions opt in sparsely through ActionDef. */
 export function defersSeatToSecondLeg(action: TwoLegSeatAction): boolean {
-  return action.fetchBeforeSeat === true || actionSpawnsCarriedFood(action.id);
+  return action.fetchBeforeSeat === true
+    || !!action.spawnsAsset
+    || actionSpawnsCarriedFood(action.id);
 }
 
 export function firstLegSeatAware(action: TwoLegSeatAction): boolean {
@@ -121,6 +123,18 @@ export class FoodRegistry {
   startCarrying(key: string, assetId: string, config: FoodConfig, pos: [number, number], wasteAssetId?: string): FoodItem {
     const item: FoodItem = { key, assetId, hungerGain: config.hungerGain, perishHours: config.perishHours, rottenAssetId: config.rottenAssetId, phase: 'carried', pos: [...pos], wasteAssetId };
     this.items.set(key, item);
+    this.activeKey = key;
+    return item;
+  }
+
+  /** Pick an already-dropped food item back up for an automatic follow-up action after a routed
+   * prerequisite leg. Freshly spawned carried food is already active and succeeds idempotently. */
+  beginCarrying(key: string): FoodItem | null {
+    const item = this.items.get(key);
+    if (!item || (item.phase !== 'dropped' && item.phase !== 'carried')) return null;
+    if (this.activeKey !== null && this.activeKey !== key) return null;
+    item.phase = 'carried';
+    delete item.droppedAtHour;
     this.activeKey = key;
     return item;
   }

@@ -32,6 +32,11 @@
   #editor .empty { color: #5f6f93; padding: 40px; text-align: center; }
   .card { background: #1a2133; border: 1px solid #26304a; border-radius: 12px; padding: 14px; margin-bottom: 14px; max-width: 660px; grid-column: 1; }
   .card h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: #93a3c0; }
+  .card.collapsible > h2 { cursor: pointer; display: flex; justify-content: space-between; align-items: center; user-select: none; }
+  .card.collapsible > h2::after { content: 'Hide'; font-size: 10px; letter-spacing: 0; text-transform: none; color: #6f7fa3; }
+  .card.collapsible.collapsed > h2 { margin-bottom: 0; }
+  .card.collapsible.collapsed > h2::after { content: 'Manage'; }
+  .card.collapsible.collapsed > :not(h2) { display: none; }
   .frow { display: grid; grid-template-columns: 160px 1fr; gap: 10px; align-items: center; padding: 5px 0; }
   .frow label { font-size: 13px; }
   .frow input[type=number], .frow input[type=text], .frow select { width: 100%; background: #10182a; border: 1px solid #2c3a58;
@@ -47,6 +52,10 @@
   #preview-msg { font-size: 12px; color: #5f6f93; margin-top: 6px; }
   .row-actions { display: flex; gap: 8px; margin-top: 8px; }
   .hint { font-size: 11px; color: #5f6f93; margin-top: 6px; line-height: 1.5; }
+  .connection-row { background: #10182a; border: 1px solid #2c3a58; border-radius: 9px; padding: 9px 10px; margin-top: 8px; }
+  .connection-row strong { display: block; font-size: 13px; margin-bottom: 5px; }
+  .connection-flow { color: #8fa3c8; font-size: 11px; line-height: 1.5; }
+  .connection-problem { color: #e5a06f; font-size: 11px; margin-top: 4px; }
   @media (max-width: 1050px) {
     #editor { display: block; }
     #preview-wrap { position: relative; top: auto; }
@@ -76,12 +85,19 @@ const FEATURE_CATEGORY_CARDS = Object.freeze({
   electronics: ['Light', 'Sound', 'Power (Hydro)', 'State visuals'],
   comfort: ['Sit / lie / use pose', 'Seat locations (multiple)', 'Need multipliers'],
   plumbing: ['Accidents', 'Cleanup'],
-  garbage: ['Garbage'],
+  garbage: ['Container'],
   kitchen: ['Food', 'Combustibility'],
 });
 const state = {
   assets: null, interactions: null, map: null, stats: null, tuning: null, events: null,
-  selected: null, dirty: false,
+  selected: null, dirty: false, actionChainEngine: null,
+  characterBoneNames: [
+    'mixamorigHead', 'mixamorigNeck', 'mixamorigSpine', 'mixamorigSpine1', 'mixamorigSpine2',
+    'mixamorigRightShoulder', 'mixamorigRightArm', 'mixamorigRightForeArm', 'mixamorigRightHand',
+    'mixamorigLeftShoulder', 'mixamorigLeftArm', 'mixamorigLeftForeArm', 'mixamorigLeftHand',
+    'mixamorigRightUpLeg', 'mixamorigRightLeg', 'mixamorigRightFoot', 'mixamorigRightToeBase',
+    'mixamorigLeftUpLeg', 'mixamorigLeftLeg', 'mixamorigLeftFoot', 'mixamorigLeftToeBase',
+  ],
   // Preview-only state: never written to assets.json. Character starts hidden on every load.
   showCharacter: false, previewPose: null, previewOn: false, previewSeatLocation: null,
   helperVisibility: { footprint: true, sit: true, lie: true, facing: true, surfaces: true, handle: true },
@@ -137,7 +153,18 @@ function setCarryHandleFromPreview(position, final = false) {
   if (final) { state.dirty = true; updateSave(); setStatus('unsaved changes'); }
 }
 
-window.AssetEditor = { state, previewGridSize, previewGridSpec, availablePreviewPoses, previewPoseSource, resolvePoseAnimation, setCarryHandleFromPreview };
+function setCharacterBoneNames(names) {
+  const cleaned = [...new Set((names ?? []).map((name) => String(name).trim()).filter(Boolean))];
+  if (cleaned.length) state.characterBoneNames = cleaned;
+  if (state.assets) renderAll();
+}
+
+function setActionChainEngine(engine) {
+  state.actionChainEngine = engine;
+  if (state.assets && state.interactions) renderAll();
+}
+
+window.AssetEditor = { state, previewGridSize, previewGridSpec, availablePreviewPoses, previewPoseSource, resolvePoseAnimation, setCarryHandleFromPreview, setCharacterBoneNames, setActionChainEngine };
 
 async function load() {
   setStatus('loading…');
@@ -325,8 +352,10 @@ function nextCategoryId() {
 
 function renderCategoriesCard() {
   const card = document.createElement('div');
-  card.className = 'card';
-  card.innerHTML = '<h2>Categories</h2>';
+  card.className = 'card collapsible collapsed';
+  card.dataset.card = 'categories';
+  card.innerHTML = `<h2>Categories (${state.assets.categories.length})</h2>`;
+  card.querySelector('h2').addEventListener('click', () => card.classList.toggle('collapsed'));
   state.assets.categories.forEach((category, index) => {
     const count = state.assets.assets.filter((asset) => asset.category === category).length;
     const controls = document.createElement('div');
@@ -764,6 +793,16 @@ function renderEditor() {
     'carryHandle.enabled',
   );
   handleCard.appendChild(frow('custom carry handle', handleEnabled));
+  const carryBone = document.createElement('select'); carryBone.dataset.path = 'carryBone';
+  const boneNames = [...new Set([a.carryBone, ...(state.characterBoneNames ?? [])].filter(Boolean))];
+  carryBone.innerHTML = '<option value="">(default — right hand)</option>' + boneNames
+    .map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
+  carryBone.value = a.carryBone ?? '';
+  carryBone.addEventListener('change', () => {
+    if (carryBone.value) a.carryBone = carryBone.value; else delete a.carryBone;
+    markDirty();
+  });
+  handleCard.appendChild(frow('character bone', carryBone));
   const handleCoords = document.createElement('div');
   handleCoords.style.display = 'grid'; handleCoords.style.gridTemplateColumns = 'repeat(3,1fr)'; handleCoords.style.gap = '6px';
   for (const [index, axis] of ['x', 'y', 'z'].entries()) {
@@ -981,13 +1020,50 @@ function renderEditor() {
     cb.addEventListener('change', () => {
       if (cb.checked) { if (!a.interactions.includes(act.id)) a.interactions.push(act.id); }
       else a.interactions = a.interactions.filter((x) => x !== act.id);
-      markDirty();
+      markDirty(); renderAll();
     });
     lab.append(cb, document.createTextNode(act.name));
     checks.appendChild(lab);
   }
   card3.appendChild(checks);
   root.appendChild(card3);
+
+  const connections = document.createElement('div');
+  connections.className = 'card'; connections.dataset.card = 'connections';
+  connections.innerHTML = '<h2>Connections</h2><div class="hint">A readable view of this asset\'s graph. Actions remain reusable behavior; products and automatic follow-ups are linked below.</div>';
+  const assetGraphIssues = (state.actionChainEngine?.actionGraphIssues?.(state.interactions.actions, state.assets.assets) ?? [])
+    .filter((issue) => issue.assetId === a.id);
+  for (const issue of assetGraphIssues.filter((issue) => !issue.actionId)) {
+    const problem = document.createElement('div'); problem.className = 'connection-problem';
+    problem.dataset.connectionIssue = issue.code; problem.textContent = `${issue.level === 'error' ? 'Error' : 'Warning'}: ${issue.message}`;
+    connections.appendChild(problem);
+  }
+  if (!a.interactions.length) {
+    connections.insertAdjacentHTML('beforeend', '<div class="hint">No interactions connected to this asset.</div>');
+  }
+  for (const actionId of a.interactions) {
+    const action = state.interactions.actions.find((entry) => entry.id === actionId);
+    const row = document.createElement('div'); row.className = 'connection-row';
+    if (!action) {
+      row.innerHTML = `<strong>${esc(actionId)}</strong><div class="connection-problem">Missing action definition.</div>`;
+    } else {
+      const steps = state.actionChainEngine?.describeActionFlow?.(action, state.interactions.actions, state.assets.assets) ?? [`Perform ${action.name}`];
+      const issues = state.actionChainEngine?.actionConnectionIssues?.(action, state.interactions.actions, state.assets.assets) ?? [];
+      for (const issue of assetGraphIssues.filter((entry) => entry.actionId === action.id)) {
+        if (!issues.some((entry) => entry.code === issue.code && entry.assetId === issue.assetId)) issues.push(issue);
+      }
+      const title = document.createElement('strong'); title.textContent = action.name;
+      const flow = document.createElement('div'); flow.className = 'connection-flow'; flow.textContent = steps.join(' \u2192 ');
+      row.append(title, flow);
+      for (const issue of issues) {
+        const problem = document.createElement('div'); problem.className = 'connection-problem';
+        problem.dataset.connectionIssue = issue.code; problem.textContent = `${issue.level === 'error' ? 'Error' : 'Warning'}: ${issue.message}`;
+        row.appendChild(problem);
+      }
+    }
+    connections.appendChild(row);
+  }
+  root.appendChild(connections);
   root.appendChild(renderStatesCard(a));
 
   // --- accidents (§7.3): transient-category assets get ONLY the clearedBy multi-select
@@ -1045,6 +1121,16 @@ function renderEditor() {
     rotten.addEventListener('change', () => { if (!rotten.value) { if (a.food) delete a.food.rottenAssetId; } else (a.food ??= {}).rottenAssetId = rotten.value; pruneFood(); markDirty(); });
     cardFood.appendChild(frow('rotten replacement asset', rotten));
     appendFeatureCard(root, cardFood, a, 'kitchen', ['food']);
+
+    const cardContainerSpace = document.createElement('div');
+    cardContainerSpace.className = 'card';
+    cardContainerSpace.innerHTML = '<h2>Container space</h2><div class="hint">How much room this transient takes when a deposit action puts it into a container. Leave blank when this asset cannot be deposited.</div>';
+    cardContainerSpace.appendChild(frow('space used', numInput(
+      () => a.containerSpace,
+      (v) => { if (v === undefined) delete a.containerSpace; else a.containerSpace = Math.max(0, v); },
+      'containerSpace',
+    )));
+    appendFeatureCard(root, cardContainerSpace, a, 'garbage', ['containerSpace']);
   } else {
     appendFeatureCard(root, renderAccidentsCard(a), a, 'plumbing', ['accidents']);
 
@@ -1066,17 +1152,22 @@ function renderEditor() {
     )));
     appendFeatureCard(root, cardCombust, a, 'kitchen', ['combustibility']);
 
-    // --- garbage (ROADMAP_NEXT item 10): sparse, same ensure/prune convention as Combustibility
-    // above — a real can (e.g. "garbage_can") sets a capacity; every other asset leaves it blank.
-    const cardGarbage = document.createElement('div');
-    cardGarbage.className = 'card';
-    cardGarbage.innerHTML = '<h2>Garbage</h2><div class="hint">Set a capacity to make this a garbage can (game/garbage.ts tracks a live fill count per placed instance, up to this many waste units, until the exterior door\'s "Empty garbage" interaction resets it). Leave blank for "not a garbage can".</div>';
-    cardGarbage.appendChild(frow('capacity (waste units)', numInput(
-      () => a.garbage?.capacity,
-      (v) => { if (v === undefined) delete a.garbage; else a.garbage = { capacity: v }; },
-      'garbage.capacity',
+    const cardContainer = document.createElement('div');
+    cardContainer.className = 'card';
+    cardContainer.innerHTML = '<h2>Container</h2><div class="hint">Set a capacity to let designer-authored deposit actions put transient assets inside this object. Its loading bar reflects used space. Leave blank for an ordinary asset.</div>';
+    cardContainer.appendChild(frow('capacity (space units)', numInput(
+      () => a.container?.capacity ?? a.garbage?.capacity,
+      (v) => {
+        if (v === undefined) delete a.container;
+        else a.container = { ...(a.container ?? {}), capacity: Math.max(0, v) };
+        if (a.garbage && Object.prototype.hasOwnProperty.call(a.garbage, 'capacity')) {
+          delete a.garbage.capacity;
+          if (!Object.keys(a.garbage).length) delete a.garbage;
+        }
+      },
+      'container.capacity',
     )));
-    appendFeatureCard(root, cardGarbage, a, 'garbage', ['garbage']);
+    appendFeatureCard(root, cardContainer, a, 'garbage', ['container', 'garbage']);
   }
 
   // --- sound: stateful B6-12 assets loop while ON; legacy assets retain action-target lifetime.
@@ -1560,6 +1651,7 @@ import { facingVector, seatLocationEntries, useFacingTargetFor, usePoseFor, useP
 import { classifyMeshPath, createSpriteInstance, createOverlayInstance } from '/game/sprites.ts';
 import { normalizeModelToFootprint, applyMeshFit, loadMeshTemplate, loadRiggedCharacter, makeSimStandIn, applyOverlayTransform } from '/game/world.ts';
 import { resolvePaneConfig } from '/game/doors.ts';
+import { actionConnectionIssues, actionGraphIssues, describeActionFlow } from '/game/actionchain.ts';
 import { resolveScreenOverlay, overlayVisibleWhenOn, meshForState } from '/game/stateviz.ts';
 
 let renderer = null, scene, camera, controls, transformControls = null, current = null, raf = 0;
@@ -1696,6 +1788,9 @@ function ensureCharacter(character) {
     characterStatus = 'loading character…'; previewMessage();
     characterPromise = loadRiggedCharacter(character).then(({ model, clips }) => {
       characterFallback = false;
+      const boneNames = [];
+      model.traverse((object) => { if (object.isBone && object.name) boneNames.push(object.name); });
+      window.AssetEditor.setCharacterBoneNames(boneNames);
       characterRoot = new THREE.Group();
       characterRoot.name = 'asset-editor-character-preview';
       characterRoot.add(model);
@@ -1837,10 +1932,13 @@ function ensure(canvas) {
 
 // AUDIT overlap 35: expose the game's own classifier to the inline script (see isImageMesh).
 window.AssetEditorEngine = { classifyMeshPath };
+window.AssetEditor?.setActionChainEngine({ actionConnectionIssues, actionGraphIssues, describeActionFlow });
 window.AssetPreview = {
   show(meshPath, assetDef, previewOn = false) {
     const canvas = document.getElementById('preview');
     if (!canvas || !ensure(canvas)) return;
+    const character = window.AssetEditor.state.tuning?.character;
+    if (character?.meshPath) ensureCharacter(character); // also feeds the carry-bone dropdown
     previewSeq++; // invalidate any in-flight async load from a previous show()
     const seq = previewSeq;
     if (current) { scene.remove(current); current = null; }

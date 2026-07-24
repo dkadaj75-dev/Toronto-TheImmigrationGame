@@ -1028,13 +1028,28 @@ export class BuyModeController {
 
   private buildAdditionGroup(addition: OverlayAddition, def: AssetDef) {
     const group = makeStandIn(def);
-    applyAssetPlacement(group, def, addition.pos, addition.rotDeg);
-    if (addition.surface) group.position.y += addition.surface.y;
+    this.applyAdditionPlacement(group, addition, def);
     group.userData = { assetId: def.id, interactions: def.interactions, buyKey: addition.key, assetStateKey: `player:${addition.key}` };
     attachAssetLight(group, def);
     attachMesh(group, def);
     this.additionGroups.set(addition.key, group);
     this.getWorld().add(group);
+  }
+
+  /** One placement path for player additions. applyAssetPlacement intentionally grounds an asset;
+   * a stacked purchase must then regain its socket height on initial build, restore, overlay
+   * refresh, and hot-reload reattach alike. Prefer the current authored socket height so editing a
+   * host does not strand purchases at an obsolete height; the saved snapshot remains the fallback. */
+  private applyAdditionPlacement(group: THREE.Object3D, addition: OverlayAddition, def: AssetDef) {
+    applyAssetPlacement(group, def, addition.pos, addition.rotDeg);
+    if (!addition.surface) return;
+    const host = this.instances().find((instance) => instance.key === addition.surface!.hostKey);
+    const hostDef = host ? this.byId().get(host.asset) : undefined;
+    const authoredY = hostDef?.surfaceSockets?.[addition.surface.index]?.y;
+    const savedY = addition.surface.y;
+    const y = Number.isFinite(authoredY) ? authoredY! : Number.isFinite(savedY) ? savedY : 0;
+    addition.surface.y = y;
+    group.position.y += y;
   }
 
   private removeAdditionGroup(key: string) {
@@ -1082,7 +1097,7 @@ export class BuyModeController {
       const a = this.overlay.allAdditions.find((x) => x.key === key);
       if (!a) continue;
       const def = byId.get(a.asset);
-      if (def) applyAssetPlacement(group, def, a.pos, a.rotDeg);
+      if (def) this.applyAdditionPlacement(group, a, def);
     }
   }
 
@@ -1107,7 +1122,12 @@ export class BuyModeController {
       }
     }
     this.removeFromWorld(world, removed);
-    for (const group of this.additionGroups.values()) world.add(group);
+    for (const [key, group] of this.additionGroups) {
+      const addition = this.overlay.allAdditions.find((entry) => entry.key === key);
+      const def = addition ? byId.get(addition.asset) : undefined;
+      if (addition && def) this.applyAdditionPlacement(group, addition, def);
+      world.add(group);
+    }
     if (this.gridOverlay && this.active) world.add(this.gridOverlay);
     // prepareForWorldRebuild deliberately cancels pending ghosts before this reattach path.
   }

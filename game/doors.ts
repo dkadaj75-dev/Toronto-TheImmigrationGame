@@ -391,6 +391,35 @@ function tagClonedMeshes(obj: THREE.Object3D): void {
   });
 }
 
+/**
+ * Reparent a loaded pane while the door root is in canonical (identity-transform) space.
+ * Cut front may already have scaled the runtime root before the async GLBs finish loading. If
+ * that scale remains active during Object3D.attach(), Three.js bakes its inverse into the pane,
+ * so the frame stays cut while a full-height pane appears to float elsewhere.
+ */
+export function attachDoorPaneInCanonicalSpace(
+  root: THREE.Object3D,
+  paneGroup: THREE.Object3D,
+  paneObj: THREE.Object3D,
+  hinge: readonly [number, number],
+): void {
+  const savedPos = root.position.clone();
+  const savedQuaternion = root.quaternion.clone();
+  const savedScale = root.scale.clone();
+  root.position.set(0, 0, 0);
+  root.quaternion.identity();
+  root.scale.set(1, 1, 1);
+  root.updateMatrixWorld(true);
+  paneGroup.position.set(hinge[0], 0, hinge[1]);
+  paneGroup.rotation.set(0, 0, 0);
+  paneGroup.updateMatrixWorld(true);
+  paneGroup.attach(paneObj);
+  root.position.copy(savedPos);
+  root.quaternion.copy(savedQuaternion);
+  root.scale.copy(savedScale);
+  root.updateMatrixWorld(true);
+}
+
 export function createDoorInstance(door: DoorEntry, def: AssetDef, tuning: TuningData, trackInitialLoad?: TrackInitialLoad): DoorInstance | null {
   const config = resolveDoorConfig(def, tuning);
   if (!config) return null;
@@ -508,20 +537,9 @@ export function createDoorInstance(door: DoorEntry, def: AssetDef, tuning: Tunin
     const bounds: PaneBounds = { minX: b.min.x, maxX: b.max.x, minZ: b.min.z, maxZ: b.max.z };
     const [hx, hz] = paneHingeLocal(bounds, config.hingeOffset);
 
-    const savedPos = root.position.clone();
-    const savedRotY = root.rotation.y;
-    root.position.set(0, 0, 0);
-    root.rotation.y = 0;
-    root.updateMatrixWorld(true);
-    paneGroup.position.set(hx, 0, hz);
-    paneGroup.rotation.y = 0;
-    paneGroup.updateMatrixWorld(true);
-    paneGroup.attach(paneObj); // removes paneObj from model, keeps its canonical world → local offset from hinge
+    attachDoorPaneInCanonicalSpace(root, paneGroup, paneObj, [hx, hz]);
     frameGroup.add(model);
     dropStandIn();
-    root.position.copy(savedPos);
-    root.rotation.y = savedRotY;
-    root.updateMatrixWorld(true);
   };
 
   // Whole-asset fallback (paneNode not found): swing the entire loaded model from the AUTHORED

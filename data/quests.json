@@ -21,7 +21,12 @@
           }
         ]
       },
-      "rewards": [],
+      "rewards": [
+        {
+          "type": "event",
+          "event": "event_2"
+        }
+      ],
       "onceOnly": true
     },
     {

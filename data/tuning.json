@@ -160,7 +160,7 @@
     "_source": "ROADMAP_APT D3. Spacing in meters between the vertical mullion posts drawn across a curtain-wall (walls[].kind === 'curtainWall') glazed facade. See game/wallaperture.ts resolveMullionSpacing (falls back to 1.2m when absent/non-positive)."
   },
   "character": {
-    "meshPath": "/models/character.glb",
+    "meshPath": "/models/Natalia.glb",
     "heightMeters": 1.55,
     "yawOffsetDeg": 0,
     "crossFadeSeconds": 0.25,
@@ -187,7 +187,9 @@
       "select": "Yelling",
       "angry": "Angry",
       "slap": "Fight",
-      "kiss": "Kiss"
+      "kiss": "Kiss",
+      "Reading": "Sitting",
+      "Sit_eat": "SittingEating"
     },
     "animationPaths": [],
     "marker": {

@@ -116,4 +116,10 @@ check('discard removes the item so tick can never silently self-despawn it',
   foodW.discard('snack#w') === true && foodW.all.length === 0 && foodW.tick(999).length === 0);
 check('discarding an unknown key is a no-op', foodW.discard('nope') === false);
 
+const pickedUp = new FoodRegistry();
+pickedUp.startCarrying('meal#pickup', 'meal', { hungerGain: 20, perishHours: 4 }, [0, 0]);
+pickedUp.interruptActive([1, 2], 8);
+check('a dropped spawned food can be picked up for a later automatic action',
+  pickedUp.beginCarrying('meal#pickup')?.phase === 'carried' && pickedUp.active?.key === 'meal#pickup');
+
 console.log(`food.test: ${passed} passed`);

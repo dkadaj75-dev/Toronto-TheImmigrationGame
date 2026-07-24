@@ -151,6 +151,25 @@ check('debt still permits zero-cost autonomous actions', runAutonomy(true, undef
 check('autonomy skips an unaffordable costly action and chooses a free alternative', runAutonomy(true, undefined, false, -10, { sleep: 20 }) === 'nap');
 check('autonomy chooses nothing when every candidate costs more than available funds', runAutonomy(true, undefined, false, -10, { nap: 20, sleep: 20 }) === undefined);
 
+{
+  const data = autonomyData(false);
+  const world = new THREE.Group();
+  const sofaObj = new THREE.Group(); sofaObj.userData.assetId = 'sofa'; sofaObj.position.set(1, 0, 0); world.add(sofaObj);
+  let routed = '';
+  let directOrders = 0;
+  const fakeAgent = {
+    isBusy: false,
+    object: new THREE.Group(),
+    orderAction() { directOrders++; return true; },
+  };
+  const autonomy = new Autonomy(
+    () => data, () => world, fakeAgent as never, new SimStats(data.stats), undefined, () => evalCtx,
+    { orderAction: (action) => { routed = action.id; return true; } },
+  );
+  autonomy.maybeAct();
+  check('authored routing hook owns ordinary autonomy orders', routed === 'nap' && directOrders === 0);
+}
+
 console.log('behavior.test — extra social candidates share the utility scorer');
 {
   const data = autonomyData(true);

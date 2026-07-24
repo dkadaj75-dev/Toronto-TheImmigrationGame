@@ -90,6 +90,11 @@ console.log('seatground.test — findSeatFor radius cutoff');
   const { world: world4, tv: tv4 } = makeWorld([10, 7]); // 3m away
   const seat4 = findSeatFor(world4, tightTuning, tv4);
   check('seatSearchRadius is tuning-driven (3m rejected at radius 2)', seat4 === null);
+
+  const { world: nearestWorld, tv: nearestTarget } = makeWorld([10, 12]); // behind the TV
+  check('target-facing strategy rejects a seat behind the target', findSeatFor(nearestWorld, gameData(), nearestTarget) === null);
+  check('nearest strategy accepts the same nearby seat for self-contained reading',
+    findSeatFor(nearestWorld, gameData(), nearestTarget, 'nearest')?.userData.assetId === 'sofa');
 }
 
 console.log('seatground.test — sit ON a seat: the target is its own seat (B10 bug fix)');

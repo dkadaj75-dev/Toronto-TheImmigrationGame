@@ -2,6 +2,14 @@
 
 export type Vec3 = [number, number, number];
 export interface CarryAxisLocks { x?: boolean; y?: boolean; z?: boolean }
+export interface CarryBoneTransform { position: Vec3; scale: Vec3 }
+export const DEFAULT_CARRY_BONE = 'mixamorigRightHand';
+
+/** Canonical bone key across Mixamo exports (`mixamorigRightHand`, `mixamorig:RightHand`,
+ * `mixamorig2:RightHand`) and plain rig names (`RightHand`). */
+export function normalizeCarryBoneName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^mixamorig\d*/, '');
+}
 
 /** Rotate a vector with the same intrinsic XYZ Euler convention used by THREE.Euler.
  * Its matrix is Rx * Ry * Rz, so the vector is transformed Z, then Y, then X. */
@@ -31,6 +39,45 @@ export function carryAnchorPosition(
     (offset?.[1] ?? 0) - rotated[1],
     (offset?.[2] ?? 0) - rotated[2],
   ];
+}
+
+/**
+ * Local transform for a prop parented below a scaled character rig.
+ *
+ * Character GLBs are normalized by scaling their root. Without inverse compensation a prop added
+ * to a descendant bone inherits that small scale, then keeps the tiny world size when detached to
+ * a table. Offsets are authored in game metres, so they need the same compensation as prop size.
+ */
+export function carryBoneTransform(
+  handle: readonly number[] | undefined,
+  offset: readonly number[] | undefined,
+  rotationDeg: readonly number[] | undefined,
+  desiredScale = 1,
+  parentWorldScale: readonly number[] = [1, 1, 1],
+): CarryBoneTransform {
+  const safeParentScale: Vec3 = [0, 1, 2].map((axis) => {
+    const value = Math.abs(parentWorldScale[axis] ?? 1);
+    return value > 1e-8 ? value : 1;
+  }) as Vec3;
+  const localScale: Vec3 = [
+    desiredScale / safeParentScale[0],
+    desiredScale / safeParentScale[1],
+    desiredScale / safeParentScale[2],
+  ];
+  const scaledHandle: Vec3 = [
+    (handle?.[0] ?? 0) * localScale[0],
+    (handle?.[1] ?? 0) * localScale[1],
+    (handle?.[2] ?? 0) * localScale[2],
+  ];
+  const rotatedHandle = rotateVec3XYZ(scaledHandle, rotationDeg ?? [0, 0, 0]);
+  return {
+    scale: localScale,
+    position: [
+      (offset?.[0] ?? 0) / safeParentScale[0] - rotatedHandle[0],
+      (offset?.[1] ?? 0) / safeParentScale[1] - rotatedHandle[1],
+      (offset?.[2] ?? 0) / safeParentScale[2] - rotatedHandle[2],
+    ],
+  };
 }
 
 /** Locked axes retain the stable authored/world orientation; other axes follow the animated bone. */

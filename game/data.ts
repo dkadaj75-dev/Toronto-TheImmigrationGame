@@ -130,19 +130,37 @@ export interface ActionDef {
    *  fires nothing). Absent = no event, so existing actions are unchanged. See game/events.ts. */
   emitsEvent?: string;
   animation: string;
+  /** Explicit physical placement posture. Absent keeps legacy animation-name inference. Use this
+   * when a semantic animation state such as "Reading" is seated but does not start with "sit". */
+  pose?: 'sit' | 'lie' | 'use';
   autonomyEligible: boolean;
   primaryNeed: string | null;
   seatAware?: boolean;
+  /** How a seat-aware action ranks seats. targetFacing (default) keeps TV-style front-facing
+   * viewing; nearest is for carried/self-contained activities such as reading a book. */
+  seatSearch?: 'targetFacing' | 'nearest';
   /** B10-6: sparse source-first flag for seat-aware fetch actions. The first leg walks to the
    *  action's target/source; only after arrival does main.ts resolve and route to a seat for the
    *  actual activity. This generalizes the carried-food fridge/stove two-leg precedent to
    *  non-food sources such as a bookshelf. Absent = ordinary one-leg seat-aware behavior. */
   fetchBeforeSeat?: boolean;
+  /** Optional target-centred live-asset prerequisite. Presence inside radius is always required;
+   * visitBefore routes required asset -> target, while visitAfter routes target -> required asset. */
+  requiredAsset?: import('./actionchain').RequiredAssetRule;
+  /** Completion-created runtime asset and optional separate action automatically ordered on it. */
+  spawnsAsset?: import('./actionchain').SpawnedAssetRule;
+  /** Designer-authored movement of container contents. A deposit action consumes its targeted
+   * transient into the nearest compatible container with enough remaining space. An empty action
+   * clears only its targeted container after reaching the authored destination asset type. */
+  containerTransfer?:
+    | { mode: 'deposit'; containerAssetId: string }
+    | { mode: 'empty'; destinationAssetId: string };
   /** B4-2: sparse action-start charge. The tap menu shows and disables this action against the
    *  live QuestRunner funds balance; QuestRunner.spend performs the authoritative deduction. */
   cost?: number;
   /** Visible prop carried for this action after source arrival. It attaches to the named character
-   * bone and is removed on completion; every incomplete stop drops it on a legal floor cell. */
+   * bone and is removed on completion. Incomplete stops drop it by default; dropOnInterrupt:false
+   * removes/returns disposable source props such as a bookshelf book instead. */
   carriedAsset?: {
     assetId: string;
     bone: string;
@@ -151,6 +169,7 @@ export interface ActionDef {
     scale?: number;
     /** Locked WORLD axes retain the authored attachment orientation instead of inheriting bone tilt. */
     lockRotationAxes?: { x?: boolean; y?: boolean; z?: boolean };
+    dropOnInterrupt?: boolean;
   };
   /** ROADMAP_NEXT item 5: optional completion timer, sim-time seconds (same clock as
    *  needsDecayTickSeconds/activityGainTickSeconds — pause/2x/3x affect it identically, see
@@ -372,6 +391,9 @@ export interface AssetDef {
   placeableOnSurface?: boolean;
   /** Model-local XYZ point aligned exactly to a character bone while this asset is carried. */
   carryHandle?: [number, number, number];
+  /** Bone used when this asset is carried automatically (for example spawned food). Absent uses
+   * the canonical right hand; action-authored carriedAsset.bone still overrides for that action. */
+  carryBone?: string;
   /** Newnew.txt: model-local [x,z] point every direct use pose faces toward. The Asset Editor
    * renders it as a ghost cube; no runtime object is spawned. */
   useFacingTarget?: [number, number];
@@ -402,6 +424,12 @@ export interface AssetDef {
    *  fill count, keyed per placed instance), the can counts as full and is excluded from
    *  findNearestNonFullCan until emptied (the exterior door's `empty_garbage` interaction resets
    *  every can to 0 — see game/garbage.ts). */
+  /** Generic per-instance storage capacity. Sparse/absent means this asset is not a container. */
+  container?: { capacity: number };
+  /** Space this transient occupies when deposited. Sparse/absent means it is not transferable by
+   * an authored deposit action. Legacy autonomous waste paths explicitly use one unit. */
+  containerSpace?: number;
+  /** Read-compatible alias for old authored garbage cans. New authoring uses `container`. */
   garbage?: { capacity: number };
   /** B4-2: transient food payload. hungerGain is applied once, only when eating completes;
    *  perishHours uses the monotonic in-game-hour clock after interrupted food is dropped. */

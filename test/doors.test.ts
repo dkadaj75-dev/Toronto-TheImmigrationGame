@@ -1,6 +1,8 @@
 // doors.test.ts — game/doors.ts pure logic (PROJECT_CONTEXT.md §7.1 doors-as-assets slice).
 // Run: npx tsx test/doors.test.ts
+import * as THREE from 'three';
 import {
+  attachDoorPaneInCanonicalSpace,
   resolveDoorConfig, doorBaseYawDeg, hingeWorldPos, panelLocalOffset,
   segmentCrossesDoorway, pathCrossesDoorway, distanceToDoor, doorShouldBeOpen, doorShouldBeOpenExt,
   stepDoorAngle, isAnimatedDoor, resolvePaneConfig, paneHingeLocal, paneLocalOffsetFromHinge,
@@ -256,6 +258,29 @@ console.log('doors.test — D2 paneHingeLocal / paneLocalOffsetFromHinge (hinge 
   const o = paneLocalOffsetFromHinge(offCenter, [-0.5, 0]);
   check('off-center pane: hinge on real min edge', approx(h[0], 0.2), String(h));
   check('off-center pane: hinge+offset == real center (0.7, 0)', approx(h[0] + o[0], 0.7) && approx(h[1] + o[1], 0), String(o));
+}
+
+console.log('doors.test — D2 async pane reparent preserves an existing Cut front scale');
+{
+  const root = new THREE.Group();
+  root.position.set(4, 0, 5.75);
+  root.rotation.y = Math.PI / 2;
+  root.scale.set(1, 0.4, 1); // Cut front was applied before the pane GLB finished loading.
+  const paneGroup = new THREE.Group();
+  root.add(paneGroup);
+  const source = new THREE.Group();
+  const pane = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 0.1));
+  pane.position.y = 1;
+  source.add(pane);
+  source.updateMatrixWorld(true);
+
+  attachDoorPaneInCanonicalSpace(root, paneGroup, pane, [-0.5, 0]);
+  const size = new THREE.Box3().setFromObject(paneGroup).getSize(new THREE.Vector3());
+  check('pane is adopted by the runtime hinge group', pane.parent === paneGroup && source.children.length === 0);
+  check('root Cut front scale is restored', approx(root.scale.y, 0.4));
+  check('pane inherits the restored cut instead of cancelling it', approx(size.y, 0.8), String(size.y));
+  check('root placement and yaw are restored',
+    approx(root.position.x, 4) && approx(root.position.z, 5.75) && approx(root.rotation.y, Math.PI / 2));
 }
 
 console.log('doors.test — explicit exterior transit opens, passes, closes, and interrupts safely');

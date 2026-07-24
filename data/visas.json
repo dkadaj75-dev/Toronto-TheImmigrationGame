@@ -5,7 +5,7 @@
       "id": "visitor",
       "name": "Visitor",
       "durationDays": 3,
-      "losable": false
+      "losable": true
     },
     {
       "id": "lmia",
@@ -20,8 +20,8 @@
       "name": "Temporary Foreign Worker",
       "durationDays": 30,
       "losable": true,
-      "graceDays": 3,
-      "obtainedVia": "quest",
+      "graceDays": 10,
+      "obtainedVia": "application",
       "requirements": {
         "all": [
           {
@@ -30,15 +30,15 @@
           },
           {
             "var": "funds",
-            "gte": 2000
+            "gte": 3500
           },
           {
             "var": "skills.english",
-            "gte": 15
+            "gte": 25
           },
           {
             "var": "vars.income",
-            "gte": 150
+            "gte": 180
           }
         ]
       }
@@ -78,7 +78,7 @@
       "id": "bridging_work_permit",
       "name": "Bridging Work Permit",
       "durationDays": 25,
-      "losable": false,
+      "losable": true,
       "graceDays": 3,
       "obtainedVia": "application",
       "applicationDays": 0,
@@ -107,12 +107,25 @@
       "id": "lmia_extension",
       "name": "LMIA Extension",
       "durationDays": 20,
-      "losable": false,
+      "losable": true,
       "graceDays": 5,
-      "obtainedVia": "quest",
-      "applicationDays": 0,
+      "obtainedVia": "application",
+      "applicationDays": 1,
       "requirements": {
-        "all": []
+        "all": [
+          {
+            "var": "quests.find_a_job.state",
+            "eq": "done"
+          },
+          {
+            "var": "skills.english",
+            "gte": 15
+          },
+          {
+            "var": "funds",
+            "gte": 750
+          }
+        ]
       }
     }
   ]

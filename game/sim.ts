@@ -44,10 +44,17 @@ export interface ActiveAction {
  * This replaces the old "nearest seat regardless of side" heuristic and the TV-specific
  * RightVector exception the Unreal prototype needed (CLAUDE.md ANIMATION_PLAN Phase A) —
  * with per-asset facingDeg, any seat-aware asset gets the same treatment for free.
- * Returns null when the home has no seat in front of the target within range — the caller
+ * `strategy: nearest` skips only the facing/viewpoint rule and ranks by distance to the target;
+ * it is for carried/self-contained activities such as reading whose target yaw has no meaning.
+ * Returns null when the home has no eligible seat within range — the caller
  * (sim.ts's orderAction) then falls back to sitting the sim on the ground (groundSit).
  */
-export function findSeatFor(world: THREE.Group, data: GameData, target: THREE.Object3D): THREE.Object3D | null {
+export function findSeatFor(
+  world: THREE.Group,
+  data: GameData,
+  target: THREE.Object3D,
+  strategy: 'targetFacing' | 'nearest' = 'targetFacing',
+): THREE.Object3D | null {
   const assetsById = new Map(data.assets.assets.map((a) => [a.id, a]));
   const targetDef = assetsById.get(target.userData?.assetId as string);
   if (!targetDef) return null;
@@ -59,7 +66,7 @@ export function findSeatFor(world: THREE.Group, data: GameData, target: THREE.Ob
   // seatTarget, so their seat search is unchanged.
   if (targetDef.seatTarget) return target;
   const targetInstance = facingInstanceOf(target);
-  const viewPoint = viewingPointFor(targetInstance, targetDef, data.tuning);
+  const viewPoint = strategy === 'nearest' ? targetInstance.pos : viewingPointFor(targetInstance, targetDef, data.tuning);
   const searchRadius = data.tuning.interaction?.seatSearchRadius ?? 5;
 
   let best: THREE.Object3D | null = null;
@@ -69,7 +76,7 @@ export function findSeatFor(world: THREE.Group, data: GameData, target: THREE.Ob
     if (!assetId || obj === target) continue;
     const def = assetsById.get(assetId);
     if (!def?.seatTarget) continue;
-    if (!isInFrontHalfSpace([obj.position.x, obj.position.z], targetInstance, targetDef)) continue;
+    if (strategy === 'targetFacing' && !isInFrontHalfSpace([obj.position.x, obj.position.z], targetInstance, targetDef)) continue;
     const distToTarget = Math.hypot(obj.position.x - targetInstance.pos[0], obj.position.z - targetInstance.pos[1]);
     if (distToTarget > searchRadius) continue;
     const d = Math.hypot(obj.position.x - viewPoint[0], obj.position.z - viewPoint[1]);
@@ -313,8 +320,9 @@ export class SimAgent {
       this.object.position.y = 0;
       return;
     }
-    const anim = a.action.animation;
+    const anim = a.action.animation.toLowerCase();
     const pose: 'sit' | 'lie' | 'use' | null = a.poseOverride
+      ?? a.action.pose
       ?? (anim.startsWith('lie') ? 'lie' : anim.startsWith('sit') ? 'sit' : null);
     const perch = a.seat ?? a.target;
     const def = this.assetsById.get(perch.userData?.assetId as string);
