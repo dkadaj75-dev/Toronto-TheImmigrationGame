@@ -275,6 +275,35 @@ export function footprintOnFloor(rect: Rect, floors: FloorDef[], gridSize: numbe
   return true;
 }
 
+/** Designer request 2026-07-25 ("the placement is too picky, make it less strict"): the
+ *  candidate footprint is shrunk by this many meters on EVERY side before the bounds / floor /
+ *  wall / object-overlap tests, so near-misses and slightly-generous authored footprints stop
+ *  blocking a drop. Data-driven via `tuning.buy.placementTolerance` (0 restores the old exact
+ *  behavior); this constant is only the fallback when the tuning key is absent. */
+export const DEFAULT_PLACEMENT_TOLERANCE = 0.1;
+
+/** Shrinks a rect by `by` meters per side, clamped so it can never invert (a footprint smaller
+ *  than 2×tolerance still keeps a tiny core rect at its center). */
+export function shrinkRect(rect: Rect, by: number): Rect {
+  const maxBy = Math.max(0, Math.min(rect.x1 - rect.x0, rect.z1 - rect.z0) / 2 - 1e-3);
+  const s = Math.min(Math.max(0, by), maxBy);
+  return { x0: rect.x0 + s, x1: rect.x1 - s, z0: rect.z0 + s, z1: rect.z1 - s };
+}
+
+/** Edge-snap escape hatch (same designer request): snapToNeighborEdges can drag the ghost INTO
+ *  a third object and turn a perfectly good raw position invalid. Prefer the snapped position
+ *  when it works, but fall back to the raw one when only the raw one is valid — never let the
+ *  convenience snap be the thing that blocks a drop. Pure, tested. */
+export function resolveSnappedPosition(
+  raw: [number, number],
+  snapped: [number, number],
+  isValid: (pos: [number, number]) => boolean,
+): [number, number] {
+  if (raw[0] === snapped[0] && raw[1] === snapped[1]) return snapped;
+  if (isValid(snapped)) return snapped;
+  return isValid(raw) ? raw : snapped;
+}
+
 export interface PlacementCheckInput {
   pos: [number, number];
   rotDeg: number;
@@ -288,6 +317,9 @@ export interface PlacementCheckInput {
   def?: Pick<AssetDef, 'footprint' | 'facingDeg' | 'wallMounted'>;
   /** exclude this key from the overlap check — moving/rotating an instance shouldn't collide with itself */
   excludeKey?: string;
+  /** per-side footprint forgiveness in meters (see DEFAULT_PLACEMENT_TOLERANCE). Absent = 0 =
+   *  the pre-2026-07-25 exact behavior, so every existing fixture/test is byte-identical. */
+  tolerance?: number;
 }
 
 /** In-bounds + fully on floor + no wall overlap + no overlap with any other placed instance
@@ -297,7 +329,7 @@ export interface PlacementCheckInput {
  *  width/depth swap rule as nav.ts's bakeNavGrid and facing.ts's placedHalfExtents, so "what you
  *  can walk through" and "what you can place on top of" agree exactly. */
 export function isValidPlacement(input: PlacementCheckInput): boolean {
-  const rect = footprintRect(input.pos, input.rotDeg, input.footprint);
+  const rect = shrinkRect(footprintRect(input.pos, input.rotDeg, input.footprint), input.tolerance ?? 0);
   if (rect.x0 < 0 || rect.z0 < 0 || rect.x1 > input.bounds.w || rect.z1 > input.bounds.h) return false;
   if (!footprintOnFloor(rect, input.floors, input.gridSize)) return false;
   if (input.def?.wallMounted && !isWallMountedPlacement(input.pos, input.rotDeg, input.def, input.walls, input.floors, input.gridSize)) return false;
@@ -729,9 +761,10 @@ export class BuyModeController {
   // -------------------------------------------------------------- placement validity helper
 
   private checkValidity(pos: [number, number], rotDeg: number, def: AssetDef, excludeKey?: string): boolean {
-    const { map } = this.getData();
+    const { map, tuning } = this.getData();
+    const tolerance = tuning.buy?.placementTolerance ?? DEFAULT_PLACEMENT_TOLERANCE;
     const others = this.instances().map((i): OtherInstance => ({ key: i.key, pos: i.pos, rotDeg: i.rotDeg, footprint: i.footprint }));
-    return isValidPlacement({ pos, rotDeg, footprint: def.footprint, def, bounds: map.bounds, walls: map.walls, others, floors: map.floors, gridSize: map.gridSize, excludeKey });
+    return isValidPlacement({ pos, rotDeg, footprint: def.footprint, def, bounds: map.bounds, walls: map.walls, others, floors: map.floors, gridSize: map.gridSize, excludeKey, tolerance });
   }
 
   // -------------------------------------------------------------- starting a purchase (ghost)
@@ -771,7 +804,10 @@ export class BuyModeController {
     if (!mounted && !def.wallMounted && this.edgeSnapEnabled) {
       const { map } = this.getData();
       const others = this.instances().map((i): OtherInstance => ({ key: i.key, pos: i.pos, rotDeg: i.rotDeg, footprint: i.footprint }));
-      pos = snapToNeighborEdges(pos, rotDeg, def.footprint, map.walls, others, { excludeKey });
+      const snapped = snapToNeighborEdges(pos, rotDeg, def.footprint, map.walls, others, { excludeKey });
+      // 2026-07-25 less-picky pass: the convenience snap must never turn a valid finger
+      // position invalid — fall back to the unsnapped spot when only it validates.
+      pos = resolveSnappedPosition(pos, snapped, (p) => this.checkValidity(p, rotDeg, def, excludeKey));
     }
     const valid = this.checkValidity(pos, rotDeg, def, excludeKey);
     this.selection = this.selection.kind === 'placing'

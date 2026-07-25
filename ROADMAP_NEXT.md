@@ -740,3 +740,9 @@ Design reading:
 4. The old tap-to-place flow (tap card → ghost → tap ground → ✓ Confirm) is retained unchanged as the desktop/precision fallback.
 
 **DONE (2026-07-25):** shipped as PROJECT_CONTEXT §7.6 as-built addendum (2026-07-25). New `game/buydrag.ts` (pure `DragTracker` + `grabsGhost`, headless-tested in `test/buydrag.test.ts`; thin `BuyModeDrag` canvas layer), `ui.ts` card drag callbacks, `camera.ts` `acceptPointer`, `input.ts` public `resolveAt`, `main.ts` wiring incl. tap-to-pivot.
+
+## Less-picky Buy Mode placement (2026-07-25, follow-up)
+
+Designer intent (verbatim): "the placement is too picky, make it less strict"
+
+Design reading + as-built: new `tuning.buy.placementTolerance` (shipped 0.15m, game default 0.1 when absent, 0 = old exact behavior) — the candidate footprint is shrunk by that much on every side before the bounds/floor/wall/object-overlap validity tests, so near-misses and generous authored footprints stop blocking drops. Additionally the edge snap can no longer *cause* a rejection: if the snapped position is invalid but the raw finger position is valid, the raw position wins (`resolveSnappedPosition`, pure + tested). Verified headless: the armchair, previously unplaceable anywhere tested in the shipped condo, now drag-places successfully.

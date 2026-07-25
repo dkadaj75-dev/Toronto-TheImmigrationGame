@@ -46,7 +46,8 @@
   },
   "buy": {
     "ghostOpacity": 0.67,
-    "_source": "ROADMAP_NEXT B13-8: opacity of the actual asset mesh/sprite shown beside the green/red footprint while placing or moving in Buy Mode. Clamped to 0..1; game default is 0.5 when absent."
+    "_source": "ROADMAP_NEXT B13-8: opacity of the actual asset mesh/sprite shown beside the green/red footprint while placing or moving in Buy Mode. Clamped to 0..1; game default is 0.5 when absent. | placementTolerance (2026-07-25 designer request \"too picky\"): meters of per-side footprint forgiveness for Buy Mode placement validity. 0 = old exact behavior; game default 0.1 when absent.",
+    "placementTolerance": 0.15
   },
   "credit": {
     "min": 300,

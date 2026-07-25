@@ -866,8 +866,10 @@ export interface TuningData {
   /** Maximum horizontal search radius for placing interrupted food/props on an elevated socket. */
   surfacePlacement?: { radiusMeters?: number };
   economy: { startingFunds: number; currencyName: string };
-  /** B13-8 Buy Mode actual-asset ghost. Opacity is clamped to 0..1; absent defaults to 0.5. */
-  buy?: { ghostOpacity?: number };
+  /** B13-8 Buy Mode actual-asset ghost. Opacity is clamped to 0..1; absent defaults to 0.5.
+   *  placementTolerance (2026-07-25): meters of per-side footprint forgiveness applied to Buy
+   *  Mode placement validity — 0 = exact/strict, absent defaults to 0.1. */
+  buy?: { ghostOpacity?: number; placementTolerance?: number };
   /** F3 credit score, consequences, debt-window scaling, and phone history length. */
   credit?: CreditTuning;
   movement: { walkSpeed: number; arrivalRadius: number };

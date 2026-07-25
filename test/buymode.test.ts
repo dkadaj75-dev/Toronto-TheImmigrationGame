@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import {
   isPurchasable, isAffordable, purchasableCatalog, catalogCategories, filterCatalog,
   snapToStep, snapPos, normalizeRotDeg, rotateStep, wallRect, isValidPlacement, footprintOnFloor,
+  shrinkRect, resolveSnappedPosition,
   snapWallMountedPlacement, isWallMountedPlacement,
   BuyOverlay, BuyModeController, effectiveInstances, effectivePlacedObjects, isSelectableForSell,
   attemptBuy, attemptSell, attemptMove, attemptDestroy,
@@ -471,6 +472,36 @@ console.log('buymode.test — ITEM 2 sold original object detached from world gr
   rebuilt.add(placed2);
   ctrl.reattach(rebuilt);
   check('reattach re-detaches the sold object after a world rebuild', !rebuilt.children.includes(placed2));
+}
+
+console.log('buymode.test — placement tolerance + snap fallback (2026-07-25 less-picky pass)');
+{
+  const bounds = { w: 10, h: 10 };
+  const floors: FloorDef[] = [{ id: 'room', polygon: [[0, 0], [10, 0], [10, 10], [0, 10]] }];
+  const base = { rotDeg: 0, footprint: [1, 1] as [number, number], bounds, walls: [] as WallSeg[], floors, gridSize: 0.5 };
+
+  const r = shrinkRect({ x0: 0, x1: 2, z0: 0, z1: 1 }, 0.1);
+  check('shrinkRect trims every side', r.x0 === 0.1 && r.x1 === 1.9 && r.z0 === 0.1 && r.z1 === 0.9);
+  const tiny = shrinkRect({ x0: 0, x1: 0.1, z0: 0, z1: 0.1 }, 0.2);
+  check('shrinkRect never inverts a tiny rect', tiny.x1 > tiny.x0 && tiny.z1 > tiny.z0);
+  const strict = shrinkRect({ x0: 1, x1: 2, z0: 1, z1: 2 }, 0);
+  check('zero tolerance leaves the rect untouched', strict.x0 === 1 && strict.x1 === 2 && strict.z0 === 1 && strict.z1 === 2);
+
+  const neighbor: OtherInstance = { key: 'o1', pos: [5, 5], rotDeg: 0, footprint: [1, 1] };
+  // 0.9m apart center-to-center = 0.1m interpenetration → blocked strict, allowed at 0.15
+  check('slight overlap blocked with no tolerance', !isValidPlacement({ ...base, pos: [5.9, 5], others: [neighbor] }));
+  check('slight overlap forgiven within tolerance', isValidPlacement({ ...base, pos: [5.9, 5], others: [neighbor], tolerance: 0.15 }));
+  check('deep overlap still blocked with tolerance', !isValidPlacement({ ...base, pos: [5.5, 5], others: [neighbor], tolerance: 0.15 }));
+  // slight out-of-bounds/off-floor hang is forgiven too
+  check('slight bounds hang blocked strict', !isValidPlacement({ ...base, pos: [0.4, 5], others: [] }));
+  check('slight bounds hang forgiven within tolerance', isValidPlacement({ ...base, pos: [0.4, 5], others: [], tolerance: 0.15 }));
+
+  // resolveSnappedPosition: snap wins when valid, raw rescues when only raw is valid
+  const validAt = (ok: [number, number][]) => (p: [number, number]) => ok.some((v) => v[0] === p[0] && v[1] === p[1]);
+  check('identical snap returns snapped', resolveSnappedPosition([1, 1], [1, 1], () => false)[0] === 1);
+  check('valid snap preferred', resolveSnappedPosition([1, 1], [2, 2], validAt([[2, 2], [1, 1]]))[0] === 2);
+  check('invalid snap falls back to valid raw', resolveSnappedPosition([1, 1], [2, 2], validAt([[1, 1]]))[0] === 1);
+  check('both invalid keeps snapped (red ghost at snap)', resolveSnappedPosition([1, 1], [2, 2], () => false)[0] === 2);
 }
 
 if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }
