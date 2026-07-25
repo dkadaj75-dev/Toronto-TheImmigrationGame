@@ -749,10 +749,9 @@ export class BuyModeController {
     this.buildGhost(def, startPos, startRot, valid);
   }
 
-  /** Ground tap while placing/moving repositions the ghost (snapped, revalidated). Mobile-first
-   *  tap-only interaction, consistent with every other placement/movement gesture already in this
-   *  game (tap-to-go, tap-to-act) — a live drag-follow is a possible future enhancement, not
-   *  required by any test here. */
+  /** Repositions the ghost (snapped, revalidated). Fed by BOTH ground taps and, since 2026-07-25,
+   *  the live drag-follow gestures (buydrag.ts + ui.ts catalog-card drags) — the finger/tap point
+   *  arrives here identically either way. */
   /** Next.txt (2026-07-18): edge snap-to-wall/assets for ordinary (non-wall-mounted) placement.
    *  Toggled from the ghost controls; persists for the session. */
   edgeSnapEnabled = true;

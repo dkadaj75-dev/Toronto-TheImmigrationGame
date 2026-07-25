@@ -63,6 +63,12 @@ export class TapInput {
     });
   }
 
+  /** Public screen→world resolution for other pointer consumers (buydrag.ts's buy-mode drags,
+   *  ui.ts's drag-from-catalog wiring in main.ts) — ONE raycast implementation, per §5. */
+  resolveAt(clientX: number, clientY: number): TapResult {
+    return this.raycast(clientX, clientY);
+  }
+
   private raycast(clientX: number, clientY: number): TapResult {
     const rect = this.el.getBoundingClientRect();
     const ndc = new THREE.Vector2(

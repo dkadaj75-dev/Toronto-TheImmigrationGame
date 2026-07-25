@@ -725,3 +725,18 @@ Design reading:
 **CORRECTION (2026-07-23):** the first wall-cut diagnosis was rejected after a closer designer screenshot showed two copies of the actual pane geometry. That unrelated wall change was fully reverted. This item remains open pending the runtime door-builder fix.
 
 **DONE (2026-07-23):** shipped as PROJECT_CONTEXT §7.73. The actual fault was async two-GLB pane adoption under an already-scaled Cut front root: position/yaw were neutralized but scale was not, so Three.js baked the inverse cut scale into the pane. Full-transform canonical adoption fixes the floating full-height pane; the rejected wall change remains reverted.
+
+## Smartphone tap-and-slide Buy Mode (2026-07-25)
+
+Designer intent (verbatim):
+
+> edit the buy mode, it should be easy to use on a smartphone: tap and slide from the buy bar, in the 3 world, the asset follows our finger movement and appears over the ground, the asset is placed when we remove the finger (if it is possible to put it here). same for moving existing ones around. but just one tap allows you to pivot it in place also
+
+Design reading:
+
+1. Catalog cards become drag sources: touching a card and sliding up past the buy bar's top edge starts a live placement — the ghost follows the finger over the ground (surfaces included), and lifting the finger buys+places it when the spot is valid. Releasing back over the bar cancels (drag-back-to-cancel); an invalid drop keeps the red ghost up with the existing Rotate/Confirm/Cancel controls as the adjust/fallback path. Horizontal swipes on the card row keep native scrolling (`touch-action: pan-x`).
+2. Placed furniture becomes directly draggable in buy mode: finger down on a selectable object + slide turns it into the usual move ghost following the finger; release confirms the move if valid (invalid keeps the ghost + controls). The camera learns to refuse pointers that grab furniture (new `TouchCamera.acceptPointer` predicate) so these drags never pan; drags starting on empty floor still pan as before.
+3. A single tap on a placed object now pivots it 90° in place (no-op if the turn would collide, or for wall-mounted assets). The selection chips still open on tap so Sell/Move/Close stay reachable.
+4. The old tap-to-place flow (tap card → ghost → tap ground → ✓ Confirm) is retained unchanged as the desktop/precision fallback.
+
+**DONE (2026-07-25):** shipped as PROJECT_CONTEXT §7.6 as-built addendum (2026-07-25). New `game/buydrag.ts` (pure `DragTracker` + `grabsGhost`, headless-tested in `test/buydrag.test.ts`; thin `BuyModeDrag` canvas layer), `ui.ts` card drag callbacks, `camera.ts` `acceptPointer`, `input.ts` public `resolveAt`, `main.ts` wiring incl. tap-to-pivot.

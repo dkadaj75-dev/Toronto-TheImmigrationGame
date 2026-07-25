@@ -31,6 +31,12 @@ export class TouchCamera {
   private tuning: TuningData['camera'];
   private bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
 
+  /** Buy-mode drag (buydrag.ts, wired in main.ts) claims pointers that land on a movable
+   *  object or the placement ghost — those drags move furniture, never the camera. Checked
+   *  once at pointerdown; a rejected pointer is simply never tracked (its later move/up
+   *  events find no entry and fall through). Null = accept everything (pre-buy-mode default). */
+  acceptPointer: ((e: PointerEvent) => boolean) | null = null;
+
   // gesture state
   private pointers = new Map<number, { x: number; y: number; button: number }>();
   private lastPinchDist = 0;
@@ -60,6 +66,7 @@ export class TouchCamera {
     // non-left buttons for the same reason) — suppress the browser's own context menu on the canvas.
     el.addEventListener('contextmenu', (e) => e.preventDefault());
     el.addEventListener('pointerdown', (e) => {
+      if (this.acceptPointer && !this.acceptPointer(e)) return;
       el.setPointerCapture(e.pointerId);
       this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, button: e.button });
       if (this.pointers.size === 2) {

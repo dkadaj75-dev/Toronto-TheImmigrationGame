@@ -29,6 +29,7 @@ import { EventFiringRegistry, MAX_EVENT_DEPTH, canFireAtDepth, findEvent, resolv
 import { AccidentsController, resolveTapAssetId, shouldRemovePlacedOnCleanup } from './accidents';
 import { GarbageController, wasteItemCount } from './garbage';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials, isSelectableForSell } from './buymode';
+import { BuyModeDrag } from './buydrag';
 import { createMarkerInstance, type MarkerInstance } from './marker';
 import { createCensorInstance, type CensorInstance } from './censor';
 import { createProgressBarInstance, createSkillBarInstance, resolveSkillBarConfig, type ProgressBarInstance, type SkillBarInstance } from './progressbar';
@@ -2390,11 +2391,12 @@ async function start(initialLoadSlotId?: string) {
   };
   hud.onCancelAction = () => { autonomy.notePlayerCommand(); agent.stopAction(); };
 
-  // --- Buy/Sell mode tap handling (§7.6): a tap while `buyMode.active` never reaches the normal
-  // gameplay routing below (tap-to-go / open an action menu) — it either repositions the pending
-  // placement/move ghost (tap-only, matching this game's existing tap-first interaction model —
-  // see buymode.ts's moveGhostTo doc comment), or selects a placed instance to show the
-  // Move/Rotate/Sell chips.
+  // --- Buy/Sell mode tap handling (§7.6, revised 2026-07-25 for smartphone tap-and-slide): a
+  // tap while `buyMode.active` never reaches the normal gameplay routing below (tap-to-go / open
+  // an action menu). While a ghost is up it repositions the ghost (fallback to the live
+  // drag-follow in buydrag.ts). Otherwise, ONE TAP on a placed object now pivots it 90° in
+  // place (the designer's "just one tap allows you to pivot it" rule) — selection chips still
+  // open alongside so Sell/Move/Close stay reachable; moving is primarily drag-and-release.
   const handleBuyModeTap = (hit: TapResult) => {
     if (buyMode.selection && buyMode.selection.kind !== 'selected') {
       if (hit.object && hit.ground && buyMode.moveGhostToSurface(hit.object, hit.ground.x, hit.ground.z)) return;
@@ -2404,7 +2406,12 @@ async function start(initialLoadSlotId?: string) {
     if (hit.object) {
       const inst = buyMode.instanceForObject(hit.object);
       if (inst && buyMode.select(inst) && buyMode.selection?.kind === 'selected') {
-        hud.showSelectionChips(buyMode.selection.def.name, buyMode.selection.def.sellPrice, data.tuning.economy.currencyName);
+        // Pivot in place; rotateSelectedInPlace safely no-ops when the turn would collide
+        // (and for wall-mounted assets, whose rotation is dictated by their wall).
+        if (buyMode.rotateSelectedInPlace()) { buyModeChangedSomething = true; rebakeNav(); }
+        if (buyMode.selection?.kind === 'selected') {
+          hud.showSelectionChips(buyMode.selection.def.name, buyMode.selection.def.sellPrice, data.tuning.economy.currencyName);
+        }
         return;
       }
     }
@@ -2592,7 +2599,9 @@ async function start(initialLoadSlotId?: string) {
   };
   hud.onGhostRotate = () => buyMode.rotateGhost();
   hud.onGhostSnapToggle = () => hud.setGhostSnap(buyMode.toggleEdgeSnap());
-  hud.onGhostConfirm = () => {
+  // Shared by the Confirm button AND the drag-release paths below (2026-07-25 tap-and-slide) —
+  // one confirm implementation, whichever gesture lands the furniture.
+  const confirmGhost = () => {
     const result = buyMode.confirm(quests.funds);
     if (!result) return;
     if (result.kind === 'bought') {
@@ -2616,6 +2625,7 @@ async function start(initialLoadSlotId?: string) {
       console.warn('buy mode confirm failed:', result.reason);
     }
   };
+  hud.onGhostConfirm = confirmGhost;
   hud.onGhostCancel = () => {
     const wasMoving = buyMode.selection?.kind === 'moving';
     buyMode.cancel();
@@ -2650,6 +2660,86 @@ async function start(initialLoadSlotId?: string) {
     buyMode.deselect();
     hud.hideSelectionChips();
   };
+
+  // --- Buy-mode smartphone drag gestures (2026-07-25 "tap and slide" request) -----------------
+  // Two drag sources feed the SAME follow/release pipeline: (a) catalog cards (ui.ts fires the
+  // onBuyItemDrag* callbacks once a finger slides up off the bar) and (b) the canvas itself
+  // (buydrag.ts's BuyModeDrag claims pointers that land on a placed object or the active ghost).
+  // Release = place: valid drops confirm through the same confirmGhost as the ✓ button; invalid
+  // drops leave the ghost up (red) with the manual controls so the player can nudge or cancel.
+
+  /** routes the finger's screen point into the ghost — surfaces first, then ground, exactly
+   *  like handleBuyModeTap's ghost branch */
+  const dragGhostTo = (clientX: number, clientY: number) => {
+    if (!buyMode.selection || buyMode.selection.kind === 'selected') return;
+    const hit = tapInput.resolveAt(clientX, clientY);
+    if (hit.object && hit.ground && buyMode.moveGhostToSurface(hit.object, hit.ground.x, hit.ground.z)) return;
+    if (hit.ground) buyMode.moveGhostTo(hit.ground.x, hit.ground.z);
+  };
+
+  const finishBuyDragRelease = (confirmIfValid: boolean) => {
+    const sel = buyMode.selection;
+    if (!sel || sel.kind === 'selected') return;
+    if (confirmIfValid && sel.valid) { confirmGhost(); return; }
+    // Invalid spot (or the browser cancelled the gesture): keep the ghost where the finger
+    // left it, with the usual tap-adjust/Rotate/Confirm/Cancel controls.
+    hud.showGhostControls();
+  };
+
+  let catalogDragMoved = false;
+  hud.onBuyItemDragStart = (assetId) => {
+    const def = data.assets.assets.find((a) => a.id === assetId);
+    if (!def) return;
+    catalogDragMoved = false;
+    buyMode.startPlacing(def);
+    hud.hideSelectionChips();
+    hud.hideGhostControls(); // controls only appear if the drop ends up needing manual help
+  };
+  hud.onBuyItemDrag = (clientX, clientY) => {
+    if (buyMode.selection?.kind !== 'placing') return;
+    catalogDragMoved = true;
+    dragGhostTo(clientX, clientY);
+  };
+  hud.onBuyItemDragEnd = () => {
+    // released without the ghost ever tracking the world (finger never left the bar area) —
+    // treat as an aborted pick, not a purchase at the ghost's default center spawn
+    if (!catalogDragMoved) { buyMode.cancel(); return; }
+    finishBuyDragRelease(true);
+  };
+  hud.onBuyItemDragCancel = () => { buyMode.cancel(); hud.hideGhostControls(); };
+
+  const buyDrag = new BuyModeDrag(renderer.domElement, {
+    isActive: () => buyMode.active && !repoOverlayActive && !gameOverActive,
+    resolve: (clientX, clientY) => {
+      const hit = tapInput.resolveAt(clientX, clientY);
+      return { ground: hit.ground ? { x: hit.ground.x, z: hit.ground.z } : null, object: hit.object };
+    },
+    ghostFootprint: () => {
+      const sel = buyMode.selection;
+      if (!sel || sel.kind === 'selected') return null;
+      return { pos: sel.pos, rotDeg: sel.rotDeg, footprint: sel.def.footprint };
+    },
+    canGrabObject: (obj) => {
+      const inst = buyMode.instanceForObject(obj);
+      if (!inst) return false;
+      const def = data.assets.assets.find((a) => a.id === inst.asset);
+      return !!def && isSelectableForSell(def);
+    },
+    beginObjectMove: (obj) => {
+      const inst = buyMode.instanceForObject(obj);
+      if (!inst || !buyMode.select(inst)) return false;
+      hud.hideSelectionChips();
+      hud.hideGhostControls();
+      buyMode.beginMoveSelected();
+      return buyMode.selection?.kind === 'moving';
+    },
+    dragTo: dragGhostTo,
+    drop: () => finishBuyDragRelease(true),
+    abort: () => finishBuyDragRelease(false),
+  });
+  // Camera: a pointer that grabs furniture (or any pointer while a furniture drag is live)
+  // must never also pan/rotate the camera. Right-button stays camera rotate even in buy mode.
+  cam.acceptPointer = (e) => e.button !== 0 || (!buyDrag.engaged && !buyDrag.wouldClaim(e.clientX, e.clientY));
 
   // --- simulation ticks (all intervals & thresholds from tuning.json / stats.json) ---
   let decayAcc = 0, gainAcc = 0;

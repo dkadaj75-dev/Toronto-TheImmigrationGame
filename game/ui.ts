@@ -506,8 +506,11 @@ const CSS = `
   background: #1c2436; color: #93a3c0; cursor: pointer; touch-action: manipulation; white-space: nowrap; }
 .buy-tabs button.active { background: rgba(90,120,190,.5); color: #eaf0fb; }
 .buy-cards { display: flex; gap: 8px; overflow-x: auto; padding: 2px; }
+/* touch-action pan-x (2026-07-25 tap-and-slide): horizontal swipes keep native card-row
+   scrolling; vertical slides stay ours as pointer events so a card can be dragged up into the
+   3D world (drag-to-place). "manipulation" would let the browser claim vertical pans too. */
 .buy-card { flex: none; width: 92px; border: 0; border-radius: 10px; background: #1a2133;
-  color: #dfe6f2; padding: 8px; cursor: pointer; text-align: left; touch-action: manipulation; }
+  color: #dfe6f2; padding: 8px; cursor: pointer; text-align: left; touch-action: pan-x; }
 .buy-card:disabled { opacity: .4; cursor: default; }
 .buy-card .thumb { width: 100%; height: 56px; border-radius: 6px; object-fit: cover; display: block; margin-bottom: 6px; }
 .buy-card .thumb-fallback { width: 100%; height: 56px; border-radius: 6px; margin-bottom: 6px;
@@ -609,6 +612,7 @@ export class Hud {
   private buyButton: HTMLElement;
   private wallCutButton: HTMLButtonElement;
   private buyBar: HTMLElement;
+  private buyInnerEl: HTMLElement;
   private buyFundsEl: HTMLElement;
   private buySearchEl: HTMLInputElement;
   private buyTabsEl: HTMLElement;
@@ -627,6 +631,14 @@ export class Hud {
   onBuyCategoryPick: ((category: string) => void) | null = null;
   onBuySearch: ((query: string) => void) | null = null;
   onBuyItemPick: ((assetId: string) => void) | null = null;
+  /** Tap-and-slide from the catalog (2026-07-25): finger crossed the bar's top edge with a card
+   *  under it — main.ts starts the placement ghost. Followed by onBuyItemDrag per move (client
+   *  px, only while over the world), then exactly one of DragEnd (released over the world) or
+   *  DragCancel (released back over the bar = classic drag-back-to-cancel, or browser cancel). */
+  onBuyItemDragStart: ((assetId: string) => void) | null = null;
+  onBuyItemDrag: ((clientX: number, clientY: number) => void) | null = null;
+  onBuyItemDragEnd: (() => void) | null = null;
+  onBuyItemDragCancel: (() => void) | null = null;
   onGhostRotate: (() => void) | null = null;
   onGhostSnapToggle: (() => void) | null = null;
   onGhostConfirm: (() => void) | null = null;
@@ -833,6 +845,7 @@ export class Hud {
     this.buyButton = root.querySelector('#buy-button')!;
     this.wallCutButton = root.querySelector('#wall-cut-button')!;
     this.buyBar = root.querySelector('#buy-bar')!;
+    this.buyInnerEl = root.querySelector('#buy-bar .buy-inner')!;
     this.buyFundsEl = root.querySelector('#buy-funds')!;
     this.buySearchEl = root.querySelector('#buy-search')!;
     this.buyTabsEl = root.querySelector('#buy-tabs')!;
@@ -1807,7 +1820,44 @@ export class Hud {
       price.className = 'price';
       price.textContent = `${currencyName}${item.price.toLocaleString()}`;
       card.append(name, price);
-      card.addEventListener('click', () => { if (item.affordable) this.onBuyItemPick?.(item.id); });
+      // Tap-and-slide (2026-07-25): dragging a card up past the bar's top edge starts a live
+      // placement drag; the ghost then follows the finger in main.ts. Horizontal drags are left
+      // to the row's native pan-x scrolling (the browser fires pointercancel when it takes the
+      // touch). Plain clicks keep the old tap-to-place flow (ghost + Confirm/Cancel buttons).
+      let drag: { pointerId: number; started: boolean } | null = null;
+      let suppressClick = false;
+      const barTop = () => this.buyInnerEl.getBoundingClientRect().top;
+      card.addEventListener('pointerdown', (e) => {
+        if (!item.affordable || e.button !== 0 || drag) return;
+        drag = { pointerId: e.pointerId, started: false };
+        card.setPointerCapture(e.pointerId);
+      });
+      card.addEventListener('pointermove', (e) => {
+        if (!drag || e.pointerId !== drag.pointerId) return;
+        const overWorld = e.clientY < barTop();
+        if (!drag.started) {
+          if (!overWorld) return;
+          drag.started = true;
+          suppressClick = true;
+          this.onBuyItemDragStart?.(item.id);
+        }
+        if (overWorld) this.onBuyItemDrag?.(e.clientX, e.clientY);
+      });
+      const endDrag = (e: PointerEvent, cancelled: boolean) => {
+        if (!drag || e.pointerId !== drag.pointerId) return;
+        const started = drag.started;
+        drag = null;
+        if (!started) return;
+        // releasing back over the bar = drag-back-to-cancel, never an accidental purchase
+        if (cancelled || e.clientY >= barTop()) this.onBuyItemDragCancel?.();
+        else this.onBuyItemDragEnd?.();
+      };
+      card.addEventListener('pointerup', (e) => endDrag(e, false));
+      card.addEventListener('pointercancel', (e) => endDrag(e, true));
+      card.addEventListener('click', () => {
+        if (suppressClick) { suppressClick = false; return; }
+        if (item.affordable) this.onBuyItemPick?.(item.id);
+      });
       this.buyCardsEl.appendChild(card);
     }
   }
