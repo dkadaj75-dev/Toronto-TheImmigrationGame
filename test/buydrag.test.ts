@@ -1,7 +1,7 @@
 // buydrag.test.ts — game/buydrag.ts pure logic (2026-07-25 smartphone tap-and-slide Buy Mode).
 // Run: npx tsx test/buydrag.test.ts
 import {
-  DragTracker, grabsGhost, DRAG_SLOP_PX, GHOST_GRAB_MARGIN_M,
+  DragTracker, grabsGhost, DRAG_SLOP_PX, GHOST_GRAB_MARGIN_M, LONG_PRESS_MS,
   type GhostFootprint,
 } from '../game/buydrag';
 
@@ -49,6 +49,21 @@ console.log('buydrag.test — custom slop radius');
   check('default-slop distance stays pending under a wider slop', t.move(1, 12, 0) === 'none');
   check('past the custom slop starts the drag', t.move(1, 21, 0) === 'start');
   t.end(1);
+}
+
+console.log('buydrag.test — long-press promote (pickup without slop)');
+{
+  const t = new DragTracker();
+  check('promote on untracked pointer refused', !t.promote(1));
+  t.begin(1, 100, 100);
+  check('promote lifts the pending pointer into dragging', t.promote(1) && t.isDragging);
+  check('second promote is not a transition', !t.promote(1) && t.isDragging);
+  check('promoted moves report move (never a second start)', t.move(1, 130, 100) === 'move');
+  check('promoted release is a drop', t.end(1) === 'drop');
+  t.begin(2, 0, 0);
+  check('promote ignores a foreign pointer id', !t.promote(9) && !t.isDragging);
+  check('LONG_PRESS_MS stays above input.ts tap window (400ms)', LONG_PRESS_MS > 400);
+  t.cancel(2);
 }
 
 console.log('buydrag.test — grabsGhost footprint hit test');

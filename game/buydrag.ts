@@ -25,6 +25,14 @@ import { footprintRect } from './accidents';
  *  a claimed pointer that stays inside this radius falls through to TapInput's tap (rotate). */
 export const DRAG_SLOP_PX = 8;
 
+/** Designer request 2026-07-25 follow-up: MAINTAINING the tap/click on a placed object (or the
+ *  ghost) picks it up without needing to cross the slop radius first — the ghost lifts in place
+ *  (hover + bounce, see buymode.ts's ghostHoverOffset) and then follows the finger. MUST stay
+ *  greater than input.ts's TAP_MAX_MS (400): a release before 400ms is a tap (rotate), a hold
+ *  past this threshold is a pickup, and the gap between the two means no gesture can ever be
+ *  both — no cross-module suppression flag needed. */
+export const LONG_PRESS_MS = 450;
+
 export type DragMoveResult = 'none' | 'start' | 'move';
 export type DragEndResult = 'none' | 'tap' | 'drop';
 export type DragCancelResult = 'none' | 'pending' | 'drag';
@@ -49,6 +57,15 @@ export class DragTracker {
     this.startX = x;
     this.startY = y;
     this.dragging = false;
+    return true;
+  }
+
+  /** Long-press pickup: force the tracked pointer into dragging without waiting for slop.
+   *  True only on the transition (already-dragging / untracked → false), mirroring move()'s
+   *  fire-exactly-once 'start' contract. */
+  promote(pointerId: number): boolean {
+    if (this.pointerId !== pointerId || this.dragging) return false;
+    this.dragging = true;
     return true;
   }
 
@@ -119,6 +136,8 @@ export interface BuyDragHooks {
   beginObjectMove(object: THREE.Object3D): boolean;
   /** Ghost follows the finger (same surface-then-ground routing as handleBuyModeTap). */
   dragTo(clientX: number, clientY: number): void;
+  /** A live finger drag began/ended — drives the ghost's hover+bounce "picked up" visual. */
+  setDragging(active: boolean): void;
   /** Finger lifted after a real drag: confirm if valid, else keep the ghost for adjustment. */
   drop(): void;
   /** Browser cancelled the gesture mid-drag: keep the ghost + show the manual controls. */
@@ -135,12 +154,34 @@ type Grab = { kind: 'ghost' } | { kind: 'object'; object: THREE.Object3D; moving
 export class BuyModeDrag {
   private tracker = new DragTracker();
   private grab: Grab | null = null;
+  private holdTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private el: HTMLElement, private hooks: BuyDragHooks) {
     el.addEventListener('pointerdown', (e) => this.onDown(e));
     el.addEventListener('pointermove', (e) => this.onMove(e));
     el.addEventListener('pointerup', (e) => this.onUp(e));
     el.addEventListener('pointercancel', (e) => this.onCancel(e));
+  }
+
+  private clearHoldTimer() {
+    if (this.holdTimer !== null) { clearTimeout(this.holdTimer); this.holdTimer = null; }
+  }
+
+  /** LONG_PRESS_MS elapsed with the finger still resting on the grab: pick it up in place —
+   *  the object lifts under the finger (no teleport to the ground point) and later pointermoves
+   *  make it follow. Same activation path as a slop-exceeding move, minus the dragTo. */
+  private onHold(pointerId: number) {
+    this.holdTimer = null;
+    if (!this.grab || !this.tracker.promote(pointerId)) return;
+    if (this.grab.kind === 'object') {
+      if (!this.hooks.beginObjectMove(this.grab.object)) {
+        this.tracker.cancel(pointerId);
+        this.grab = null;
+        return;
+      }
+      this.grab.moving = true;
+    }
+    this.hooks.setDragging(true);
   }
 
   /** True while a pointer is claimed (even pre-slop) — camera.ts must not track it either. */
@@ -172,18 +213,24 @@ export class BuyModeDrag {
     if (!this.tracker.begin(e.pointerId, e.clientX, e.clientY)) return;
     this.grab = grab;
     this.el.setPointerCapture(e.pointerId);
+    this.clearHoldTimer();
+    this.holdTimer = setTimeout(() => this.onHold(e.pointerId), LONG_PRESS_MS);
   }
 
   private onMove(e: PointerEvent) {
     const result = this.tracker.move(e.pointerId, e.clientX, e.clientY);
     if (result === 'none' || !this.grab) return;
-    if (result === 'start' && this.grab.kind === 'object') {
-      if (!this.hooks.beginObjectMove(this.grab.object)) {
-        this.tracker.cancel(e.pointerId);
-        this.grab = null;
-        return;
+    if (result === 'start') {
+      this.clearHoldTimer();
+      if (this.grab.kind === 'object') {
+        if (!this.hooks.beginObjectMove(this.grab.object)) {
+          this.tracker.cancel(e.pointerId);
+          this.grab = null;
+          return;
+        }
+        this.grab.moving = true;
       }
-      this.grab.moving = true;
+      this.hooks.setDragging(true);
     }
     this.hooks.dragTo(e.clientX, e.clientY);
   }
@@ -191,15 +238,17 @@ export class BuyModeDrag {
   private onUp(e: PointerEvent) {
     const result = this.tracker.end(e.pointerId);
     if (result === 'none') return;
+    this.clearHoldTimer();
     this.grab = null;
-    if (result === 'drop') this.hooks.drop();
+    if (result === 'drop') { this.hooks.setDragging(false); this.hooks.drop(); }
     // 'tap' → TapInput handles it (rotate-in-place / ghost reposition); nothing to do here.
   }
 
   private onCancel(e: PointerEvent) {
     const result = this.tracker.cancel(e.pointerId);
     if (result === 'none') return;
+    this.clearHoldTimer();
     this.grab = null;
-    if (result === 'drag') this.hooks.abort();
+    if (result === 'drag') { this.hooks.setDragging(false); this.hooks.abort(); }
   }
 }

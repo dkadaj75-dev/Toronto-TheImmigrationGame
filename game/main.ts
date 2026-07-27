@@ -2692,6 +2692,7 @@ async function start(initialLoadSlotId?: string) {
     if (!def) return;
     catalogDragMoved = false;
     buyMode.startPlacing(def);
+    buyMode.setGhostDragActive(true); // hover+bounce from the first instant of the slide
     hud.hideSelectionChips();
     hud.hideGhostControls(); // controls only appear if the drop ends up needing manual help
   };
@@ -2701,12 +2702,13 @@ async function start(initialLoadSlotId?: string) {
     dragGhostTo(clientX, clientY);
   };
   hud.onBuyItemDragEnd = () => {
+    buyMode.setGhostDragActive(false);
     // released without the ghost ever tracking the world (finger never left the bar area) —
     // treat as an aborted pick, not a purchase at the ghost's default center spawn
     if (!catalogDragMoved) { buyMode.cancel(); return; }
     finishBuyDragRelease(true);
   };
-  hud.onBuyItemDragCancel = () => { buyMode.cancel(); hud.hideGhostControls(); };
+  hud.onBuyItemDragCancel = () => { buyMode.setGhostDragActive(false); buyMode.cancel(); hud.hideGhostControls(); };
 
   const buyDrag = new BuyModeDrag(renderer.domElement, {
     isActive: () => buyMode.active && !repoOverlayActive && !gameOverActive,
@@ -2734,6 +2736,7 @@ async function start(initialLoadSlotId?: string) {
       return buyMode.selection?.kind === 'moving';
     },
     dragTo: dragGhostTo,
+    setDragging: (active) => buyMode.setGhostDragActive(active),
     drop: () => finishBuyDragRelease(true),
     abort: () => finishBuyDragRelease(false),
   });
@@ -3300,6 +3303,9 @@ async function start(initialLoadSlotId?: string) {
     // audio.ts's module doc comment on the PAUSE decision).
     audio.setPaused(initialLoadingActive || mapSwitchInFlight || effectiveSpeed === 0 || repoOverlayActive || gameOverActive);
     syncAssetStates(); // picks up newly purchased/sold stateful instances; idempotent for steady state
+    // 2026-07-25: "picked up" hover+bounce on the drag ghost — raw dt on purpose (pure cosmetic,
+    // and sim time is a hard 0 while in buy mode anyway); no-ops unless a finger drag is live.
+    buyMode.tickGhostHover(dt);
 
     const previousGameHour = gameSeconds / 3600;
     const gameSecondsDelta = sdt * clockScale();

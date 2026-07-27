@@ -572,6 +572,25 @@ const GHOST_VALID_COLOR = 0x6fe36f;
 const GHOST_INVALID_COLOR = 0xe35a5a;
 export const DEFAULT_GHOST_OPACITY = 0.5;
 
+/** Designer request 2026-07-25 follow-up: while a finger is actively dragging (catalog slide,
+ *  object pickup, ghost grab), the ghost visibly HOVERS above the ground with a slight bounce —
+ *  "picked up" feedback. Pure cosmetics (real-time driven, sim time is frozen in buy mode
+ *  anyway), so constants not tuning fields, per §7.6's ghost-tint precedent. The bounce is
+ *  |sin| — a full-wave rectified sine reads as a soft bounce rather than a float. */
+export const GHOST_HOVER_BASE_M = 0.18;
+export const GHOST_HOVER_BOUNCE_M = 0.07;
+export const GHOST_HOVER_BOUNCE_HZ = 1.6;
+
+/** Vertical lift above the placed height at hover time `tSeconds`. Pure, tested. */
+export function ghostHoverOffset(
+  tSeconds: number,
+  base = GHOST_HOVER_BASE_M,
+  bounce = GHOST_HOVER_BOUNCE_M,
+  hz = GHOST_HOVER_BOUNCE_HZ,
+): number {
+  return base + bounce * Math.abs(Math.sin(tSeconds * hz * Math.PI));
+}
+
 export interface GhostAppearance {
   opacity: number;
   tint: number | null;
@@ -695,6 +714,12 @@ export class BuyModeController {
   private ghostVisualId: string | null = null;
   private ghostCache = new Map<string, GhostCacheEntry>();
   private gridOverlay: THREE.GridHelper | null = null;
+  /** live-drag hover state (2026-07-25 follow-up): while a finger actively drags, the ghost
+   *  floats above its placed height and bounces (see ghostHoverOffset). Purely visual — the
+   *  selection's pos/rot (what confirm uses) is never affected. */
+  private dragHover = false;
+  private hoverClock = 0;
+  private ghostBaseY = 0;
 
   active = false;
   selection: BuyModeSelection = null;
@@ -720,8 +745,35 @@ export class BuyModeController {
   exit() {
     this.active = false;
     this.selection = null;
+    this.dragHover = false;
     this.clearGhost();
     this.removeGridOverlay();
+  }
+
+  // ------------------------------------------------------------ live-drag hover (cosmetic)
+
+  /** Applies the ghost's placement transform and records its resting height so the hover
+   *  bounce always lifts from the CURRENT placed height (ground, wall mount, or surface). */
+  private placeGhost(def: AssetDef, pos: [number, number], rotDeg: number, extraY = 0) {
+    if (!this.ghost) return;
+    applyAssetPlacement(this.ghost, def, pos, rotDeg);
+    this.ghost.position.y += extraY;
+    this.ghostBaseY = this.ghost.position.y;
+    if (this.dragHover) this.ghost.position.y = this.ghostBaseY + ghostHoverOffset(this.hoverClock);
+  }
+
+  /** Finger down-and-dragging (buydrag.ts / catalog slide) ↔ finger released. */
+  setGhostDragActive(active: boolean) {
+    if (this.dragHover === active) return;
+    this.dragHover = active;
+    if (!active && this.ghost) this.ghost.position.y = this.ghostBaseY; // settle back down
+  }
+
+  /** Called from main.ts's render loop with RAW dt (cosmetic; sim time is frozen in buy mode). */
+  tickGhostHover(dtSeconds: number) {
+    if (!this.dragHover || !this.ghost) return;
+    this.hoverClock += dtSeconds;
+    this.ghost.position.y = this.ghostBaseY + ghostHoverOffset(this.hoverClock);
   }
 
   private ensureGridOverlay() {
@@ -813,7 +865,7 @@ export class BuyModeController {
     this.selection = this.selection.kind === 'placing'
       ? { ...this.selection, pos, rotDeg, valid, surface: undefined }
       : { ...this.selection, pos, rotDeg, valid };
-    if (this.ghost) { applyAssetPlacement(this.ghost, def, pos, rotDeg); this.updateGhostAppearance(valid); }
+    if (this.ghost) { this.placeGhost(def, pos, rotDeg); this.updateGhostAppearance(valid); }
   }
 
   /** Clicking an authored counter/table while placing a surface-capable asset snaps to its nearest
@@ -832,8 +884,7 @@ export class BuyModeController {
     const pos: [number, number] = [socket.pos[0], socket.pos[2]];
     this.selection = { ...this.selection, pos, rotDeg: socket.rotDeg, valid: true, surface: socket };
     if (this.ghost) {
-      applyAssetPlacement(this.ghost, this.selection.def, pos, socket.rotDeg);
-      this.ghost.position.y += socket.pos[1];
+      this.placeGhost(this.selection.def, pos, socket.rotDeg, socket.pos[1]);
       this.updateGhostAppearance(true);
     }
     return true;
@@ -847,8 +898,7 @@ export class BuyModeController {
       const surface = this.selection.surface;
       this.selection = { ...this.selection, rotDeg, valid: true };
       if (this.ghost) {
-        applyAssetPlacement(this.ghost, def, this.selection.pos, rotDeg);
-        this.ghost.position.y += surface.pos[1];
+        this.placeGhost(def, this.selection.pos, rotDeg, surface.pos[1]);
         this.updateGhostAppearance(true);
       }
       return;
@@ -856,7 +906,7 @@ export class BuyModeController {
     const excludeKey = this.selection.kind === 'moving' ? this.selection.inst.key : undefined;
     const valid = this.checkValidity(this.selection.pos, rotDeg, def, excludeKey);
     this.selection = { ...this.selection, rotDeg, valid };
-    if (this.ghost) { applyAssetPlacement(this.ghost, def, this.selection.pos, rotDeg); this.updateGhostAppearance(valid); }
+    if (this.ghost) { this.placeGhost(def, this.selection.pos, rotDeg); this.updateGhostAppearance(valid); }
   }
 
   /** Confirms the pending placement (new purchase) or move. Returns the result so the caller
@@ -1019,9 +1069,9 @@ export class BuyModeController {
     styleGhostVisual(entry.visual, appearance);
     ghost.add(entry.visual);
     this.ghostVisualId = def.id;
-    applyAssetPlacement(ghost, def, pos, rotDeg);
     disableGhostRaycasts(ghost);
     this.ghost = ghost;
+    this.placeGhost(def, pos, rotDeg);
     this.getWorld().add(ghost);
   }
 
@@ -1051,6 +1101,7 @@ export class BuyModeController {
 
   /** Cancel and dispose pending/cached visuals before the old world graph is torn down. */
   prepareForWorldRebuild() {
+    this.dragHover = false;
     this.clearGhost();
     this.selection = null;
     for (const entry of this.ghostCache.values()) {

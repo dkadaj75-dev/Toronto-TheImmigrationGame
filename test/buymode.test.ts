@@ -5,6 +5,7 @@ import {
   isPurchasable, isAffordable, purchasableCatalog, catalogCategories, filterCatalog,
   snapToStep, snapPos, normalizeRotDeg, rotateStep, wallRect, isValidPlacement, footprintOnFloor,
   shrinkRect, resolveSnappedPosition,
+  ghostHoverOffset, GHOST_HOVER_BASE_M, GHOST_HOVER_BOUNCE_M, GHOST_HOVER_BOUNCE_HZ,
   snapWallMountedPlacement, isWallMountedPlacement,
   BuyOverlay, BuyModeController, effectiveInstances, effectivePlacedObjects, isSelectableForSell,
   attemptBuy, attemptSell, attemptMove, attemptDestroy,
@@ -472,6 +473,16 @@ console.log('buymode.test — ITEM 2 sold original object detached from world gr
   rebuilt.add(placed2);
   ctrl.reattach(rebuilt);
   check('reattach re-detaches the sold object after a world rebuild', !rebuilt.children.includes(placed2));
+}
+
+console.log('buymode.test — drag-hover bounce offset (2026-07-25 pickup visual)');
+{
+  check('hover at t=0 rests at the base lift', ghostHoverOffset(0) === GHOST_HOVER_BASE_M);
+  const peak = ghostHoverOffset(0.5 / GHOST_HOVER_BOUNCE_HZ);
+  check('hover peaks at base + bounce mid-cycle', approx(peak, GHOST_HOVER_BASE_M + GHOST_HOVER_BOUNCE_M));
+  check('hover returns to base each full cycle', approx(ghostHoverOffset(1 / GHOST_HOVER_BOUNCE_HZ), GHOST_HOVER_BASE_M, 1e-9));
+  check('hover never dips below the base lift', ghostHoverOffset(0.123) >= GHOST_HOVER_BASE_M && ghostHoverOffset(0.789) >= GHOST_HOVER_BASE_M);
+  check('custom params respected', ghostHoverOffset(0, 0.3, 0.1, 2) === 0.3);
 }
 
 console.log('buymode.test — placement tolerance + snap fallback (2026-07-25 less-picky pass)');
