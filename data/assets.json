@@ -201,7 +201,9 @@
         1
       ],
       "interactions": [
-        "eat"
+        "eat",
+        "grab_a_beer",
+        "pour_a_glass_of_wine"
       ],
       "meshFit": {
         "yawOffsetDeg": -90,
@@ -1034,7 +1036,9 @@
         1
       ],
       "interactions": [
-        "eat"
+        "eat",
+        "grab_a_beer",
+        "pour_a_glass_of_wine"
       ],
       "meshFit": {
         "yawOffsetDeg": 0,
@@ -1399,6 +1403,110 @@
         0.081
       ],
       "buyable": false
+    },
+    {
+      "id": "beer",
+      "name": "Beer",
+      "category": "transient",
+      "mesh": "/models/cup.glb",
+      "buyPrice": 0,
+      "sellPrice": 0,
+      "environmentScore": 0,
+      "footprint": [
+        0.25,
+        0.25
+      ],
+      "interactions": [
+        "drink_beer",
+        "throw_away_food"
+      ],
+      "buyable": false,
+      "food": {
+        "hungerGain": 3,
+        "perishHours": 12,
+        "rottenAssetId": "rotten_food"
+      },
+      "_note": "Alcohol slice: spawned by the fridge Grab a beer action, consumed like food. [MODEL: beer_bottle] - reusing cup.glb until the designer drops a bottle model.",
+      "meshFit": {
+        "scale": 0.75
+      },
+      "clearedBy": [
+        "drink_beer",
+        "throw_away_food"
+      ],
+      "carryHandle": [
+        0,
+        0.08,
+        -0.06
+      ],
+      "containerSpace": 1
+    },
+    {
+      "id": "wine",
+      "name": "Glass of wine",
+      "category": "transient",
+      "mesh": "/models/cup.glb",
+      "buyPrice": 0,
+      "sellPrice": 0,
+      "environmentScore": 0,
+      "footprint": [
+        0.25,
+        0.25
+      ],
+      "interactions": [
+        "drink_wine",
+        "throw_away_food"
+      ],
+      "buyable": false,
+      "food": {
+        "hungerGain": 3,
+        "perishHours": 12,
+        "rottenAssetId": "rotten_food"
+      },
+      "_note": "Alcohol slice: spawned by the fridge Pour a glass of wine action. [MODEL: wine_glass] - reusing cup.glb until the designer drops a glass model.",
+      "meshFit": {
+        "scale": 0.75
+      },
+      "clearedBy": [
+        "drink_wine",
+        "throw_away_food"
+      ],
+      "carryHandle": [
+        0,
+        0.08,
+        -0.06
+      ],
+      "containerSpace": 1
+    },
+    {
+      "id": "empty_bottle",
+      "name": "Empty bottle",
+      "category": "transient",
+      "mesh": "/models/cup.glb",
+      "buyPrice": 0,
+      "sellPrice": 0,
+      "environmentScore": -3,
+      "footprint": [
+        0.25,
+        0.25
+      ],
+      "interactions": [
+        "put_in_the_trash"
+      ],
+      "clearedBy": [
+        "clean_up"
+      ],
+      "buyable": false,
+      "_note": "Alcohol slice: waste transient left after drinking, mirrors dirty_dishes. Its Clean up deposit action carries it to a compatible garbage can. [MODEL: empty_bottle] - reusing cup.glb until the designer drops a bottle model.",
+      "meshFit": {
+        "scale": 0.75
+      },
+      "carryHandle": [
+        0,
+        0.08,
+        -0.06
+      ],
+      "containerSpace": 1
     }
   ]
 }
