@@ -199,6 +199,89 @@
       },
       "rewards": [],
       "onceOnly": true
+    },
+    {
+      "id": "treat_yourself",
+      "name": "Treat yourself",
+      "description": "You survived your first days in Toronto and even found a job. You have earned it!\nGrab a cold beer (or pour a glass of wine) from the fridge and unwind.",
+      "trigger": {
+        "all": [
+          {
+            "var": "quests.find_a_job.state",
+            "eq": "done"
+          }
+        ]
+      },
+      "completion": {
+        "all": [
+          {
+            "var": "vars.hadADrink",
+            "eq": true
+          }
+        ]
+      },
+      "rewards": [],
+      "onceOnly": true
+    },
+    {
+      "id": "save_for_moving",
+      "name": "Moving fund",
+      "description": "Toronto landlords want first AND last month up front.\nSave up $2,500 so you can afford to move somewhere better than this basement.",
+      "trigger": {
+        "all": [
+          {
+            "var": "quests.get_a_better_visa.state",
+            "eq": "done"
+          }
+        ]
+      },
+      "completion": {
+        "all": [
+          {
+            "var": "funds",
+            "gte": 2500
+          }
+        ]
+      },
+      "rewards": [
+        {
+          "type": "event",
+          "event": "event_moving_fund"
+        }
+      ],
+      "onceOnly": true
+    },
+    {
+      "id": "home_sweet_home",
+      "name": "Home sweet home",
+      "description": "You made it out of the basement!\nMake your new place feel like home: get comfortable (Comfort at 75 or more).",
+      "trigger": {
+        "all": [
+          {
+            "var": "vars.homeMap",
+            "neq": null
+          },
+          {
+            "var": "vars.homeMap",
+            "neq": "condo"
+          }
+        ]
+      },
+      "completion": {
+        "all": [
+          {
+            "var": "needs.comfort",
+            "gte": 75
+          }
+        ]
+      },
+      "rewards": [
+        {
+          "type": "event",
+          "event": "event_home_sweet_home"
+        }
+      ],
+      "onceOnly": true
     }
   ]
 }

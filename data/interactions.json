@@ -779,6 +779,98 @@
         "containerAssetId": "garbage_can"
       },
       "faceTarget": false
+    },
+    {
+      "id": "grab_a_beer",
+      "name": "Grab a beer",
+      "needGains": {},
+      "skillGains": {},
+      "animation": "stand_use",
+      "autonomyEligible": false,
+      "primaryNeed": null,
+      "cost": 6,
+      "duration": {
+        "baseSeconds": 3
+      },
+      "spawnsAsset": {
+        "assetId": "beer",
+        "actionId": "drink_beer"
+      },
+      "faceTarget": false,
+      "_note": "Alcohol slice: fridge source action, same two-leg shape as eat -> snack -> consume_food. Player-only by design (autonomyEligible false) so sims never drink on their own; designer can flip it."
+    },
+    {
+      "id": "drink_beer",
+      "name": "Drink beer",
+      "needGains": {
+        "fun": 2,
+        "social": 0.5,
+        "energy": -0.3,
+        "bladder": -1
+      },
+      "skillGains": {},
+      "animation": "sit_eat",
+      "autonomyEligible": false,
+      "primaryNeed": null,
+      "seatAware": true,
+      "seatSearch": "nearest",
+      "duration": {
+        "baseSeconds": 6
+      },
+      "consumesFood": true,
+      "spawnsAsset": {
+        "assetId": "empty_bottle",
+        "actionId": "clean_up"
+      },
+      "emitsEvent": "event_first_drink",
+      "faceTarget": false,
+      "_note": "Alcohol slice: consume action mirroring consume_food. Completion leaves an Empty bottle and auto-runs its ordinary Clean up deposit; drinking itself never changes container fill. Fun/social up, small energy dip, bladder pressure."
+    },
+    {
+      "id": "pour_a_glass_of_wine",
+      "name": "Pour a glass of wine",
+      "needGains": {},
+      "skillGains": {},
+      "animation": "stand_use",
+      "autonomyEligible": false,
+      "primaryNeed": null,
+      "cost": 12,
+      "duration": {
+        "baseSeconds": 3
+      },
+      "spawnsAsset": {
+        "assetId": "wine",
+        "actionId": "drink_wine"
+      },
+      "faceTarget": false,
+      "_note": "Alcohol slice: fridge source action, same shape as grab_a_beer with a pricier pour."
+    },
+    {
+      "id": "drink_wine",
+      "name": "Drink wine",
+      "needGains": {
+        "fun": 3,
+        "comfort": 1,
+        "energy": -1,
+        "bladder": -1
+      },
+      "skillGains": {},
+      "animation": "sit_eat",
+      "autonomyEligible": false,
+      "primaryNeed": null,
+      "seatAware": true,
+      "seatSearch": "nearest",
+      "duration": {
+        "baseSeconds": 8
+      },
+      "consumesFood": true,
+      "spawnsAsset": {
+        "assetId": "empty_bottle",
+        "actionId": "clean_up"
+      },
+      "emitsEvent": "event_first_drink",
+      "faceTarget": false,
+      "_note": "Alcohol slice: pricier, comfier, slower drink than beer with a bigger energy dip."
     }
   ]
 }

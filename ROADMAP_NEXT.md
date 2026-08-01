@@ -752,3 +752,18 @@ Design reading + as-built: new `tuning.buy.placementTolerance` (shipped 0.15m, g
 Designer intent (verbatim): "when we maintain the tap/click on an object already placed, we should be able to move it around, maintaining our finger/click. this should be shown by the object hovering above the ground, in ghost mode, and with an effect like the object is slightly bouncy. this applies to the buy mode drag and drop too."
 
 As-built: holding a placed object (or the active ghost) for `LONG_PRESS_MS` (450ms — deliberately above input.ts's 400ms tap window so a hold can never double as a tap-rotate) picks it up in place without needing to move first; it then follows the finger and drops on release like any drag. While ANY finger drag is live (long-press pickup, slop drag, or a catalog-card slide), the ghost hovers `GHOST_HOVER_BASE_M` (0.18m) above its placed height with a rectified-sine bounce (`GHOST_HOVER_BOUNCE_M` 0.07m at 1.6Hz) — `ghostHoverOffset` pure + tested, applied over the recorded resting height so wall-mount/surface placements bounce from the right altitude, driven by raw dt in the render loop (pure cosmetic; sim time is frozen in buy mode). The visual never touches the selection's pos/rot, so confirm/validity are unaffected.
+
+## Alcohol drinks loop and housing quest arc (2026-08-01)
+
+Designer intent (session branch `claude/alcohol-housing-quests-gpmz4s`; spec inferred — no verbatim batch text was delivered with the session):
+
+> Add alcohol to the game and quests around housing; commit, merge and push as usual.
+
+Design reading:
+
+1. Author an alcohol consumption loop entirely as data on the shipped graphs: fridge source actions (Grab a beer $6 / Pour a glass of wine $12) spawn `beer`/`wine` transients whose seat-aware consume actions leave an `empty_bottle` that auto-runs the ordinary Clean up deposit to the garbage can. Player-only (`autonomyEligible: false`) so sims never drink autonomously.
+2. Track "has ever had a drink" via a once-only completion event setting the new `vars.hadADrink` boolean, so quests can gate on drinking with the ordinary condition vocabulary.
+3. Author a housing quest arc around the shipped rental/Kijiji flow: Treat yourself (have a first drink after landing a job), Moving fund (save first+last month = $2,500 after Get a better visa, with a Kijiji-pointer reward notification), Home sweet home (settle into the new place: Comfort ≥ 75 after `homeMap` changes off `condo`, +$150 deposit-return reward).
+4. No engine/tool code changes; placeholder `cup.glb` models tagged `[MODEL: …]` for the designer to swap.
+
+**DONE (2026-08-01):** shipped as PROJECT_CONTEXT §7.74. Data-only: assets/interactions/events/simstate/quests JSON. All affected pure + jsdom suites pass; cross-file id graph verified clean.

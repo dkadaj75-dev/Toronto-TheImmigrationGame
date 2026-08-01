@@ -24,6 +24,12 @@
       "name": "Home Map",
       "type": "string",
       "default": null
+    },
+    {
+      "id": "hadADrink",
+      "name": "Had a drink",
+      "type": "boolean",
+      "default": false
     }
   ]
 }

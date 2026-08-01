@@ -34,6 +34,65 @@
       ],
       "chancePercent": 100,
       "onceOnly": true
+    },
+    {
+      "id": "event_first_drink",
+      "name": "First drink",
+      "effects": [
+        {
+          "type": "setVar",
+          "at": "sim",
+          "var": "hadADrink",
+          "value": true
+        },
+        {
+          "type": "notification",
+          "at": "sim",
+          "event": "notification",
+          "title": "Cheers!",
+          "body": "Nothing like a cold one after a long day. Go easy - drinks dent your energy and your wallet."
+        }
+      ],
+      "chancePercent": 100,
+      "onceOnly": true,
+      "_note": "Alcohol slice: fired by drink_beer/drink_wine completion. Sets vars.hadADrink for the Treat yourself quest; the toast shows once."
+    },
+    {
+      "id": "event_moving_fund",
+      "name": "Moving fund ready",
+      "effects": [
+        {
+          "type": "notification",
+          "at": "sim",
+          "event": "moneyUp",
+          "title": "Moving fund ready!",
+          "body": "You have enough for first and last month somewhere better. Check Kijiji on your smartphone!"
+        }
+      ],
+      "chancePercent": 100,
+      "onceOnly": true,
+      "_note": "Housing quests slice: fired as the save_for_moving quest reward."
+    },
+    {
+      "id": "event_home_sweet_home",
+      "name": "Home sweet home",
+      "effects": [
+        {
+          "type": "funds",
+          "at": "sim",
+          "amount": 150
+        },
+        {
+          "type": "notification",
+          "at": "sim",
+          "event": "questCompleted",
+          "title": "Home sweet home",
+          "body": "You are finally settling in. Your landlord returned part of your deposit: +$150."
+        }
+      ],
+      "chancePercent": 100,
+      "onceOnly": true,
+      "_note": "Housing quests slice: fired as the home_sweet_home quest reward."
     }
   ]
 }
