@@ -116,6 +116,51 @@
       },
       "scoreBonus": 2.5,
       "enabled": true
+    },
+    {
+      "id": "sober_sims_never_drink_autonomously",
+      "name": "Sober sims never drink autonomously",
+      "action": "grab_a_beer",
+      "conditions": {
+        "all": [
+          {
+            "var": "skills.alcoholism",
+            "lte": 40
+          }
+        ]
+      },
+      "scoreBonus": -1000,
+      "enabled": true
+    },
+    {
+      "id": "alcoholism_craving",
+      "name": "Addicted sims crave a drink",
+      "action": "grab_a_beer",
+      "conditions": {
+        "all": [
+          {
+            "var": "skills.alcoholism",
+            "gte": 40
+          }
+        ]
+      },
+      "scoreBonus": 6,
+      "enabled": true
+    },
+    {
+      "id": "rock_bottom_craving",
+      "name": "Rock-bottom sims crave harder",
+      "action": "grab_a_beer",
+      "conditions": {
+        "all": [
+          {
+            "var": "skills.alcoholism",
+            "gte": 75
+          }
+        ]
+      },
+      "scoreBonus": 6,
+      "enabled": true
     }
   ]
 }

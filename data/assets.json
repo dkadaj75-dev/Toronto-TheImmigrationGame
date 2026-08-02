@@ -243,6 +243,11 @@
               "var": "skills.cooking",
               "pctAt0": 5,
               "pctAtMax": -2
+            },
+            {
+              "var": "needs.sobriety",
+              "pctAt0": 20,
+              "pctAtMax": 0
             }
           ],
           "_note": "PROJECT_CONTEXT.md §7.3 example, verbatim: novice cook (skills.cooking=0) risks 2+15=17%, master (=max) 2-2=0%."
@@ -437,7 +442,8 @@
         0.5
       ],
       "interactions": [
-        "wash_hands"
+        "wash_hands",
+        "quit_drinking"
       ],
       "icon": "icons/sink.png",
       "meshFit": {
@@ -1067,7 +1073,8 @@
         0.5
       ],
       "interactions": [
-        "wash_hands"
+        "wash_hands",
+        "quit_drinking"
       ],
       "icon": "icons/kitchensink.png",
       "meshFit": {
@@ -1199,6 +1206,11 @@
               "var": "skills.cooking",
               "pctAt0": 5,
               "pctAtMax": -2
+            },
+            {
+              "var": "needs.sobriety",
+              "pctAt0": 20,
+              "pctAtMax": 0
             }
           ],
           "_note": "PROJECT_CONTEXT.md §7.3 example, verbatim: novice cook (skills.cooking=0) risks 2+15=17%, master (=max) 2-2=0%."

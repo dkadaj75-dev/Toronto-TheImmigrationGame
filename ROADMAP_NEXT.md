@@ -767,3 +767,16 @@ Design reading:
 4. No engine/tool code changes; placeholder `cup.glb` models tagged `[MODEL: …]` for the designer to swap.
 
 **DONE (2026-08-01):** shipped as PROJECT_CONTEXT §7.74. Data-only: assets/interactions/events/simstate/quests JSON. All affected pure + jsdom suites pass; cross-file id graph verified clean.
+
+## Drunkenness effect and Alcoholism levels (2026-08-01, follow-up)
+
+Designer intent (verbatim):
+
+> what about the alcohol effect ? and alcoholism levels?
+
+Design reading:
+
+1. Model the drunk state as an inverted **Sobriety** need (full = sober): drinks knock it down, a negative decayPerTick sobers the sim back up over sim time, and it is never autonomy-sought. Consequences ride existing seams only — happiness component, cook-duration modifiers, stove fire-risk modifier, and a `leave_for_work` sobriety condition (too drunk to work).
+2. Model addiction as an **Alcoholism** skill fed by every drink, with once-only threshold announcement events at 25/50/75 fanned out from an umbrella drink-completion event, autonomy craving rules that make sims at 40+ raid the fridge on their own (and never below), a **Pour it down the drain** recovery action on the sinks, and a repeatable **Sober up** quest (trigger ≥ 60, complete ≤ 20, +$100) that re-arms on relapse.
+
+**DONE (2026-08-01):** shipped as PROJECT_CONTEXT §7.75. Data-only (stats/interactions/assets/events/quests/behavior/happiness JSON); all affected suites green; headless smoke verified the full drink → drunk → sober / binge → levels → recovery → relapse loop.

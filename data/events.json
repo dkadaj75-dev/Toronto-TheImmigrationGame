@@ -93,6 +93,120 @@
       "chancePercent": 100,
       "onceOnly": true,
       "_note": "Housing quests slice: fired as the home_sweet_home quest reward."
+    },
+    {
+      "id": "event_drink_check",
+      "name": "Drink check",
+      "effects": [
+        {
+          "type": "fireEvent",
+          "event": "event_first_drink"
+        },
+        {
+          "type": "fireEvent",
+          "event": "event_habit_forming"
+        },
+        {
+          "type": "fireEvent",
+          "event": "event_alcoholism"
+        },
+        {
+          "type": "fireEvent",
+          "event": "event_rock_bottom"
+        }
+      ],
+      "chancePercent": 100,
+      "_note": "Alcohol effect slice: fired by every drink completion; each child event gates itself on skills.alcoholism and is onceOnly, so level announcements fire exactly once at the right threshold."
+    },
+    {
+      "id": "event_habit_forming",
+      "name": "Alcoholism level 1 - habit",
+      "conditions": {
+        "all": [
+          {
+            "var": "skills.alcoholism",
+            "gte": 25
+          }
+        ]
+      },
+      "effects": [
+        {
+          "type": "notification",
+          "at": "sim",
+          "event": "notification",
+          "title": "A habit is forming",
+          "body": "That fridge run is becoming a reflex. Your Alcoholism is creeping up - watch it in your skills panel."
+        }
+      ],
+      "chancePercent": 100,
+      "onceOnly": true
+    },
+    {
+      "id": "event_alcoholism",
+      "name": "Alcoholism level 2 - dependence",
+      "conditions": {
+        "all": [
+          {
+            "var": "skills.alcoholism",
+            "gte": 50
+          }
+        ]
+      },
+      "effects": [
+        {
+          "type": "notification",
+          "at": "sim",
+          "event": "unhappyShift",
+          "title": "Dependence",
+          "body": "You now NEED a drink. Expect cravings - your sim may hit the fridge on their own. Pour it down the drain at a sink to fight back."
+        }
+      ],
+      "chancePercent": 100,
+      "onceOnly": true
+    },
+    {
+      "id": "event_rock_bottom",
+      "name": "Alcoholism level 3 - rock bottom",
+      "conditions": {
+        "all": [
+          {
+            "var": "skills.alcoholism",
+            "gte": 75
+          }
+        ]
+      },
+      "effects": [
+        {
+          "type": "needDelta",
+          "at": "sim",
+          "need": "comfort",
+          "amount": -20
+        },
+        {
+          "type": "notification",
+          "at": "sim",
+          "event": "firedUnhappy",
+          "title": "Rock bottom",
+          "body": "Waking up on the floor again. Toronto is hard, but this is harder. Sober up before it costs you your job."
+        }
+      ],
+      "chancePercent": 100,
+      "onceOnly": true
+    },
+    {
+      "id": "event_sober_up",
+      "name": "Sobered up",
+      "effects": [
+        {
+          "type": "notification",
+          "at": "sim",
+          "event": "questCompleted",
+          "title": "Clean(er)",
+          "body": "You worked your Alcoholism back down. Your wallet and your liver thank you."
+        }
+      ],
+      "chancePercent": 100,
+      "_note": "Alcohol effect slice: fired by each completion of the REPEATABLE sober_up quest, so no onceOnly."
     }
   ]
 }
