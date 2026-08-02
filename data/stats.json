@@ -73,6 +73,15 @@
       "autonomy": false,
       "computed": "sumOfPlacedObjectEnvScores",
       "_note": "Passive — Σ environment scores of placed objects, never decays, never sought."
+    },
+    {
+      "id": "sobriety",
+      "name": "Sobriety",
+      "color": "#6c5ce7",
+      "default": 100,
+      "decayPerTick": -0.06,
+      "autonomy": false,
+      "_note": "Alcohol effect slice: INVERTED need - full bar = sober, drinks apply negative needGains, and the negative decayPerTick makes it refill toward 100 over sim time (sobering up). autonomy:false so sims never seek it; effects ride ordinary hooks (happiness component, duration modifiers, stove accident modifier, leave_for_work condition)."
     }
   ],
   "skills": [
@@ -128,6 +137,14 @@
       "default": 0,
       "max": 100,
       "_note": "ROADMAP_NEXT B2-5 — drives extinguish's duration modifier (smarter sims extinguish fires faster). No gain activity maps to it yet; designer edits later."
+    },
+    {
+      "id": "alcoholism",
+      "name": "Alcoholism",
+      "color": "#8e44ad",
+      "default": 0,
+      "max": 100,
+      "_note": "Alcohol effect slice: addiction level 0-100, fed by drink skillGains, reduced by the quit_drinking action. Threshold events at 25/50/75 announce the levels; behavior rules make sims 40+ crave autonomous drinks; the repeatable sober_up quest triggers at 60."
     }
   ],
   "personality": [

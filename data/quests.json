@@ -282,6 +282,38 @@
         }
       ],
       "onceOnly": true
+    },
+    {
+      "id": "sober_up",
+      "name": "Sober up",
+      "description": "The drinking got out of hand.\nGet your Alcoholism back down to 20 or less - pour your stash down the drain at a sink, and stay out of the fridge.",
+      "trigger": {
+        "all": [
+          {
+            "var": "skills.alcoholism",
+            "gte": 60
+          }
+        ]
+      },
+      "completion": {
+        "all": [
+          {
+            "var": "skills.alcoholism",
+            "lte": 20
+          }
+        ]
+      },
+      "rewards": [
+        {
+          "type": "funds",
+          "amount": 100
+        },
+        {
+          "type": "event",
+          "event": "event_sober_up"
+        }
+      ],
+      "onceOnly": false
     }
   ]
 }

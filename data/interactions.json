@@ -160,7 +160,14 @@
       "sound": "sounds/action_beep.wav",
       "duration": {
         "baseSeconds": 12,
-        "atMaxSeconds": 6
+        "atMaxSeconds": 6,
+        "modifiers": [
+          {
+            "var": "needs.sobriety",
+            "atMin": 1.8,
+            "atMax": 1
+          }
+        ]
       },
       "faceTarget": false,
       "requiredAsset": {
@@ -331,10 +338,14 @@
           {
             "var": "vars.job",
             "neq": null
+          },
+          {
+            "var": "needs.sobriety",
+            "gte": 25
           }
         ]
       },
-      "_note": "ROADMAP_NEXT B3-8 / PROJECT_CONTEXT.md §7.20 V3 — player-only exterior-door work departure. Existing conditions still require vars.job; game/main.ts adds the job-hours code-side gate because each job has different/cross-midnight hours. The short duration lets the stand_use animation visibly complete before the sim disappears; completed-only effects use the ordinary onActionStop path."
+      "_note": "ROADMAP_NEXT B3-8 / PROJECT_CONTEXT.md §7.20 V3 — player-only exterior-door work departure. Existing conditions still require vars.job; game/main.ts adds the job-hours code-side gate because each job has different/cross-midnight hours. The short duration lets the stand_use animation visibly complete before the sim disappears; completed-only effects use the ordinary onActionStop path. Alcohol slice: also requires needs.sobriety >= 25 - a hammered sim cannot leave for work (the option hides until they sober up)."
     },
     {
       "id": "visit_their_place",
@@ -512,7 +523,14 @@
       "duration": {
         "baseSeconds": 15,
         "atMaxSeconds": 5,
-        "skillVar": "skills.cooking"
+        "skillVar": "skills.cooking",
+        "modifiers": [
+          {
+            "var": "needs.sobriety",
+            "atMin": 1.8,
+            "atMax": 1
+          }
+        ]
       },
       "faceTarget": false,
       "requiredAsset": {
@@ -786,7 +804,7 @@
       "needGains": {},
       "skillGains": {},
       "animation": "stand_use",
-      "autonomyEligible": false,
+      "autonomyEligible": true,
       "primaryNeed": null,
       "cost": 6,
       "duration": {
@@ -797,7 +815,7 @@
         "actionId": "drink_beer"
       },
       "faceTarget": false,
-      "_note": "Alcohol slice: fridge source action, same two-leg shape as eat -> snack -> consume_food. Player-only by design (autonomyEligible false) so sims never drink on their own; designer can flip it."
+      "_note": "Alcohol slice: fridge source action, same two-leg shape as eat -> snack -> consume_food. autonomyEligible so the behavior.json craving/blocker rule pair decides: sober sims (alcoholism <= 40) get -1000 and never drink on their own, addicted sims get a positive craving bonus."
     },
     {
       "id": "drink_beer",
@@ -806,9 +824,12 @@
         "fun": 2,
         "social": 0.5,
         "energy": -0.3,
-        "bladder": -1
+        "bladder": -1,
+        "sobriety": -6
       },
-      "skillGains": {},
+      "skillGains": {
+        "alcoholism": 0.4
+      },
       "animation": "sit_eat",
       "autonomyEligible": false,
       "primaryNeed": null,
@@ -822,7 +843,7 @@
         "assetId": "empty_bottle",
         "actionId": "clean_up"
       },
-      "emitsEvent": "event_first_drink",
+      "emitsEvent": "event_drink_check",
       "faceTarget": false,
       "_note": "Alcohol slice: consume action mirroring consume_food. Completion leaves an Empty bottle and auto-runs its ordinary Clean up deposit; drinking itself never changes container fill. Fun/social up, small energy dip, bladder pressure."
     },
@@ -852,9 +873,12 @@
         "fun": 3,
         "comfort": 1,
         "energy": -1,
-        "bladder": -1
+        "bladder": -1,
+        "sobriety": -8
       },
-      "skillGains": {},
+      "skillGains": {
+        "alcoholism": 0.5
+      },
       "animation": "sit_eat",
       "autonomyEligible": false,
       "primaryNeed": null,
@@ -868,9 +892,36 @@
         "assetId": "empty_bottle",
         "actionId": "clean_up"
       },
-      "emitsEvent": "event_first_drink",
+      "emitsEvent": "event_drink_check",
       "faceTarget": false,
       "_note": "Alcohol slice: pricier, comfier, slower drink than beer with a bigger energy dip."
+    },
+    {
+      "id": "quit_drinking",
+      "name": "Pour it down the drain",
+      "needGains": {
+        "fun": -0.5
+      },
+      "skillGains": {
+        "alcoholism": -0.6
+      },
+      "animation": "stand_use",
+      "autonomyEligible": false,
+      "primaryNeed": null,
+      "cost": 4,
+      "duration": {
+        "baseSeconds": 6
+      },
+      "conditions": {
+        "all": [
+          {
+            "var": "skills.alcoholism",
+            "gte": 5
+          }
+        ]
+      },
+      "faceTarget": false,
+      "_note": "Alcohol slice: recovery action on the sinks. Dumps the stash (costs money, no fun) and works Alcoholism back down; drives the repeatable sober_up quest. Hidden below alcoholism 5."
     }
   ]
 }

@@ -124,6 +124,13 @@
       "weight": 2,
       "min": 0,
       "max": 1
+    },
+    {
+      "var": "needs.sobriety",
+      "weight": 1,
+      "min": 0,
+      "max": 100,
+      "_note": "Alcohol effect slice: being drunk (low sobriety) drags happiness down; fully sober contributes full weight."
     }
   ]
 }
