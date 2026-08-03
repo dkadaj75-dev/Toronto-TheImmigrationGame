@@ -788,3 +788,11 @@ Designer intent (verbatim):
 > While drunk, we should have a screen effect that intensifies the drunker the character is
 
 Design reading + as-built: new pure module `game/drunkfx.ts` + a thin render-loop application in `main.ts`, all knobs in `tuning.drunkFx` (sparse, hot-reloadable, `enabled:false` kill switch). Effect = blur + saturation + radial vignette + slow view sway, ramping linearly from the authored sobriety threshold (70) to peak at 0. Sway runs on raw dt (cosmetic precedent), is suppressed in buy mode to keep placement hit-testing exact, and a small zoom hides swayed edges. HUD unaffected. Shipped as PROJECT_CONTEXT §7.76 with a 26-check pure suite, strict tsc, build, and a live boot + hot-reload probe verifying the exact authored values on the canvas.
+
+## Full-screen mode (2026-08-01, follow-up 3)
+
+Designer intent (verbatim):
+
+> Player to switch to full screen mode. Add this feature in the options too
+
+Design reading + as-built: pure `game/fullscreen.ts` (standard + WebKit APIs, duck-typed, never-throw) + a HUD ⛶ button beside the system gear + a new `'fullscreen'` option type rendered by the shared OptionsPanel — so the switch shows up in the title-screen Options AND the in-game system-menu Options from one `data/title.json` entry (System editor dropdown updated). The switch/button always mirror the live browser state via the fullscreen change events (ESC/F11 covered) with delayed-resync fallbacks; unsupported platforms (iPhone Safari) hide both controls. Shipped as PROJECT_CONTEXT §7.77 with an 18-check pure suite; title/title-screen/system-editor suites, strict tsc, build, and a live headless boot all green.

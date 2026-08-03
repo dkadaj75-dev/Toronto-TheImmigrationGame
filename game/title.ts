@@ -40,7 +40,9 @@ export function mostRecentSlotId(slots: readonly SlotEntry[]): string | undefine
 
 function finite(value: unknown, fallback: number): number { return typeof value === 'number' && Number.isFinite(value) ? value : fallback; }
 export function clampOptionValue(def: TitleOptionDef, value: unknown): number | boolean {
-  if (def.type === 'toggle') return typeof value === 'boolean' ? value : Boolean(def.default);
+  // 'fullscreen' clamps like a toggle so the preferences round-trip stays total, but the panel
+  // ignores the stored value and always renders the browser's LIVE state (see title-screen.ts).
+  if (def.type === 'toggle' || def.type === 'fullscreen') return typeof value === 'boolean' ? value : Boolean(def.default);
   const min = finite(def.min, 0); const max = Math.max(min, finite(def.max, 1));
   return Math.min(max, Math.max(min, finite(value, finite(def.default, min))));
 }

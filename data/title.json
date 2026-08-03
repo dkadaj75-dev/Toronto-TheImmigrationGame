@@ -50,6 +50,13 @@
       "max": 1,
       "step": 0.05,
       "default": 1
+    },
+    {
+      "id": "fullscreen",
+      "type": "fullscreen",
+      "label": "Full screen",
+      "default": false,
+      "_note": "PROJECT_CONTEXT 7.77: live full-screen switch. Mirrors the browser state (never the stored pref) and hides itself on platforms without the Fullscreen API (iPhone Safari). Same row appears in the in-game system menu Options."
     }
   ],
   "credits": "Septentrion Games"

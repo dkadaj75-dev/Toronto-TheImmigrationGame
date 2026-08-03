@@ -195,9 +195,10 @@ function renderTitle() {
     const row = document.createElement('div'); row.className = 'option-row'; row.dataset.optionIndex = String(index);
     row.appendChild(textInput(() => opt.id, (v) => { opt.id = v.trim(); markDirty('title.json'); }, `title.options.${index}.id`));
     row.appendChild(textInput(() => opt.label, (v) => { opt.label = v; markDirty('title.json'); }, `title.options.${index}.label`));
-    row.appendChild(selectInput([['slider', 'slider'], ['toggle', 'toggle']], () => opt.type, (v) => {
+    row.appendChild(selectInput([['slider', 'slider'], ['toggle', 'toggle'], ['fullscreen', 'fullscreen']], () => opt.type, (v) => {
       opt.type = v;
-      opt.default = v === 'toggle' ? !!opt.default : Number(opt.default) || 0;
+      // 'fullscreen' clamps like a toggle in-game (live browser state; the stored default is inert).
+      opt.default = v === 'slider' ? (Number(opt.default) || 0) : !!opt.default;
       markDirty('title.json'); renderTitle();
     }, `title.options.${index}.type`));
     for (const key of ['min', 'max', 'step']) {
@@ -205,7 +206,7 @@ function renderTitle() {
       el.disabled = opt.type !== 'slider';
       row.appendChild(el);
     }
-    if (opt.type === 'toggle') {
+    if (opt.type === 'toggle' || opt.type === 'fullscreen') {
       row.appendChild(checkInput(() => opt.default, (v) => { opt.default = v; markDirty('title.json'); }, `title.options.${index}.default`));
     } else {
       row.appendChild(numInput(() => opt.default, (v) => { opt.default = v ?? 0; markDirty('title.json'); }, `title.options.${index}.default`));

@@ -3,6 +3,7 @@ import type { ThemeLayoutItem, TitleConfig, TitleOptionDef } from './data';
 import { anchorCss } from './theme';
 import { deleteDecision, loadDecision, type SlotCardView } from './saveslots';
 import { applyVolumes, PreferencesStore, resolveMenu, resolveOptions, type TitlePreferences, type VolumeAudioTarget } from './title';
+import { FULLSCREEN_CHANGE_EVENTS, fullscreenSupported, isFullscreen, setFullscreen } from './fullscreen';
 import { publicUrl } from './urls';
 
 export interface TitleScreenActions {
@@ -23,7 +24,21 @@ export class OptionsPanel {
     private readonly store: PreferencesStore,
     private readonly audio: VolumeAudioTarget,
     private readonly onBack: () => void,
-  ) { this.prefs = store.read(definitions); }
+  ) {
+    this.prefs = store.read(definitions);
+    // §7.77: whichever way fullscreen actually changes (this panel, the HUD button, ESC/F11, the
+    // system UI), any rendered fullscreen switch resyncs to the browser's real state. Bound once
+    // per panel; querying by id each event keeps it correct across re-renders.
+    for (const eventName of FULLSCREEN_CHANGE_EVENTS) {
+      document.addEventListener(eventName, () => {
+        for (const def of this.definitions) {
+          if (def.type !== 'fullscreen') continue;
+          const box = this.root.querySelector<HTMLInputElement>(`#title-option-${def.id}`);
+          if (box) box.checked = isFullscreen(document);
+        }
+      });
+    }
+  }
 
   render(): void {
     this.root.replaceChildren();
@@ -36,8 +51,17 @@ export class OptionsPanel {
       if (option.type === 'slider') {
         input.type = 'range'; input.min = String(option.min ?? 0); input.max = String(option.max ?? 1);
         input.step = String(option.step ?? 0.05); input.value = String(option.value);
+      } else if (option.type === 'fullscreen') {
+        // Live browser state, not the stored preference — fullscreen cannot be restored without
+        // a user gesture, so a persisted "true" would only ever desync the switch.
+        input.type = 'checkbox'; input.checked = isFullscreen(document);
+        row.hidden = !fullscreenSupported(document.documentElement);
       } else { input.type = 'checkbox'; input.checked = Boolean(option.value); }
       input.addEventListener('input', () => {
+        if (option.type === 'fullscreen') {
+          setFullscreen(input.checked, document.documentElement, document);
+          return; // real outcome lands via FULLSCREEN_CHANGE_EVENTS; nothing to persist
+        }
         this.prefs[option.id] = option.type === 'toggle' ? input.checked : input.valueAsNumber;
         this.prefs = this.store.write(this.definitions, this.prefs);
         applyVolumes(this.prefs, this.audio);
