@@ -28,6 +28,7 @@ import { computeHappiness, happinessSkillFactor, isRefusedByMood } from './happi
 import { EventFiringRegistry, MAX_EVENT_DEPTH, canFireAtDepth, findEvent, resolveEvent } from './events';
 import { AccidentsController, resolveTapAssetId, shouldRemovePlacedOnCleanup } from './accidents';
 import { drunkFxFrame, drunkFilterCss, drunkTransformCss } from './drunkfx';
+import { FULLSCREEN_CHANGE_EVENTS, fullscreenSupported, isFullscreen, setFullscreen } from './fullscreen';
 import { GarbageController, wasteItemCount } from './garbage';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials, isSelectableForSell } from './buymode';
 import { BuyModeDrag } from './buydrag';
@@ -1279,6 +1280,20 @@ async function start(initialLoadSlotId?: string) {
     });
   };
   hud.onSystemMenuQuit = () => location.reload();
+  // §7.77 full screen: the HUD button and any Options-panel switch drive the same browser state;
+  // change events (incl. ESC/F11/system exits) are the single source of truth for the UI, and an
+  // unsupported platform (iPhone Safari) simply never shows the button or the options row.
+  const syncFullscreenHud = () =>
+    hud.setFullscreenState(isFullscreen(document), fullscreenSupported(document.documentElement));
+  hud.onFullscreenToggle = () => {
+    setFullscreen(!isFullscreen(document), document.documentElement, document);
+    // Belt and suspenders: some embedders flip fullscreenElement without emitting the change
+    // event (observed in headless Chromium), and back-to-back transitions can settle slowly —
+    // two delayed resyncs keep the button honest there. Real browsers stay synced via the events.
+    for (const delayMs of [150, 800]) window.setTimeout(syncFullscreenHud, delayMs);
+  };
+  for (const eventName of FULLSCREEN_CHANGE_EVENTS) document.addEventListener(eventName, syncFullscreenHud);
+  syncFullscreenHud();
   hud.onNotificationAction = (notification: ResolvedNotification) => {
     const action = notification.action;
     if (action?.type === 'phoneTab' && typeof action.tab === 'string') {

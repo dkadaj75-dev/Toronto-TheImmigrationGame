@@ -294,6 +294,11 @@ const CSS = `
   width: 44px; height: 44px; border: var(--theme-button-outline-width, 1px) solid var(--theme-button-outline, rgba(130,158,210,.55));
   border-radius: var(--theme-button-radius, 999px); background: var(--theme-button-bg, rgba(20,26,40,.9)); color: var(--theme-button-fg, #eaf0fb);
   font-size: 20px; pointer-events: auto; cursor: pointer; touch-action: manipulation; }
+#fullscreen-button { position: absolute; top: calc(8px + env(safe-area-inset-top, 0px)); right: calc(60px + env(safe-area-inset-right, 0px));
+  width: 44px; height: 44px; border: var(--theme-button-outline-width, 1px) solid var(--theme-button-outline, rgba(130,158,210,.55));
+  border-radius: var(--theme-button-radius, 999px); background: var(--theme-button-bg, rgba(20,26,40,.9)); color: var(--theme-button-fg, #eaf0fb);
+  font-size: 20px; pointer-events: auto; cursor: pointer; touch-action: manipulation; }
+#fullscreen-button[aria-pressed="true"] { border-color: var(--theme-button-active-outline, #9ecbff); }
 #system-menu-overlay { position: fixed; inset: 0; z-index: 23; display: none; place-items: center; padding: 20px; pointer-events: none; background: rgba(8,10,16,.76); }
 #system-menu-overlay.open { display: grid; pointer-events: auto; }
 .system-menu-panel { width: min(380px, 100%); max-height: calc(100dvh - 40px); overflow-y: auto; display: grid; gap: 10px; padding: 22px;
@@ -582,6 +587,7 @@ export class Hud {
   private renderedNotificationIds = new Set<string>();
   private systemMenuOverlay: HTMLElement;
   private systemMenuPanel: HTMLElement;
+  private fullscreenButton!: HTMLButtonElement;
   private feedbackRoot: HTMLElement;
   private feedbackItems: { el: HTMLElement; elapsed: number }[] = [];
   private fills = new Map<string, HTMLElement>();
@@ -677,6 +683,9 @@ export class Hud {
   onNotificationDismiss: ((id: string) => void) | null = null;
   onNotificationAcknowledge: (() => void) | null = null;
   onNotificationAction: ((notification: ResolvedNotification) => void) | null = null;
+  /** §7.77: HUD full-screen button (next to the system gear). main.ts owns the actual
+   *  Fullscreen API calls and keeps the pressed/hidden state synced via setFullscreenState. */
+  onFullscreenToggle: (() => void) | null = null;
   onSystemMenuOpen: (() => void) | null = null;
   onSystemMenuResume: (() => void) | null = null;
   onSystemMenuSave: (() => void) | null = null;
@@ -725,6 +734,7 @@ export class Hud {
       <button id="buy-button">🛒 Buy</button>
       <button id="wall-cut-button" aria-pressed="false" title="Cut walls down">⌂ Cut</button>
       <button id="phone-button" aria-label="Open smartphone" title="Smartphone"><img alt="" /><span class="phone-badge" aria-label="0 unpaid bills"></span></button>
+      <button id="fullscreen-button" aria-label="Toggle full screen" aria-pressed="false" title="Full screen" hidden>⛶</button>
       <button id="system-menu-button" aria-label="Open system menu" title="Menu">⚙</button>
       <div id="system-menu-overlay" role="dialog" aria-modal="true" aria-label="System menu">
         <div class="system-menu-panel"></div>
@@ -808,6 +818,8 @@ export class Hud {
     this.feedbackRoot = root.querySelector('#floating-feedback')!;
     this.chip.querySelector('button')!.addEventListener('click', () => this.onCancelAction?.());
     root.querySelector('#system-menu-button')!.addEventListener('click', () => this.onSystemMenuOpen?.());
+    this.fullscreenButton = root.querySelector('#fullscreen-button')!;
+    this.fullscreenButton.addEventListener('click', () => this.onFullscreenToggle?.());
 
     // --- Visa status + terminal game-over UI (§7.20 B3-6) ---
     this.visaChip = root.querySelector('#visa-chip')!;
@@ -1249,6 +1261,14 @@ export class Hud {
   }
 
   showSystemOptions(render: (root: HTMLElement) => void): void { render(this.systemMenuPanel); }
+
+  /** §7.77: mirror the browser's real fullscreen state onto the HUD button. Unsupported
+   *  platforms (iPhone Safari has no element fullscreen) keep the button hidden entirely. */
+  setFullscreenState(active: boolean, supported: boolean): void {
+    this.fullscreenButton.hidden = !supported;
+    this.fullscreenButton.setAttribute('aria-pressed', String(active));
+    this.fullscreenButton.title = active ? 'Exit full screen' : 'Full screen';
+  }
 
   private showQuitConfirm(): void {
     this.systemMenuPanel.replaceChildren();

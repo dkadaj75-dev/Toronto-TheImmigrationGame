@@ -66,7 +66,10 @@ export interface ThemeData {
 
 export interface TitleMenuDef { id: string; label: string; enabled?: boolean; }
 export interface TitleOptionDef {
-  id: string; type: 'slider' | 'toggle'; label: string;
+  /** §7.77: 'fullscreen' renders as a live full-screen switch — its value mirrors the browser's
+   *  real state (never the stored preference; browsers cannot restore fullscreen without a
+   *  gesture) and the whole row hides on platforms without the Fullscreen API (iPhone Safari). */
+  id: string; type: 'slider' | 'toggle' | 'fullscreen'; label: string;
   min?: number; max?: number; step?: number; default: number | boolean;
 }
 export interface TitleConfig {
