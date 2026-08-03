@@ -780,3 +780,11 @@ Design reading:
 2. Model addiction as an **Alcoholism** skill fed by every drink, with once-only threshold announcement events at 25/50/75 fanned out from an umbrella drink-completion event, autonomy craving rules that make sims at 40+ raid the fridge on their own (and never below), a **Pour it down the drain** recovery action on the sinks, and a repeatable **Sober up** quest (trigger ≥ 60, complete ≤ 20, +$100) that re-arms on relapse.
 
 **DONE (2026-08-01):** shipped as PROJECT_CONTEXT §7.75. Data-only (stats/interactions/assets/events/quests/behavior/happiness JSON); all affected suites green; headless smoke verified the full drink → drunk → sober / binge → levels → recovery → relapse loop.
+
+## Drunk-screen effect (2026-08-01, follow-up 2)
+
+Designer intent (verbatim):
+
+> While drunk, we should have a screen effect that intensifies the drunker the character is
+
+Design reading + as-built: new pure module `game/drunkfx.ts` + a thin render-loop application in `main.ts`, all knobs in `tuning.drunkFx` (sparse, hot-reloadable, `enabled:false` kill switch). Effect = blur + saturation + radial vignette + slow view sway, ramping linearly from the authored sobriety threshold (70) to peak at 0. Sway runs on raw dt (cosmetic precedent), is suppressed in buy mode to keep placement hit-testing exact, and a small zoom hides swayed edges. HUD unaffected. Shipped as PROJECT_CONTEXT §7.76 with a 26-check pure suite, strict tsc, build, and a live boot + hot-reload probe verifying the exact authored values on the canvas.

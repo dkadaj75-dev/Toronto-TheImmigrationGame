@@ -274,5 +274,17 @@
   "surfacePlacement": {
     "radiusMeters": 3,
     "_source": "New.txt elevated surfaces: nearest free counter/table socket search radius for interrupted food and carried props; fallback is a legal floor cell."
+  },
+  "drunkFx": {
+    "enabled": true,
+    "needId": "sobriety",
+    "startBelowSobriety": 70,
+    "maxBlurPx": 2.5,
+    "maxSaturate": 1.6,
+    "maxVignette": 0.55,
+    "wobbleMaxDeg": 1.5,
+    "wobbleMaxShiftPx": 10,
+    "wobbleHz": 0.22,
+    "_note": "Drunk-screen effect (PROJECT_CONTEXT 7.76): ramps in below startBelowSobriety and peaks at sobriety 0 - blur + saturation + vignette + slow view sway. All sparse; enabled:false switches the whole effect off. See game/drunkfx.ts."
   }
 }
