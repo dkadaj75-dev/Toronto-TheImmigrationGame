@@ -865,6 +865,8 @@ export interface TuningData {
   cleanup?: { radiusMeters?: number };
   /** Maximum horizontal search radius for placing interrupted food/props on an elevated socket. */
   surfacePlacement?: { radiusMeters?: number };
+  /** §7.76 drunk-screen effect knobs — every field sparse (see game/drunkfx.ts for defaults). */
+  drunkFx?: import('./drunkfx').DrunkFxTuning;
   economy: { startingFunds: number; currencyName: string };
   /** B13-8 Buy Mode actual-asset ghost. Opacity is clamped to 0..1; absent defaults to 0.5.
    *  placementTolerance (2026-07-25): meters of per-side footprint forgiveness applied to Buy

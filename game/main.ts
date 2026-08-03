@@ -27,6 +27,7 @@ import { WorkTracker, applyNeedsCost, decideAutoDepart, isLeaveForWorkAvailable,
 import { computeHappiness, happinessSkillFactor, isRefusedByMood } from './happiness';
 import { EventFiringRegistry, MAX_EVENT_DEPTH, canFireAtDepth, findEvent, resolveEvent } from './events';
 import { AccidentsController, resolveTapAssetId, shouldRemovePlacedOnCleanup } from './accidents';
+import { drunkFxFrame, drunkFilterCss, drunkTransformCss } from './drunkfx';
 import { GarbageController, wasteItemCount } from './garbage';
 import { BuyModeController, catalogCategories, filterCatalog, isAffordable, iconFallbackColor, iconFallbackInitials, isSelectableForSell } from './buymode';
 import { BuyModeDrag } from './buydrag';
@@ -149,6 +150,16 @@ async function start(initialLoadSlotId?: string) {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   app.appendChild(renderer.domElement);
+
+  // §7.76 drunk vignette — one gradient div over the canvas (inside #app, below the HUD, which
+  // lives outside it); only its opacity ever animates, driven by game/drunkfx.ts in the render
+  // loop. pointer-events:none so taps pass through untouched.
+  const drunkVignette = document.createElement('div');
+  drunkVignette.style.cssText =
+    'position:absolute;inset:0;pointer-events:none;z-index:1;opacity:0;transition:opacity 0.4s;' +
+    'background:radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(30,5,40,0.85) 100%);';
+  app.appendChild(drunkVignette);
+  let drunkClock = 0;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x2a3346);
@@ -3306,6 +3317,24 @@ async function start(initialLoadSlotId?: string) {
     // 2026-07-25: "picked up" hover+bounce on the drag ghost — raw dt on purpose (pure cosmetic,
     // and sim time is a hard 0 while in buy mode anyway); no-ops unless a finger drag is live.
     buyMode.tickGhostHover(dt);
+
+    // §7.76 drunk-screen effect — raw dt on purpose (pure cosmetic, same precedent as the ghost
+    // bounce above): the sway keeps drifting while paused, but its INTENSITY is frozen since
+    // sobriety only moves on sim ticks. Buy mode suppresses the canvas sway so drag/placement
+    // hit-testing coordinates stay exact; the vignette/blur (which don't move pixels) remain.
+    drunkClock += dt;
+    {
+      const drunkCfg = data.tuning.drunkFx;
+      const sobriety = stats.needs.get(drunkCfg?.needId ?? 'sobriety') ?? 100;
+      const fxFrame = drunkFxFrame(sobriety, drunkClock, drunkCfg);
+      const canvasStyle = renderer.domElement.style;
+      const filter = drunkFilterCss(fxFrame);
+      const transform = buyMode.active ? '' : drunkTransformCss(fxFrame);
+      if (canvasStyle.filter !== filter) canvasStyle.filter = filter;
+      if (canvasStyle.transform !== transform) canvasStyle.transform = transform;
+      const vignette = fxFrame.vignetteOpacity.toFixed(3);
+      if (drunkVignette.style.opacity !== vignette) drunkVignette.style.opacity = vignette;
+    }
 
     const previousGameHour = gameSeconds / 3600;
     const gameSecondsDelta = sdt * clockScale();
