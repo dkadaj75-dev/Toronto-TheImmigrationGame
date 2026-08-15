@@ -796,3 +796,37 @@ Designer intent (verbatim):
 > Player to switch to full screen mode. Add this feature in the options too
 
 Design reading + as-built: pure `game/fullscreen.ts` (standard + WebKit APIs, duck-typed, never-throw) + a HUD ⛶ button beside the system gear + a new `'fullscreen'` option type rendered by the shared OptionsPanel — so the switch shows up in the title-screen Options AND the in-game system-menu Options from one `data/title.json` entry (System editor dropdown updated). The switch/button always mirror the live browser state via the fullscreen change events (ESC/F11 covered) with delayed-resync fallbacks; unsupported platforms (iPhone Safari) hide both controls. Shipped as PROJECT_CONTEXT §7.77 with an 18-check pure suite; title/title-screen/system-editor suites, strict tsc, build, and a live headless boot all green.
+
+## Rentable maps and the housing quest ladder (2026-08-15)
+
+Designer intent (verbatim):
+
+> create a series of quests and maps that we can rent. The quests basically continue the exisiting
+> serie where we start the immigration and visa processes, all the way to living in a detached house
+> or penthouse condo. Create 10 new maps, from the apt to the penthouse / house and commit merge publish
+
+Design reading:
+
+1. Ten new rentable maps in `data/maps/`, one rung per step of a Toronto housing ladder — bachelor
+   studio → 1BR → 2BR → glass condo with a balcony → hard loft → townhouse → semi → detached
+   bungalow → detached house **and** penthouse (the two endgame homes the designer named). Each one
+   carries the shipped ROADMAP_APT R1 `rental` block: fake Kijiji ad, `moveInHours`, and an
+   availability Condition tree gating on quests done, income, credit score and visa status — exactly
+   the four gates of the original Kijiji request (ROADMAP_APT §0).
+2. Eleven new quests continuing the shipped arc where it stopped (`home_sweet_home`), interleaving
+   housing rungs with the immigration track — credit, promotion, the PR file, PR itself, the
+   detached house, citizenship, and a finale that needs the top home AND a passport.
+3. Data only: no engine or tool code. Everything rides shipped systems — the rental listing/pricing
+   boundary (`game/rental.ts` + `data/finance.json`), the quest evaluator (`game/quests.ts`), the
+   event manager for reward toasts, and the D1/D3/D4 building shell (on-wall doors, curtain walls,
+   outdoor balcony/terrace floors, per-map exteriors).
+4. Two pre-existing data bugs fixed on the way, because the ladder stands on them: `move_out`
+   completed on the tick it activated (`vars.homeMap` defaults to null and `null != "condo"`), which
+   made the shipped Apt1 listing unreachable in practice; and `Apt1`'s `bounds.h` was smaller than
+   its own floor plan, leaving its back room outside the nav grid.
+
+**DONE (2026-08-15):** shipped as PROJECT_CONTEXT §7.78 and ROADMAP_APT R5 (partial — designer still
+owns ad photos). New `test/housing-ladder.test.ts` (151 checks) validates every map headlessly
+(geometry, nav reachability, approachable furniture) and plays the whole arc through `QuestRunner` +
+`listRentals`. All affected pure and jsdom suites, strict tsc, production build, and a live
+headless-Chromium boot of all 12 maps plus the Kijiji tab are green.

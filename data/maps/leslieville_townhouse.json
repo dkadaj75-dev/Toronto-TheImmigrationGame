@@ -1,0 +1,517 @@
+{
+  "id": "leslieville_townhouse",
+  "name": "Leslieville Townhouse",
+  "propertyType": "townhouse",
+  "gridSize": 0.25,
+  "snapStep": 0.25,
+  "bounds": {
+    "w": 12.0,
+    "h": 11.0
+  },
+  "floors": [
+    {
+      "id": "entry",
+      "polygon": [
+        [
+          0.5,
+          0.5
+        ],
+        [
+          3.0,
+          0.5
+        ],
+        [
+          3.0,
+          2.5
+        ],
+        [
+          0.5,
+          2.5
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/Tiling.jpg"
+    },
+    {
+      "id": "powder",
+      "polygon": [
+        [
+          0.5,
+          2.5
+        ],
+        [
+          3.0,
+          2.5
+        ],
+        [
+          3.0,
+          5.0
+        ],
+        [
+          0.5,
+          5.0
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/ChineseTiles.jpg"
+    },
+    {
+      "id": "kitchen",
+      "polygon": [
+        [
+          3.0,
+          0.5
+        ],
+        [
+          7.0,
+          0.5
+        ],
+        [
+          7.0,
+          4.0
+        ],
+        [
+          3.0,
+          4.0
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/ChineseTiles.jpg"
+    },
+    {
+      "id": "dining",
+      "polygon": [
+        [
+          7.0,
+          0.5
+        ],
+        [
+          10.5,
+          0.5
+        ],
+        [
+          10.5,
+          4.0
+        ],
+        [
+          7.0,
+          4.0
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/Wood_Old_Planks.jpg"
+    },
+    {
+      "id": "living",
+      "polygon": [
+        [
+          3.0,
+          4.0
+        ],
+        [
+          10.5,
+          4.0
+        ],
+        [
+          10.5,
+          9.0
+        ],
+        [
+          3.0,
+          9.0
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/Wood_Old_Planks.jpg"
+    },
+    {
+      "id": "bedroom",
+      "polygon": [
+        [
+          0.5,
+          5.0
+        ],
+        [
+          3.0,
+          5.0
+        ],
+        [
+          3.0,
+          9.0
+        ],
+        [
+          0.5,
+          9.0
+        ]
+      ],
+      "material": "carpet",
+      "texture": "textures/Carpet1.jpg"
+    }
+  ],
+  "walls": [
+    {
+      "from": [
+        0.5,
+        0.5
+      ],
+      "to": [
+        0.5,
+        9.0
+      ]
+    },
+    {
+      "from": [
+        3.0,
+        0.5
+      ],
+      "to": [
+        3.0,
+        9.0
+      ]
+    },
+    {
+      "from": [
+        10.5,
+        0.5
+      ],
+      "to": [
+        10.5,
+        9.0
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        0.5
+      ],
+      "to": [
+        10.5,
+        0.5
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        2.5
+      ],
+      "to": [
+        3.0,
+        2.5
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        5.0
+      ],
+      "to": [
+        3.0,
+        5.0
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        9.0
+      ],
+      "to": [
+        10.5,
+        9.0
+      ]
+    }
+  ],
+  "doors": [
+    {
+      "at": [
+        3.0,
+        1.5
+      ],
+      "orientation": "vertical",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        1.5,
+        2.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        3.0,
+        7.0
+      ],
+      "orientation": "vertical",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        1.75,
+        0.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_exterior"
+    }
+  ],
+  "windows": [
+    {
+      "at": [
+        5.0,
+        0.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "window_basic",
+      "width": 1.0
+    },
+    {
+      "at": [
+        10.5,
+        6.5
+      ],
+      "orientation": "vertical",
+      "assetId": "window_basic",
+      "width": 1.0
+    },
+    {
+      "at": [
+        6.0,
+        9.0
+      ],
+      "orientation": "horizontal",
+      "assetId": "window_basic",
+      "width": 1.0
+    }
+  ],
+  "spawn": {
+    "pos": [
+      1.75,
+      1.1
+    ],
+    "facingDeg": 0
+  },
+  "placedObjects": [
+    {
+      "asset": "lamp",
+      "pos": [
+        0.8,
+        1.5
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "toilet",
+      "pos": [
+        1.05,
+        3.6
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "shower",
+      "pos": [
+        2.45,
+        4.4
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "sink",
+      "pos": [
+        1.05,
+        4.7
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "mirror",
+      "pos": [
+        1.05,
+        4.9075
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "fridge",
+      "pos": [
+        4.1,
+        1.05
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "stove",
+      "pos": [
+        5.025,
+        0.925
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "kitchen_sink",
+      "pos": [
+        5.95,
+        0.8
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "counter",
+      "pos": [
+        3.95,
+        3.575
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "coffee_machine",
+      "pos": [
+        4.9,
+        3.825
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "garbage_can",
+      "pos": [
+        6.7,
+        3.7
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "dining_table",
+      "pos": [
+        8.6,
+        0.925
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "dining_chair",
+      "pos": [
+        8.6,
+        1.75
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "dining_chair",
+      "pos": [
+        9.9,
+        0.9
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "sofa",
+      "pos": [
+        6.5,
+        8.45
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "tv",
+      "pos": [
+        6.5,
+        5.2
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "armchair",
+      "pos": [
+        9.95,
+        5.6
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        10.2,
+        7.6
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "canvas",
+      "pos": [
+        9.0,
+        4.08
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "wall_lamp",
+      "pos": [
+        10.39,
+        6.8
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "bed",
+      "pos": [
+        1.5,
+        7.7
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "bookshelf",
+      "pos": [
+        1.6,
+        5.3
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        2.7,
+        8.7
+      ],
+      "rotDeg": 180
+    }
+  ],
+  "music": [
+    "sounds/music_condo_2.mp3"
+  ],
+  "rental": {
+    "listed": true,
+    "adTitle": "Leslieville townhouse - own front door",
+    "adText": "Your own entrance, no shared hallway, nobody above you. Backs onto a laneway, walking distance to every brunch place on Queen East. Landlord is a family that moved to the burbs.",
+    "moveInHours": 24,
+    "availability": {
+      "all": [
+        {
+          "var": "quests.loft_life.state",
+          "eq": "done"
+        },
+        {
+          "var": "creditScore",
+          "gte": 650
+        },
+        {
+          "var": "vars.income",
+          "gte": 350
+        },
+        {
+          "var": "funds",
+          "gte": 9000
+        }
+      ]
+    }
+  },
+  "exterior": {
+    "skyColor": "#9cc4e8",
+    "groundColor": "#4f6138",
+    "fog": {
+      "color": "#9cc4e8",
+      "near": 30,
+      "far": 110
+    }
+  }
+}

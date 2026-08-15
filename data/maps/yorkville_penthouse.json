@@ -1,0 +1,846 @@
+{
+  "id": "yorkville_penthouse",
+  "name": "Yorkville Penthouse",
+  "propertyType": "penthouse",
+  "gridSize": 0.25,
+  "snapStep": 0.25,
+  "bounds": {
+    "w": 15.5,
+    "h": 13.5
+  },
+  "floors": [
+    {
+      "id": "foyer",
+      "polygon": [
+        [
+          0.5,
+          0.5
+        ],
+        [
+          3.5,
+          0.5
+        ],
+        [
+          3.5,
+          3.0
+        ],
+        [
+          0.5,
+          3.0
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/Tiling.jpg"
+    },
+    {
+      "id": "powder",
+      "polygon": [
+        [
+          0.5,
+          3.0
+        ],
+        [
+          3.5,
+          3.0
+        ],
+        [
+          3.5,
+          7.0
+        ],
+        [
+          0.5,
+          7.0
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/ChineseTiles.jpg"
+    },
+    {
+      "id": "kitchen",
+      "polygon": [
+        [
+          3.5,
+          0.5
+        ],
+        [
+          8.5,
+          0.5
+        ],
+        [
+          8.5,
+          3.5
+        ],
+        [
+          3.5,
+          3.5
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/ChineseTiles.jpg"
+    },
+    {
+      "id": "dining",
+      "polygon": [
+        [
+          8.5,
+          0.5
+        ],
+        [
+          14.5,
+          0.5
+        ],
+        [
+          14.5,
+          3.5
+        ],
+        [
+          8.5,
+          3.5
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/Wood_Old_Planks.jpg"
+    },
+    {
+      "id": "living",
+      "polygon": [
+        [
+          3.5,
+          3.5
+        ],
+        [
+          14.5,
+          3.5
+        ],
+        [
+          14.5,
+          7.0
+        ],
+        [
+          3.5,
+          7.0
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/Wood_Old_Planks.jpg"
+    },
+    {
+      "id": "hall",
+      "polygon": [
+        [
+          0.5,
+          7.0
+        ],
+        [
+          14.5,
+          7.0
+        ],
+        [
+          14.5,
+          8.0
+        ],
+        [
+          0.5,
+          8.0
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/Wood_Old_Planks.jpg"
+    },
+    {
+      "id": "primary",
+      "polygon": [
+        [
+          0.5,
+          8.0
+        ],
+        [
+          6.0,
+          8.0
+        ],
+        [
+          6.0,
+          10.5
+        ],
+        [
+          0.5,
+          10.5
+        ]
+      ],
+      "material": "carpet",
+      "texture": "textures/Carpet1.jpg"
+    },
+    {
+      "id": "ensuite",
+      "polygon": [
+        [
+          6.0,
+          8.0
+        ],
+        [
+          9.0,
+          8.0
+        ],
+        [
+          9.0,
+          10.5
+        ],
+        [
+          6.0,
+          10.5
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/Tiling.jpg"
+    },
+    {
+      "id": "bedroom2",
+      "polygon": [
+        [
+          9.0,
+          8.0
+        ],
+        [
+          11.75,
+          8.0
+        ],
+        [
+          11.75,
+          10.5
+        ],
+        [
+          9.0,
+          10.5
+        ]
+      ],
+      "material": "carpet",
+      "texture": "textures/Carpet1.jpg"
+    },
+    {
+      "id": "study",
+      "polygon": [
+        [
+          11.75,
+          8.0
+        ],
+        [
+          14.5,
+          8.0
+        ],
+        [
+          14.5,
+          10.5
+        ],
+        [
+          11.75,
+          10.5
+        ]
+      ],
+      "material": "carpet",
+      "texture": "textures/Carpet1.jpg"
+    },
+    {
+      "id": "terrace",
+      "polygon": [
+        [
+          2.0,
+          10.5
+        ],
+        [
+          12.0,
+          10.5
+        ],
+        [
+          12.0,
+          12.5
+        ],
+        [
+          2.0,
+          12.5
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/Concrete.jpg",
+      "outdoor": true
+    }
+  ],
+  "walls": [
+    {
+      "from": [
+        0.5,
+        0.5
+      ],
+      "to": [
+        0.5,
+        10.5
+      ]
+    },
+    {
+      "from": [
+        2.0,
+        10.5
+      ],
+      "to": [
+        2.0,
+        12.5
+      ],
+      "kind": "curtainWall"
+    },
+    {
+      "from": [
+        3.5,
+        0.5
+      ],
+      "to": [
+        3.5,
+        7.0
+      ]
+    },
+    {
+      "from": [
+        6.0,
+        8.0
+      ],
+      "to": [
+        6.0,
+        10.5
+      ]
+    },
+    {
+      "from": [
+        9.0,
+        8.0
+      ],
+      "to": [
+        9.0,
+        10.5
+      ]
+    },
+    {
+      "from": [
+        11.75,
+        8.0
+      ],
+      "to": [
+        11.75,
+        10.5
+      ]
+    },
+    {
+      "from": [
+        12.0,
+        10.5
+      ],
+      "to": [
+        12.0,
+        12.5
+      ],
+      "kind": "curtainWall"
+    },
+    {
+      "from": [
+        14.5,
+        0.5
+      ],
+      "to": [
+        14.5,
+        10.5
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        0.5
+      ],
+      "to": [
+        14.5,
+        0.5
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        3.0
+      ],
+      "to": [
+        3.5,
+        3.0
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        7.0
+      ],
+      "to": [
+        14.5,
+        7.0
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        8.0
+      ],
+      "to": [
+        14.5,
+        8.0
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        10.5
+      ],
+      "to": [
+        14.5,
+        10.5
+      ],
+      "kind": "curtainWall"
+    },
+    {
+      "from": [
+        2.0,
+        12.5
+      ],
+      "to": [
+        12.0,
+        12.5
+      ],
+      "kind": "curtainWall"
+    }
+  ],
+  "doors": [
+    {
+      "at": [
+        3.5,
+        1.75
+      ],
+      "orientation": "vertical",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        2.0,
+        7.0
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        6.0,
+        7.0
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        2.5,
+        8.0
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        6.0,
+        9.25
+      ],
+      "orientation": "vertical",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        10.4,
+        8.0
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        13.1,
+        8.0
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        4.0,
+        10.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        0.5,
+        1.75
+      ],
+      "orientation": "vertical",
+      "assetId": "door_exterior"
+    }
+  ],
+  "windows": [
+    {
+      "at": [
+        6.0,
+        0.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "window_basic",
+      "width": 1.0
+    },
+    {
+      "at": [
+        11.5,
+        0.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "window_basic",
+      "width": 1.0
+    }
+  ],
+  "spawn": {
+    "pos": [
+      1.1,
+      1.75
+    ],
+    "facingDeg": 90
+  },
+  "placedObjects": [
+    {
+      "asset": "bookshelf",
+      "pos": [
+        2.4,
+        2.7
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        2.8,
+        0.8
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "canvas",
+      "pos": [
+        1.7,
+        0.58
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "toilet",
+      "pos": [
+        1.05,
+        4.1
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "shower",
+      "pos": [
+        2.95,
+        4.1
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "sink",
+      "pos": [
+        0.8,
+        5.3
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "mirror",
+      "pos": [
+        0.5925,
+        5.3
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "fridge",
+      "pos": [
+        4.6,
+        1.05
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "stove",
+      "pos": [
+        5.525,
+        0.925
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "kitchen_sink",
+      "pos": [
+        6.45,
+        0.8
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "counter",
+      "pos": [
+        4.45,
+        3.075
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "coffee_machine",
+      "pos": [
+        5.4,
+        3.325
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "garbage_can",
+      "pos": [
+        8.2,
+        3.2
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "dining_table",
+      "pos": [
+        10.1,
+        0.925
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "dining_chair",
+      "pos": [
+        10.1,
+        1.75
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "dining_chair",
+      "pos": [
+        11.4,
+        0.9
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "sofa",
+      "pos": [
+        9.0,
+        6.45
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "tv",
+      "pos": [
+        9.0,
+        4.4
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "armchair",
+      "pos": [
+        13.95,
+        4.6
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        14.2,
+        6.4
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "canvas",
+      "pos": [
+        11.0,
+        3.58
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "wall_lamp",
+      "pos": [
+        14.39,
+        3.8
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "bed",
+      "pos": [
+        1.8,
+        9.6
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        5.2,
+        8.3
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "toilet",
+      "pos": [
+        7.1,
+        9.95
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "shower",
+      "pos": [
+        8.45,
+        8.6
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "sink",
+      "pos": [
+        6.9,
+        8.3
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "mirror",
+      "pos": [
+        6.9,
+        8.0925
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "bed",
+      "pos": [
+        10.3,
+        9.6
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        11.4,
+        8.3
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "bookshelf",
+      "pos": [
+        13.0,
+        10.2
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "armchair",
+      "pos": [
+        13.95,
+        9.3
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        12.05,
+        8.8
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "armchair",
+      "pos": [
+        2.55,
+        11.5
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "armchair",
+      "pos": [
+        11.45,
+        11.5
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        7.0,
+        12.2
+      ],
+      "rotDeg": 180
+    }
+  ],
+  "music": [
+    "sounds/music_condo_2.mp3"
+  ],
+  "rental": {
+    "listed": true,
+    "adTitle": "Yorkville PENTHOUSE - full floor, terrace",
+    "adText": "The top of the building and, some would say, the top of the city. Full-floor plan, floor-to-ceiling glass, a terrace off the primary suite, and a concierge who will learn your name. The board is particular: citizens with impeccable credit only.",
+    "moveInHours": 48,
+    "availability": {
+      "all": [
+        {
+          "var": "quests.the_driveway.state",
+          "eq": "done"
+        },
+        {
+          "var": "vars.visaStatus",
+          "eq": "citizen"
+        },
+        {
+          "var": "creditScore",
+          "gte": 780
+        },
+        {
+          "var": "vars.income",
+          "gte": 775
+        },
+        {
+          "var": "funds",
+          "gte": 40000
+        }
+      ]
+    }
+  },
+  "exterior": {
+    "skyColor": "#6f9ede",
+    "groundColor": "#3b4148",
+    "fog": {
+      "color": "#87a9d8",
+      "near": 40,
+      "far": 160
+    }
+  }
+}

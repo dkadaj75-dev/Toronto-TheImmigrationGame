@@ -1,0 +1,681 @@
+{
+  "id": "north_york_semi",
+  "name": "North York Semi-Detached",
+  "propertyType": "townhouse",
+  "gridSize": 0.25,
+  "snapStep": 0.25,
+  "bounds": {
+    "w": 13.0,
+    "h": 11.0
+  },
+  "floors": [
+    {
+      "id": "entry",
+      "polygon": [
+        [
+          0.5,
+          0.5
+        ],
+        [
+          3.0,
+          0.5
+        ],
+        [
+          3.0,
+          2.75
+        ],
+        [
+          0.5,
+          2.75
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/Tiling.jpg"
+    },
+    {
+      "id": "utility",
+      "polygon": [
+        [
+          0.5,
+          2.75
+        ],
+        [
+          3.0,
+          2.75
+        ],
+        [
+          3.0,
+          6.0
+        ],
+        [
+          0.5,
+          6.0
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/Concrete.jpg"
+    },
+    {
+      "id": "kitchen",
+      "polygon": [
+        [
+          3.0,
+          0.5
+        ],
+        [
+          7.0,
+          0.5
+        ],
+        [
+          7.0,
+          3.5
+        ],
+        [
+          3.0,
+          3.5
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/ChineseTiles.jpg"
+    },
+    {
+      "id": "dining",
+      "polygon": [
+        [
+          7.0,
+          0.5
+        ],
+        [
+          11.5,
+          0.5
+        ],
+        [
+          11.5,
+          3.5
+        ],
+        [
+          7.0,
+          3.5
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/Wood_Old_Planks.jpg"
+    },
+    {
+      "id": "living",
+      "polygon": [
+        [
+          3.0,
+          3.5
+        ],
+        [
+          11.5,
+          3.5
+        ],
+        [
+          11.5,
+          6.0
+        ],
+        [
+          3.0,
+          6.0
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/Wood_Old_Planks.jpg"
+    },
+    {
+      "id": "hall",
+      "polygon": [
+        [
+          0.5,
+          6.0
+        ],
+        [
+          11.5,
+          6.0
+        ],
+        [
+          11.5,
+          7.0
+        ],
+        [
+          0.5,
+          7.0
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/Wood_Old_Planks.jpg"
+    },
+    {
+      "id": "bathroom",
+      "polygon": [
+        [
+          0.5,
+          7.0
+        ],
+        [
+          3.5,
+          7.0
+        ],
+        [
+          3.5,
+          9.5
+        ],
+        [
+          0.5,
+          9.5
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/Tiling.jpg"
+    },
+    {
+      "id": "bedroom",
+      "polygon": [
+        [
+          3.5,
+          7.0
+        ],
+        [
+          7.5,
+          7.0
+        ],
+        [
+          7.5,
+          9.5
+        ],
+        [
+          3.5,
+          9.5
+        ]
+      ],
+      "material": "carpet",
+      "texture": "textures/Carpet1.jpg"
+    },
+    {
+      "id": "bedroom2",
+      "polygon": [
+        [
+          7.5,
+          7.0
+        ],
+        [
+          11.5,
+          7.0
+        ],
+        [
+          11.5,
+          9.5
+        ],
+        [
+          7.5,
+          9.5
+        ]
+      ],
+      "material": "carpet",
+      "texture": "textures/Carpet1.jpg"
+    }
+  ],
+  "walls": [
+    {
+      "from": [
+        0.5,
+        0.5
+      ],
+      "to": [
+        0.5,
+        9.5
+      ]
+    },
+    {
+      "from": [
+        3.0,
+        0.5
+      ],
+      "to": [
+        3.0,
+        6.0
+      ]
+    },
+    {
+      "from": [
+        3.5,
+        7.0
+      ],
+      "to": [
+        3.5,
+        9.5
+      ]
+    },
+    {
+      "from": [
+        7.5,
+        7.0
+      ],
+      "to": [
+        7.5,
+        9.5
+      ]
+    },
+    {
+      "from": [
+        11.5,
+        0.5
+      ],
+      "to": [
+        11.5,
+        9.5
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        0.5
+      ],
+      "to": [
+        11.5,
+        0.5
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        2.75
+      ],
+      "to": [
+        3.0,
+        2.75
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        6.0
+      ],
+      "to": [
+        11.5,
+        6.0
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        7.0
+      ],
+      "to": [
+        11.5,
+        7.0
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        9.5
+      ],
+      "to": [
+        11.5,
+        9.5
+      ]
+    }
+  ],
+  "doors": [
+    {
+      "at": [
+        3.0,
+        1.6
+      ],
+      "orientation": "vertical",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        1.75,
+        6.0
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        6.5,
+        6.0
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        2.0,
+        7.0
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        5.5,
+        7.0
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        9.5,
+        7.0
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        1.75,
+        0.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_exterior"
+    }
+  ],
+  "windows": [
+    {
+      "at": [
+        5.0,
+        0.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "window_basic",
+      "width": 1.0
+    },
+    {
+      "at": [
+        11.5,
+        5.0
+      ],
+      "orientation": "vertical",
+      "assetId": "window_basic",
+      "width": 1.0
+    },
+    {
+      "at": [
+        5.5,
+        9.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "window_basic",
+      "width": 1.0
+    },
+    {
+      "at": [
+        9.5,
+        9.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "window_basic",
+      "width": 1.0
+    }
+  ],
+  "spawn": {
+    "pos": [
+      1.75,
+      1.1
+    ],
+    "facingDeg": 0
+  },
+  "placedObjects": [
+    {
+      "asset": "lamp",
+      "pos": [
+        0.8,
+        1.6
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "counter",
+      "pos": [
+        0.925,
+        3.4
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "sink",
+      "pos": [
+        2.7,
+        4.5
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "garbage_can",
+      "pos": [
+        0.8,
+        5.0
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "fridge",
+      "pos": [
+        4.1,
+        1.05
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "stove",
+      "pos": [
+        5.025,
+        0.925
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "kitchen_sink",
+      "pos": [
+        5.95,
+        0.8
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "counter",
+      "pos": [
+        3.95,
+        3.075
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "coffee_machine",
+      "pos": [
+        4.9,
+        3.325
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "garbage_can",
+      "pos": [
+        6.7,
+        3.2
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "dining_table",
+      "pos": [
+        8.6,
+        0.925
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "dining_chair",
+      "pos": [
+        8.6,
+        1.75
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "dining_chair",
+      "pos": [
+        9.9,
+        0.9
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "sofa",
+      "pos": [
+        4.6,
+        5.45
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "tv",
+      "pos": [
+        4.6,
+        3.8
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "armchair",
+      "pos": [
+        10.95,
+        4.6
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        11.2,
+        5.7
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "canvas",
+      "pos": [
+        9.0,
+        3.58
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "wall_lamp",
+      "pos": [
+        11.39,
+        3.8
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "toilet",
+      "pos": [
+        1.05,
+        8.95
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "shower",
+      "pos": [
+        2.1,
+        8.95
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "sink",
+      "pos": [
+        3.2,
+        8.0
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "mirror",
+      "pos": [
+        3.4075,
+        8.0
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "bed",
+      "pos": [
+        4.8,
+        8.6
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        7.2,
+        9.2
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "bed",
+      "pos": [
+        8.8,
+        8.6
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        11.2,
+        9.2
+      ],
+      "rotDeg": 270
+    }
+  ],
+  "music": [
+    "sounds/music_condo_2.mp3"
+  ],
+  "rental": {
+    "listed": true,
+    "adTitle": "North York semi - 2BR + utility room",
+    "adText": "Half a house, all yours: two bedrooms off a real hallway, a utility room for the laundry you keep meaning to do, a driveway shared with the other half. Subway a 12 minute walk.",
+    "moveInHours": 24,
+    "availability": {
+      "all": [
+        {
+          "var": "quests.own_front_door.state",
+          "eq": "done"
+        },
+        {
+          "var": "creditScore",
+          "gte": 680
+        },
+        {
+          "var": "vars.income",
+          "gte": 390
+        },
+        {
+          "var": "funds",
+          "gte": 12000
+        }
+      ]
+    }
+  },
+  "exterior": {
+    "skyColor": "#9cc4e8",
+    "groundColor": "#4f6138",
+    "fog": {
+      "color": "#9cc4e8",
+      "near": 30,
+      "far": 110
+    }
+  }
+}
