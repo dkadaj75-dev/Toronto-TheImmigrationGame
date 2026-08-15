@@ -325,3 +325,12 @@ As-built: collapsible full-width 3D preview panel in tools/map.html — module s
 ## D5b — SHIPPED (2026-07-17): BATCH 11 CODE COMPLETE (R5 designer authoring remains)
 
 As-built: 2D canvas handlers refactored into world-coordinate worldPointerDown/Move/Up (identical bodies) — the 3D pane converts gestures to world coords and calls THE SAME functions, so every 3D edit is by construction the same mutation + markDirty + single pushUndo. Pure inline helpers rayToGround/edit3DPoint/claim3DGesture (jsdom, ~45 new checks); module raycast pickAt (placedIndex climb; walls/floors/doors resolve via the 2D hitTest from the hit point). Edit listeners registered before OrbitControls + stopImmediatePropagation on claimed gestures; right-drag pan/wheel zoom always free. Select/drag/rotate(R)/wall-draw/door+window-on-wall/floor-paint/spawn all live in 3D; 2D editor unchanged and canonical. Known pre-existing quirk: <520px viewport fitView arc error (not D5b). Designer playtest checklist in the D5b agent report (chat log 2026-07-17).
+
+## R5 — SHIPPED (2026-08-15, partial: ad photos still designer-owned)
+
+Ten authored rental maps + the housing quest arc that gates them — see PROJECT_CONTEXT §7.78 for the
+full as-built. Every map carries the R1 `rental` block (ad title/text, `moveInHours`, availability
+Condition tree over quests/income/creditScore/visaStatus); three use D3 curtain walls with glazed
+balcony/terrace railings and `outdoor` floors (excluded from rent, still shown as m² in the ad);
+five carry a D4 `exterior` sky/ground/fog block. `adImage` is deliberately left unset — `public/ads/`
+photos remain the designer's authoring pass. Coverage: `test/housing-ladder.test.ts`.

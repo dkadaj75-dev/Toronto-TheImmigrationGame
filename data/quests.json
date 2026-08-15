@@ -193,6 +193,10 @@
         "all": [
           {
             "var": "vars.homeMap",
+            "neq": null
+          },
+          {
+            "var": "vars.homeMap",
             "neq": "condo"
           }
         ]
@@ -314,6 +318,490 @@
         }
       ],
       "onceOnly": false
+    },
+    {
+      "id": "good_tenant",
+      "name": "Good tenant, good credit",
+      "description": "Out of the basement - now make the paperwork agree with you.\nToronto landlords run a credit check before they hand over keys. Pay your bills on time until your credit score reaches 560 and better places start answering your emails.",
+      "trigger": {
+        "all": [
+          {
+            "var": "quests.home_sweet_home.state",
+            "eq": "done"
+          }
+        ]
+      },
+      "completion": {
+        "all": [
+          {
+            "var": "creditScore",
+            "gte": 560
+          }
+        ]
+      },
+      "rewards": [
+        {
+          "type": "event",
+          "event": "event_good_tenant"
+        }
+      ],
+      "onceOnly": true
+    },
+    {
+      "id": "a_real_bedroom",
+      "name": "A real bedroom",
+      "description": "A bedroom with an actual door. That is the whole dream right now.\nMove somewhere better than your first place - check Kijiji on your smartphone.",
+      "trigger": {
+        "all": [
+          {
+            "var": "quests.good_tenant.state",
+            "eq": "done"
+          }
+        ]
+      },
+      "completion": {
+        "all": [
+          {
+            "any": [
+              {
+                "var": "vars.homeMap",
+                "eq": "junction_1br"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "east_york_2br"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "liberty_village_condo"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "distillery_loft"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "leslieville_townhouse"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "north_york_semi"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "etobicoke_bungalow"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "forest_hill_house"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "yorkville_penthouse"
+              }
+            ]
+          }
+        ]
+      },
+      "rewards": [
+        {
+          "type": "funds",
+          "amount": 150
+        },
+        {
+          "type": "event",
+          "event": "event_a_real_bedroom"
+        }
+      ],
+      "onceOnly": true
+    },
+    {
+      "id": "career_climb",
+      "name": "Climb the ladder",
+      "description": "Rent goes up faster than wages, so the wage has to move.\nReach level 3 in your career and a shift paying at least $260. Study the skills your job requirements ask for - they are on your smartphone.",
+      "trigger": {
+        "all": [
+          {
+            "var": "quests.a_real_bedroom.state",
+            "eq": "done"
+          }
+        ]
+      },
+      "completion": {
+        "all": [
+          {
+            "var": "job.level",
+            "gte": 3
+          },
+          {
+            "var": "vars.income",
+            "gte": 260
+          }
+        ]
+      },
+      "rewards": [
+        {
+          "type": "funds",
+          "amount": 250
+        },
+        {
+          "type": "event",
+          "event": "event_career_climb"
+        }
+      ],
+      "onceOnly": true
+    },
+    {
+      "id": "room_with_a_view",
+      "name": "A room with a view",
+      "description": "You have earned a window worth looking out of.\nMove into a place with a balcony or better - the glass towers of Liberty Village are finally answering your emails.",
+      "trigger": {
+        "all": [
+          {
+            "var": "quests.career_climb.state",
+            "eq": "done"
+          }
+        ]
+      },
+      "completion": {
+        "all": [
+          {
+            "any": [
+              {
+                "var": "vars.homeMap",
+                "eq": "liberty_village_condo"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "distillery_loft"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "leslieville_townhouse"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "north_york_semi"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "etobicoke_bungalow"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "forest_hill_house"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "yorkville_penthouse"
+              }
+            ]
+          }
+        ]
+      },
+      "rewards": [
+        {
+          "type": "event",
+          "event": "event_room_with_a_view"
+        }
+      ],
+      "onceOnly": true
+    },
+    {
+      "id": "loft_life",
+      "name": "Loft life",
+      "description": "Brick, beams, and a ceiling you cannot reach.\nMove into the Distillery loft or something even better.",
+      "trigger": {
+        "all": [
+          {
+            "var": "quests.room_with_a_view.state",
+            "eq": "done"
+          }
+        ]
+      },
+      "completion": {
+        "all": [
+          {
+            "any": [
+              {
+                "var": "vars.homeMap",
+                "eq": "distillery_loft"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "leslieville_townhouse"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "north_york_semi"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "etobicoke_bungalow"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "forest_hill_house"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "yorkville_penthouse"
+              }
+            ]
+          }
+        ]
+      },
+      "rewards": [
+        {
+          "type": "funds",
+          "amount": 200
+        },
+        {
+          "type": "event",
+          "event": "event_loft_life"
+        }
+      ],
+      "onceOnly": true
+    },
+    {
+      "id": "own_front_door",
+      "name": "Your own front door",
+      "description": "No lobby. No elevator. No neighbour above you at 3am.\nMove into a townhouse or better - a place where the front door is yours alone.",
+      "trigger": {
+        "all": [
+          {
+            "var": "quests.loft_life.state",
+            "eq": "done"
+          }
+        ]
+      },
+      "completion": {
+        "all": [
+          {
+            "any": [
+              {
+                "var": "vars.homeMap",
+                "eq": "leslieville_townhouse"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "north_york_semi"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "etobicoke_bungalow"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "forest_hill_house"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "yorkville_penthouse"
+              }
+            ]
+          }
+        ]
+      },
+      "rewards": [
+        {
+          "type": "event",
+          "event": "event_own_front_door"
+        }
+      ],
+      "onceOnly": true
+    },
+    {
+      "id": "the_paperwork",
+      "name": "The paperwork",
+      "description": "Permanent Residence is a file, not a feeling. Time to build the file.\nEnglish at 50, $20,000 in the bank and a shift paying $350 or more - then apply for PR from the visa tab on your smartphone.",
+      "trigger": {
+        "all": [
+          {
+            "var": "quests.own_front_door.state",
+            "eq": "done"
+          }
+        ]
+      },
+      "completion": {
+        "all": [
+          {
+            "var": "skills.english",
+            "gte": 50
+          },
+          {
+            "var": "funds",
+            "gte": 20000
+          },
+          {
+            "var": "vars.income",
+            "gte": 350
+          }
+        ]
+      },
+      "rewards": [
+        {
+          "type": "event",
+          "event": "event_the_paperwork"
+        }
+      ],
+      "onceOnly": true
+    },
+    {
+      "id": "permanent_roots",
+      "name": "Permanent roots",
+      "description": "No more countdown in the corner of your visa.\nBecome a Permanent Resident. Landlords with detached houses want tenants who are staying.",
+      "trigger": {
+        "all": [
+          {
+            "var": "quests.the_paperwork.state",
+            "eq": "done"
+          }
+        ]
+      },
+      "completion": {
+        "all": [
+          {
+            "any": [
+              {
+                "var": "vars.visaStatus",
+                "eq": "permanent_resident"
+              },
+              {
+                "var": "vars.visaStatus",
+                "eq": "citizen"
+              }
+            ]
+          }
+        ]
+      },
+      "rewards": [
+        {
+          "type": "funds",
+          "amount": 500
+        },
+        {
+          "type": "event",
+          "event": "event_permanent_roots"
+        }
+      ],
+      "onceOnly": true
+    },
+    {
+      "id": "the_driveway",
+      "name": "A driveway of your own",
+      "description": "Detached. No shared walls. A driveway, a yard, and silence.\nMove into a detached house.",
+      "trigger": {
+        "all": [
+          {
+            "var": "quests.permanent_roots.state",
+            "eq": "done"
+          }
+        ]
+      },
+      "completion": {
+        "all": [
+          {
+            "any": [
+              {
+                "var": "vars.homeMap",
+                "eq": "etobicoke_bungalow"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "forest_hill_house"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "yorkville_penthouse"
+              }
+            ]
+          }
+        ]
+      },
+      "rewards": [
+        {
+          "type": "event",
+          "event": "event_the_driveway"
+        }
+      ],
+      "onceOnly": true
+    },
+    {
+      "id": "citizenship_ceremony",
+      "name": "The ceremony",
+      "description": "A small room, a flag, an oath, and a very long journey behind you.\nBecome a Canadian citizen.",
+      "trigger": {
+        "all": [
+          {
+            "var": "quests.permanent_roots.state",
+            "eq": "done"
+          }
+        ]
+      },
+      "completion": {
+        "all": [
+          {
+            "var": "vars.visaStatus",
+            "eq": "citizen"
+          }
+        ]
+      },
+      "rewards": [
+        {
+          "type": "funds",
+          "amount": 1000
+        },
+        {
+          "type": "event",
+          "event": "event_citizenship"
+        }
+      ],
+      "onceOnly": true
+    },
+    {
+      "id": "the_canadian_dream",
+      "name": "The Canadian dream",
+      "description": "The last rung: the Forest Hill house or the Yorkville penthouse, with a Canadian passport in the drawer.\nYou arrived on a three-day visitor visa with a mop and a leaking ceiling. Look where you sleep tonight.",
+      "trigger": {
+        "all": [
+          {
+            "var": "quests.the_driveway.state",
+            "eq": "done"
+          }
+        ]
+      },
+      "completion": {
+        "all": [
+          {
+            "any": [
+              {
+                "var": "vars.homeMap",
+                "eq": "forest_hill_house"
+              },
+              {
+                "var": "vars.homeMap",
+                "eq": "yorkville_penthouse"
+              }
+            ]
+          },
+          {
+            "var": "vars.visaStatus",
+            "eq": "citizen"
+          }
+        ]
+      },
+      "rewards": [
+        {
+          "type": "funds",
+          "amount": 2500
+        },
+        {
+          "type": "event",
+          "event": "event_canadian_dream"
+        }
+      ],
+      "onceOnly": true
     }
   ]
 }

@@ -1,0 +1,454 @@
+{
+  "id": "junction_1br",
+  "name": "Junction 1 Bedroom",
+  "propertyType": "condo",
+  "gridSize": 0.25,
+  "snapStep": 0.25,
+  "bounds": {
+    "w": 9.0,
+    "h": 7.5
+  },
+  "floors": [
+    {
+      "id": "bathroom",
+      "polygon": [
+        [
+          0.5,
+          0.5
+        ],
+        [
+          3.0,
+          0.5
+        ],
+        [
+          3.0,
+          3.0
+        ],
+        [
+          0.5,
+          3.0
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/Tiling.jpg"
+    },
+    {
+      "id": "bedroom",
+      "polygon": [
+        [
+          3.0,
+          0.5
+        ],
+        [
+          6.0,
+          0.5
+        ],
+        [
+          6.0,
+          3.5
+        ],
+        [
+          3.0,
+          3.5
+        ]
+      ],
+      "material": "carpet",
+      "texture": "textures/Carpet1.jpg"
+    },
+    {
+      "id": "kitchen",
+      "polygon": [
+        [
+          6.0,
+          0.5
+        ],
+        [
+          8.0,
+          0.5
+        ],
+        [
+          8.0,
+          3.5
+        ],
+        [
+          6.0,
+          3.5
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/ChineseTiles.jpg"
+    },
+    {
+      "id": "living",
+      "polygon": [
+        [
+          0.5,
+          3.0
+        ],
+        [
+          3.0,
+          3.0
+        ],
+        [
+          3.0,
+          6.5
+        ],
+        [
+          0.5,
+          6.5
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/Wood_Old_Planks.jpg"
+    },
+    {
+      "id": "living_east",
+      "polygon": [
+        [
+          3.0,
+          3.5
+        ],
+        [
+          8.0,
+          3.5
+        ],
+        [
+          8.0,
+          6.5
+        ],
+        [
+          3.0,
+          6.5
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/Wood_Old_Planks.jpg"
+    }
+  ],
+  "walls": [
+    {
+      "from": [
+        0.5,
+        0.5
+      ],
+      "to": [
+        0.5,
+        6.5
+      ]
+    },
+    {
+      "from": [
+        3.0,
+        0.5
+      ],
+      "to": [
+        3.0,
+        3.5
+      ]
+    },
+    {
+      "from": [
+        6.0,
+        0.5
+      ],
+      "to": [
+        6.0,
+        3.5
+      ]
+    },
+    {
+      "from": [
+        8.0,
+        0.5
+      ],
+      "to": [
+        8.0,
+        6.5
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        0.5
+      ],
+      "to": [
+        8.0,
+        0.5
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        3.0
+      ],
+      "to": [
+        3.0,
+        3.0
+      ]
+    },
+    {
+      "from": [
+        3.0,
+        3.5
+      ],
+      "to": [
+        6.0,
+        3.5
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        6.5
+      ],
+      "to": [
+        8.0,
+        6.5
+      ]
+    }
+  ],
+  "doors": [
+    {
+      "at": [
+        1.5,
+        3.0
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        4.5,
+        3.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        0.5,
+        5.0
+      ],
+      "orientation": "vertical",
+      "assetId": "door_exterior"
+    }
+  ],
+  "windows": [
+    {
+      "at": [
+        5.0,
+        6.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "window_basic",
+      "width": 1.0
+    },
+    {
+      "at": [
+        8.0,
+        5.0
+      ],
+      "orientation": "vertical",
+      "assetId": "window_basic",
+      "width": 1.0
+    }
+  ],
+  "spawn": {
+    "pos": [
+      1.0,
+      5.0
+    ],
+    "facingDeg": 90
+  },
+  "placedObjects": [
+    {
+      "asset": "toilet",
+      "pos": [
+        1.05,
+        1.05
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "shower",
+      "pos": [
+        2.1,
+        1.05
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "sink",
+      "pos": [
+        2.7,
+        2.4
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "mirror",
+      "pos": [
+        2.9075,
+        2.4
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "bed",
+      "pos": [
+        4.3,
+        1.45
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        5.7,
+        3.0
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "fridge",
+      "pos": [
+        7.45,
+        1.05
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "stove",
+      "pos": [
+        7.575,
+        1.975
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "kitchen_sink",
+      "pos": [
+        7.7,
+        2.9
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "counter",
+      "pos": [
+        6.425,
+        1.0
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "coffee_machine",
+      "pos": [
+        6.175,
+        1.8
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "garbage_can",
+      "pos": [
+        6.3,
+        3.0
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "dining_table",
+      "pos": [
+        1.6,
+        6.075
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "dining_chair",
+      "pos": [
+        1.6,
+        5.2
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        0.8,
+        3.9
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "wall_lamp",
+      "pos": [
+        2.7,
+        6.39
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "sofa",
+      "pos": [
+        5.5,
+        5.95
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "tv",
+      "pos": [
+        5.5,
+        4.25
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "armchair",
+      "pos": [
+        7.45,
+        4.6
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        7.5,
+        6.2
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "canvas",
+      "pos": [
+        7.92,
+        5.85
+      ],
+      "rotDeg": 270
+    }
+  ],
+  "music": [
+    "sounds/music_condo_2.mp3"
+  ],
+  "rental": {
+    "listed": true,
+    "adTitle": "Junction 1BR - reno'd, quiet street",
+    "adText": "One bedroom in a converted house steps from Dundas West. New floors, an actual bedroom door, landlord lives upstairs and is \"very hands on\". Credit check required.",
+    "moveInHours": 4,
+    "availability": {
+      "all": [
+        {
+          "var": "quests.home_sweet_home.state",
+          "eq": "done"
+        },
+        {
+          "var": "vars.income",
+          "gte": 150
+        }
+      ]
+    }
+  }
+}

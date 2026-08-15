@@ -1,0 +1,565 @@
+{
+  "id": "liberty_village_condo",
+  "name": "Liberty Village Condo",
+  "propertyType": "condo",
+  "gridSize": 0.25,
+  "snapStep": 0.25,
+  "bounds": {
+    "w": 11.0,
+    "h": 9.5
+  },
+  "floors": [
+    {
+      "id": "bathroom",
+      "polygon": [
+        [
+          0.5,
+          0.5
+        ],
+        [
+          3.0,
+          0.5
+        ],
+        [
+          3.0,
+          3.0
+        ],
+        [
+          0.5,
+          3.0
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/Tiling.jpg"
+    },
+    {
+      "id": "bedroom",
+      "polygon": [
+        [
+          3.0,
+          0.5
+        ],
+        [
+          6.0,
+          0.5
+        ],
+        [
+          6.0,
+          3.5
+        ],
+        [
+          3.0,
+          3.5
+        ]
+      ],
+      "material": "carpet",
+      "texture": "textures/Carpet1.jpg"
+    },
+    {
+      "id": "den",
+      "polygon": [
+        [
+          6.0,
+          0.5
+        ],
+        [
+          9.5,
+          0.5
+        ],
+        [
+          9.5,
+          3.5
+        ],
+        [
+          6.0,
+          3.5
+        ]
+      ],
+      "material": "carpet",
+      "texture": "textures/Carpet1.jpg"
+    },
+    {
+      "id": "kitchen",
+      "polygon": [
+        [
+          0.5,
+          3.0
+        ],
+        [
+          3.0,
+          3.0
+        ],
+        [
+          3.0,
+          7.0
+        ],
+        [
+          0.5,
+          7.0
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/ChineseTiles.jpg"
+    },
+    {
+      "id": "living",
+      "polygon": [
+        [
+          3.0,
+          3.5
+        ],
+        [
+          9.5,
+          3.5
+        ],
+        [
+          9.5,
+          7.0
+        ],
+        [
+          3.0,
+          7.0
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/Wood_Old_Planks.jpg"
+    },
+    {
+      "id": "balcony",
+      "polygon": [
+        [
+          2.0,
+          7.0
+        ],
+        [
+          8.0,
+          7.0
+        ],
+        [
+          8.0,
+          8.5
+        ],
+        [
+          2.0,
+          8.5
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/Concrete.jpg",
+      "outdoor": true
+    }
+  ],
+  "walls": [
+    {
+      "from": [
+        0.5,
+        0.5
+      ],
+      "to": [
+        0.5,
+        7.0
+      ]
+    },
+    {
+      "from": [
+        2.0,
+        7.0
+      ],
+      "to": [
+        2.0,
+        8.5
+      ],
+      "kind": "curtainWall"
+    },
+    {
+      "from": [
+        3.0,
+        0.5
+      ],
+      "to": [
+        3.0,
+        3.5
+      ]
+    },
+    {
+      "from": [
+        6.0,
+        0.5
+      ],
+      "to": [
+        6.0,
+        3.5
+      ]
+    },
+    {
+      "from": [
+        8.0,
+        7.0
+      ],
+      "to": [
+        8.0,
+        8.5
+      ],
+      "kind": "curtainWall"
+    },
+    {
+      "from": [
+        9.5,
+        0.5
+      ],
+      "to": [
+        9.5,
+        7.0
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        0.5
+      ],
+      "to": [
+        9.5,
+        0.5
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        3.0
+      ],
+      "to": [
+        3.0,
+        3.0
+      ]
+    },
+    {
+      "from": [
+        3.0,
+        3.5
+      ],
+      "to": [
+        9.5,
+        3.5
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        7.0
+      ],
+      "to": [
+        9.5,
+        7.0
+      ],
+      "kind": "curtainWall"
+    },
+    {
+      "from": [
+        2.0,
+        8.5
+      ],
+      "to": [
+        8.0,
+        8.5
+      ],
+      "kind": "curtainWall"
+    }
+  ],
+  "doors": [
+    {
+      "at": [
+        1.5,
+        3.0
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        4.5,
+        3.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        7.75,
+        3.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        5.0,
+        7.0
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        9.5,
+        5.5
+      ],
+      "orientation": "vertical",
+      "assetId": "door_exterior"
+    }
+  ],
+  "windows": [
+    {
+      "at": [
+        4.5,
+        0.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "window_basic",
+      "width": 1.0
+    },
+    {
+      "at": [
+        0.5,
+        5.0
+      ],
+      "orientation": "vertical",
+      "assetId": "window_basic",
+      "width": 1.0
+    }
+  ],
+  "spawn": {
+    "pos": [
+      9.0,
+      5.5
+    ],
+    "facingDeg": 270
+  },
+  "placedObjects": [
+    {
+      "asset": "toilet",
+      "pos": [
+        1.05,
+        1.05
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "shower",
+      "pos": [
+        2.1,
+        1.05
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "sink",
+      "pos": [
+        2.7,
+        2.4
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "mirror",
+      "pos": [
+        2.9075,
+        2.4
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "bed",
+      "pos": [
+        4.3,
+        1.45
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        5.7,
+        3.0
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "bookshelf",
+      "pos": [
+        7.0,
+        0.8
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "armchair",
+      "pos": [
+        8.95,
+        2.9
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        6.3,
+        2.9
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "fridge",
+      "pos": [
+        1.05,
+        4.3
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "stove",
+      "pos": [
+        0.925,
+        5.225
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "kitchen_sink",
+      "pos": [
+        0.8,
+        6.15
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "counter",
+      "pos": [
+        2.575,
+        6.4
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "coffee_machine",
+      "pos": [
+        2.825,
+        5.3
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "garbage_can",
+      "pos": [
+        2.7,
+        3.9
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "sofa",
+      "pos": [
+        6.9,
+        6.45
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "tv",
+      "pos": [
+        6.9,
+        4.25
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "armchair",
+      "pos": [
+        8.95,
+        4.2
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "dining_table",
+      "pos": [
+        4.0,
+        4.6
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "dining_chair",
+      "pos": [
+        4.0,
+        5.4
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "canvas",
+      "pos": [
+        5.9,
+        3.58
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "wall_lamp",
+      "pos": [
+        9.39,
+        6.5
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "armchair",
+      "pos": [
+        2.55,
+        7.75
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        7.7,
+        7.75
+      ],
+      "rotDeg": 270
+    }
+  ],
+  "music": [
+    "sounds/music_condo_2.mp3"
+  ],
+  "rental": {
+    "listed": true,
+    "adTitle": "Liberty Village 1BR + den, BALCONY",
+    "adText": "Glass-front unit with a real balcony and a partial lake view if you lean. The den fits a desk. Gym in the building you will use exactly twice. Employment letter and credit check.",
+    "moveInHours": 8,
+    "availability": {
+      "all": [
+        {
+          "var": "quests.career_climb.state",
+          "eq": "done"
+        },
+        {
+          "var": "creditScore",
+          "gte": 600
+        },
+        {
+          "var": "vars.income",
+          "gte": 260
+        }
+      ]
+    }
+  },
+  "exterior": {
+    "skyColor": "#8fb3d9",
+    "groundColor": "#4a4f52",
+    "fog": {
+      "color": "#8fb3d9",
+      "near": 25,
+      "far": 95
+    }
+  }
+}

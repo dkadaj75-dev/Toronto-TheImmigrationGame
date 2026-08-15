@@ -1,0 +1,328 @@
+{
+  "id": "parkdale_studio",
+  "name": "Parkdale Bachelor Studio",
+  "propertyType": "condo",
+  "gridSize": 0.25,
+  "snapStep": 0.25,
+  "bounds": {
+    "w": 7.5,
+    "h": 7.0
+  },
+  "floors": [
+    {
+      "id": "bathroom",
+      "polygon": [
+        [
+          0.5,
+          0.5
+        ],
+        [
+          3.0,
+          0.5
+        ],
+        [
+          3.0,
+          3.0
+        ],
+        [
+          0.5,
+          3.0
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/Tiling.jpg"
+    },
+    {
+      "id": "kitchen",
+      "polygon": [
+        [
+          3.0,
+          0.5
+        ],
+        [
+          6.5,
+          0.5
+        ],
+        [
+          6.5,
+          3.0
+        ],
+        [
+          3.0,
+          3.0
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/ChineseTiles.jpg"
+    },
+    {
+      "id": "studio",
+      "polygon": [
+        [
+          0.5,
+          3.0
+        ],
+        [
+          6.5,
+          3.0
+        ],
+        [
+          6.5,
+          6.0
+        ],
+        [
+          0.5,
+          6.0
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/Wood_Old_Planks.jpg"
+    }
+  ],
+  "walls": [
+    {
+      "from": [
+        0.5,
+        0.5
+      ],
+      "to": [
+        0.5,
+        6.0
+      ]
+    },
+    {
+      "from": [
+        3.0,
+        0.5
+      ],
+      "to": [
+        3.0,
+        3.0
+      ]
+    },
+    {
+      "from": [
+        6.5,
+        0.5
+      ],
+      "to": [
+        6.5,
+        6.0
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        0.5
+      ],
+      "to": [
+        6.5,
+        0.5
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        3.0
+      ],
+      "to": [
+        3.0,
+        3.0
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        6.0
+      ],
+      "to": [
+        6.5,
+        6.0
+      ]
+    }
+  ],
+  "doors": [
+    {
+      "at": [
+        1.5,
+        3.0
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        6.5,
+        4.5
+      ],
+      "orientation": "vertical",
+      "assetId": "door_exterior"
+    }
+  ],
+  "windows": [
+    {
+      "at": [
+        3.5,
+        6.0
+      ],
+      "orientation": "horizontal",
+      "assetId": "window_basic",
+      "width": 1.0
+    },
+    {
+      "at": [
+        4.75,
+        0.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "window_basic",
+      "width": 1.0
+    }
+  ],
+  "spawn": {
+    "pos": [
+      6.0,
+      4.5
+    ],
+    "facingDeg": 270
+  },
+  "placedObjects": [
+    {
+      "asset": "toilet",
+      "pos": [
+        1.05,
+        1.05
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "shower",
+      "pos": [
+        2.1,
+        1.05
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "sink",
+      "pos": [
+        2.7,
+        2.4
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "mirror",
+      "pos": [
+        2.9075,
+        2.4
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "fridge",
+      "pos": [
+        3.55,
+        1.05
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "stove",
+      "pos": [
+        4.475,
+        0.925
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "kitchen_sink",
+      "pos": [
+        5.4,
+        0.8
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "counter",
+      "pos": [
+        3.45,
+        2.575
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "coffee_machine",
+      "pos": [
+        4.0,
+        2.825
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "garbage_can",
+      "pos": [
+        6.2,
+        2.7
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "bed",
+      "pos": [
+        1.8,
+        4.6
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "sofa",
+      "pos": [
+        5.0,
+        5.45
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "tv",
+      "pos": [
+        5.0,
+        3.2
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        6.2,
+        3.4
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "wall_lamp",
+      "pos": [
+        0.61,
+        5.7
+      ],
+      "rotDeg": 90
+    }
+  ],
+  "music": [
+    "sounds/music_condo_2.mp3"
+  ],
+  "rental": {
+    "listed": true,
+    "adTitle": "Parkdale bachelor - all inclusive!",
+    "adText": "Bright bachelor above a bakery on Queen West. Everything in one room, which the ad calls \"open concept\". Streetcar at the door, laundromat next door. First and last, no pets.",
+    "moveInHours": 2,
+    "availability": {
+      "all": [
+        {
+          "var": "quests.move_out.state",
+          "eq": "active"
+        }
+      ]
+    }
+  }
+}

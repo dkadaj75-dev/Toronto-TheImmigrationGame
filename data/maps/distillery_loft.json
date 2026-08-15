@@ -1,0 +1,468 @@
+{
+  "id": "distillery_loft",
+  "name": "Distillery District Loft",
+  "propertyType": "condo",
+  "gridSize": 0.25,
+  "snapStep": 0.25,
+  "bounds": {
+    "w": 12.0,
+    "h": 8.5
+  },
+  "floors": [
+    {
+      "id": "bathroom",
+      "polygon": [
+        [
+          0.5,
+          0.5
+        ],
+        [
+          3.0,
+          0.5
+        ],
+        [
+          3.0,
+          3.0
+        ],
+        [
+          0.5,
+          3.0
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/Tiling.jpg"
+    },
+    {
+      "id": "bedroom",
+      "polygon": [
+        [
+          0.5,
+          3.0
+        ],
+        [
+          4.0,
+          3.0
+        ],
+        [
+          4.0,
+          7.5
+        ],
+        [
+          0.5,
+          7.5
+        ]
+      ],
+      "material": "carpet",
+      "texture": "textures/Carpet1.jpg"
+    },
+    {
+      "id": "kitchen",
+      "polygon": [
+        [
+          3.0,
+          0.5
+        ],
+        [
+          7.0,
+          0.5
+        ],
+        [
+          7.0,
+          3.0
+        ],
+        [
+          3.0,
+          3.0
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/ChineseTiles.jpg"
+    },
+    {
+      "id": "dining",
+      "polygon": [
+        [
+          7.0,
+          0.5
+        ],
+        [
+          11.0,
+          0.5
+        ],
+        [
+          11.0,
+          3.0
+        ],
+        [
+          7.0,
+          3.0
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/Wood_Old_Planks.jpg"
+    },
+    {
+      "id": "living",
+      "polygon": [
+        [
+          4.0,
+          3.0
+        ],
+        [
+          11.0,
+          3.0
+        ],
+        [
+          11.0,
+          7.5
+        ],
+        [
+          4.0,
+          7.5
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/Wood_Old_Planks.jpg"
+    }
+  ],
+  "walls": [
+    {
+      "from": [
+        0.5,
+        0.5
+      ],
+      "to": [
+        0.5,
+        7.5
+      ]
+    },
+    {
+      "from": [
+        3.0,
+        0.5
+      ],
+      "to": [
+        3.0,
+        3.0
+      ]
+    },
+    {
+      "from": [
+        4.0,
+        3.0
+      ],
+      "to": [
+        4.0,
+        7.5
+      ]
+    },
+    {
+      "from": [
+        11.0,
+        0.5
+      ],
+      "to": [
+        11.0,
+        7.5
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        0.5
+      ],
+      "to": [
+        11.0,
+        0.5
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        3.0
+      ],
+      "to": [
+        4.0,
+        3.0
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        7.5
+      ],
+      "to": [
+        11.0,
+        7.5
+      ]
+    }
+  ],
+  "doors": [
+    {
+      "at": [
+        3.0,
+        1.75
+      ],
+      "orientation": "vertical",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        4.0,
+        5.25
+      ],
+      "orientation": "vertical",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        9.0,
+        0.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_exterior"
+    }
+  ],
+  "windows": [
+    {
+      "at": [
+        6.0,
+        0.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "window_basic",
+      "width": 1.0
+    }
+  ],
+  "spawn": {
+    "pos": [
+      9.0,
+      1.1
+    ],
+    "facingDeg": 0
+  },
+  "placedObjects": [
+    {
+      "asset": "toilet",
+      "pos": [
+        1.05,
+        1.05
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "shower",
+      "pos": [
+        1.05,
+        2.4
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "sink",
+      "pos": [
+        2.2,
+        2.7
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "mirror",
+      "pos": [
+        2.2,
+        2.9075
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "bed",
+      "pos": [
+        1.8,
+        4.4
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "bookshelf",
+      "pos": [
+        1.6,
+        7.2
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        3.7,
+        6.9
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "wall_lamp",
+      "pos": [
+        0.61,
+        6.0
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "fridge",
+      "pos": [
+        4.1,
+        1.05
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "stove",
+      "pos": [
+        5.025,
+        0.925
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "kitchen_sink",
+      "pos": [
+        5.95,
+        0.8
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "counter",
+      "pos": [
+        3.95,
+        2.575
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "coffee_machine",
+      "pos": [
+        4.9,
+        2.825
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "garbage_can",
+      "pos": [
+        6.7,
+        2.7
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "dining_table",
+      "pos": [
+        8.6,
+        2.575
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "dining_chair",
+      "pos": [
+        8.6,
+        1.7
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "dining_chair",
+      "pos": [
+        9.9,
+        2.6
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "sofa",
+      "pos": [
+        6.5,
+        6.95
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "tv",
+      "pos": [
+        6.5,
+        3.7
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "armchair",
+      "pos": [
+        10.45,
+        4.6
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "bookshelf",
+      "pos": [
+        10.7,
+        6.2
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        9.5,
+        7.2
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "canvas",
+      "pos": [
+        8.5,
+        3.08
+      ],
+      "rotDeg": 0
+    }
+  ],
+  "music": [
+    "sounds/music_condo_2.mp3"
+  ],
+  "rental": {
+    "listed": true,
+    "adTitle": "Distillery hard loft - 14ft ceilings",
+    "adText": "Converted brick-and-beam loft on the cobblestones. Exposed everything, enormous windows, a heating bill to match. Open plan with a walled bedroom - rare for a hard loft.",
+    "moveInHours": 12,
+    "availability": {
+      "all": [
+        {
+          "var": "quests.room_with_a_view.state",
+          "eq": "done"
+        },
+        {
+          "var": "creditScore",
+          "gte": 620
+        },
+        {
+          "var": "vars.income",
+          "gte": 300
+        },
+        {
+          "var": "funds",
+          "gte": 6000
+        }
+      ]
+    }
+  },
+  "exterior": {
+    "skyColor": "#8fb3d9",
+    "groundColor": "#4a4f52",
+    "fog": {
+      "color": "#8fb3d9",
+      "near": 25,
+      "far": 95
+    }
+  }
+}

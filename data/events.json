@@ -207,6 +207,182 @@
       ],
       "chancePercent": 100,
       "_note": "Alcohol effect slice: fired by each completion of the REPEATABLE sober_up quest, so no onceOnly."
+    },
+    {
+      "id": "event_good_tenant",
+      "name": "Good tenant",
+      "effects": [
+        {
+          "type": "notification",
+          "at": "sim",
+          "event": "moneyUp",
+          "title": "Credit check: passed",
+          "body": "Your credit score is respectable now. Two-bedroom listings suddenly answer your emails - check Kijiji on your smartphone."
+        }
+      ],
+      "chancePercent": 100,
+      "onceOnly": true,
+      "_note": "Housing ladder arc: fired as a quest reward (PROJECT_CONTEXT §7.78)."
+    },
+    {
+      "id": "event_a_real_bedroom",
+      "name": "A real bedroom",
+      "effects": [
+        {
+          "type": "notification",
+          "at": "sim",
+          "event": "questCompleted",
+          "title": "A door of your own",
+          "body": "A bedroom with a door that closes. Small thing. Enormous thing."
+        }
+      ],
+      "chancePercent": 100,
+      "onceOnly": true,
+      "_note": "Housing ladder arc: fired as a quest reward (PROJECT_CONTEXT §7.78)."
+    },
+    {
+      "id": "event_career_climb",
+      "name": "Career climb",
+      "effects": [
+        {
+          "type": "notification",
+          "at": "sim",
+          "event": "moneyUp",
+          "title": "Promoted",
+          "body": "Level 3 and a real paycheque. The glass towers are within reach - new listings on Kijiji."
+        }
+      ],
+      "chancePercent": 100,
+      "onceOnly": true,
+      "_note": "Housing ladder arc: fired as a quest reward (PROJECT_CONTEXT §7.78)."
+    },
+    {
+      "id": "event_room_with_a_view",
+      "name": "A room with a view",
+      "effects": [
+        {
+          "type": "notification",
+          "at": "sim",
+          "event": "questCompleted",
+          "title": "A view worth the rent",
+          "body": "Balcony, skyline, and a lake you can almost see. Toronto looks different from up here."
+        }
+      ],
+      "chancePercent": 100,
+      "onceOnly": true,
+      "_note": "Housing ladder arc: fired as a quest reward (PROJECT_CONTEXT §7.78)."
+    },
+    {
+      "id": "event_loft_life",
+      "name": "Loft life",
+      "effects": [
+        {
+          "type": "notification",
+          "at": "sim",
+          "event": "questCompleted",
+          "title": "Brick and beams",
+          "body": "Fourteen foot ceilings and cobblestones outside. Worth every dollar of the heating bill."
+        }
+      ],
+      "chancePercent": 100,
+      "onceOnly": true,
+      "_note": "Housing ladder arc: fired as a quest reward (PROJECT_CONTEXT §7.78)."
+    },
+    {
+      "id": "event_own_front_door",
+      "name": "Own front door",
+      "effects": [
+        {
+          "type": "notification",
+          "at": "sim",
+          "event": "questCompleted",
+          "title": "Your own front door",
+          "body": "No lobby, no elevator, nobody above you. Just a door, and it is yours."
+        }
+      ],
+      "chancePercent": 100,
+      "onceOnly": true,
+      "_note": "Housing ladder arc: fired as a quest reward (PROJECT_CONTEXT §7.78)."
+    },
+    {
+      "id": "event_the_paperwork",
+      "name": "The paperwork",
+      "effects": [
+        {
+          "type": "notification",
+          "at": "sim",
+          "event": "questReceived",
+          "title": "The file is ready",
+          "body": "English, savings and income all clear the bar. Open the visa tab on your smartphone and apply for Permanent Residence."
+        }
+      ],
+      "chancePercent": 100,
+      "onceOnly": true,
+      "_note": "Housing ladder arc: fired as a quest reward (PROJECT_CONTEXT §7.78)."
+    },
+    {
+      "id": "event_permanent_roots",
+      "name": "Permanent roots",
+      "effects": [
+        {
+          "type": "notification",
+          "at": "sim",
+          "event": "moneyUp",
+          "title": "Permanent Resident",
+          "body": "No expiry date in the corner of your status any more. You are staying. Detached houses are now on your Kijiji."
+        }
+      ],
+      "chancePercent": 100,
+      "onceOnly": true,
+      "_note": "Housing ladder arc: fired as a quest reward (PROJECT_CONTEXT §7.78)."
+    },
+    {
+      "id": "event_the_driveway",
+      "name": "The driveway",
+      "effects": [
+        {
+          "type": "notification",
+          "at": "sim",
+          "event": "questCompleted",
+          "title": "Detached",
+          "body": "No shared walls. A driveway. A yard that is, generously, a blank canvas."
+        }
+      ],
+      "chancePercent": 100,
+      "onceOnly": true,
+      "_note": "Housing ladder arc: fired as a quest reward (PROJECT_CONTEXT §7.78)."
+    },
+    {
+      "id": "event_citizenship",
+      "name": "Citizenship",
+      "effects": [
+        {
+          "type": "notification",
+          "at": "sim",
+          "event": "moneyUp",
+          "title": "Canadian citizen",
+          "body": "A small room, a flag, an oath. Congratulations - the passport is yours."
+        }
+      ],
+      "chancePercent": 100,
+      "onceOnly": true,
+      "_note": "Housing ladder arc: fired as a quest reward (PROJECT_CONTEXT §7.78)."
+    },
+    {
+      "id": "event_canadian_dream",
+      "name": "The Canadian dream",
+      "effects": [
+        {
+          "type": "notification",
+          "at": "sim",
+          "event": "questCompleted",
+          "title": "The Canadian dream",
+          "body": "A three-day visitor visa, a leaking basement and a mop. Now this address, and a passport in the drawer. That is the whole game - well played."
+        }
+      ],
+      "chancePercent": 100,
+      "onceOnly": true,
+      "_note": "Housing ladder arc: fired as a quest reward (PROJECT_CONTEXT §7.78)."
     }
   ]
 }

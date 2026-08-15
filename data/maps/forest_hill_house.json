@@ -1,0 +1,783 @@
+{
+  "id": "forest_hill_house",
+  "name": "Forest Hill Detached House",
+  "propertyType": "house",
+  "gridSize": 0.25,
+  "snapStep": 0.25,
+  "bounds": {
+    "w": 15.0,
+    "h": 12.0
+  },
+  "floors": [
+    {
+      "id": "foyer",
+      "polygon": [
+        [
+          0.5,
+          0.5
+        ],
+        [
+          4.0,
+          0.5
+        ],
+        [
+          4.0,
+          3.5
+        ],
+        [
+          0.5,
+          3.5
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/Tiling.jpg"
+    },
+    {
+      "id": "powder",
+      "polygon": [
+        [
+          0.5,
+          3.5
+        ],
+        [
+          4.0,
+          3.5
+        ],
+        [
+          4.0,
+          6.5
+        ],
+        [
+          0.5,
+          6.5
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/ChineseTiles.jpg"
+    },
+    {
+      "id": "kitchen",
+      "polygon": [
+        [
+          4.0,
+          0.5
+        ],
+        [
+          8.5,
+          0.5
+        ],
+        [
+          8.5,
+          3.5
+        ],
+        [
+          4.0,
+          3.5
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/ChineseTiles.jpg"
+    },
+    {
+      "id": "dining",
+      "polygon": [
+        [
+          8.5,
+          0.5
+        ],
+        [
+          14.0,
+          0.5
+        ],
+        [
+          14.0,
+          3.5
+        ],
+        [
+          8.5,
+          3.5
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/Wood_Old_Planks.jpg"
+    },
+    {
+      "id": "living",
+      "polygon": [
+        [
+          4.0,
+          3.5
+        ],
+        [
+          14.0,
+          3.5
+        ],
+        [
+          14.0,
+          6.5
+        ],
+        [
+          4.0,
+          6.5
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/Wood_Old_Planks.jpg"
+    },
+    {
+      "id": "hall",
+      "polygon": [
+        [
+          0.5,
+          6.5
+        ],
+        [
+          14.0,
+          6.5
+        ],
+        [
+          14.0,
+          8.0
+        ],
+        [
+          0.5,
+          8.0
+        ]
+      ],
+      "material": "wood",
+      "texture": "textures/Wood_Old_Planks.jpg"
+    },
+    {
+      "id": "primary",
+      "polygon": [
+        [
+          0.5,
+          8.0
+        ],
+        [
+          5.0,
+          8.0
+        ],
+        [
+          5.0,
+          10.5
+        ],
+        [
+          0.5,
+          10.5
+        ]
+      ],
+      "material": "carpet",
+      "texture": "textures/Carpet1.jpg"
+    },
+    {
+      "id": "ensuite",
+      "polygon": [
+        [
+          5.0,
+          8.0
+        ],
+        [
+          7.5,
+          8.0
+        ],
+        [
+          7.5,
+          10.5
+        ],
+        [
+          5.0,
+          10.5
+        ]
+      ],
+      "material": "tile",
+      "texture": "textures/Tiling.jpg"
+    },
+    {
+      "id": "bedroom2",
+      "polygon": [
+        [
+          7.5,
+          8.0
+        ],
+        [
+          11.0,
+          8.0
+        ],
+        [
+          11.0,
+          10.5
+        ],
+        [
+          7.5,
+          10.5
+        ]
+      ],
+      "material": "carpet",
+      "texture": "textures/Carpet1.jpg"
+    },
+    {
+      "id": "bedroom3",
+      "polygon": [
+        [
+          11.0,
+          8.0
+        ],
+        [
+          14.0,
+          8.0
+        ],
+        [
+          14.0,
+          10.5
+        ],
+        [
+          11.0,
+          10.5
+        ]
+      ],
+      "material": "carpet",
+      "texture": "textures/Carpet1.jpg"
+    }
+  ],
+  "walls": [
+    {
+      "from": [
+        0.5,
+        0.5
+      ],
+      "to": [
+        0.5,
+        10.5
+      ]
+    },
+    {
+      "from": [
+        4.0,
+        0.5
+      ],
+      "to": [
+        4.0,
+        6.5
+      ]
+    },
+    {
+      "from": [
+        5.0,
+        8.0
+      ],
+      "to": [
+        5.0,
+        10.5
+      ]
+    },
+    {
+      "from": [
+        7.5,
+        8.0
+      ],
+      "to": [
+        7.5,
+        10.5
+      ]
+    },
+    {
+      "from": [
+        11.0,
+        8.0
+      ],
+      "to": [
+        11.0,
+        10.5
+      ]
+    },
+    {
+      "from": [
+        14.0,
+        0.5
+      ],
+      "to": [
+        14.0,
+        10.5
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        0.5
+      ],
+      "to": [
+        14.0,
+        0.5
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        3.5
+      ],
+      "to": [
+        4.0,
+        3.5
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        6.5
+      ],
+      "to": [
+        14.0,
+        6.5
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        8.0
+      ],
+      "to": [
+        14.0,
+        8.0
+      ]
+    },
+    {
+      "from": [
+        0.5,
+        10.5
+      ],
+      "to": [
+        14.0,
+        10.5
+      ]
+    }
+  ],
+  "doors": [
+    {
+      "at": [
+        4.0,
+        2.0
+      ],
+      "orientation": "vertical",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        2.0,
+        6.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        6.5,
+        6.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        2.5,
+        8.0
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        5.0,
+        9.25
+      ],
+      "orientation": "vertical",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        9.0,
+        8.0
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        12.5,
+        8.0
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_basic"
+    },
+    {
+      "at": [
+        2.0,
+        0.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "door_exterior"
+    }
+  ],
+  "windows": [
+    {
+      "at": [
+        6.0,
+        0.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "window_basic",
+      "width": 1.0
+    },
+    {
+      "at": [
+        14.0,
+        5.0
+      ],
+      "orientation": "vertical",
+      "assetId": "window_basic",
+      "width": 1.0
+    },
+    {
+      "at": [
+        2.5,
+        10.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "window_basic",
+      "width": 1.0
+    },
+    {
+      "at": [
+        9.0,
+        10.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "window_basic",
+      "width": 1.0
+    },
+    {
+      "at": [
+        12.5,
+        10.5
+      ],
+      "orientation": "horizontal",
+      "assetId": "window_basic",
+      "width": 1.0
+    }
+  ],
+  "spawn": {
+    "pos": [
+      2.0,
+      1.1
+    ],
+    "facingDeg": 0
+  },
+  "placedObjects": [
+    {
+      "asset": "bookshelf",
+      "pos": [
+        2.4,
+        3.2
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        0.8,
+        2.5
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "canvas",
+      "pos": [
+        0.58,
+        1.5
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "toilet",
+      "pos": [
+        1.05,
+        4.6
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "shower",
+      "pos": [
+        3.45,
+        4.6
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "sink",
+      "pos": [
+        0.95,
+        6.2
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "mirror",
+      "pos": [
+        0.95,
+        6.4075
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "fridge",
+      "pos": [
+        5.1,
+        1.05
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "stove",
+      "pos": [
+        6.025,
+        0.925
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "kitchen_sink",
+      "pos": [
+        6.95,
+        0.8
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "counter",
+      "pos": [
+        4.95,
+        3.075
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "coffee_machine",
+      "pos": [
+        5.9,
+        3.325
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "garbage_can",
+      "pos": [
+        8.2,
+        3.2
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "dining_table",
+      "pos": [
+        10.1,
+        0.925
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "dining_chair",
+      "pos": [
+        10.1,
+        1.75
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "dining_chair",
+      "pos": [
+        11.4,
+        0.9
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "sofa",
+      "pos": [
+        9.0,
+        5.95
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "tv",
+      "pos": [
+        9.0,
+        4.0
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "armchair",
+      "pos": [
+        13.45,
+        4.6
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        13.7,
+        5.9
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "canvas",
+      "pos": [
+        11.0,
+        3.58
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "wall_lamp",
+      "pos": [
+        13.89,
+        3.8
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "bed",
+      "pos": [
+        1.8,
+        9.6
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        4.7,
+        10.2
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "toilet",
+      "pos": [
+        6.1,
+        9.95
+      ],
+      "rotDeg": 180
+    },
+    {
+      "asset": "shower",
+      "pos": [
+        6.95,
+        8.6
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "sink",
+      "pos": [
+        5.9,
+        8.3
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "mirror",
+      "pos": [
+        5.9,
+        8.0925
+      ],
+      "rotDeg": 0
+    },
+    {
+      "asset": "bed",
+      "pos": [
+        8.8,
+        9.6
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        10.7,
+        10.2
+      ],
+      "rotDeg": 270
+    },
+    {
+      "asset": "bed",
+      "pos": [
+        12.3,
+        9.6
+      ],
+      "rotDeg": 90
+    },
+    {
+      "asset": "lamp",
+      "pos": [
+        13.7,
+        8.3
+      ],
+      "rotDeg": 0
+    }
+  ],
+  "music": [
+    "sounds/music_condo_2.mp3"
+  ],
+  "rental": {
+    "listed": true,
+    "adTitle": "Forest Hill house - 3BR, ensuite, ravine lot",
+    "adText": "The kind of address people repeat back to you. Three bedrooms, an ensuite off the primary, mature trees, and a hallway longer than your first apartment. The owners are relocating abroad and want a settled, permanent tenant.",
+    "moveInHours": 48,
+    "availability": {
+      "all": [
+        {
+          "var": "quests.the_driveway.state",
+          "eq": "done"
+        },
+        {
+          "any": [
+            {
+              "var": "vars.visaStatus",
+              "eq": "permanent_resident"
+            },
+            {
+              "var": "vars.visaStatus",
+              "eq": "citizen"
+            }
+          ]
+        },
+        {
+          "var": "creditScore",
+          "gte": 750
+        },
+        {
+          "var": "vars.income",
+          "gte": 625
+        },
+        {
+          "var": "funds",
+          "gte": 30000
+        }
+      ]
+    }
+  },
+  "exterior": {
+    "skyColor": "#9cc4e8",
+    "groundColor": "#4f6138",
+    "fog": {
+      "color": "#9cc4e8",
+      "near": 30,
+      "far": 110
+    }
+  }
+}
